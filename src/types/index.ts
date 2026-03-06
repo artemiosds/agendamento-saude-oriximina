@@ -75,11 +75,14 @@ export interface FilaEspera {
   pacienteNome: string;
   unidadeId: string;
   setor: string;
+  profissionalId?: string;
   prioridade: 'normal' | 'alta' | 'urgente';
-  status: 'aguardando' | 'chamado' | 'em_atendimento' | 'atendido' | 'falta';
+  status: 'aguardando' | 'encaixado' | 'chamado' | 'em_atendimento' | 'atendido' | 'falta' | 'cancelado';
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
+  observacoes?: string;
+  criadoPor?: string;
 }
 
 export interface Atendimento {
@@ -110,6 +113,36 @@ export interface Disponibilidade {
   vagasPorHora: number;
   vagasPorDia: number;
   diasSemana: number[];
+}
+
+export interface Configuracoes {
+  whatsapp: {
+    ativo: boolean;
+    provedor: string;
+    token: string;
+    numero: string;
+    notificacoes: {
+      confirmacao: boolean;
+      lembrete24h: boolean;
+      lembrete2h: boolean;
+      remarcacao: boolean;
+      cancelamento: boolean;
+    };
+  };
+  googleCalendar: {
+    conectado: boolean;
+    criarEvento: boolean;
+    atualizarRemarcar: boolean;
+    removerCancelar: boolean;
+    enviarEmail: boolean;
+  };
+  filaEspera: {
+    modoEncaixe: 'automatico' | 'assistido';
+  };
+  templates: {
+    confirmacao: string;
+    lembrete: string;
+  };
 }
 
 export interface AuditLog {

@@ -1,11 +1,24 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { 
-  Agendamento, Paciente, FilaEspera, Atendimento, Unidade, Sala, Setor, User, Disponibilidade 
+  Agendamento, Paciente, FilaEspera, Atendimento, Unidade, Sala, Setor, User, Disponibilidade, Configuracoes 
 } from '@/types';
 import { 
   mockAgendamentos, mockPacientes, mockFila, mockAtendimentos, 
   mockUnidades, mockSalas, mockSetores, mockUsers 
 } from '@/data/mockData';
+
+const defaultConfiguracoes: Configuracoes = {
+  whatsapp: {
+    ativo: false, provedor: 'zapi', token: '', numero: '',
+    notificacoes: { confirmacao: true, lembrete24h: true, lembrete2h: false, remarcacao: true, cancelamento: true },
+  },
+  googleCalendar: { conectado: false, criarEvento: true, atualizarRemarcar: true, removerCancelar: true, enviarEmail: true },
+  filaEspera: { modoEncaixe: 'assistido' },
+  templates: {
+    confirmacao: 'Olá {nome}! Sua consulta foi agendada para {data} às {hora} na {unidade}. Profissional: {profissional}.',
+    lembrete: 'Lembrete: Sua consulta é amanhã, {data} às {hora} na {unidade} com {profissional}.',
+  },
+};
 
 interface DataContextType {
   agendamentos: Agendamento[];
@@ -17,8 +30,10 @@ interface DataContextType {
   setores: Setor[];
   funcionarios: User[];
   disponibilidades: Disponibilidade[];
+  configuracoes: Configuracoes;
   addAgendamento: (ag: Agendamento) => void;
   updateAgendamento: (id: string, data: Partial<Agendamento>) => void;
+  cancelAgendamento: (id: string) => FilaEspera[];
   addPaciente: (p: Paciente) => void;
   updatePaciente: (id: string, data: Partial<Paciente>) => void;
   addToFila: (f: FilaEspera) => void;
@@ -39,6 +54,9 @@ interface DataContextType {
   deleteDisponibilidade: (id: string) => void;
   getAvailableSlots: (profissionalId: string, unidadeId: string, date: string) => string[];
   getAvailableDates: (profissionalId: string, unidadeId: string) => string[];
+  updateConfiguracoes: (data: Partial<Configuracoes>) => void;
+  checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
+  encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, 'id' | 'criadoEm'>) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -59,6 +77,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [setores] = useState<Setor[]>(mockSetores);
   const [funcionarios, setFuncionarios] = useState<User[]>(mockUsers);
   const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
+  const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
   const addAgendamento = useCallback((ag: Agendamento) => setAgendamentos(prev => [...prev, ag]), []);
   const updateAgendamento = useCallback((id: string, data: Partial<Agendamento>) => 
@@ -87,6 +106,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateDisponibilidade = useCallback((id: string, data: Partial<Disponibilidade>) => 
     setDisponibilidades(prev => prev.map(d => d.id === id ? { ...d, ...data } : d)), []);
   const deleteDisponibilidade = useCallback((id: string) => setDisponibilidades(prev => prev.filter(d => d.id !== id)), []);
+  const updateConfiguracoes = useCallback((data: Partial<Configuracoes>) => 
+    setConfiguracoes(prev => ({ ...prev, ...data })), []);
+
+  // Check queue for compatible patients when a slot opens
+  const checkFilaForSlot = useCallback((profissionalId: string, unidadeId: string, _data: string, _hora: string): FilaEspera[] => {
+    const prioOrder = { urgente: 0, alta: 1, normal: 2 };
+    return fila
+      .filter(f => 
+        f.status === 'aguardando' &&
+        f.unidadeId === unidadeId &&
+        (!f.profissionalId || f.profissionalId === profissionalId)
+      )
+      .sort((a, b) => {
+        if (prioOrder[a.prioridade] !== prioOrder[b.prioridade]) return prioOrder[a.prioridade] - prioOrder[b.prioridade];
+        return a.horaChegada.localeCompare(b.horaChegada);
+      });
+  }, [fila]);
+
+  // Cancel appointment and return queue candidates
+  const cancelAgendamento = useCallback((id: string): FilaEspera[] => {
+    const ag = agendamentos.find(a => a.id === id);
+    if (!ag) return [];
+    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelado' as const } : a));
+    return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
+  }, [agendamentos, checkFilaForSlot]);
+
+  // Move patient from queue to appointment
+  const encaixarDaFila = useCallback((filaId: string, agData: Omit<Agendamento, 'id' | 'criadoEm'>) => {
+    const newAg: Agendamento = { ...agData, id: `ag${Date.now()}`, criadoEm: new Date().toISOString() };
+    setAgendamentos(prev => [...prev, newAg]);
+    setFila(prev => prev.map(f => f.id === filaId ? { ...f, status: 'encaixado' as const } : f));
+  }, []);
 
   // Get available dates for a professional at a unit
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
@@ -106,7 +157,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const dayOfWeek = current.getDay();
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
-          // Check if day still has capacity
           const dayAppointments = agendamentos.filter(
             a => a.data === dateStr && a.profissionalId === profissionalId && 
                  a.unidadeId === unidadeId && a.status !== 'cancelado'
@@ -147,20 +197,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
            a.unidadeId === unidadeId && a.status !== 'cancelado'
     );
 
-    // Check daily limit
     if (dayAppointments.length >= disp.vagasPorDia) return [];
 
-    // Generate slots every 30 minutes
     let h = startHour;
     let m = startMin;
     while (h < endHour || (h === endHour && m < endMin)) {
       const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      
-      // Count appointments at this hour
       const hourStr = `${String(h).padStart(2, '0')}:`;
       const hourAppointments = dayAppointments.filter(a => a.hora.startsWith(hourStr));
-      
-      // Check if this specific slot is taken
       const slotTaken = dayAppointments.some(a => a.hora === timeStr);
       
       if (!slotTaken && hourAppointments.length < disp.vagasPorHora) {
@@ -176,14 +220,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <DataContext.Provider value={{
-      agendamentos, pacientes, fila, atendimentos, unidades, salas, setores, funcionarios, disponibilidades,
-      addAgendamento, updateAgendamento, addPaciente, updatePaciente,
+      agendamentos, pacientes, fila, atendimentos, unidades, salas, setores, funcionarios, disponibilidades, configuracoes,
+      addAgendamento, updateAgendamento, cancelAgendamento, addPaciente, updatePaciente,
       addToFila, updateFila, removeFromFila, addAtendimento,
       addUnidade, updateUnidade, deleteUnidade, 
       addSala, updateSala, deleteSala,
       addFuncionario, updateFuncionario, deleteFuncionario,
       addDisponibilidade, updateDisponibilidade, deleteDisponibilidade,
-      getAvailableSlots, getAvailableDates,
+      getAvailableSlots, getAvailableDates, updateConfiguracoes,
+      checkFilaForSlot, encaixarDaFila,
     }}>
       {children}
     </DataContext.Provider>

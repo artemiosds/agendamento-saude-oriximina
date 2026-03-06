@@ -161,16 +161,19 @@ export const mockFila: FilaEspera[] = [
     id: 'f1', pacienteId: 'p1', pacienteNome: 'João Pereira',
     unidadeId: 'un1', setor: 'Clínica Geral', prioridade: 'normal',
     status: 'em_atendimento', posicao: 1, horaChegada: '07:45', horaChamada: '08:02',
+    profissionalId: 'u4', observacoes: '', criadoPor: 'u3',
   },
   {
     id: 'f2', pacienteId: 'p2', pacienteNome: 'Maria Conceição',
     unidadeId: 'un1', setor: 'Clínica Geral', prioridade: 'normal',
     status: 'aguardando', posicao: 2, horaChegada: '07:50',
+    profissionalId: 'u4', observacoes: '', criadoPor: 'u3',
   },
   {
     id: 'f3', pacienteId: 'p3', pacienteNome: 'José Souza',
     unidadeId: 'un1', setor: 'Pediatria', prioridade: 'alta',
     status: 'aguardando', posicao: 1, horaChegada: '08:30',
+    profissionalId: 'u5', observacoes: 'Criança com febre', criadoPor: 'u3',
   },
 ];
 

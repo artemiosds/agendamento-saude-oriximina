@@ -10,6 +10,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Clock, Calendar, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
 const Disponibilidade: React.FC = () => {
   const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas } = useData();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -41,6 +44,10 @@ const Disponibilidade: React.FC = () => {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
+    if (form.diasSemana.length === 0) {
+      toast.error('Selecione pelo menos um dia da semana.');
+      return;
+    }
 
     const startH = parseInt(form.horaInicio.split(':')[0]);
     const endH = parseInt(form.horaFim.split(':')[0]);
@@ -61,7 +68,6 @@ const Disponibilidade: React.FC = () => {
     setDialogOpen(false);
   };
 
-  const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const toggleDia = (dia: number) => {
     setForm(p => ({
       ...p, diasSemana: p.diasSemana.includes(dia) ? p.diasSemana.filter(d => d !== dia) : [...p.diasSemana, dia],
@@ -122,11 +128,19 @@ const Disponibilidade: React.FC = () => {
               <div><Label>Total Vagas por Dia</Label><Input type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} /></div>
             </div>
             <div>
-              <Label>Dias da Semana</Label>
-              <div className="flex gap-2 mt-1">
+              <Label className="mb-2 block">Dias da Semana</Label>
+              <div className="grid grid-cols-7 gap-1.5">
                 {diasSemanaLabels.map((label, i) => (
-                  <Button key={i} type="button" size="sm" variant={form.diasSemana.includes(i) ? 'default' : 'outline'}
-                    className={form.diasSemana.includes(i) ? 'gradient-primary text-primary-foreground' : ''} onClick={() => toggleDia(i)}>{label}</Button>
+                  <Button
+                    key={i}
+                    type="button"
+                    size="sm"
+                    variant={form.diasSemana.includes(i) ? 'default' : 'outline'}
+                    className={`w-full text-center text-xs font-medium ${form.diasSemana.includes(i) ? 'gradient-primary text-primary-foreground' : ''}`}
+                    onClick={() => toggleDia(i)}
+                  >
+                    {label}
+                  </Button>
                 ))}
               </div>
             </div>
@@ -150,23 +164,23 @@ const Disponibilidade: React.FC = () => {
               <Card key={d.id} className="shadow-card border-0">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-foreground">{prof?.nome}</h3>
                       <p className="text-sm text-muted-foreground">{unidade?.nome}{sala ? ` • ${sala.nome}` : ''}</p>
                       <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                         <p><Calendar className="w-3.5 h-3.5 inline mr-1" />{d.dataInicio} a {d.dataFim}</p>
-                        <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} - {d.horaFim}</p>
+                        <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} — {d.horaFim}</p>
                         <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia</p>
-                        <p>Dias: {d.diasSemana.map(i => diasSemanaLabels[i]).join(', ')}</p>
+                        <p>Dias: {d.diasSemana.sort((a, b) => a - b).map(i => diasSemanaFull[i]).join(', ')}</p>
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 shrink-0">
                       <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-4 h-4" /></Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
                         <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Tem certeza?</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteDisponibilidade(d.id); toast.success('Excluído!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                          <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Essa ação não pode ser desfeita. Os horários vinculados não aparecerão mais no agendamento online.</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteDisponibilidade(d.id); toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
