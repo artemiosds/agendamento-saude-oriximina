@@ -1,17 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes } = useData();
   const { whatsapp, googleCalendar, filaEspera, templates } = configuracoes;
+  const gcal = useGoogleCalendar();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (code) {
+      gcal.exchangeCode(code).then(() => {
+        toast.success('Google Agenda conectada com sucesso!');
+        updateConfiguracoes({ googleCalendar: { ...googleCalendar, conectado: true } });
+        // Clean URL
+        searchParams.delete('code');
+        searchParams.delete('state');
+        searchParams.delete('scope');
+        setSearchParams(searchParams, { replace: true });
+      }).catch(() => {
+        toast.error('Erro ao conectar Google Agenda.');
+      });
+    }
+  }, []);
+
+  // Check connection status on mount
+  useEffect(() => {
+    gcal.checkStatus().then((connected) => {
+      if (connected !== googleCalendar.conectado) {
+        updateConfiguracoes({ googleCalendar: { ...googleCalendar, conectado: connected } });
+      }
+    });
+  }, []);
 
   const updateWhatsapp = (data: Partial<typeof whatsapp>) => {
     updateConfiguracoes({ whatsapp: { ...whatsapp, ...data } });
@@ -23,6 +54,24 @@ const Configuracoes: React.FC = () => {
 
   const updateGoogle = (data: Partial<typeof googleCalendar>) => {
     updateConfiguracoes({ googleCalendar: { ...googleCalendar, ...data } });
+  };
+
+  const handleConnectGoogle = async () => {
+    try {
+      await gcal.connect();
+    } catch {
+      toast.error('Erro ao iniciar conexão com Google Agenda.');
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      await gcal.disconnect();
+      updateConfiguracoes({ googleCalendar: { ...googleCalendar, conectado: false } });
+      toast.success('Google Agenda desconectada.');
+    } catch {
+      toast.error('Erro ao desconectar.');
+    }
   };
 
   return (
@@ -86,7 +135,7 @@ const Configuracoes: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Google Calendar */}
+      {/* Google Calendar - Now with real OAuth */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
           <div className="flex items-center gap-3 mb-4">
@@ -97,16 +146,39 @@ const Configuracoes: React.FC = () => {
               <h3 className="font-semibold font-display text-foreground">Google Agenda</h3>
               <p className="text-sm text-muted-foreground">Sincronizar agendamentos</p>
             </div>
-            {googleCalendar.conectado ? (
-              <span className="text-xs bg-success/10 text-success px-2 py-1 rounded-full font-medium">Conectado</span>
+            {gcal.connected || googleCalendar.conectado ? (
+              <span className="flex items-center gap-1 text-xs bg-success/10 text-success px-2 py-1 rounded-full font-medium">
+                <CheckCircle2 className="w-3 h-3" /> Conectado
+              </span>
             ) : (
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full font-medium">Desconectado</span>
+              <span className="flex items-center gap-1 text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full font-medium">
+                <XCircle className="w-3 h-3" /> Desconectado
+              </span>
             )}
           </div>
           <div className="space-y-4">
-            <Button variant="outline" className="w-full" onClick={() => toast.info('Para conectar o Google Agenda, ative o Lovable Cloud e configure as credenciais OAuth.')}>
-              {googleCalendar.conectado ? 'Reconectar' : 'Conectar'} Google Agenda
-            </Button>
+            {gcal.connected || googleCalendar.conectado ? (
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={handleConnectGoogle} disabled={gcal.loading}>
+                  {gcal.loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Reconectar
+                </Button>
+                <Button variant="destructive" className="flex-1" onClick={handleDisconnectGoogle} disabled={gcal.loading}>
+                  Desconectar
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" className="w-full" onClick={handleConnectGoogle} disabled={gcal.loading}>
+                {gcal.loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Conectar Google Agenda
+              </Button>
+            )}
             <div className="space-y-2">
               <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Criar evento ao agendar</span><Switch checked={googleCalendar.criarEvento} onCheckedChange={v => updateGoogle({ criarEvento: v })} /></div>
               <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Atualizar ao remarcar</span><Switch checked={googleCalendar.atualizarRemarcar} onCheckedChange={v => updateGoogle({ atualizarRemarcar: v })} /></div>
