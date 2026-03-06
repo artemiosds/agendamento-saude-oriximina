@@ -5,17 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Content-Type": "application/json",
 };
 
 async function getValidToken(supabaseAdmin: any, userId: string): Promise<string> {
   const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
   const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 
-  const { data, error } = await supabaseAdmin
-    .from("google_calendar_tokens")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
+  const { data, error } = await supabaseAdmin.from("google_calendar_tokens").select("*").eq("user_id", userId).single();
 
   if (error || !data) throw new Error("Google Calendar not connected");
 
@@ -24,7 +21,6 @@ async function getValidToken(supabaseAdmin: any, userId: string): Promise<string
     return data.access_token;
   }
 
-  // Refresh
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -36,17 +32,23 @@ async function getValidToken(supabaseAdmin: any, userId: string): Promise<string
     }),
   });
 
-  if (!res.ok) throw new Error("Token refresh failed");
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Token refresh failed: ${err}`);
+  }
 
   const tokens = await res.json();
-  const newExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  const newExpiry = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
-  await supabaseAdmin.from("google_calendar_tokens").update({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token ?? data.refresh_token,
-    expires_at: newExpiry,
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", userId);
+  await supabaseAdmin
+    .from("google_calendar_tokens")
+    .update({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token ?? data.refresh_token,
+      expires_at: newExpiry,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
 
   return tokens.access_token;
 }
@@ -56,34 +58,47 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-  // Auth
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Not authenticated" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: { user } } = await supabaseUser.auth.getUser();
-  if (!user) {
-    return new Response(JSON.stringify({ error: "Invalid token" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const { action, event, eventId } = await req.json();
-  const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
-
   try {
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
+      return new Response(JSON.stringify({ error: "Supabase environment variables not configured correctly" }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Not authenticated" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const supabaseUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseUser.auth.getUser();
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const { action, event, eventId } = await req.json();
+    const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
+
     const accessToken = await getValidToken(supabaseAdmin, user.id);
 
     if (action === "create_event") {
@@ -103,7 +118,8 @@ serve(async (req) => {
 
       const created = await res.json();
       return new Response(JSON.stringify({ success: true, eventId: created.id }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: corsHeaders,
       });
     }
 
@@ -123,7 +139,8 @@ serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: corsHeaders,
       });
     }
 
@@ -139,16 +156,20 @@ serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: corsHeaders,
       });
     }
 
     if (action === "list_events") {
       const now = new Date().toISOString();
       const maxDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
       const res = await fetch(
-        `${CALENDAR_API}/calendars/primary/events?timeMin=${now}&timeMax=${maxDate}&singleEvents=true&orderBy=startTime&maxResults=250`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        `${CALENDAR_API}/calendars/primary/events?timeMin=${encodeURIComponent(now)}&timeMax=${encodeURIComponent(maxDate)}&singleEvents=true&orderBy=startTime&maxResults=250`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
       );
 
       if (!res.ok) {
@@ -158,19 +179,25 @@ serve(async (req) => {
 
       const data = await res.json();
       return new Response(JSON.stringify({ success: true, events: data.items || [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+        headers: corsHeaders,
       });
     }
 
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (err) {
     console.error("Calendar sync error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
   }
 });
