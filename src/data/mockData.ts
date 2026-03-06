@@ -1,4 +1,4 @@
-import { User, Unidade, Sala, Setor, Paciente, Agendamento, FilaEspera, Atendimento } from '@/types';
+import { User, Unidade, Sala, Setor, Paciente, Agendamento, FilaEspera, Atendimento, Disponibilidade } from '@/types';
 
 // Password: sms@2025 (pre-hashed with bcryptjs)
 export const mockUsers: User[] = [
@@ -184,5 +184,40 @@ export const mockAtendimentos: Atendimento[] = [
     unidadeId: 'un1', salaId: 's1', setor: 'Clínica Geral',
     procedimento: 'Consulta de rotina', observacoes: 'Paciente estável',
     data: today, hora: '07:30',
+  },
+];
+
+// Generate date range: today + 60 days
+const todayDate = new Date();
+const futureDate = new Date();
+futureDate.setDate(futureDate.getDate() + 60);
+const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+export const mockDisponibilidades: Disponibilidade[] = [
+  {
+    id: 'd1',
+    profissionalId: 'u4',
+    unidadeId: 'un1',
+    salaId: 's1',
+    dataInicio: formatDate(todayDate),
+    dataFim: formatDate(futureDate),
+    horaInicio: '08:00',
+    horaFim: '12:00',
+    vagasPorHora: 3,
+    vagasPorDia: 12,
+    diasSemana: [1, 2, 3, 4, 5],
+  },
+  {
+    id: 'd2',
+    profissionalId: 'u5',
+    unidadeId: 'un1',
+    salaId: 's2',
+    dataInicio: formatDate(todayDate),
+    dataFim: formatDate(futureDate),
+    horaInicio: '08:00',
+    horaFim: '12:00',
+    vagasPorHora: 2,
+    vagasPorDia: 8,
+    diasSemana: [1, 2, 3, 4, 5],
   },
 ];
