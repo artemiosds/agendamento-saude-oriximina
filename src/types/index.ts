@@ -5,7 +5,7 @@ export interface User {
   nome: string;
   usuario: string;
   email: string;
-  senha: string; // hashed
+  senha: string;
   setor: string;
   unidadeId: string;
   cargo: string;
@@ -102,6 +102,7 @@ export interface Disponibilidade {
   id: string;
   profissionalId: string;
   unidadeId: string;
+  salaId?: string;
   dataInicio: string;
   dataFim: string;
   horaInicio: string;

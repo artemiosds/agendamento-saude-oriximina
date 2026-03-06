@@ -1,56 +1,92 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Calendar, CheckCircle, ArrowLeft, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 const AgendarOnline: React.FC = () => {
-  const { unidades, salas, funcionarios, setores, addAgendamento, addPaciente } = useData();
+  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots } = useData();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
 
   const [form, setForm] = useState({
-    unidadeId: '', salaId: '', profissionalId: '', setorId: '', tipo: 'Consulta',
+    unidadeId: '', profissionalId: '', tipo: 'Consulta',
     nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', obs: '',
     data: '', hora: '',
   });
 
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
-  const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId);
+  // Only show professionals who have availability configured
+  const profissionaisComDisponibilidade = useMemo(() => {
+    return funcionarios.filter(f => 
+      f.role === 'profissional' && f.ativo &&
+      (!form.unidadeId || f.unidadeId === form.unidadeId) &&
+      disponibilidades.some(d => d.profissionalId === f.id && (!form.unidadeId || d.unidadeId === form.unidadeId))
+    );
+  }, [funcionarios, disponibilidades, form.unidadeId]);
+
+  // Only show units that have availability configured
+  const unidadesComDisponibilidade = useMemo(() => {
+    const unidadeIds = new Set(disponibilidades.map(d => d.unidadeId));
+    return unidades.filter(u => unidadeIds.has(u.id) && u.ativo);
+  }, [unidades, disponibilidades]);
+
+  // Available dates based on availability config
+  const availableDates = useMemo(() => {
+    if (!form.profissionalId || !form.unidadeId) return [];
+    return getAvailableDates(form.profissionalId, form.unidadeId);
+  }, [form.profissionalId, form.unidadeId, getAvailableDates]);
+
+  // Available time slots for selected date
+  const availableSlots = useMemo(() => {
+    if (!form.profissionalId || !form.unidadeId || !form.data) return [];
+    return getAvailableSlots(form.profissionalId, form.unidadeId, form.data);
+  }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const handleSubmit = () => {
-    if (!form.nome || !form.telefone || !form.data || !form.hora || !form.profissionalId) {
+    if (!form.nome || !form.telefone || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
 
-    const pacienteId = `p${Date.now()}`;
-    addPaciente({
-      id: pacienteId,
-      nome: form.nome,
-      cpf: form.cpf,
-      telefone: form.telefone,
-      dataNascimento: form.dataNascimento,
-      email: form.email,
-      endereco: '',
-      observacoes: form.obs,
-      criadoEm: new Date().toISOString(),
-    });
+    // Check if patient already exists by CPF or phone
+    let pacienteId: string;
+    const existingPatient = pacientes.find(p => 
+      (form.cpf && p.cpf === form.cpf) || p.telefone === form.telefone
+    );
 
-    const prof = profissionais.find(p => p.id === form.profissionalId);
+    if (existingPatient) {
+      pacienteId = existingPatient.id;
+    } else {
+      pacienteId = `p${Date.now()}`;
+      addPaciente({
+        id: pacienteId,
+        nome: form.nome,
+        cpf: form.cpf,
+        telefone: form.telefone,
+        dataNascimento: form.dataNascimento,
+        email: form.email,
+        endereco: '',
+        observacoes: form.obs,
+        criadoEm: new Date().toISOString(),
+      });
+    }
+
+    const prof = funcionarios.find(p => p.id === form.profissionalId);
+    const agendamentoId = `ag${Date.now()}`;
+    
     addAgendamento({
-      id: `ag${Date.now()}`,
+      id: agendamentoId,
       pacienteId,
       pacienteNome: form.nome,
       unidadeId: form.unidadeId,
-      salaId: form.salaId,
-      setorId: form.setorId,
+      salaId: '',
+      setorId: prof?.setor || '',
       profissionalId: form.profissionalId,
       profissionalNome: prof?.nome || '',
       data: form.data,
@@ -64,6 +100,7 @@ const AgendarOnline: React.FC = () => {
       criadoPor: 'online',
     });
 
+    toast.success('Agendamento realizado com sucesso!');
     setDone(true);
   };
 
@@ -80,8 +117,14 @@ const AgendarOnline: React.FC = () => {
               <p className="text-muted-foreground mb-4">
                 {form.nome}, sua consulta foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
               </p>
+              <p className="text-sm text-muted-foreground mb-2">
+                <strong>Profissional:</strong> {funcionarios.find(f => f.id === form.profissionalId)?.nome}
+              </p>
+              <p className="text-sm text-muted-foreground mb-2">
+                <strong>Unidade:</strong> {unidades.find(u => u.id === form.unidadeId)?.nome}
+              </p>
               <p className="text-sm text-muted-foreground mb-6">
-                Você receberá a confirmação por WhatsApp e/ou e-mail. Lembre-se de chegar com 15 minutos de antecedência.
+                Lembre-se de chegar com 15 minutos de antecedência.
               </p>
               <Link to="/">
                 <Button className="gradient-primary text-primary-foreground">Voltar ao Início</Button>
@@ -101,12 +144,11 @@ const AgendarOnline: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-1" />Voltar
           </Link>
           <h1 className="text-2xl md:text-3xl font-bold font-display">Agendar Consulta Online</h1>
-          <p className="opacity-80 mt-1">Preencha os dados para agendar sua consulta</p>
+          <p className="opacity-80 mt-1">SMS Oriximiná — Agendamento Público</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Progress */}
         <div className="flex items-center gap-2 mb-6">
           {[1, 2, 3].map(s => (
             <React.Fragment key={s}>
@@ -120,44 +162,47 @@ const AgendarOnline: React.FC = () => {
           <CardContent className="p-6">
             {step === 1 && (
               <div className="space-y-4">
-                <h2 className="text-lg font-semibold font-display text-foreground">Local e Profissional</h2>
-                <div><Label>Unidade *</Label>
-                  <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, salaId: '' }))}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
-                    <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                {filteredSalas.length > 0 && (
-                  <div><Label>Sala (opcional)</Label>
-                    <Select value={form.salaId} onValueChange={v => setForm(p => ({ ...p, salaId: v }))}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>{filteredSalas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
-                    </Select>
+                <h2 className="text-lg font-semibold font-display text-foreground">Unidade e Profissional</h2>
+                
+                {unidadesComDisponibilidade.length === 0 ? (
+                  <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+                    <p className="text-sm text-warning">Nenhuma unidade possui horários disponíveis no momento. Tente novamente mais tarde.</p>
                   </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label>Unidade *</Label>
+                      <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a unidade" /></SelectTrigger>
+                        <SelectContent>{unidadesComDisponibilidade.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Profissional *</Label>
+                      <Select value={form.profissionalId} onValueChange={v => setForm(p => ({ ...p, profissionalId: v, data: '', hora: '' }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
+                        <SelectContent>
+                          {profissionaisComDisponibilidade.map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.nome} — {p.cargo}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Tipo de Atendimento</Label>
+                      <Select value={form.tipo} onValueChange={v => setForm(p => ({ ...p, tipo: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Consulta">Consulta</SelectItem>
+                          <SelectItem value="Retorno">Retorno</SelectItem>
+                          <SelectItem value="Exame">Exame</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={() => setStep(2)} className="w-full gradient-primary text-primary-foreground" disabled={!form.unidadeId || !form.profissionalId}>Próximo</Button>
+                  </>
                 )}
-                <div><Label>Setor</Label>
-                  <Select value={form.setorId} onValueChange={v => setForm(p => ({ ...p, setorId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Profissional *</Label>
-                  <Select value={form.profissionalId} onValueChange={v => setForm(p => ({ ...p, profissionalId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Tipo de Atendimento</Label>
-                  <Select value={form.tipo} onValueChange={v => setForm(p => ({ ...p, tipo: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Consulta">Consulta</SelectItem>
-                      <SelectItem value="Retorno">Retorno</SelectItem>
-                      <SelectItem value="Exame">Exame</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={() => setStep(2)} className="w-full gradient-primary text-primary-foreground" disabled={!form.unidadeId || !form.profissionalId}>Próximo</Button>
               </div>
             )}
 
@@ -184,8 +229,53 @@ const AgendarOnline: React.FC = () => {
             {step === 3 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Data e Horário</h2>
-                <div><Label>Data *</Label><Input type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} /></div>
-                <div><Label>Horário *</Label><Input type="time" value={form.hora} onChange={e => setForm(p => ({ ...p, hora: e.target.value }))} /></div>
+                
+                {availableDates.length === 0 ? (
+                  <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+                    <p className="text-sm text-warning">Não há datas disponíveis para este profissional nesta unidade. Volte e escolha outro profissional.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <Label>Data Disponível *</Label>
+                      <Select value={form.data} onValueChange={v => setForm(p => ({ ...p, data: v, hora: '' }))}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a data" /></SelectTrigger>
+                        <SelectContent>
+                          {availableDates.slice(0, 30).map(d => {
+                            const dateObj = new Date(d + 'T12:00:00');
+                            const label = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                            return <SelectItem key={d} value={d}>{label}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {form.data && (
+                      <div>
+                        <Label>Horário Disponível *</Label>
+                        {availableSlots.length === 0 ? (
+                          <p className="text-sm text-warning mt-1">Todos os horários desta data estão ocupados.</p>
+                        ) : (
+                          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                            {availableSlots.map(slot => (
+                              <Button
+                                key={slot}
+                                variant={form.hora === slot ? 'default' : 'outline'}
+                                className={form.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                                size="sm"
+                                onClick={() => setForm(p => ({ ...p, hora: slot }))}
+                              >
+                                {slot}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="flex-1">Voltar</Button>
                   <Button onClick={handleSubmit} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.data || !form.hora}>
