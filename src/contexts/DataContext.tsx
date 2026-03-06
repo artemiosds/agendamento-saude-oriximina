@@ -4,7 +4,7 @@ import {
 } from '@/types';
 import { 
   mockAgendamentos, mockPacientes, mockFila, mockAtendimentos, 
-  mockUnidades, mockSalas, mockSetores, mockUsers 
+  mockUnidades, mockSalas, mockSetores, mockUsers, mockDisponibilidades 
 } from '@/data/mockData';
 
 const defaultConfiguracoes: Configuracoes = {
@@ -76,7 +76,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [salas, setSalas] = useState<Sala[]>(mockSalas);
   const [setores] = useState<Setor[]>(mockSetores);
   const [funcionarios, setFuncionarios] = useState<User[]>(mockUsers);
-  const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
+  const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>(mockDisponibilidades);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
   const addAgendamento = useCallback((ag: Agendamento) => setAgendamentos(prev => [...prev, ag]), []);
