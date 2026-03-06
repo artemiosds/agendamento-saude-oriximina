@@ -100,10 +100,10 @@ const Disponibilidade: React.FC = () => {
             </div>
             {filteredSalas.length > 0 && (
               <div><Label>Sala (opcional)</Label>
-                <Select value={form.salaId} onValueChange={v => setForm(p => ({ ...p, salaId: v }))}>
+                <Select value={form.salaId || 'none'} onValueChange={v => setForm(p => ({ ...p, salaId: v === 'none' ? '' : v }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value="none">Nenhuma</SelectItem>
                     {filteredSalas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
