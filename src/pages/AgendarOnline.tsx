@@ -21,20 +21,20 @@ const AgendarOnline: React.FC = () => {
     data: '', hora: '',
   });
 
-  // Only show professionals who have availability configured
-  const profissionaisComDisponibilidade = useMemo(() => {
-    return funcionarios.filter(f => 
-      f.role === 'profissional' && f.ativo &&
-      (!form.unidadeId || f.unidadeId === form.unidadeId) &&
-      disponibilidades.some(d => d.profissionalId === f.id && (!form.unidadeId || d.unidadeId === form.unidadeId))
-    );
-  }, [funcionarios, disponibilidades, form.unidadeId]);
-
   // Only show units that have availability configured
   const unidadesComDisponibilidade = useMemo(() => {
     const unidadeIds = new Set(disponibilidades.map(d => d.unidadeId));
     return unidades.filter(u => unidadeIds.has(u.id) && u.ativo);
   }, [unidades, disponibilidades]);
+
+  // Only show professionals who have availability configured for the selected unit
+  const profissionaisComDisponibilidade = useMemo(() => {
+    return funcionarios.filter(f => 
+      f.role === 'profissional' && f.ativo &&
+      disponibilidades.some(d => d.profissionalId === f.id && 
+        (!form.unidadeId || d.unidadeId === form.unidadeId))
+    );
+  }, [funcionarios, disponibilidades, form.unidadeId]);
 
   // Available dates based on availability config
   const availableDates = useMemo(() => {
@@ -54,7 +54,6 @@ const AgendarOnline: React.FC = () => {
       return;
     }
 
-    // Check if patient already exists by CPF or phone
     let pacienteId: string;
     const existingPatient = pacientes.find(p => 
       (form.cpf && p.cpf === form.cpf) || p.telefone === form.telefone
@@ -65,39 +64,21 @@ const AgendarOnline: React.FC = () => {
     } else {
       pacienteId = `p${Date.now()}`;
       addPaciente({
-        id: pacienteId,
-        nome: form.nome,
-        cpf: form.cpf,
-        telefone: form.telefone,
-        dataNascimento: form.dataNascimento,
-        email: form.email,
-        endereco: '',
-        observacoes: form.obs,
-        criadoEm: new Date().toISOString(),
+        id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
+        dataNascimento: form.dataNascimento, email: form.email, endereco: '',
+        observacoes: form.obs, criadoEm: new Date().toISOString(),
       });
     }
 
     const prof = funcionarios.find(p => p.id === form.profissionalId);
-    const agendamentoId = `ag${Date.now()}`;
     
     addAgendamento({
-      id: agendamentoId,
-      pacienteId,
-      pacienteNome: form.nome,
-      unidadeId: form.unidadeId,
-      salaId: '',
-      setorId: prof?.setor || '',
-      profissionalId: form.profissionalId,
-      profissionalNome: prof?.nome || '',
-      data: form.data,
-      hora: form.hora,
-      status: 'pendente',
-      tipo: form.tipo,
-      observacoes: form.obs,
-      origem: 'online',
-      syncStatus: 'pendente',
-      criadoEm: new Date().toISOString(),
-      criadoPor: 'online',
+      id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
+      unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
+      profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
+      data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
+      observacoes: form.obs, origem: 'online', syncStatus: 'pendente',
+      criadoEm: new Date().toISOString(), criadoPor: 'online',
     });
 
     toast.success('Agendamento realizado com sucesso!');
@@ -126,9 +107,7 @@ const AgendarOnline: React.FC = () => {
               <p className="text-sm text-muted-foreground mb-6">
                 Lembre-se de chegar com 15 minutos de antecedência.
               </p>
-              <Link to="/">
-                <Button className="gradient-primary text-primary-foreground">Voltar ao Início</Button>
-              </Link>
+              <Link to="/"><Button className="gradient-primary text-primary-foreground">Voltar ao Início</Button></Link>
             </CardContent>
           </Card>
         </motion.div>
@@ -259,15 +238,9 @@ const AgendarOnline: React.FC = () => {
                         ) : (
                           <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
                             {availableSlots.map(slot => (
-                              <Button
-                                key={slot}
-                                variant={form.hora === slot ? 'default' : 'outline'}
+                              <Button key={slot} variant={form.hora === slot ? 'default' : 'outline'}
                                 className={form.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
-                                size="sm"
-                                onClick={() => setForm(p => ({ ...p, hora: slot }))}
-                              >
-                                {slot}
-                              </Button>
+                                size="sm" onClick={() => setForm(p => ({ ...p, hora: slot }))}>{slot}</Button>
                             ))}
                           </div>
                         )}
