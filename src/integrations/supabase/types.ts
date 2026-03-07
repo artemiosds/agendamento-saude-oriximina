@@ -14,18 +14,61 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_logs: {
+        Row: {
+          acao: string
+          created_at: string
+          detalhes: Json
+          entidade: string
+          entidade_id: string
+          id: string
+          role: string
+          unidade_id: string
+          user_id: string
+          user_nome: string
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          detalhes?: Json
+          entidade: string
+          entidade_id?: string
+          id?: string
+          role?: string
+          unidade_id?: string
+          user_id?: string
+          user_nome?: string
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          detalhes?: Json
+          entidade?: string
+          entidade_id?: string
+          id?: string
+          role?: string
+          unidade_id?: string
+          user_id?: string
+          user_nome?: string
+        }
+        Relationships: []
+      }
       agendamentos: {
         Row: {
+          atualizado_em: string
           criado_em: string | null
           criado_por: string
           data: string
           google_event_id: string | null
           hora: string
           id: string
+          lembrete_24h_enviado_em: string | null
+          lembrete_proximo_enviado_em: string | null
           observacoes: string
           origem: string
           paciente_id: string
           paciente_nome: string
+          prioridade_perfil: string
           profissional_id: string
           profissional_nome: string
           sala_id: string
@@ -36,16 +79,20 @@ export type Database = {
           unidade_id: string
         }
         Insert: {
+          atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
           data?: string
           google_event_id?: string | null
           hora?: string
           id: string
+          lembrete_24h_enviado_em?: string | null
+          lembrete_proximo_enviado_em?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
+          prioridade_perfil?: string
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
@@ -56,16 +103,20 @@ export type Database = {
           unidade_id?: string
         }
         Update: {
+          atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
           data?: string
           google_event_id?: string | null
           hora?: string
           id?: string
+          lembrete_24h_enviado_em?: string | null
+          lembrete_proximo_enviado_em?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
+          prioridade_perfil?: string
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
@@ -239,6 +290,7 @@ export type Database = {
           paciente_nome: string
           posicao: number
           prioridade: string
+          prioridade_perfil: string
           profissional_id: string | null
           setor: string
           status: string
@@ -255,6 +307,7 @@ export type Database = {
           paciente_nome?: string
           posicao?: number
           prioridade?: string
+          prioridade_perfil?: string
           profissional_id?: string | null
           setor?: string
           status?: string
@@ -271,6 +324,7 @@ export type Database = {
           paciente_nome?: string
           posicao?: number
           prioridade?: string
+          prioridade_perfil?: string
           profissional_id?: string | null
           setor?: string
           status?: string
@@ -519,6 +573,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_config: {
+        Row: {
+          configuracoes: Json
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          configuracoes?: Json
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          configuracoes?: Json
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       unidades: {
         Row: {
