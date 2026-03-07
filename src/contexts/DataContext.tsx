@@ -45,6 +45,7 @@ interface DataContextType {
   updateFila: (id: string, data: Partial<FilaEspera>) => void;
   removeFromFila: (id: string) => void;
   addAtendimento: (a: Atendimento) => void;
+  updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
   addUnidade: (u: Unidade) => void;
   updateUnidade: (id: string, data: Partial<Unidade>) => void;
   deleteUnidade: (id: string) => void;
@@ -76,7 +77,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(mockAgendamentos);
   const [pacientes, setPacientes] = useState<Paciente[]>(mockPacientes);
   const [fila, setFila] = useState<FilaEspera[]>(mockFila);
-  const [atendimentos, setAtendimentos] = useState<Atendimento[]>(mockAtendimentos);
+  const [atendimentos, setAtendimentos] = useState<Atendimento[]>(mockAtendimentos as Atendimento[]);
   const [unidades, setUnidades] = useState<Unidade[]>(mockUnidades);
   const [salas, setSalas] = useState<Sala[]>(mockSalas);
   const [setores] = useState<Setor[]>(mockSetores);
@@ -95,6 +96,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setFila(prev => prev.map(f => f.id === id ? { ...f, ...data } : f)), []);
   const removeFromFila = useCallback((id: string) => setFila(prev => prev.filter(f => f.id !== id)), []);
   const addAtendimento = useCallback((a: Atendimento) => setAtendimentos(prev => [...prev, a]), []);
+  const updateAtendimento = useCallback((id: string, data: Partial<Atendimento>) =>
+    setAtendimentos(prev => prev.map(a => a.id === id ? { ...a, ...data } : a)), []);
   const addUnidade = useCallback((u: Unidade) => setUnidades(prev => [...prev, u]), []);
   const updateUnidade = useCallback((id: string, data: Partial<Unidade>) => 
     setUnidades(prev => prev.map(u => u.id === id ? { ...u, ...data } : u)), []);
@@ -114,7 +117,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateConfiguracoes = useCallback((data: Partial<Configuracoes>) => 
     setConfiguracoes(prev => ({ ...prev, ...data })), []);
 
-  // Check queue for compatible patients when a slot opens
   const checkFilaForSlot = useCallback((profissionalId: string, unidadeId: string, _data: string, _hora: string): FilaEspera[] => {
     const prioOrder = { urgente: 0, alta: 1, normal: 2 };
     return fila
@@ -129,7 +131,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
   }, [fila]);
 
-  // Cancel appointment and return queue candidates
   const cancelAgendamento = useCallback((id: string): FilaEspera[] => {
     const ag = agendamentos.find(a => a.id === id);
     if (!ag) return [];
@@ -137,14 +138,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
   }, [agendamentos, checkFilaForSlot]);
 
-  // Move patient from queue to appointment
   const encaixarDaFila = useCallback((filaId: string, agData: Omit<Agendamento, 'id' | 'criadoEm'>) => {
     const newAg: Agendamento = { ...agData, id: `ag${Date.now()}`, criadoEm: new Date().toISOString() };
     setAgendamentos(prev => [...prev, newAg]);
     setFila(prev => prev.map(f => f.id === filaId ? { ...f, status: 'encaixado' as const } : f));
   }, []);
 
-  // Get available dates for a professional at a unit
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter(d => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
@@ -177,7 +176,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return dates.sort();
   }, [disponibilidades, agendamentos]);
 
-  // Get available time slots for a specific date
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string): string[] => {
     const dateObj = new Date(date + 'T00:00:00');
     const dayOfWeek = dateObj.getDay();
@@ -227,7 +225,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <DataContext.Provider value={{
       agendamentos, pacientes, fila, atendimentos, unidades, salas, setores, funcionarios, disponibilidades, configuracoes,
       addAgendamento, updateAgendamento, cancelAgendamento, addPaciente, updatePaciente,
-      addToFila, updateFila, removeFromFila, addAtendimento,
+      addToFila, updateFila, removeFromFila, addAtendimento, updateAtendimento,
       addUnidade, updateUnidade, deleteUnidade, 
       addSala, updateSala, deleteSala,
       addFuncionario, updateFuncionario, deleteFuncionario,

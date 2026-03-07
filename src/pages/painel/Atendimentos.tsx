@@ -1,92 +1,96 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus } from 'lucide-react';
+import { Loader2, Clock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+
+interface AtendimentoDB {
+  id: string;
+  paciente_nome: string;
+  profissional_nome: string;
+  unidade_id: string;
+  setor: string;
+  procedimento: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  duracao_minutos: number | null;
+  status: string;
+}
 
 const Atendimentos: React.FC = () => {
-  const { atendimentos, addAtendimento, pacientes, funcionarios, salas } = useData();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ pacienteId: '', profissionalId: '', salaId: '', procedimento: '', observacoes: '' });
+  const { user } = useAuth();
+  const { unidades } = useData();
+  const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const profissionais = funcionarios.filter(f => f.role === 'profissional');
-
-  const handleCreate = () => {
-    const pac = pacientes.find(p => p.id === form.pacienteId);
-    const prof = profissionais.find(p => p.id === form.profissionalId);
-    if (!pac || !prof) return;
-    const now = new Date();
-    addAtendimento({
-      id: `at${Date.now()}`,
-      agendamentoId: '',
-      pacienteId: pac.id,
-      pacienteNome: pac.nome,
-      profissionalId: prof.id,
-      profissionalNome: prof.nome,
-      unidadeId: prof.unidadeId,
-      salaId: form.salaId,
-      setor: prof.setor,
-      procedimento: form.procedimento,
-      observacoes: form.observacoes,
-      data: now.toISOString().split('T')[0],
-      hora: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    });
-    setDialogOpen(false);
-    setForm({ pacienteId: '', profissionalId: '', salaId: '', procedimento: '', observacoes: '' });
-  };
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false });
+        if (user?.role === 'profissional') query = query.eq('profissional_id', user.id);
+        if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        const { data } = await query;
+        if (data) setAtendimentos(data);
+      } catch (err) {
+        console.error('Error:', err);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [user]);
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Atendimentos</h1>
-          <p className="text-muted-foreground text-sm">{atendimentos.length} registros</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Registrar</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle className="font-display">Registrar Atendimento</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label>Paciente</Label>
-                <Select value={form.pacienteId} onValueChange={v => setForm(p => ({ ...p, pacienteId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{pacientes.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Profissional</Label>
-                <Select value={form.profissionalId} onValueChange={v => setForm(p => ({ ...p, profissionalId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Procedimento</Label><Input value={form.procedimento} onChange={e => setForm(p => ({ ...p, procedimento: e.target.value }))} /></div>
-              <div><Label>Observações</Label><Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} /></div>
-              <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground">Registrar</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h1 className="text-2xl font-bold font-display text-foreground">Atendimentos</h1>
+        <p className="text-muted-foreground text-sm">{atendimentos.length} registros</p>
       </div>
 
-      <div className="space-y-2">
-        {atendimentos.map(at => (
-          <Card key={at.id} className="shadow-card border-0">
-            <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <span className="text-sm font-mono font-medium text-primary w-20 shrink-0">{at.data} {at.hora}</span>
-              <div className="flex-1">
-                <p className="font-semibold text-foreground">{at.pacienteNome}</p>
-                <p className="text-sm text-muted-foreground">{at.profissionalNome} • {at.procedimento}</p>
-              </div>
-              <span className="text-xs text-muted-foreground">{at.setor}</span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+      ) : atendimentos.length === 0 ? (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-8 text-center text-muted-foreground">Nenhum atendimento registrado.</CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {atendimentos.map(at => {
+            const unidadeNome = unidades.find(u => u.id === at.unidade_id)?.nome || '';
+            return (
+              <Card key={at.id} className="shadow-card border-0">
+                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <span className="text-sm font-mono font-medium text-primary w-24 shrink-0">
+                    {at.data} {at.hora_inicio}
+                  </span>
+                  <div className="flex-1">
+                    <p className="font-semibold text-foreground">{at.paciente_nome}</p>
+                    <p className="text-sm text-muted-foreground">{at.profissional_nome} • {at.procedimento}</p>
+                    {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-xs px-2 py-1 rounded-full font-medium",
+                      at.status === 'finalizado' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary'
+                    )}>
+                      {at.status === 'finalizado' ? 'Finalizado' : 'Em Atendimento'}
+                    </span>
+                    {at.duracao_minutos && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{at.duracao_minutos}min
+                      </span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      atendimentos: {
+        Row: {
+          agendamento_id: string
+          criado_em: string | null
+          data: string
+          duracao_minutos: number | null
+          hora_fim: string
+          hora_inicio: string
+          id: string
+          observacoes: string
+          paciente_id: string
+          paciente_nome: string
+          procedimento: string
+          profissional_id: string
+          profissional_nome: string
+          sala_id: string
+          setor: string
+          status: string
+          unidade_id: string
+        }
+        Insert: {
+          agendamento_id?: string
+          criado_em?: string | null
+          data?: string
+          duracao_minutos?: number | null
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          observacoes?: string
+          paciente_id: string
+          paciente_nome: string
+          procedimento?: string
+          profissional_id: string
+          profissional_nome: string
+          sala_id?: string
+          setor?: string
+          status?: string
+          unidade_id?: string
+        }
+        Update: {
+          agendamento_id?: string
+          criado_em?: string | null
+          data?: string
+          duracao_minutos?: number | null
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          observacoes?: string
+          paciente_id?: string
+          paciente_nome?: string
+          procedimento?: string
+          profissional_id?: string
+          profissional_nome?: string
+          sala_id?: string
+          setor?: string
+          status?: string
+          unidade_id?: string
+        }
+        Relationships: []
+      }
       funcionarios: {
         Row: {
           ativo: boolean | null
@@ -27,6 +87,7 @@ export type Database = {
           role: string
           sala_id: string | null
           setor: string | null
+          tempo_atendimento: number
           unidade_id: string | null
           usuario: string
         }
@@ -42,6 +103,7 @@ export type Database = {
           role?: string
           sala_id?: string | null
           setor?: string | null
+          tempo_atendimento?: number
           unidade_id?: string | null
           usuario: string
         }
@@ -57,6 +119,7 @@ export type Database = {
           role?: string
           sala_id?: string | null
           setor?: string | null
+          tempo_atendimento?: number
           unidade_id?: string | null
           usuario?: string
         }

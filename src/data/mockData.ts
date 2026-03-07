@@ -183,7 +183,7 @@ export const mockAtendimentos: Atendimento[] = [
     profissionalId: 'u4', profissionalNome: 'Dr. Carlos Oliveira',
     unidadeId: 'un1', salaId: 's1', setor: 'Clínica Geral',
     procedimento: 'Consulta de rotina', observacoes: 'Paciente estável',
-    data: today, hora: '07:30',
+    data: today, horaInicio: '07:30', horaFim: '08:00', status: 'finalizado' as const,
   },
 ];
 

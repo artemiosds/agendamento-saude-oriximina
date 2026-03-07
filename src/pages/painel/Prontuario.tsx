@@ -8,10 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, FileText, Printer, Pencil, Search } from 'lucide-react';
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Prontuario } from '@/types';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import AtendimentoTimer from '@/components/AtendimentoTimer';
 
 interface ProntuarioDB {
   id: string;
@@ -42,6 +43,7 @@ interface ProntuarioDB {
 const emptyForm = {
   paciente_id: '',
   paciente_nome: '',
+  agendamento_id: '',
   data_atendimento: new Date().toISOString().split('T')[0],
   hora_atendimento: '',
   queixa_principal: '',
@@ -58,7 +60,9 @@ const emptyForm = {
 
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { pacientes, unidades } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento } = useData();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,22 +70,23 @@ const ProntuarioPage: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
-  const [viewProntuario, setViewProntuario] = useState<ProntuarioDB | null>(null);
+  const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   const isProfissional = user?.role === 'profissional';
   const canEdit = hasPermission(['master', 'coordenador', 'profissional']);
+
+  // Get tempo_atendimento for current professional (default 30)
+  const tempoLimite = user?.tempoAtendimento || 30;
 
   const loadProntuarios = async () => {
     setLoading(true);
     try {
       let query = (supabase as any).from('prontuarios').select('*').order('data_atendimento', { ascending: false });
 
-      // Professionals see only their own records
       if (isProfissional && user) {
         query = query.eq('profissional_id', user.id);
       }
-      // Coordenador sees only their unit
       if (user?.role === 'coordenador' && user.unidadeId) {
         query = query.eq('unidade_id', user.unidadeId);
       }
@@ -99,17 +104,46 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user]);
 
+  // Auto-open form when coming from "Iniciar Atendimento"
+  useEffect(() => {
+    const pacienteId = searchParams.get('pacienteId');
+    const pacienteNome = searchParams.get('pacienteNome');
+    const agendamentoId = searchParams.get('agendamentoId');
+    const horaInicio = searchParams.get('horaInicio');
+    const data = searchParams.get('data');
+
+    if (pacienteId && pacienteNome) {
+      setEditId(null);
+      setForm({
+        ...emptyForm,
+        paciente_id: pacienteId,
+        paciente_nome: pacienteNome,
+        agendamento_id: agendamentoId || '',
+        data_atendimento: data || new Date().toISOString().split('T')[0],
+        hora_atendimento: horaInicio || '',
+      });
+      setDialogOpen(true);
+
+      if (agendamentoId && horaInicio) {
+        setActiveAtendimento({ agendamentoId, horaInicio });
+      }
+    }
+  }, [searchParams]);
+
   const openNew = () => {
     setEditId(null);
+    setActiveAtendimento(null);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split('T')[0] });
     setDialogOpen(true);
   };
 
   const openEdit = (p: ProntuarioDB) => {
     setEditId(p.id);
+    setActiveAtendimento(null);
     setForm({
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
+      agendamento_id: p.agendamento_id || '',
       data_atendimento: p.data_atendimento,
       hora_atendimento: p.hora_atendimento || '',
       queixa_principal: p.queixa_principal || '',
@@ -141,6 +175,7 @@ const ProntuarioPage: React.FC = () => {
         profissional_nome: user?.nome || '',
         unidade_id: user?.unidadeId || '',
         setor: user?.setor || '',
+        agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
         queixa_principal: form.queixa_principal,
@@ -173,85 +208,105 @@ const ProntuarioPage: React.FC = () => {
     setSaving(false);
   };
 
+  const handleFinalizarAtendimento = async () => {
+    // Save prontuário first
+    await handleSave();
+
+    if (!activeAtendimento) return;
+
+    const now = new Date();
+    const horaFim = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Calculate duration
+    const [hi, mi] = activeAtendimento.horaInicio.split(':').map(Number);
+    const [hf, mf] = horaFim.split(':').map(Number);
+    const duracaoMinutos = (hf * 60 + mf) - (hi * 60 + mi);
+
+    // Update atendimento in DB
+    try {
+      await (supabase as any).from('atendimentos')
+        .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: 'finalizado' })
+        .eq('agendamento_id', activeAtendimento.agendamentoId);
+    } catch (err) {
+      console.error('Error finalizing atendimento:', err);
+    }
+
+    // Update agendamento status
+    updateAgendamento(activeAtendimento.agendamentoId, { status: 'concluido' });
+
+    setActiveAtendimento(null);
+    toast.success(`Atendimento finalizado! Duração: ${Math.max(0, duracaoMinutos)} minutos.`);
+    navigate('/painel/agenda');
+  };
+
   const handlePrint = (p: ProntuarioDB) => {
-    setViewProntuario(p);
-    setTimeout(() => {
-      const printContent = printRef.current;
-      if (!printContent) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Habilite popups para imprimir.');
+      return;
+    }
 
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        toast.error('Habilite popups para imprimir.');
-        return;
-      }
+    const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
 
-      const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
-
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Prontuário - ${p.paciente_nome}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; font-size: 12px; }
-            .header { text-align: center; border-bottom: 2px solid #0369a1; padding-bottom: 12px; margin-bottom: 16px; }
-            .header h1 { font-size: 16px; color: #0369a1; }
-            .header p { font-size: 11px; color: #666; }
-            .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; padding: 10px; background: #f8fafc; border-radius: 6px; }
-            .info-item { }
-            .info-label { font-weight: 600; font-size: 10px; text-transform: uppercase; color: #666; }
-            .info-value { font-size: 12px; }
-            .section { margin-bottom: 12px; }
-            .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px; }
-            .section-content { font-size: 12px; line-height: 1.5; white-space: pre-wrap; min-height: 20px; }
-            .footer { margin-top: 40px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-            .signature { margin-top: 50px; text-align: center; }
-            .signature-line { width: 250px; border-top: 1px solid #333; margin: 0 auto 4px; }
-            @media print { body { padding: 10px; } }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-            <p>${unidadeNome}</p>
-            <p style="margin-top: 8px; font-size: 14px; font-weight: 600;">PRONTUÁRIO DE ATENDIMENTO</p>
-          </div>
-
-          <div class="info-grid">
-            <div class="info-item"><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
-            <div class="info-item"><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
-            <div class="info-item"><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
-            <div class="info-item"><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || '-'}</span></div>
-          </div>
-
-          ${p.queixa_principal ? `<div class="section"><div class="section-title">Queixa Principal</div><div class="section-content">${p.queixa_principal}</div></div>` : ''}
-          ${p.anamnese ? `<div class="section"><div class="section-title">Anamnese</div><div class="section-content">${p.anamnese}</div></div>` : ''}
-          ${p.sinais_sintomas ? `<div class="section"><div class="section-title">Sinais e Sintomas</div><div class="section-content">${p.sinais_sintomas}</div></div>` : ''}
-          ${p.exame_fisico ? `<div class="section"><div class="section-title">Exame Físico</div><div class="section-content">${p.exame_fisico}</div></div>` : ''}
-          ${p.hipotese ? `<div class="section"><div class="section-title">Hipótese / Avaliação</div><div class="section-content">${p.hipotese}</div></div>` : ''}
-          ${p.conduta ? `<div class="section"><div class="section-title">Conduta</div><div class="section-content">${p.conduta}</div></div>` : ''}
-          ${p.prescricao ? `<div class="section"><div class="section-title">Prescrição / Orientações</div><div class="section-content">${p.prescricao}</div></div>` : ''}
-          ${p.solicitacao_exames ? `<div class="section"><div class="section-title">Solicitação de Exames</div><div class="section-content">${p.solicitacao_exames}</div></div>` : ''}
-          ${p.evolucao ? `<div class="section"><div class="section-title">Evolução</div><div class="section-content">${p.evolucao}</div></div>` : ''}
-          ${p.observacoes ? `<div class="section"><div class="section-title">Observações Gerais</div><div class="section-content">${p.observacoes}</div></div>` : ''}
-
-          <div class="signature">
-            <div class="signature-line"></div>
-            <p>${p.profissional_nome}</p>
-            <p style="font-size: 10px; color: #666;">${p.setor || ''}</p>
-          </div>
-
-          <div class="footer">
-            <p style="font-size: 10px; color: #999;">Documento gerado em ${new Date().toLocaleString('pt-BR')} — SMS Oriximiná</p>
-          </div>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    }, 100);
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Prontuário - ${p.paciente_nome}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; font-size: 12px; }
+          .header { text-align: center; border-bottom: 2px solid #0369a1; padding-bottom: 12px; margin-bottom: 16px; }
+          .header h1 { font-size: 16px; color: #0369a1; }
+          .header p { font-size: 11px; color: #666; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; padding: 10px; background: #f8fafc; border-radius: 6px; }
+          .info-label { font-weight: 600; font-size: 10px; text-transform: uppercase; color: #666; }
+          .info-value { font-size: 12px; }
+          .section { margin-bottom: 12px; }
+          .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px; }
+          .section-content { font-size: 12px; line-height: 1.5; white-space: pre-wrap; min-height: 20px; }
+          .signature { margin-top: 50px; text-align: center; }
+          .signature-line { width: 250px; border-top: 1px solid #333; margin: 0 auto 4px; }
+          .footer { margin-top: 40px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
+          <p>${unidadeNome}</p>
+          <p style="margin-top: 8px; font-size: 14px; font-weight: 600;">PRONTUÁRIO DE ATENDIMENTO</p>
+        </div>
+        <div class="info-grid">
+          <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
+          <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
+          <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
+          <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || '-'}</span></div>
+        </div>
+        ${p.queixa_principal ? `<div class="section"><div class="section-title">Queixa Principal</div><div class="section-content">${p.queixa_principal}</div></div>` : ''}
+        ${p.anamnese ? `<div class="section"><div class="section-title">Anamnese</div><div class="section-content">${p.anamnese}</div></div>` : ''}
+        ${p.sinais_sintomas ? `<div class="section"><div class="section-title">Sinais e Sintomas</div><div class="section-content">${p.sinais_sintomas}</div></div>` : ''}
+        ${p.exame_fisico ? `<div class="section"><div class="section-title">Exame Físico</div><div class="section-content">${p.exame_fisico}</div></div>` : ''}
+        ${p.hipotese ? `<div class="section"><div class="section-title">Hipótese / Avaliação</div><div class="section-content">${p.hipotese}</div></div>` : ''}
+        ${p.conduta ? `<div class="section"><div class="section-title">Conduta</div><div class="section-content">${p.conduta}</div></div>` : ''}
+        ${p.prescricao ? `<div class="section"><div class="section-title">Prescrição / Orientações</div><div class="section-content">${p.prescricao}</div></div>` : ''}
+        ${p.solicitacao_exames ? `<div class="section"><div class="section-title">Solicitação de Exames</div><div class="section-content">${p.solicitacao_exames}</div></div>` : ''}
+        ${p.evolucao ? `<div class="section"><div class="section-title">Evolução</div><div class="section-content">${p.evolucao}</div></div>` : ''}
+        ${p.observacoes ? `<div class="section"><div class="section-title">Observações Gerais</div><div class="section-content">${p.observacoes}</div></div>` : ''}
+        <div class="signature">
+          <div class="signature-line"></div>
+          <p>${p.profissional_nome}</p>
+          <p style="font-size: 10px; color: #666;">${p.setor || ''}</p>
+        </div>
+        <div class="footer">
+          <p style="font-size: 10px; color: #999;">Documento gerado em ${new Date().toLocaleString('pt-BR')} — SMS Oriximiná</p>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const filtered = prontuarios.filter(p =>
@@ -284,11 +339,23 @@ const ProntuarioPage: React.FC = () => {
       </div>
 
       {/* Form Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (!open) setActiveAtendimento(null);
+      }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display">{editId ? 'Editar' : 'Novo'} Prontuário</DialogTitle>
           </DialogHeader>
+
+          {/* Timer when active atendimento */}
+          {activeAtendimento && (
+            <AtendimentoTimer
+              horaInicio={activeAtendimento.horaInicio}
+              tempoLimite={tempoLimite}
+            />
+          )}
+
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -325,10 +392,25 @@ const ProntuarioPage: React.FC = () => {
             <div><Label>Evolução</Label><Textarea rows={2} value={form.evolucao} onChange={e => setForm(p => ({ ...p, evolucao: e.target.value }))} /></div>
             <div><Label>Observações Gerais</Label><Textarea rows={2} value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} /></div>
 
-            <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {editId ? 'Salvar Alterações' : 'Registrar Prontuário'}
-            </Button>
+            <div className="flex gap-2">
+              {activeAtendimento ? (
+                <>
+                  <Button onClick={handleSave} disabled={saving} variant="outline" className="flex-1">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    Salvar Rascunho
+                  </Button>
+                  <Button onClick={handleFinalizarAtendimento} disabled={saving} className="flex-1 bg-success hover:bg-success/90 text-success-foreground">
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Finalizar Atendimento
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  {editId ? 'Salvar Alterações' : 'Registrar Prontuário'}
+                </Button>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -385,7 +467,6 @@ const ProntuarioPage: React.FC = () => {
         </div>
       )}
 
-      {/* Hidden print ref */}
       <div ref={printRef} className="hidden" />
     </div>
   );
