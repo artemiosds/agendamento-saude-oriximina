@@ -37,6 +37,10 @@ interface FuncionarioDB {
   criado_em: string;
   criado_por: string;
   tempo_atendimento: number;
+  profissao: string;
+  tipo_conselho: string;
+  numero_conselho: string;
+  uf_conselho: string;
 }
 
 const Funcionarios: React.FC = () => {
@@ -49,6 +53,7 @@ const Funcionarios: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '',
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
@@ -72,19 +77,30 @@ const Funcionarios: React.FC = () => {
     loadFuncionarios();
   }, []);
 
+  const conselhoMap: Record<string, string> = {
+    'Médico': 'CRM', 'Médica': 'CRM', 'Enfermeiro': 'COREN', 'Enfermeira': 'COREN',
+    'Odontólogo': 'CRO', 'Odontóloga': 'CRO', 'Dentista': 'CRO',
+    'Fisioterapeuta': 'CREFITO', 'Psicólogo': 'CRP', 'Psicóloga': 'CRP',
+    'Assistente Social': 'CRESS', 'Nutricionista': 'CRN', 'Farmacêutico': 'CRF', 'Farmacêutica': 'CRF',
+    'Fonoaudiólogo': 'CRFa', 'Fonoaudióloga': 'CRFa', 'Terapeuta Ocupacional': 'CREFITO',
+    'Biomédico': 'CRBM', 'Biomédica': 'CRBM', 'Fisio': 'CREFITO',
+  };
+
   const openEdit = (f: FuncionarioDB) => {
     setEditId(f.id);
     setForm({
       nome: f.nome, usuario: f.usuario, email: f.email, senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
+      profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
+      numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
     });
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30 });
+    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '' });
     setDialogOpen(true);
   };
 
