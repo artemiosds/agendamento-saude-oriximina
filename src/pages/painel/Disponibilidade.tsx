@@ -17,7 +17,7 @@ const Disponibilidade: React.FC = () => {
   const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas } = useData();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const profissionais = funcionarios.filter(f => f.role === 'profissional');
+  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
     horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5] as number[],
@@ -39,7 +39,7 @@ const Disponibilidade: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.profissionalId || !form.unidadeId || !form.dataInicio || !form.dataFim) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
@@ -59,10 +59,10 @@ const Disponibilidade: React.FC = () => {
     }
 
     if (editId) {
-      updateDisponibilidade(editId, { ...form });
+      await updateDisponibilidade(editId, { ...form });
       toast.success('Disponibilidade atualizada!');
     } else {
-      addDisponibilidade({ id: `d${Date.now()}`, ...form });
+      await addDisponibilidade({ id: `d${Date.now()}`, ...form });
       toast.success('Disponibilidade configurada!');
     }
     setDialogOpen(false);
