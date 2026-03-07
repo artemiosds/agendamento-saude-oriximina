@@ -23,7 +23,7 @@ serve(async (req) => {
     const { action } = body;
 
     if (action === "create") {
-      const { nome, usuario, email, senha, setor, unidade_id, sala_id, cargo, role, criado_por } = body;
+      const { nome, usuario, email, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento } = body;
 
       if (!nome || !usuario || !email || !senha) {
         return new Response(
@@ -62,6 +62,7 @@ serve(async (req) => {
           role: role || "recepcao",
           ativo: true,
           criado_por: criado_por || "",
+          tempo_atendimento: tempo_atendimento || 30,
         })
         .select()
         .single();
