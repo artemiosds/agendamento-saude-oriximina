@@ -37,6 +37,10 @@ interface FuncionarioDB {
   criado_em: string;
   criado_por: string;
   tempo_atendimento: number;
+  profissao: string;
+  tipo_conselho: string;
+  numero_conselho: string;
+  uf_conselho: string;
 }
 
 const Funcionarios: React.FC = () => {
@@ -49,6 +53,7 @@ const Funcionarios: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '',
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
@@ -72,19 +77,30 @@ const Funcionarios: React.FC = () => {
     loadFuncionarios();
   }, []);
 
+  const conselhoMap: Record<string, string> = {
+    'Médico': 'CRM', 'Médica': 'CRM', 'Enfermeiro': 'COREN', 'Enfermeira': 'COREN',
+    'Odontólogo': 'CRO', 'Odontóloga': 'CRO', 'Dentista': 'CRO',
+    'Fisioterapeuta': 'CREFITO', 'Psicólogo': 'CRP', 'Psicóloga': 'CRP',
+    'Assistente Social': 'CRESS', 'Nutricionista': 'CRN', 'Farmacêutico': 'CRF', 'Farmacêutica': 'CRF',
+    'Fonoaudiólogo': 'CRFa', 'Fonoaudióloga': 'CRFa', 'Terapeuta Ocupacional': 'CREFITO',
+    'Biomédico': 'CRBM', 'Biomédica': 'CRBM', 'Fisio': 'CREFITO',
+  };
+
   const openEdit = (f: FuncionarioDB) => {
     setEditId(f.id);
     setForm({
       nome: f.nome, usuario: f.usuario, email: f.email, senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
+      profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
+      numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
     });
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30 });
+    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '' });
     setDialogOpen(true);
   };
 
@@ -109,6 +125,10 @@ const Funcionarios: React.FC = () => {
           cargo: form.cargo,
           role: form.role,
           tempo_atendimento: form.tempo_atendimento,
+          profissao: form.profissao,
+          tipo_conselho: form.tipo_conselho,
+          numero_conselho: form.numero_conselho,
+          uf_conselho: form.uf_conselho,
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -142,6 +162,10 @@ const Funcionarios: React.FC = () => {
             cargo: form.cargo,
             role: form.role,
             tempo_atendimento: form.tempo_atendimento,
+            profissao: form.profissao,
+            tipo_conselho: form.tipo_conselho,
+            numero_conselho: form.numero_conselho,
+            uf_conselho: form.uf_conselho,
             criado_por: user?.id || '',
           },
         });
@@ -257,6 +281,53 @@ const Funcionarios: React.FC = () => {
                 </div>
               )}
             </div>
+            {form.role === 'profissional' && (
+              <>
+                <div className="border-t pt-3 mt-2">
+                  <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Profissão</Label>
+                    <Select value={form.profissao || '__none__'} onValueChange={v => {
+                      const prof = v === '__none__' ? '' : v;
+                      const conselho = conselhoMap[prof] || '';
+                      setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Selecione</SelectItem>
+                        {Object.keys(conselhoMap).map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Tipo de Conselho</Label>
+                    <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nº do Conselho</Label>
+                    <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
+                  </div>
+                  <div>
+                    <Label>UF do Conselho</Label>
+                    <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
+                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </>
+            )}
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editId ? 'Salvar' : 'Cadastrar'}
@@ -285,7 +356,11 @@ const Funcionarios: React.FC = () => {
                       {f.cargo}{f.setor ? ` • ${f.setor}` : ''}
                       {f.role === 'profissional' && f.tempo_atendimento ? ` • ${f.tempo_atendimento}min` : ''}
                     </p>
+                    {f.tipo_conselho && f.numero_conselho && (
+                      <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
+                    )}
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
+                    {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
                   </div>
                   <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
                     {roleLabels[f.role as UserRole] || f.role}

@@ -15,7 +15,11 @@ export interface User {
   ativo: boolean;
   criadoEm: string;
   criadoPor: string;
-  tempoAtendimento?: number; // consultation duration in minutes
+  tempoAtendimento?: number;
+  profissao?: string;
+  tipoConselho?: string;
+  numeroConselho?: string;
+  ufConselho?: string;
 }
 
 export interface Prontuario {

@@ -26,17 +26,22 @@ const AgendarOnline: React.FC = () => {
   });
 
   const unidadesComDisponibilidade = useMemo(() => {
-    const unidadeIds = new Set(disponibilidades.map(d => d.unidadeId));
-    return unidades.filter(u => unidadeIds.has(u.id) && u.ativo);
-  }, [unidades, disponibilidades]);
+    // Show all active units that have at least one active professional linked
+    const unidadeIdsComProfissional = new Set(
+      funcionarios.filter(f => f.role === 'profissional' && f.ativo && f.unidadeId)
+        .map(f => f.unidadeId)
+    );
+    return unidades.filter(u => u.ativo && unidadeIdsComProfissional.has(u.id));
+  }, [unidades, funcionarios]);
 
   const profissionaisComDisponibilidade = useMemo(() => {
+    if (!form.unidadeId) return [];
+    // Show professionals that are active, have role 'profissional', linked to selected unit
+    // AND optionally have availability configured
     return funcionarios.filter(f => 
-      f.role === 'profissional' && f.ativo &&
-      disponibilidades.some(d => d.profissionalId === f.id && 
-        (!form.unidadeId || d.unidadeId === form.unidadeId))
+      f.role === 'profissional' && f.ativo && f.unidadeId === form.unidadeId
     );
-  }, [funcionarios, disponibilidades, form.unidadeId]);
+  }, [funcionarios, form.unidadeId]);
 
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
