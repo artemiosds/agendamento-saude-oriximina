@@ -48,6 +48,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           criadoEm: data.criado_em || '',
           criadoPor: data.criado_por || '',
           tempoAtendimento: data.tempo_atendimento || 30,
+          profissao: data.profissao || '',
+          tipoConselho: data.tipo_conselho || '',
+          numeroConselho: data.numero_conselho || '',
+          ufConselho: data.uf_conselho || '',
         });
       }
     } catch (err) {
@@ -57,20 +61,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    // Restore session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadProfile(session.user.id);
-      } else {
-        setIsLoading(false);
-      }
-    });
-
+    // IMPORTANT: Set up auth state listener BEFORE checking session (Supabase best practice)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         loadProfile(session.user.id);
       } else {
         setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadProfile(session.user.id);
+      } else {
         setIsLoading(false);
       }
     });
@@ -85,7 +90,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        // Extract the actual error message from the edge function response
         let errorMsg = 'Erro ao conectar ao servidor.';
         try {
           if (error instanceof Error && 'context' in error) {

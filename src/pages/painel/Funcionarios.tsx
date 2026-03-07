@@ -44,7 +44,7 @@ interface FuncionarioDB {
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas } = useData();
+  const { unidades, salas, refreshFuncionarios } = useData();
   const { hasPermission, user } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,6 +180,8 @@ const Funcionarios: React.FC = () => {
 
       setDialogOpen(false);
       await loadFuncionarios();
+      // Also refresh DataContext so other pages see the new employee immediately
+      await refreshFuncionarios();
     } catch (err) {
       toast.error('Erro ao salvar funcionário.');
     }
@@ -197,6 +199,7 @@ const Funcionarios: React.FC = () => {
       }
       toast.success('Funcionário excluído!');
       await loadFuncionarios();
+      await refreshFuncionarios();
     } catch {
       toast.error('Erro ao excluir funcionário.');
     }
