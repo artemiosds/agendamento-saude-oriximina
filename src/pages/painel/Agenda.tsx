@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -41,8 +43,15 @@ const statusBadgeClass: Record<string, string> = {
   em_atendimento: 'bg-primary/10 text-primary',
 };
 
+const tipoBadge: Record<string, { label: string; class: string }> = {
+  Consulta: { label: '1ª Consulta', class: 'bg-primary/10 text-primary' },
+  Retorno: { label: 'Retorno', class: 'bg-accent/80 text-accent-foreground' },
+  Exame: { label: 'Exame', class: 'bg-info/10 text-info' },
+  Procedimento: { label: 'Procedimento', class: 'bg-warning/10 text-warning' },
+};
+
 const Agenda: React.FC = () => {
-  const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento } = useData();
+  const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction } = useData();
   const { user } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -59,7 +68,6 @@ const Agenda: React.FC = () => {
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
     if (isProfissional && user) {
       if (a.profissionalId !== user.id) return false;
-      // Profissional only sees confirmed arrivals and in-progress
       if (a.status !== 'confirmado_chegada' && a.status !== 'em_atendimento' && a.status !== 'concluido') return false;
     }
     if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
@@ -187,9 +195,34 @@ const Agenda: React.FC = () => {
     }
   };
 
+  const handleDeleteAgendamento = async (agId: string) => {
+    try {
+      await (supabase as any).from('agendamentos').delete().eq('id', agId);
+      await logAction({
+        acao: 'excluir', entidade: 'agendamento', entidadeId: agId,
+        detalhes: { acao: 'exclusão de agendamento' }, user,
+      });
+      toast.success('Agendamento excluído!');
+      // Refresh
+      window.location.reload();
+    } catch (err) {
+      console.error('Error deleting:', err);
+      toast.error('Erro ao excluir agendamento.');
+    }
+  };
+
   const handleIniciarAtendimento = async (ag: typeof agendamentos[0]) => {
     const now = new Date();
     const horaInicio = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Save timer state in localStorage
+    const timerState = {
+      agendamentoId: ag.id,
+      horaInicio,
+      tempoLimite: user?.tempoAtendimento || 30,
+      startTimestamp: Date.now(),
+    };
+    localStorage.setItem(`timer_${ag.id}`, JSON.stringify(timerState));
 
     await updateAgendamento(ag.id, { status: 'em_atendimento' });
 
@@ -269,7 +302,7 @@ const Agenda: React.FC = () => {
                     <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Consulta">Consulta</SelectItem>
+                        <SelectItem value="Consulta">Primeira Consulta</SelectItem>
                         <SelectItem value="Retorno">Retorno</SelectItem>
                         <SelectItem value="Exame">Exame</SelectItem>
                         <SelectItem value="Procedimento">Procedimento</SelectItem>
@@ -309,16 +342,34 @@ const Agenda: React.FC = () => {
         ) : filtered.map(ag => {
           const canStart = isProfissional && ag.status === 'confirmado_chegada' && ag.data === new Date().toISOString().split('T')[0];
           const isEmAtendimento = ag.status === 'em_atendimento';
+          const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground' };
+          const paciente = pacientes.find(p => p.id === ag.pacienteId);
 
           return (
             <Card key={ag.id} className={cn('shadow-card border-0', isEmAtendimento && 'ring-2 ring-primary/50')}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{ag.pacienteNome}</p>
-                  <p className="text-sm text-muted-foreground">{ag.profissionalNome} • {ag.tipo}</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className="font-semibold text-foreground cursor-default">{ag.pacienteNome}</p>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p className="text-xs"><strong>Paciente:</strong> {ag.pacienteNome}</p>
+                      {paciente?.telefone && <p className="text-xs"><strong>Tel:</strong> {paciente.telefone}</p>}
+                      {paciente?.cpf && <p className="text-xs"><strong>CPF:</strong> {paciente.cpf}</p>}
+                      <p className="text-xs"><strong>Tipo:</strong> {tipoInfo.label}</p>
+                      <p className="text-xs"><strong>Origem:</strong> {ag.origem}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Tipo badge */}
+                  <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
+                    {tipoInfo.label}
+                  </span>
+                  {/* Status badge */}
                   <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
                     statusBadgeClass[ag.status] || 'bg-muted text-muted-foreground'
                   )}>
@@ -358,6 +409,28 @@ const Agenda: React.FC = () => {
                         <sa.icon className="w-3.5 h-3.5" />
                       </Button>
                     ))
+                  )}
+                  {/* Delete button */}
+                  {!isProfissional && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-destructive" title="Excluir">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir agendamento?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja excluir o agendamento de {ag.pacienteNome} às {ag.hora}? Esta ação será registrada no log de auditoria.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteAgendamento(ag.id)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   )}
                 </div>
               </CardContent>

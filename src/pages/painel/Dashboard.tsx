@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Users, Clock, CheckCircle, TrendingUp } from 'lucide-react';
+import { Calendar, Users, Clock, CheckCircle, TrendingUp, XCircle, AlertTriangle, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string }> = ({ title, value, icon, color }) => (
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string }> = ({ title, value, icon, color, subtitle }) => (
   <Card className="shadow-card border-0">
     <CardContent className="p-5 flex items-center gap-4">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
@@ -17,6 +17,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
       <div>
         <p className="text-sm text-muted-foreground">{title}</p>
         <p className="text-2xl font-bold font-display text-foreground">{value}</p>
+        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </div>
     </CardContent>
   </Card>
@@ -30,17 +31,18 @@ interface AtendimentoDB {
   data: string;
   status: string;
   duracao_minutos: number | null;
+  sala_id: string;
 }
 
 const Dashboard: React.FC = () => {
-  const { agendamentos, fila, funcionarios, unidades, disponibilidades } = useData();
+  const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
   const { user } = useAuth();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await (supabase as any).from('atendimentos').select('*').order('data', { ascending: false }).limit(500);
+        const { data } = await (supabase as any).from('atendimentos').select('*').order('data', { ascending: false }).limit(1000);
         if (data) setAtendimentosDB(data);
       } catch (err) {
         console.error('Error loading atendimentos for dashboard:', err);
@@ -51,7 +53,6 @@ const Dashboard: React.FC = () => {
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Filter based on role
   const filteredAgendamentos = useMemo(() => {
     return agendamentos.filter(a => {
       if (user?.role === 'profissional' && a.profissionalId !== user.id) return false;
@@ -62,11 +63,36 @@ const Dashboard: React.FC = () => {
   }, [agendamentos, user]);
 
   const todayAg = filteredAgendamentos.filter(a => a.data === today);
-  const confirmados = todayAg.filter(a => a.status === 'confirmado').length;
+  const confirmados = todayAg.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
   const pendentes = todayAg.filter(a => a.status === 'pendente').length;
   const aguardando = fila.filter(f => f.status === 'aguardando').length;
 
-  // Build chart from real atendimentos data
+  // KPIs
+  const kpis = useMemo(() => {
+    const totalAg = filteredAgendamentos.length;
+    const faltas = filteredAgendamentos.filter(a => a.status === 'falta').length;
+    const cancelados = filteredAgendamentos.filter(a => a.status === 'cancelado').length;
+    const noShowRate = totalAg > 0 ? Math.round((faltas / totalAg) * 100) : 0;
+
+    const finalizados = atendimentosDB.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
+    const avgTime = finalizados.length > 0
+      ? Math.round(finalizados.reduce((s, a) => s + (a.duracao_minutos || 0), 0) / finalizados.length)
+      : 0;
+
+    // Occupancy per sala (today)
+    const todayAtendimentos = atendimentosDB.filter(a => a.data === today);
+    const salasAtivas = salas.filter(s => s.ativo).length;
+    const salasOcupadas = new Set(todayAtendimentos.map(a => a.sala_id).filter(Boolean)).size;
+    const occupancyRate = salasAtivas > 0 ? Math.round((salasOcupadas / salasAtivas) * 100) : 0;
+
+    // Priority patients
+    const prioritarios = fila.filter(f => f.prioridade === 'alta' || f.prioridade === 'urgente');
+    const prioAtendidos = prioritarios.filter(f => f.status === 'atendido').length;
+    const prioAguardando = prioritarios.filter(f => f.status === 'aguardando' || f.status === 'chamado').length;
+
+    return { noShowRate, avgTime, occupancyRate, cancelados, faltas, prioAtendidos, prioAguardando, totalFinalizados: finalizados.length };
+  }, [filteredAgendamentos, atendimentosDB, today, salas, fila]);
+
   const weekChartData = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const now = new Date();
@@ -82,18 +108,13 @@ const Dashboard: React.FC = () => {
     return result;
   }, [atendimentosDB, filteredAgendamentos]);
 
-  // Build pie from real professionals
   const profData = useMemo(() => {
     const map: Record<string, number> = {};
     filteredAgendamentos.forEach(a => {
-      if (a.profissionalNome) {
-        map[a.profissionalNome] = (map[a.profissionalNome] || 0) + 1;
-      }
+      if (a.profissionalNome) map[a.profissionalNome] = (map[a.profissionalNome] || 0) + 1;
     });
     atendimentosDB.forEach(a => {
-      if (a.profissional_nome) {
-        map[a.profissional_nome] = (map[a.profissional_nome] || 0) + 1;
-      }
+      if (a.profissional_nome) map[a.profissional_nome] = (map[a.profissional_nome] || 0) + 1;
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
   }, [filteredAgendamentos, atendimentosDB]);
@@ -103,15 +124,48 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Visão geral do dia</p>
+        <h1 className="text-2xl font-bold font-display text-foreground">Dashboard Executivo</h1>
+        <p className="text-muted-foreground text-sm">Visão geral e KPIs em tempo real</p>
       </div>
 
+      {/* Main KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Consultas Hoje" value={todayAg.length} icon={<Calendar className="w-5 h-5 text-primary-foreground" />} color="gradient-primary" />
-        <StatCard title="Confirmados" value={confirmados} icon={<CheckCircle className="w-5 h-5 text-success-foreground" />} color="bg-success" />
+        <StatCard title="Confirmados/Chegou" value={confirmados} icon={<CheckCircle className="w-5 h-5 text-success-foreground" />} color="bg-success" />
         <StatCard title="Na Fila" value={aguardando} icon={<Clock className="w-5 h-5 text-warning-foreground" />} color="bg-warning" />
         <StatCard title="Atendimentos Totais" value={totalAtendimentos} icon={<TrendingUp className="w-5 h-5 text-info-foreground" />} color="bg-info" />
+      </div>
+
+      {/* Executive KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Taxa No-Show" 
+          value={`${kpis.noShowRate}%`} 
+          icon={<XCircle className="w-5 h-5 text-destructive-foreground" />} 
+          color="bg-destructive"
+          subtitle={`${kpis.faltas} faltas de ${filteredAgendamentos.length}`}
+        />
+        <StatCard 
+          title="Tempo Médio" 
+          value={`${kpis.avgTime}min`} 
+          icon={<Clock className="w-5 h-5 text-primary-foreground" />} 
+          color="gradient-primary"
+          subtitle={`${kpis.totalFinalizados} atendimentos`}
+        />
+        <StatCard 
+          title="Ocupação Salas" 
+          value={`${kpis.occupancyRate}%`} 
+          icon={<BarChart3 className="w-5 h-5 text-info-foreground" />} 
+          color="bg-info"
+          subtitle="Hoje"
+        />
+        <StatCard 
+          title="Prioritários" 
+          value={kpis.prioAguardando} 
+          icon={<AlertTriangle className="w-5 h-5 text-warning-foreground" />} 
+          color="bg-warning"
+          subtitle={`${kpis.prioAtendidos} atendidos`}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -159,23 +213,27 @@ const Dashboard: React.FC = () => {
             {todayAg.length === 0 ? (
               <p className="text-muted-foreground text-sm">Nenhum agendamento para hoje.</p>
             ) : (
-              todayAg.sort((a, b) => a.hora.localeCompare(b.hora)).map(ag => (
-                <div key={ag.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  <span className="text-sm font-mono font-medium text-foreground w-14">{ag.hora}</span>
-                  <span className="text-sm text-foreground flex-1">{ag.pacienteNome}</span>
-                  <span className="text-xs text-muted-foreground">{ag.profissionalNome}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    ag.status === 'confirmado' ? 'bg-success/10 text-success' :
-                    ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
-                    ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
-                    ag.status === 'em_atendimento' ? 'bg-primary/10 text-primary' :
-                    ag.status === 'concluido' ? 'bg-info/10 text-info' :
-                    'bg-muted text-muted-foreground'
-                  }`}>
-                    {ag.status}
-                  </span>
-                </div>
-              ))
+              todayAg.sort((a, b) => a.hora.localeCompare(b.hora)).map(ag => {
+                const tipoLabel = ag.tipo === 'Retorno' ? '🔄' : ag.tipo === 'Exame' ? '🔬' : '🩺';
+                return (
+                  <div key={ag.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm font-mono font-medium text-foreground w-14">{ag.hora}</span>
+                    <span className="text-sm" title={ag.tipo}>{tipoLabel}</span>
+                    <span className="text-sm text-foreground flex-1">{ag.pacienteNome}</span>
+                    <span className="text-xs text-muted-foreground">{ag.profissionalNome}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      ag.status === 'confirmado' || ag.status === 'confirmado_chegada' ? 'bg-success/10 text-success' :
+                      ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
+                      ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
+                      ag.status === 'em_atendimento' ? 'bg-primary/10 text-primary' :
+                      ag.status === 'concluido' ? 'bg-info/10 text-info' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {ag.status === 'confirmado_chegada' ? 'Chegou' : ag.status}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </CardContent>

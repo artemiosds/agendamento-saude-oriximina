@@ -3,9 +3,11 @@ import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Clock } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Loader2, Clock, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface AtendimentoDB {
   id: string;
@@ -22,28 +24,46 @@ interface AtendimentoDB {
 }
 
 const Atendimentos: React.FC = () => {
-  const { user } = useAuth();
-  const { unidades } = useData();
+  const { user, hasPermission } = useAuth();
+  const { unidades, logAction } = useData();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
+  const canDelete = hasPermission(['master', 'coordenador']);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false });
+      if (user?.role === 'profissional') query = query.eq('profissional_id', user.id);
+      if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+      if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+      const { data } = await query;
+      if (data) setAtendimentos(data);
+    } catch (err) {
+      console.error('Error:', err);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false });
-        if (user?.role === 'profissional') query = query.eq('profissional_id', user.id);
-        if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
-        if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
-        const { data } = await query;
-        if (data) setAtendimentos(data);
-      } catch (err) {
-        console.error('Error:', err);
-      }
-      setLoading(false);
-    };
     load();
   }, [user]);
+
+  const handleDelete = async (at: AtendimentoDB) => {
+    try {
+      await (supabase as any).from('atendimentos').delete().eq('id', at.id);
+      await logAction({
+        acao: 'excluir', entidade: 'atendimento', entidadeId: at.id,
+        detalhes: { paciente: at.paciente_nome, profissional: at.profissional_nome },
+        user,
+      });
+      setAtendimentos(prev => prev.filter(a => a.id !== at.id));
+      toast.success('Atendimento excluído!');
+    } catch (err) {
+      console.error('Error deleting:', err);
+      toast.error('Erro ao excluir atendimento.');
+    }
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -83,6 +103,27 @@ const Atendimentos: React.FC = () => {
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="w-3 h-3" />{at.duracao_minutos}min
                       </span>
+                    )}
+                    {canDelete && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir atendimento?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Excluir o atendimento de {at.paciente_nome}? Esta ação será registrada em log.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(at)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </div>
                 </CardContent>
