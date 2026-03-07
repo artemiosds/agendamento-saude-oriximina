@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const statusActions = [
   { key: 'confirmado', label: 'Chegou', icon: Check, color: 'bg-success text-success-foreground' },
@@ -18,7 +20,8 @@ const statusActions = [
 ] as const;
 
 const Agenda: React.FC = () => {
-  const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento } = useData();
+  const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes } = useData();
+  const gcal = useGoogleCalendar();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -38,13 +41,46 @@ const Agenda: React.FC = () => {
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
-  const handleCreate = () => {
+  const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string }) => {
+    if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
+    try {
+      const unidade = unidades.find(u => u.id === ag.unidadeId);
+      const paciente = pacientes.find(p => p.nome === ag.pacienteNome);
+      const startDateTime = `${ag.data}T${ag.hora}:00`;
+      const [h, m] = ag.hora.split(':').map(Number);
+      const endH = m + 30 >= 60 ? h + 1 : h;
+      const endM = (m + 30) % 60;
+      const endDateTime = `${ag.data}T${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
+
+      const description = [
+        `Paciente: ${ag.pacienteNome}`,
+        paciente?.telefone ? `Telefone: ${paciente.telefone}` : '',
+        `Profissional: ${ag.profissionalNome}`,
+        `Tipo: ${ag.tipo}`,
+        unidade ? `Unidade: ${unidade.nome}` : '',
+      ].filter(Boolean).join('\n');
+
+      const result = await gcal.createEvent({
+        summary: `${ag.tipo} - ${ag.pacienteNome}`,
+        description,
+        start: { dateTime: startDateTime, timeZone: 'America/Belem' },
+        end: { dateTime: endDateTime, timeZone: 'America/Belem' },
+      });
+      return result?.eventId || null;
+    } catch (err) {
+      console.error('Google Calendar sync failed:', err);
+      return null;
+    }
+  };
+
+  const handleCreate = async () => {
     const pac = pacientes.find(p => p.id === newAg.pacienteId);
     const prof = profissionais.find(p => p.id === newAg.profissionalId);
     if (!pac || !prof || !newAg.hora) return;
 
-    addAgendamento({
-      id: `ag${Date.now()}`,
+    const agId = `ag${Date.now()}`;
+    const agData = {
+      id: agId,
       pacienteId: pac.id,
       pacienteNome: pac.nome,
       unidadeId: prof.unidadeId,
@@ -54,15 +90,50 @@ const Agenda: React.FC = () => {
       profissionalNome: prof.nome,
       data: selectedDate,
       hora: newAg.hora,
-      status: 'confirmado',
+      status: 'confirmado' as const,
       tipo: newAg.tipo,
       observacoes: newAg.obs,
-      origem: 'recepcao',
+      origem: 'recepcao' as const,
       criadoEm: new Date().toISOString(),
       criadoPor: 'current',
-    });
+    };
+
+    addAgendamento(agData);
+
+    // Sync to Google Calendar
+    const googleEventId = await syncToGoogleCalendar(agData);
+    if (googleEventId) {
+      updateAgendamento(agId, { googleEventId, syncStatus: 'ok' });
+      toast.success('Agendamento criado e sincronizado com Google Agenda!');
+    } else {
+      toast.success('Agendamento criado!');
+    }
+
     setDialogOpen(false);
     setNewAg({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
+  };
+
+  const handleStatusChange = async (agId: string, newStatus: string) => {
+    const ag = agendamentos.find(a => a.id === agId);
+    if (!ag) return;
+
+    updateAgendamento(agId, { status: newStatus as any });
+
+    // Google Calendar sync on cancel/reschedule
+    if (ag.googleEventId) {
+      try {
+        if (newStatus === 'cancelado' && configuracoes.googleCalendar.removerCancelar) {
+          await gcal.deleteEvent(ag.googleEventId);
+          updateAgendamento(agId, { syncStatus: 'ok' });
+          toast.success('Evento removido do Google Agenda.');
+        } else if (newStatus === 'remarcado' && configuracoes.googleCalendar.atualizarRemarcar) {
+          toast.info('Remarcação registrada. Atualize a data/hora e o evento será atualizado.');
+        }
+      } catch (err) {
+        console.error('Google Calendar sync error:', err);
+        updateAgendamento(agId, { syncStatus: 'erro' });
+      }
+    }
   };
 
   return (
@@ -152,15 +223,26 @@ const Agenda: React.FC = () => {
                 <p className="font-semibold text-foreground">{ag.pacienteNome}</p>
                 <p className="text-sm text-muted-foreground">{ag.profissionalNome} • {ag.tipo}</p>
               </div>
-              <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                ag.status === 'confirmado' ? 'bg-success/10 text-success' :
-                ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
-                ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
-                ag.status === 'concluido' ? 'bg-info/10 text-info' :
-                'bg-muted text-muted-foreground'
-              )}>
-                {ag.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
+                  ag.status === 'confirmado' ? 'bg-success/10 text-success' :
+                  ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
+                  ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
+                  ag.status === 'concluido' ? 'bg-info/10 text-info' :
+                  'bg-muted text-muted-foreground'
+                )}>
+                  {ag.status}
+                </span>
+                {ag.googleEventId && (
+                  <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium",
+                    ag.syncStatus === 'ok' ? 'bg-success/10 text-success' :
+                    ag.syncStatus === 'erro' ? 'bg-destructive/10 text-destructive' :
+                    'bg-warning/10 text-warning'
+                  )}>
+                    📅
+                  </span>
+                )}
+              </div>
               <div className="flex gap-1 flex-wrap">
                 {statusActions.map(sa => (
                   <Button
@@ -168,7 +250,7 @@ const Agenda: React.FC = () => {
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2 text-xs"
-                    onClick={() => updateAgendamento(ag.id, { status: sa.key as any })}
+                    onClick={() => handleStatusChange(ag.id, sa.key)}
                     title={sa.label}
                   >
                     <sa.icon className="w-3.5 h-3.5" />
