@@ -1,11 +1,12 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { 
   Agendamento, Paciente, FilaEspera, Atendimento, Unidade, Sala, Setor, User, Disponibilidade, Configuracoes 
 } from '@/types';
 import { 
   mockAgendamentos, mockPacientes, mockFila, mockAtendimentos, 
-  mockUnidades, mockSalas, mockSetores, mockUsers, mockDisponibilidades 
+  mockUnidades, mockSalas, mockSetores, mockDisponibilidades 
 } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 
 const defaultConfiguracoes: Configuracoes = {
   whatsapp: {
