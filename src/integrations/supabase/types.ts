@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      agendamentos: {
+        Row: {
+          criado_em: string | null
+          criado_por: string
+          data: string
+          google_event_id: string | null
+          hora: string
+          id: string
+          observacoes: string
+          origem: string
+          paciente_id: string
+          paciente_nome: string
+          profissional_id: string
+          profissional_nome: string
+          sala_id: string
+          setor_id: string
+          status: string
+          sync_status: string | null
+          tipo: string
+          unidade_id: string
+        }
+        Insert: {
+          criado_em?: string | null
+          criado_por?: string
+          data?: string
+          google_event_id?: string | null
+          hora?: string
+          id: string
+          observacoes?: string
+          origem?: string
+          paciente_id?: string
+          paciente_nome?: string
+          profissional_id?: string
+          profissional_nome?: string
+          sala_id?: string
+          setor_id?: string
+          status?: string
+          sync_status?: string | null
+          tipo?: string
+          unidade_id?: string
+        }
+        Update: {
+          criado_em?: string | null
+          criado_por?: string
+          data?: string
+          google_event_id?: string | null
+          hora?: string
+          id?: string
+          observacoes?: string
+          origem?: string
+          paciente_id?: string
+          paciente_nome?: string
+          profissional_id?: string
+          profissional_nome?: string
+          sala_id?: string
+          setor_id?: string
+          status?: string
+          sync_status?: string | null
+          tipo?: string
+          unidade_id?: string
+        }
+        Relationships: []
+      }
       atendimentos: {
         Row: {
           agendamento_id: string
@@ -74,6 +137,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bloqueios: {
+        Row: {
+          criado_em: string | null
+          criado_por: string
+          data_fim: string
+          data_inicio: string
+          dia_inteiro: boolean | null
+          hora_fim: string | null
+          hora_inicio: string | null
+          id: string
+          profissional_id: string | null
+          tipo: string
+          titulo: string
+          unidade_id: string | null
+        }
+        Insert: {
+          criado_em?: string | null
+          criado_por?: string
+          data_fim: string
+          data_inicio: string
+          dia_inteiro?: boolean | null
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          profissional_id?: string | null
+          tipo?: string
+          titulo?: string
+          unidade_id?: string | null
+        }
+        Update: {
+          criado_em?: string | null
+          criado_por?: string
+          data_fim?: string
+          data_inicio?: string
+          dia_inteiro?: boolean | null
+          hora_fim?: string | null
+          hora_inicio?: string | null
+          id?: string
+          profissional_id?: string | null
+          tipo?: string
+          titulo?: string
+          unidade_id?: string | null
+        }
+        Relationships: []
+      }
       disponibilidades: {
         Row: {
           criado_em: string | null
@@ -116,6 +224,57 @@ export type Database = {
           unidade_id?: string
           vagas_por_dia?: number
           vagas_por_hora?: number
+        }
+        Relationships: []
+      }
+      fila_espera: {
+        Row: {
+          criado_em: string | null
+          criado_por: string
+          hora_chamada: string | null
+          hora_chegada: string
+          id: string
+          observacoes: string | null
+          paciente_id: string
+          paciente_nome: string
+          posicao: number
+          prioridade: string
+          profissional_id: string | null
+          setor: string
+          status: string
+          unidade_id: string
+        }
+        Insert: {
+          criado_em?: string | null
+          criado_por?: string
+          hora_chamada?: string | null
+          hora_chegada?: string
+          id: string
+          observacoes?: string | null
+          paciente_id?: string
+          paciente_nome?: string
+          posicao?: number
+          prioridade?: string
+          profissional_id?: string | null
+          setor?: string
+          status?: string
+          unidade_id?: string
+        }
+        Update: {
+          criado_em?: string | null
+          criado_por?: string
+          hora_chamada?: string | null
+          hora_chegada?: string
+          id?: string
+          observacoes?: string | null
+          paciente_id?: string
+          paciente_nome?: string
+          posicao?: number
+          prioridade?: string
+          profissional_id?: string | null
+          setor?: string
+          status?: string
+          unidade_id?: string
         }
         Relationships: []
       }
@@ -212,6 +371,42 @@ export type Database = {
           refresh_token?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      pacientes: {
+        Row: {
+          cpf: string
+          criado_em: string | null
+          data_nascimento: string
+          email: string
+          endereco: string
+          id: string
+          nome: string
+          observacoes: string
+          telefone: string
+        }
+        Insert: {
+          cpf?: string
+          criado_em?: string | null
+          data_nascimento?: string
+          email?: string
+          endereco?: string
+          id: string
+          nome: string
+          observacoes?: string
+          telefone?: string
+        }
+        Update: {
+          cpf?: string
+          criado_em?: string | null
+          data_nascimento?: string
+          email?: string
+          endereco?: string
+          id?: string
+          nome?: string
+          observacoes?: string
+          telefone?: string
         }
         Relationships: []
       }
