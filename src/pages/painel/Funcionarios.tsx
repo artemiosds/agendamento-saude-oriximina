@@ -281,6 +281,53 @@ const Funcionarios: React.FC = () => {
                 </div>
               )}
             </div>
+            {form.role === 'profissional' && (
+              <>
+                <div className="border-t pt-3 mt-2">
+                  <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Profissão</Label>
+                    <Select value={form.profissao || '__none__'} onValueChange={v => {
+                      const prof = v === '__none__' ? '' : v;
+                      const conselho = conselhoMap[prof] || '';
+                      setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Selecione</SelectItem>
+                        {Object.keys(conselhoMap).map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Tipo de Conselho</Label>
+                    <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nº do Conselho</Label>
+                    <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
+                  </div>
+                  <div>
+                    <Label>UF do Conselho</Label>
+                    <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
+                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </>
+            )}
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editId ? 'Salvar' : 'Cadastrar'}

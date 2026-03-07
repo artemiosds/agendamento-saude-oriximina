@@ -23,7 +23,7 @@ serve(async (req) => {
     const { action } = body;
 
     if (action === "create") {
-      const { nome, usuario, email, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento } = body;
+      const { nome, usuario, email, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho } = body;
 
       if (!nome || !usuario || !email || !senha) {
         return new Response(
@@ -63,6 +63,10 @@ serve(async (req) => {
           ativo: true,
           criado_por: criado_por || "",
           tempo_atendimento: tempo_atendimento || 30,
+          profissao: profissao || "",
+          tipo_conselho: tipo_conselho || "",
+          numero_conselho: numero_conselho || "",
+          uf_conselho: uf_conselho || "",
         })
         .select()
         .single();
