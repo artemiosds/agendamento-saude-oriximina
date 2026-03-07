@@ -84,10 +84,14 @@ export type Database = {
           email: string
           id: string
           nome: string
+          numero_conselho: string
+          profissao: string
           role: string
           sala_id: string | null
           setor: string | null
           tempo_atendimento: number
+          tipo_conselho: string
+          uf_conselho: string
           unidade_id: string | null
           usuario: string
         }
@@ -100,10 +104,14 @@ export type Database = {
           email: string
           id?: string
           nome: string
+          numero_conselho?: string
+          profissao?: string
           role?: string
           sala_id?: string | null
           setor?: string | null
           tempo_atendimento?: number
+          tipo_conselho?: string
+          uf_conselho?: string
           unidade_id?: string | null
           usuario: string
         }
@@ -116,10 +124,14 @@ export type Database = {
           email?: string
           id?: string
           nome?: string
+          numero_conselho?: string
+          profissao?: string
           role?: string
           sala_id?: string | null
           setor?: string | null
           tempo_atendimento?: number
+          tipo_conselho?: string
+          uf_conselho?: string
           unidade_id?: string | null
           usuario?: string
         }
