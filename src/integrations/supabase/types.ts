@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      funcionarios: {
+        Row: {
+          ativo: boolean | null
+          auth_user_id: string | null
+          cargo: string | null
+          criado_em: string | null
+          criado_por: string | null
+          email: string
+          id: string
+          nome: string
+          role: string
+          sala_id: string | null
+          setor: string | null
+          unidade_id: string | null
+          usuario: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          auth_user_id?: string | null
+          cargo?: string | null
+          criado_em?: string | null
+          criado_por?: string | null
+          email: string
+          id?: string
+          nome: string
+          role?: string
+          sala_id?: string | null
+          setor?: string | null
+          unidade_id?: string | null
+          usuario: string
+        }
+        Update: {
+          ativo?: boolean | null
+          auth_user_id?: string | null
+          cargo?: string | null
+          criado_em?: string | null
+          criado_por?: string | null
+          email?: string
+          id?: string
+          nome?: string
+          role?: string
+          sala_id?: string | null
+          setor?: string | null
+          unidade_id?: string | null
+          usuario?: string
+        }
+        Relationships: []
+      }
       google_calendar_tokens: {
         Row: {
           access_token: string
@@ -44,6 +92,84 @@ export type Database = {
           refresh_token?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      prontuarios: {
+        Row: {
+          agendamento_id: string | null
+          anamnese: string | null
+          atualizado_em: string | null
+          conduta: string | null
+          criado_em: string | null
+          data_atendimento: string
+          evolucao: string | null
+          exame_fisico: string | null
+          hipotese: string | null
+          hora_atendimento: string | null
+          id: string
+          observacoes: string | null
+          paciente_id: string
+          paciente_nome: string
+          prescricao: string | null
+          profissional_id: string
+          profissional_nome: string
+          queixa_principal: string | null
+          sala_id: string | null
+          setor: string | null
+          sinais_sintomas: string | null
+          solicitacao_exames: string | null
+          unidade_id: string
+        }
+        Insert: {
+          agendamento_id?: string | null
+          anamnese?: string | null
+          atualizado_em?: string | null
+          conduta?: string | null
+          criado_em?: string | null
+          data_atendimento?: string
+          evolucao?: string | null
+          exame_fisico?: string | null
+          hipotese?: string | null
+          hora_atendimento?: string | null
+          id?: string
+          observacoes?: string | null
+          paciente_id: string
+          paciente_nome: string
+          prescricao?: string | null
+          profissional_id: string
+          profissional_nome: string
+          queixa_principal?: string | null
+          sala_id?: string | null
+          setor?: string | null
+          sinais_sintomas?: string | null
+          solicitacao_exames?: string | null
+          unidade_id: string
+        }
+        Update: {
+          agendamento_id?: string | null
+          anamnese?: string | null
+          atualizado_em?: string | null
+          conduta?: string | null
+          criado_em?: string | null
+          data_atendimento?: string
+          evolucao?: string | null
+          exame_fisico?: string | null
+          hipotese?: string | null
+          hora_atendimento?: string | null
+          id?: string
+          observacoes?: string | null
+          paciente_id?: string
+          paciente_nome?: string
+          prescricao?: string | null
+          profissional_id?: string
+          profissional_nome?: string
+          queixa_principal?: string | null
+          sala_id?: string | null
+          setor?: string | null
+          sinais_sintomas?: string | null
+          solicitacao_exames?: string | null
+          unidade_id?: string
         }
         Relationships: []
       }
