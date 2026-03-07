@@ -38,7 +38,7 @@ const Home: React.FC = () => {
                 </Button>
               </Link>
               <Link to="/login">
-                <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 w-full sm:w-auto">
+                <Button size="lg" variant="outline" className="border-primary-foreground bg-primary-foreground/20 text-primary-foreground font-semibold hover:bg-primary-foreground/30 w-full sm:w-auto">
                   <Shield className="w-5 h-5 mr-2" />
                   Entrar
                 </Button>
