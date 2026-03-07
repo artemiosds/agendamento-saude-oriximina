@@ -227,7 +227,7 @@ const Funcionarios: React.FC = () => {
             </div>
             <div>
               <Label>Sala</Label>
-              <Select value={form.sala_id} onValueChange={v => setForm(p => ({ ...p, sala_id: v }))}>
+              <Select value={form.sala_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, sala_id: v === '__none__' ? '' : v }))}>
                 <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Todas</SelectItem>
