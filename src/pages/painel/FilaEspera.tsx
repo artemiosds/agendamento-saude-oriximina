@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Plus, Pencil, Trash2, UserPlus, CalendarPlus } from 'lucide-react';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -52,8 +52,8 @@ const FilaEspera: React.FC = () => {
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
       .sort((a, b) => {
-        const prioOrder = { urgente: 0, alta: 1, normal: 2 };
-        if (prioOrder[a.prioridade] !== prioOrder[b.prioridade]) return prioOrder[a.prioridade] - prioOrder[b.prioridade];
+        const prioOrder: Record<string, number> = { urgente: 0, alta: 1, normal: 2 };
+        if ((prioOrder[a.prioridade] ?? 2) !== (prioOrder[b.prioridade] ?? 2)) return (prioOrder[a.prioridade] ?? 2) - (prioOrder[b.prioridade] ?? 2);
         return a.horaChegada.localeCompare(b.horaChegada);
       });
   }, [fila, filterUnidade, filterProf, filterStatus]);
@@ -73,17 +73,17 @@ const FilaEspera: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.pacienteNome || !form.unidadeId) {
       toast.error('Informe o paciente e a unidade.');
       return;
     }
 
     if (editId) {
-      updateFila(editId, { ...form });
+      await updateFila(editId, { ...form });
       toast.success('Registro atualizado!');
     } else {
-      addToFila({
+      await addToFila({
         id: `f${Date.now()}`, ...form,
         status: 'aguardando', posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -183,7 +183,7 @@ const FilaEspera: React.FC = () => {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="alta">Alta (Idoso/Gestante)</SelectItem>
                   <SelectItem value="urgente">Urgente</SelectItem>
                 </SelectContent>
               </Select>
@@ -248,7 +248,7 @@ const FilaEspera: React.FC = () => {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader><AlertDialogTitle>Remover da fila?</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja remover {f.pacienteNome} da fila?</AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { removeFromFila(f.id); toast.success('Removido da fila!'); }}>Remover</AlertDialogAction></AlertDialogFooter>
+                        <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { await removeFromFila(f.id); toast.success('Removido da fila!'); }}>Remover</AlertDialogAction></AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
                   </div>
