@@ -143,6 +143,11 @@ export interface Configuracoes {
     confirmacao: string;
     lembrete: string;
   };
+  webhook: {
+    ativo: boolean;
+    url: string;
+    status: 'ativo' | 'inativo' | 'erro';
+  };
 }
 
 export interface AuditLog {
