@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 
 const AgendarOnline: React.FC = () => {
-  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots } = useData();
+  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
   const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
@@ -83,8 +83,14 @@ const AgendarOnline: React.FC = () => {
     setLoading(true);
     try {
       let pacienteId: string;
+      const normalizePhone = (t: string) => t.replace(/\D/g, '');
+      const normalizeCpf = (c: string) => c.replace(/\D/g, '');
+      const phoneNorm = normalizePhone(form.telefone);
+      const cpfNorm = normalizeCpf(form.cpf);
+
       const existingPatient = pacientes.find(p => 
-        (form.cpf && p.cpf === form.cpf) || p.telefone === form.telefone
+        (cpfNorm && normalizeCpf(p.cpf) === cpfNorm) || 
+        (phoneNorm && normalizePhone(p.telefone) === phoneNorm)
       );
 
       if (existingPatient) {
@@ -96,6 +102,7 @@ const AgendarOnline: React.FC = () => {
           dataNascimento: form.dataNascimento, email: form.email, endereco: '',
           observacoes: form.obs, criadoEm: new Date().toISOString(),
         });
+        await refreshPacientes();
       }
 
       const prof = funcionarios.find(p => p.id === form.profissionalId);
