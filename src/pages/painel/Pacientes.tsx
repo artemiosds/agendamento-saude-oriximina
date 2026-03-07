@@ -6,12 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Phone, Mail } from 'lucide-react';
+import { toast } from 'sonner';
+import { validatePacienteFields } from '@/lib/validation';
 
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente } = useData();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const filtered = pacientes.filter(p =>
     p.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -20,7 +23,18 @@ const Pacientes: React.FC = () => {
   );
 
   const handleCreate = () => {
-    if (!form.nome || !form.telefone) return;
+    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
+    if (err) {
+      const newErrors: Record<string, string> = {};
+      if (err.includes('Nome')) newErrors.nome = err;
+      else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
+      else if (err.includes('mail')) newErrors.email = err;
+      setErrors(newErrors);
+      toast.error(err);
+      return;
+    }
+    setErrors({});
+
     addPaciente({
       id: `p${Date.now()}`,
       ...form,
@@ -29,6 +43,7 @@ const Pacientes: React.FC = () => {
     });
     setDialogOpen(false);
     setForm({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
+    toast.success('Paciente cadastrado com sucesso!');
   };
 
   return (
@@ -38,21 +53,33 @@ const Pacientes: React.FC = () => {
           <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
           <p className="text-muted-foreground text-sm">{pacientes.length} cadastrados</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setErrors({}); }}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle className="font-display">Cadastrar Paciente</DialogTitle></DialogHeader>
             <div className="space-y-3">
-              <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
+              <div>
+                <Label>Nome *</Label>
+                <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
+                {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-                <div><Label>Telefone *</Label><Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" /></div>
+                <div>
+                  <Label>Telefone *</Label>
+                  <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
+                  {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
-                <div><Label>E-mail</Label><Input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                <div>
+                  <Label>E-mail *</Label>
+                  <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
+                  {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
+                </div>
               </div>
               <div><Label>Endereço</Label><Input value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))} /></div>
               <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground">Cadastrar</Button>
