@@ -1,5 +1,7 @@
 import { User, Unidade, Sala, Setor, Paciente, Agendamento, FilaEspera, Atendimento, Disponibilidade } from '@/types';
 
+// Legacy mock users - kept for reference only, system now uses DB funcionarios
+
 // Password: sms@2025 (pre-hashed with bcryptjs)
 export const mockUsers: User[] = [
   {
