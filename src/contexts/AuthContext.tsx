@@ -84,7 +84,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
-        return { success: false, error: 'Erro ao conectar ao servidor.' };
+        // Extract the actual error message from the edge function response
+        let errorMsg = 'Erro ao conectar ao servidor.';
+        try {
+          if (error instanceof Error && 'context' in error) {
+            const resp = (error as any).context;
+            if (resp instanceof Response) {
+              const body = await resp.json();
+              if (body?.error) errorMsg = body.error;
+            }
+          }
+        } catch (_) { /* fallback to generic */ }
+        return { success: false, error: errorMsg };
       }
 
       if (data?.error) {
