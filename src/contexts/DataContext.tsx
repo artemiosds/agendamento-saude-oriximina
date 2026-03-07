@@ -194,7 +194,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadConfiguracoes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('system_config' as any).select('configuracoes').eq('id', 'default').maybeSingle();
+      const { data, error } = await supabase.from('system_config' as any).select('configuracoes').eq('id', 'default').maybeSingle() as any;
       if (!error && data?.configuracoes) {
         setConfiguracoes(safeConfigMerge(data.configuracoes));
       }
@@ -651,18 +651,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } as any).select('*').single();
 
     if (!error && data) {
+      const d = data as any;
       const mapped: BloqueioAgenda = {
-        id: data.id,
-        titulo: data.titulo,
-        tipo: data.tipo,
-        dataInicio: data.data_inicio,
-        dataFim: data.data_fim,
-        diaInteiro: data.dia_inteiro ?? true,
-        horaInicio: data.hora_inicio || '',
-        horaFim: data.hora_fim || '',
-        unidadeId: data.unidade_id || '',
-        profissionalId: data.profissional_id || '',
-        criadoPor: data.criado_por || '',
+        id: d.id,
+        titulo: d.titulo,
+        tipo: d.tipo,
+        dataInicio: d.data_inicio,
+        dataFim: d.data_fim,
+        diaInteiro: d.dia_inteiro ?? true,
+        horaInicio: d.hora_inicio || '',
+        horaFim: d.hora_fim || '',
+        unidadeId: d.unidade_id || '',
+        profissionalId: d.profissional_id || '',
+        criadoPor: d.criado_por || '',
       };
       setBloqueios((prev) => [...prev, mapped]);
       await logAction({ acao: 'criar', entidade: 'bloqueio', entidadeId: mapped.id, unidadeId: mapped.unidadeId, detalhes: { tipo: mapped.tipo, titulo: mapped.titulo } });
