@@ -24,14 +24,9 @@ const statusActions = [
 ] as const;
 
 const statusLabels: Record<string, string> = {
-  pendente: 'Pendente',
-  confirmado: 'Confirmado',
-  cancelado: 'Cancelado',
-  concluido: 'Concluído',
-  falta: 'Falta',
-  atraso: 'Atraso',
-  remarcado: 'Remarcado',
-  em_atendimento: 'Em Atendimento',
+  pendente: 'Pendente', confirmado: 'Confirmado', cancelado: 'Cancelado',
+  concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
+  remarcado: 'Remarcado', em_atendimento: 'Em Atendimento',
 };
 
 const Agenda: React.FC = () => {
@@ -47,15 +42,11 @@ const Agenda: React.FC = () => {
 
   const isProfissional = user?.role === 'profissional';
 
-  // Filter appointments based on role
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
-    // Professionals see only their own appointments
     if (isProfissional && user && a.profissionalId !== user.id) return false;
-    // Coordenador sees only their unit
     if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-    // Recepcao sees only their unit
     if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     return true;
   }).sort((a, b) => a.hora.localeCompare(b.hora));
@@ -112,45 +103,29 @@ const Agenda: React.FC = () => {
     const unidade = unidades.find(u => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
-      id: agId,
-      pacienteId: pac.id,
-      pacienteNome: pac.nome,
-      unidadeId: prof.unidadeId,
-      salaId: newAg.salaId,
-      setorId: '',
-      profissionalId: prof.id,
-      profissionalNome: prof.nome,
-      data: selectedDate,
-      hora: newAg.hora,
-      status: 'confirmado' as const,
-      tipo: newAg.tipo,
-      observacoes: newAg.obs,
-      origem: 'recepcao' as const,
-      criadoEm: new Date().toISOString(),
-      criadoPor: 'current',
+      id: agId, pacienteId: pac.id, pacienteNome: pac.nome,
+      unidadeId: prof.unidadeId, salaId: newAg.salaId, setorId: '',
+      profissionalId: prof.id, profissionalNome: prof.nome,
+      data: selectedDate, hora: newAg.hora, status: 'confirmado' as const, tipo: newAg.tipo,
+      observacoes: newAg.obs, origem: 'recepcao' as const,
+      criadoEm: new Date().toISOString(), criadoPor: 'current',
     };
 
-    addAgendamento(agData);
+    await addAgendamento(agData);
 
     const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
     if (googleEventId) {
-      updateAgendamento(agId, { googleEventId, syncStatus: 'ok' });
+      await updateAgendamento(agId, { googleEventId, syncStatus: 'ok' });
       toast.success('Agendamento criado e sincronizado com Google Agenda!');
     } else {
       toast.success('Agendamento criado!');
     }
 
     notify({
-      acao: 'novo_agendamento',
-      nome: pac.nome,
-      telefone: pac.telefone,
-      email: pac.email,
-      data: selectedDate,
-      hora: newAg.hora,
-      unidade: unidade?.nome || '',
-      profissional: prof.nome,
-      tipo_atendimento: newAg.tipo,
-      observacoes: newAg.obs,
+      acao: 'novo_agendamento', nome: pac.nome, telefone: pac.telefone,
+      email: pac.email, data: selectedDate, hora: newAg.hora,
+      unidade: unidade?.nome || '', profissional: prof.nome,
+      tipo_atendimento: newAg.tipo, observacoes: newAg.obs,
     });
 
     setDialogOpen(false);
@@ -161,7 +136,7 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find(a => a.id === agId);
     if (!ag) return;
 
-    updateAgendamento(agId, { status: newStatus as any });
+    await updateAgendamento(agId, { status: newStatus as any });
 
     const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
     const unidade = unidades.find(u => u.id === ag.unidadeId);
@@ -169,13 +144,9 @@ const Agenda: React.FC = () => {
     if (newStatus === 'cancelado' || newStatus === 'remarcado') {
       notify({
         acao: newStatus === 'cancelado' ? 'cancelamento' : 'remarcacao',
-        nome: ag.pacienteNome,
-        telefone: paciente?.telefone || '',
-        email: paciente?.email || '',
-        data: ag.data,
-        hora: ag.hora,
-        unidade: unidade?.nome || '',
-        profissional: ag.profissionalNome,
+        nome: ag.pacienteNome, telefone: paciente?.telefone || '',
+        email: paciente?.email || '', data: ag.data, hora: ag.hora,
+        unidade: unidade?.nome || '', profissional: ag.profissionalNome,
         tipo_atendimento: ag.tipo,
       });
     }
@@ -184,14 +155,14 @@ const Agenda: React.FC = () => {
       try {
         if (newStatus === 'cancelado' && configuracoes.googleCalendar.removerCancelar) {
           await gcal.deleteEvent(ag.googleEventId);
-          updateAgendamento(agId, { syncStatus: 'ok' });
+          await updateAgendamento(agId, { syncStatus: 'ok' });
           toast.success('Evento removido do Google Agenda.');
         } else if (newStatus === 'remarcado' && configuracoes.googleCalendar.atualizarRemarcar) {
-          toast.info('Remarcação registrada. Atualize a data/hora e o evento será atualizado.');
+          toast.info('Remarcação registrada.');
         }
       } catch (err) {
         console.error('Google Calendar sync error:', err);
-        updateAgendamento(agId, { syncStatus: 'erro' });
+        await updateAgendamento(agId, { syncStatus: 'erro' });
       }
     }
   };
@@ -200,57 +171,35 @@ const Agenda: React.FC = () => {
     const now = new Date();
     const horaInicio = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Update agendamento status
-    updateAgendamento(ag.id, { status: 'em_atendimento' });
+    await updateAgendamento(ag.id, { status: 'em_atendimento' });
 
-    // Create atendimento record in DB
     try {
       await (supabase as any).from('atendimentos').insert({
-        agendamento_id: ag.id,
-        paciente_id: ag.pacienteId,
-        paciente_nome: ag.pacienteNome,
-        profissional_id: ag.profissionalId,
-        profissional_nome: ag.profissionalNome,
-        unidade_id: ag.unidadeId,
-        sala_id: ag.salaId || '',
-        setor: user?.setor || '',
-        procedimento: ag.tipo,
-        data: ag.data,
-        hora_inicio: horaInicio,
+        agendamento_id: ag.id, paciente_id: ag.pacienteId,
+        paciente_nome: ag.pacienteNome, profissional_id: ag.profissionalId,
+        profissional_nome: ag.profissionalNome, unidade_id: ag.unidadeId,
+        sala_id: ag.salaId || '', setor: user?.setor || '',
+        procedimento: ag.tipo, data: ag.data, hora_inicio: horaInicio,
         status: 'em_atendimento',
       });
     } catch (err) {
       console.error('Error creating atendimento:', err);
     }
 
-    // Also add to in-memory context
     addAtendimento({
-      id: `at${Date.now()}`,
-      agendamentoId: ag.id,
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      profissionalId: ag.profissionalId,
-      profissionalNome: ag.profissionalNome,
-      unidadeId: ag.unidadeId,
-      salaId: ag.salaId,
-      setor: user?.setor || '',
-      procedimento: ag.tipo,
-      observacoes: '',
-      data: ag.data,
-      horaInicio,
-      horaFim: '',
-      status: 'em_atendimento',
+      id: `at${Date.now()}`, agendamentoId: ag.id,
+      pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome,
+      unidadeId: ag.unidadeId, salaId: ag.salaId, setor: user?.setor || '',
+      procedimento: ag.tipo, observacoes: '', data: ag.data,
+      horaInicio, horaFim: '', status: 'em_atendimento',
     });
 
     toast.success('Atendimento iniciado!');
 
-    // Navigate to prontuário with pre-filled data
     const params = new URLSearchParams({
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      agendamentoId: ag.id,
-      horaInicio,
-      data: ag.data,
+      pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+      agendamentoId: ag.id, horaInicio, data: ag.data,
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   };
@@ -260,16 +209,12 @@ const Agenda: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>
-          <p className="text-muted-foreground text-sm">
-            {isProfissional ? 'Seus agendamentos' : 'Gerenciar agendamentos'}
-          </p>
+          <p className="text-muted-foreground text-sm">{isProfissional ? 'Seus agendamentos' : 'Gerenciar agendamentos'}</p>
         </div>
         {!isProfissional && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gradient-primary text-primary-foreground">
-                <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
-              </Button>
+              <Button className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Agendamento</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle className="font-display">Novo Agendamento</DialogTitle></DialogHeader>
@@ -296,10 +241,7 @@ const Agenda: React.FC = () => {
                   </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Horário</Label>
-                    <Input type="time" value={newAg.hora} onChange={e => setNewAg(p => ({ ...p, hora: e.target.value }))} />
-                  </div>
+                  <div><Label>Horário</Label><Input type="time" value={newAg.hora} onChange={e => setNewAg(p => ({ ...p, hora: e.target.value }))} /></div>
                   <div>
                     <Label>Tipo</Label>
                     <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
@@ -368,56 +310,35 @@ const Agenda: React.FC = () => {
                       ag.syncStatus === 'ok' ? 'bg-success/10 text-success' :
                       ag.syncStatus === 'erro' ? 'bg-destructive/10 text-destructive' :
                       'bg-warning/10 text-warning'
-                    )}>
-                      📅
-                    </span>
+                    )}>📅</span>
                   )}
                 </div>
 
                 <div className="flex gap-1 flex-wrap">
-                  {/* Iniciar Atendimento button for professionals */}
                   {canStart && (
-                    <Button
-                      size="sm"
-                      className="h-8 px-3 text-xs gradient-primary text-primary-foreground"
-                      onClick={() => handleIniciarAtendimento(ag)}
-                    >
+                    <Button size="sm" className="h-8 px-3 text-xs gradient-primary text-primary-foreground" onClick={() => handleIniciarAtendimento(ag)}>
                       <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
                     </Button>
                   )}
-
                   {isEmAtendimento && isProfissional && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => {
-                        const params = new URLSearchParams({
-                          pacienteId: ag.pacienteId,
-                          pacienteNome: ag.pacienteNome,
-                          agendamentoId: ag.id,
-                          data: ag.data,
-                        });
-                        navigate(`/painel/prontuario?${params.toString()}`);
-                      }}
-                    >
+                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                      const params = new URLSearchParams({
+                        pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+                        agendamentoId: ag.id, data: ag.data,
+                      });
+                      navigate(`/painel/prontuario?${params.toString()}`);
+                    }}>
                       <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
                     </Button>
                   )}
-
-                  {/* Status action buttons (for non-em_atendimento, non-concluido) */}
-                  {!isEmAtendimento && ag.status !== 'concluido' && !isProfissional && statusActions.map(sa => (
-                    <Button
-                      key={sa.key}
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => handleStatusChange(ag.id, sa.key)}
-                      title={sa.label}
-                    >
-                      <sa.icon className="w-3.5 h-3.5" />
-                    </Button>
-                  ))}
+                  {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
+                    statusActions.map(sa => (
+                      <Button key={sa.key} size="sm" variant="outline" className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
+                        onClick={() => handleStatusChange(ag.id, sa.key)} disabled={ag.status === sa.key}>
+                        <sa.icon className="w-3.5 h-3.5" />
+                      </Button>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>

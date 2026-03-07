@@ -17,6 +17,7 @@ const AgendarOnline: React.FC = () => {
   const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
@@ -26,10 +27,7 @@ const AgendarOnline: React.FC = () => {
   });
 
   const unidadesComDisponibilidade = useMemo(() => {
-    // Show units that have at least one active professional with availability configured
-    const unidadeIdsComDisponibilidade = new Set(
-      disponibilidades.map(d => d.unidadeId)
-    );
+    const unidadeIdsComDisponibilidade = new Set(disponibilidades.map(d => d.unidadeId));
     const unidadeIdsComProfissional = new Set(
       funcionarios.filter(f => f.role === 'profissional' && f.ativo && f.unidadeId)
         .map(f => f.unidadeId)
@@ -39,12 +37,11 @@ const AgendarOnline: React.FC = () => {
 
   const profissionaisComDisponibilidade = useMemo(() => {
     if (!form.unidadeId) return [];
-    // Show only professionals that are active, linked to unit, AND have availability configured for that unit
     const profIdsComDisponibilidade = new Set(
       disponibilidades.filter(d => d.unidadeId === form.unidadeId).map(d => d.profissionalId)
     );
     return funcionarios.filter(f => 
-      f.role === 'profissional' && f.ativo && f.unidadeId === form.unidadeId && profIdsComDisponibilidade.has(f.id)
+      f.role === 'profissional' && f.ativo && profIdsComDisponibilidade.has(f.id)
     );
   }, [funcionarios, disponibilidades, form.unidadeId]);
 
@@ -61,7 +58,6 @@ const AgendarOnline: React.FC = () => {
   const validateStep2 = (): boolean => {
     const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
     if (err) {
-      // Map error to field
       const newErrors: Record<string, string> = {};
       if (err.includes('Nome')) newErrors.nome = err;
       else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
@@ -84,50 +80,52 @@ const AgendarOnline: React.FC = () => {
       return;
     }
 
-    let pacienteId: string;
-    const existingPatient = pacientes.find(p => 
-      (form.cpf && p.cpf === form.cpf) || p.telefone === form.telefone
-    );
+    setLoading(true);
+    try {
+      let pacienteId: string;
+      const existingPatient = pacientes.find(p => 
+        (form.cpf && p.cpf === form.cpf) || p.telefone === form.telefone
+      );
 
-    if (existingPatient) {
-      pacienteId = existingPatient.id;
-    } else {
-      pacienteId = `p${Date.now()}`;
-      addPaciente({
-        id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
-        dataNascimento: form.dataNascimento, email: form.email, endereco: '',
-        observacoes: form.obs, criadoEm: new Date().toISOString(),
+      if (existingPatient) {
+        pacienteId = existingPatient.id;
+      } else {
+        pacienteId = `p${Date.now()}`;
+        await addPaciente({
+          id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
+          dataNascimento: form.dataNascimento, email: form.email, endereco: '',
+          observacoes: form.obs, criadoEm: new Date().toISOString(),
+        });
+      }
+
+      const prof = funcionarios.find(p => p.id === form.profissionalId);
+      const unidade = unidades.find(u => u.id === form.unidadeId);
+      
+      await addAgendamento({
+        id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
+        unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
+        profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
+        data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
+        observacoes: form.obs, origem: 'online', syncStatus: 'pendente',
+        criadoEm: new Date().toISOString(), criadoPor: 'online',
       });
+
+      notify({
+        acao: 'novo_agendamento',
+        nome: form.nome, telefone: form.telefone, email: form.email,
+        data: form.data, hora: form.hora,
+        unidade: unidade?.nome || '', profissional: prof?.nome || '',
+        tipo_atendimento: form.tipo, observacoes: form.obs,
+      });
+
+      toast.success('Agendamento realizado com sucesso!');
+      setDone(true);
+    } catch (err) {
+      console.error('Erro ao agendar:', err);
+      toast.error('Erro ao realizar agendamento. Tente novamente.');
+    } finally {
+      setLoading(false);
     }
-
-    const prof = funcionarios.find(p => p.id === form.profissionalId);
-    const unidade = unidades.find(u => u.id === form.unidadeId);
-    
-    addAgendamento({
-      id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
-      unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
-      profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
-      data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
-      observacoes: form.obs, origem: 'online', syncStatus: 'pendente',
-      criadoEm: new Date().toISOString(), criadoPor: 'online',
-    });
-
-    // Send webhook notification
-    notify({
-      acao: 'novo_agendamento',
-      nome: form.nome,
-      telefone: form.telefone,
-      email: form.email,
-      data: form.data,
-      hora: form.hora,
-      unidade: unidade?.nome || '',
-      profissional: prof?.nome || '',
-      tipo_atendimento: form.tipo,
-      observacoes: form.obs,
-    });
-
-    toast.success('Agendamento realizado com sucesso!');
-    setDone(true);
   };
 
   if (done) {
@@ -308,8 +306,8 @@ const AgendarOnline: React.FC = () => {
 
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="flex-1">Voltar</Button>
-                  <Button onClick={handleSubmit} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.data || !form.hora}>
-                    <Calendar className="w-4 h-4 mr-2" />Confirmar Agendamento
+                  <Button onClick={handleSubmit} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.data || !form.hora || loading}>
+                    <Calendar className="w-4 h-4 mr-2" />{loading ? 'Agendando...' : 'Confirmar Agendamento'}
                   </Button>
                 </div>
               </div>
