@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,21 +7,30 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Clock, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 const Disponibilidade: React.FC = () => {
-  const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas } = useData();
+  const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useData();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  
+  // Filter: only active professionals with role=profissional
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
     horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5] as number[],
   });
+
+  // Refresh data on mount to ensure latest professionals appear
+  useEffect(() => {
+    refreshFuncionarios();
+    refreshDisponibilidades();
+  }, []);
 
   const openNew = () => {
     setEditId(null);
@@ -52,6 +61,10 @@ const Disponibilidade: React.FC = () => {
     const startH = parseInt(form.horaInicio.split(':')[0]);
     const endH = parseInt(form.horaFim.split(':')[0]);
     const hoursCount = endH - startH;
+    if (hoursCount <= 0) {
+      toast.error('Hora fim deve ser maior que hora início.');
+      return;
+    }
     const maxPossible = hoursCount * form.vagasPorHora;
     if (form.vagasPorDia > maxPossible) {
       toast.error(`Total por dia (${form.vagasPorDia}) excede o máximo possível (${maxPossible} = ${hoursCount}h × ${form.vagasPorHora} vagas/hora). Ajuste os valores.`);
@@ -66,6 +79,8 @@ const Disponibilidade: React.FC = () => {
       toast.success('Disponibilidade configurada!');
     }
     setDialogOpen(false);
+    // Refresh to ensure we have latest from DB
+    await refreshDisponibilidades();
   };
 
   const toggleDia = (dia: number) => {
@@ -74,17 +89,51 @@ const Disponibilidade: React.FC = () => {
     }));
   };
 
-  const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId);
+  const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
+
+  // When selecting a professional, auto-fill their unit
+  const handleProfissionalChange = (profId: string) => {
+    const prof = profissionais.find(p => p.id === profId);
+    setForm(p => ({
+      ...p,
+      profissionalId: profId,
+      unidadeId: prof?.unidadeId || p.unidadeId,
+      salaId: prof?.salaId || '',
+    }));
+  };
+
+  const handleRefresh = async () => {
+    await Promise.all([refreshFuncionarios(), refreshDisponibilidades()]);
+    toast.success('Dados atualizados!');
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Disponibilidade</h1>
-          <p className="text-muted-foreground text-sm">Configurar horários e vagas dos profissionais</p>
+          <p className="text-muted-foreground text-sm">
+            Configurar horários e vagas dos profissionais
+            {profissionais.length > 0 && ` • ${profissionais.length} profissional(is) ativo(s)`}
+          </p>
         </div>
-        <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Configurar</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleRefresh} size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />Atualizar
+          </Button>
+          <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+            <Plus className="w-4 h-4 mr-2" />Configurar
+          </Button>
+        </div>
       </div>
+
+      {profissionais.length === 0 && (
+        <Card className="shadow-card border-0 border-l-4 border-l-warning">
+          <CardContent className="p-4 text-sm text-warning">
+            Nenhum profissional ativo cadastrado. Cadastre profissionais na tela de Funcionários antes de configurar disponibilidades.
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
@@ -92,15 +141,21 @@ const Disponibilidade: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Profissional *</Label>
-                <Select value={form.profissionalId} onValueChange={v => setForm(p => ({ ...p, profissionalId: v }))}>
+                <Select value={form.profissionalId} onValueChange={handleProfissionalChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {profissionais.length === 0 ? (
+                      <SelectItem value="__none__" disabled>Nenhum profissional cadastrado</SelectItem>
+                    ) : (
+                      profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome} — {p.cargo}</SelectItem>)
+                    )}
+                  </SelectContent>
                 </Select>
               </div>
               <div><Label>Unidade *</Label>
                 <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, salaId: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidades.filter(u => u.ativo).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -165,13 +220,14 @@ const Disponibilidade: React.FC = () => {
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-foreground">{prof?.nome}</h3>
-                      <p className="text-sm text-muted-foreground">{unidade?.nome}{sala ? ` • ${sala.nome}` : ''}</p>
+                      <h3 className="font-semibold text-foreground">{prof?.nome || 'Profissional não encontrado'}</h3>
+                      <p className="text-sm text-muted-foreground">{unidade?.nome || 'Unidade não encontrada'}{sala ? ` • ${sala.nome}` : ''}</p>
                       <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                         <p><Calendar className="w-3.5 h-3.5 inline mr-1" />{d.dataInicio} a {d.dataFim}</p>
                         <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} — {d.horaFim}</p>
                         <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia</p>
                         <p>Dias: {d.diasSemana.sort((a, b) => a - b).map(i => diasSemanaFull[i]).join(', ')}</p>
+                        {prof?.tempoAtendimento && <p>Duração consulta: {prof.tempoAtendimento}min</p>}
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -180,7 +236,7 @@ const Disponibilidade: React.FC = () => {
                         <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Essa ação não pode ser desfeita. Os horários vinculados não aparecerão mais no agendamento online.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { deleteDisponibilidade(d.id); toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { await deleteDisponibilidade(d.id); toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
