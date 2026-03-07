@@ -18,6 +18,11 @@ const defaultConfiguracoes: Configuracoes = {
     confirmacao: 'Olá {nome}! Sua consulta foi agendada para {data} às {hora} na {unidade}. Profissional: {profissional}.',
     lembrete: 'Lembrete: Sua consulta é amanhã, {data} às {hora} na {unidade} com {profissional}.',
   },
+  webhook: {
+    ativo: false,
+    url: '',
+    status: 'inativo' as const,
+  },
 };
 
 interface DataContextType {

@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 interface WebhookPayload {
-  acao: 'novo_agendamento' | 'remarcacao' | 'cancelamento';
+  acao: 'novo_agendamento' | 'remarcacao' | 'cancelamento' | 'teste';
   nome: string;
   telefone: string;
   email: string;

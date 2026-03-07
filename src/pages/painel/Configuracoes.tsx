@@ -7,15 +7,20 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes } = useData();
-  const { whatsapp, googleCalendar, filaEspera, templates } = configuracoes;
+  const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [webhookUrl, setWebhookUrl] = useState(webhook.url);
+  const [webhookEditing, setWebhookEditing] = useState(!webhook.url);
+  const [webhookTesting, setWebhookTesting] = useState(false);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -212,6 +217,110 @@ const Configuracoes: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Webhook Make.com */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+              <Webhook className="w-5 h-5 text-accent-foreground" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold font-display text-foreground">Webhook Make.com</h3>
+              <p className="text-sm text-muted-foreground">Integração via webhook para automações</p>
+            </div>
+            <Badge variant={webhook.status === 'ativo' ? 'default' : webhook.status === 'erro' ? 'destructive' : 'secondary'} className="capitalize">
+              {webhook.status === 'ativo' ? '✅ Ativo' : webhook.status === 'erro' ? '❌ Erro' : '⏸ Inativo'}
+            </Badge>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <Label>URL do Webhook</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  placeholder="https://hook.us2.make.com/..."
+                  value={webhookUrl}
+                  onChange={e => setWebhookUrl(e.target.value)}
+                  disabled={!webhookEditing}
+                  className="flex-1"
+                />
+                {!webhookEditing && (
+                  <Button variant="outline" size="icon" onClick={() => setWebhookEditing(true)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                className="gradient-primary text-primary-foreground flex-1"
+                disabled={!webhookUrl.trim()}
+                onClick={() => {
+                  updateConfiguracoes({ webhook: { url: webhookUrl.trim(), ativo: true, status: 'ativo' } });
+                  setWebhookEditing(false);
+                  toast.success('Webhook salvo com sucesso!');
+                }}
+              >
+                Salvar Webhook
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!webhook.url || webhookTesting}
+                onClick={async () => {
+                  setWebhookTesting(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('webhook-notify', {
+                      body: {
+                        acao: 'teste',
+                        nome: 'Teste do Sistema',
+                        telefone: '(00) 00000-0000',
+                        email: 'teste@teste.com',
+                        data: new Date().toLocaleDateString('pt-BR'),
+                        hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        unidade: 'Unidade Teste',
+                        profissional: 'Profissional Teste',
+                        tipo_atendimento: 'Teste de Webhook',
+                      },
+                    });
+                    if (error) throw error;
+                    updateConfiguracoes({ webhook: { ...webhook, url: webhookUrl.trim(), ativo: true, status: 'ativo' } });
+                    toast.success('Webhook testado com sucesso! Verifique seu cenário no Make.com.');
+                  } catch (err) {
+                    updateConfiguracoes({ webhook: { ...webhook, status: 'erro' } });
+                    toast.error('Erro ao testar webhook. Verifique a URL e se o cenário está ativo no Make.com.');
+                  } finally {
+                    setWebhookTesting(false);
+                  }
+                }}
+              >
+                {webhookTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                Testar
+              </Button>
+            </div>
+
+            {webhook.ativo && (
+              <Button
+                variant="ghost"
+                className="w-full text-destructive"
+                onClick={() => {
+                  updateConfiguracoes({ webhook: { url: '', ativo: false, status: 'inativo' } });
+                  setWebhookUrl('');
+                  setWebhookEditing(true);
+                  toast.info('Webhook desativado.');
+                }}
+              >
+                Desativar Webhook
+              </Button>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              O webhook será acionado automaticamente em: novo agendamento, remarcação e cancelamento.
+              Payload enviado: nome, telefone, e-mail, data, hora, unidade, profissional, tipo de ação.
+            </p>
           </div>
         </CardContent>
       </Card>
