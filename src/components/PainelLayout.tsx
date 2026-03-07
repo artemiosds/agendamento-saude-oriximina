@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
-  Activity, CalendarClock
+  Activity, CalendarClock, Stethoscope
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ const menuItems = [
   { to: '/painel/fila', label: 'Fila de Espera', icon: ListOrdered, roles: ['master', 'coordenador', 'recepcao'] },
   { to: '/painel/pacientes', label: 'Pacientes', icon: Users, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
   { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
+  { to: '/painel/prontuario', label: 'Prontuário', icon: Stethoscope, roles: ['master', 'coordenador', 'profissional'] },
   { to: '/painel/relatorios', label: 'Relatórios', icon: FileText, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, roles: ['master', 'coordenador'] },
   { to: '/painel/unidades', label: 'Unidades/Salas', icon: Building2, roles: ['master', 'coordenador'] },

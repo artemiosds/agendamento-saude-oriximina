@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.webhook-notify]
 verify_jwt = false
+
+[functions.auth-login]
+verify_jwt = false
+
+[functions.manage-employee]
+verify_jwt = false

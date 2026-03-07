@@ -20,18 +20,21 @@ import Funcionarios from "./pages/painel/Funcionarios";
 import UnidadesSalas from "./pages/painel/UnidadesSalas";
 import Disponibilidade from "./pages/painel/Disponibilidade";
 import Configuracoes from "./pages/painel/Configuracoes";
+import Prontuario from "./pages/painel/Prontuario";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
 const LoginRedirect: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   if (isAuthenticated) return <Navigate to="/painel" replace />;
   return <Login />;
 };
@@ -60,6 +63,7 @@ const App = () => (
                 <Route path="unidades" element={<UnidadesSalas />} />
                 <Route path="disponibilidade" element={<Disponibilidade />} />
                 <Route path="configuracoes" element={<Configuracoes />} />
+                <Route path="prontuario" element={<Prontuario />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
