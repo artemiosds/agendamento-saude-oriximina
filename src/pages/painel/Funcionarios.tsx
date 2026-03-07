@@ -230,7 +230,7 @@ const Funcionarios: React.FC = () => {
               <Select value={form.sala_id} onValueChange={v => setForm(p => ({ ...p, sala_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="__none__">Todas</SelectItem>
                   {salas.filter(s => !form.unidade_id || s.unidadeId === form.unidade_id).map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                   ))}
