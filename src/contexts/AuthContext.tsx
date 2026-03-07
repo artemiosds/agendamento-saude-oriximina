@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types';
-import { mockUsers } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (usuario: string, senha: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
@@ -19,41 +20,102 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = sessionStorage.getItem('sms_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (usuario: string, senha: string) => {
-    // Find user by username or email
-    const found = mockUsers.find(
-      (u) => (u.usuario === usuario || u.email === usuario) && u.ativo
-    );
+  const loadProfile = useCallback(async (authUserId: string) => {
+    try {
+      const { data, error } = await (supabase as any)
+        .from('funcionarios')
+        .select('*')
+        .eq('auth_user_id', authUserId)
+        .eq('ativo', true)
+        .single();
 
-    if (!found) {
-      return { success: false, error: 'Usuário não encontrado ou inativo.' };
-    }
-
-    // For the master admin, check plain password (in production would use bcrypt)
-    if (found.id === 'u1') {
-      if (senha !== 'sms@2025') {
-        return { success: false, error: 'Senha incorreta.' };
+      if (data && !error) {
+        setUser({
+          id: data.id,
+          authUserId: data.auth_user_id,
+          nome: data.nome,
+          usuario: data.usuario,
+          email: data.email,
+          setor: data.setor || '',
+          unidadeId: data.unidade_id || '',
+          salaId: data.sala_id || '',
+          cargo: data.cargo || '',
+          role: data.role as UserRole,
+          ativo: data.ativo,
+          criadoEm: data.criado_em || '',
+          criadoPor: data.criado_por || '',
+        });
       }
-    } else {
-      // For demo, any password works for other users
-      if (senha !== '123456') {
-        return { success: false, error: 'Senha incorreta.' };
-      }
+    } catch (err) {
+      console.error('Error loading profile:', err);
     }
-
-    setUser(found);
-    sessionStorage.setItem('sms_user', JSON.stringify(found));
-    return { success: true };
+    setIsLoading(false);
   }, []);
 
-  const logout = useCallback(() => {
+  useEffect(() => {
+    // Restore session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadProfile(session.user.id);
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        loadProfile(session.user.id);
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [loadProfile]);
+
+  const login = useCallback(async (usuario: string, senha: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('auth-login', {
+        body: { usuario: usuario.trim(), senha },
+      });
+
+      if (error) {
+        return { success: false, error: 'Erro ao conectar ao servidor.' };
+      }
+
+      if (data?.error) {
+        return { success: false, error: data.error };
+      }
+
+      if (data?.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+
+      if (data?.user) {
+        setUser({
+          ...data.user,
+          criadoEm: '',
+          criadoPor: '',
+        });
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Login error:', err);
+      return { success: false, error: 'Erro ao conectar ao servidor.' };
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    sessionStorage.removeItem('sms_user');
   }, []);
 
   const hasPermission = useCallback(
@@ -66,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );
