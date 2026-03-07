@@ -2,9 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { 
   Agendamento, Paciente, FilaEspera, Atendimento, Unidade, Sala, Setor, User, Disponibilidade, Configuracoes 
 } from '@/types';
-import { 
-  mockAgendamentos, mockPacientes, mockFila, mockAtendimentos, mockSetores 
-} from '@/data/mockData';
+import { mockSetores } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
 
 const defaultConfiguracoes: Configuracoes = {
@@ -36,14 +34,14 @@ interface DataContextType {
   funcionarios: User[];
   disponibilidades: Disponibilidade[];
   configuracoes: Configuracoes;
-  addAgendamento: (ag: Agendamento) => void;
-  updateAgendamento: (id: string, data: Partial<Agendamento>) => void;
+  addAgendamento: (ag: Agendamento) => Promise<void>;
+  updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => FilaEspera[];
-  addPaciente: (p: Paciente) => void;
-  updatePaciente: (id: string, data: Partial<Paciente>) => void;
-  addToFila: (f: FilaEspera) => void;
-  updateFila: (id: string, data: Partial<FilaEspera>) => void;
-  removeFromFila: (id: string) => void;
+  addPaciente: (p: Paciente) => Promise<void>;
+  updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
+  addToFila: (f: FilaEspera) => Promise<void>;
+  updateFila: (id: string, data: Partial<FilaEspera>) => Promise<void>;
+  removeFromFila: (id: string) => Promise<void>;
   addAtendimento: (a: Atendimento) => void;
   updateAtendimento: (id: string, data: Partial<Atendimento>) => void;
   addUnidade: (u: Unidade) => void;
@@ -65,6 +63,9 @@ interface DataContextType {
   encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, 'id' | 'criadoEm'>) => void;
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
+  refreshAgendamentos: () => Promise<void>;
+  refreshPacientes: () => Promise<void>;
+  refreshFila: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -76,10 +77,10 @@ export const useData = () => {
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>(mockAgendamentos);
-  const [pacientes, setPacientes] = useState<Paciente[]>(mockPacientes);
-  const [fila, setFila] = useState<FilaEspera[]>(mockFila);
-  const [atendimentos, setAtendimentos] = useState<Atendimento[]>(mockAtendimentos as Atendimento[]);
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [pacientes, setPacientes] = useState<Paciente[]>([]);
+  const [fila, setFila] = useState<FilaEspera[]>([]);
+  const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
   const [setores] = useState<Setor[]>(mockSetores);
@@ -93,18 +94,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.from('unidades' as any).select('*');
       if (data && !error) {
         const mapped: Unidade[] = (data as any[]).map((u: any) => ({
-          id: u.id,
-          nome: u.nome,
-          endereco: u.endereco || '',
-          telefone: u.telefone || '',
-          whatsapp: u.whatsapp || '',
-          ativo: u.ativo ?? true,
+          id: u.id, nome: u.nome, endereco: u.endereco || '', telefone: u.telefone || '',
+          whatsapp: u.whatsapp || '', ativo: u.ativo ?? true,
         }));
         setUnidades(mapped);
       }
-    } catch (err) {
-      console.error('Error loading unidades:', err);
-    }
+    } catch (err) { console.error('Error loading unidades:', err); }
   }, []);
 
   // Load salas from DB
@@ -113,51 +108,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.from('salas' as any).select('*');
       if (data && !error) {
         const mapped: Sala[] = (data as any[]).map((s: any) => ({
-          id: s.id,
-          nome: s.nome,
-          unidadeId: s.unidade_id || '',
-          ativo: s.ativo ?? true,
+          id: s.id, nome: s.nome, unidadeId: s.unidade_id || '', ativo: s.ativo ?? true,
         }));
         setSalas(mapped);
       }
-    } catch (err) {
-      console.error('Error loading salas:', err);
-    }
+    } catch (err) { console.error('Error loading salas:', err); }
   }, []);
 
   // Load funcionarios from DB
   const loadFuncionarios = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('funcionarios')
-        .select('*')
-        .eq('ativo', true);
+      const { data, error } = await supabase.from('funcionarios').select('*').eq('ativo', true);
       if (data && !error) {
         const mapped: User[] = data.map((f: any) => ({
-          id: f.id,
-          authUserId: f.auth_user_id || '',
-          nome: f.nome,
-          usuario: f.usuario,
-          email: f.email,
-          setor: f.setor || '',
-          unidadeId: f.unidade_id || '',
-          salaId: f.sala_id || '',
-          cargo: f.cargo || '',
-          role: f.role as User['role'],
-          ativo: f.ativo ?? true,
-          criadoEm: f.criado_em || '',
-          criadoPor: f.criado_por || '',
-          tempoAtendimento: f.tempo_atendimento || 30,
-          profissao: f.profissao || '',
-          tipoConselho: f.tipo_conselho || '',
-          numeroConselho: f.numero_conselho || '',
+          id: f.id, authUserId: f.auth_user_id || '', nome: f.nome, usuario: f.usuario,
+          email: f.email, setor: f.setor || '', unidadeId: f.unidade_id || '',
+          salaId: f.sala_id || '', cargo: f.cargo || '', role: f.role as User['role'],
+          ativo: f.ativo ?? true, criadoEm: f.criado_em || '', criadoPor: f.criado_por || '',
+          tempoAtendimento: f.tempo_atendimento || 30, profissao: f.profissao || '',
+          tipoConselho: f.tipo_conselho || '', numeroConselho: f.numero_conselho || '',
           ufConselho: f.uf_conselho || '',
         }));
         setFuncionarios(mapped);
       }
-    } catch (err) {
-      console.error('Error loading funcionarios:', err);
-    }
+    } catch (err) { console.error('Error loading funcionarios:', err); }
   }, []);
 
   // Load disponibilidades from DB
@@ -166,23 +140,67 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase.from('disponibilidades' as any).select('*');
       if (data && !error) {
         const mapped: Disponibilidade[] = (data as any[]).map((d: any) => ({
-          id: d.id,
-          profissionalId: d.profissional_id,
-          unidadeId: d.unidade_id,
-          salaId: d.sala_id || '',
-          dataInicio: d.data_inicio,
-          dataFim: d.data_fim,
-          horaInicio: d.hora_inicio,
-          horaFim: d.hora_fim,
-          vagasPorHora: d.vagas_por_hora,
-          vagasPorDia: d.vagas_por_dia,
-          diasSemana: d.dias_semana || [],
+          id: d.id, profissionalId: d.profissional_id, unidadeId: d.unidade_id,
+          salaId: d.sala_id || '', dataInicio: d.data_inicio, dataFim: d.data_fim,
+          horaInicio: d.hora_inicio, horaFim: d.hora_fim, vagasPorHora: d.vagas_por_hora,
+          vagasPorDia: d.vagas_por_dia, diasSemana: d.dias_semana || [],
         }));
         setDisponibilidades(mapped);
       }
-    } catch (err) {
-      console.error('Error loading disponibilidades:', err);
-    }
+    } catch (err) { console.error('Error loading disponibilidades:', err); }
+  }, []);
+
+  // Load pacientes from DB
+  const loadPacientes = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('pacientes' as any).select('*');
+      if (data && !error) {
+        const mapped: Paciente[] = (data as any[]).map((p: any) => ({
+          id: p.id, nome: p.nome, cpf: p.cpf || '', telefone: p.telefone || '',
+          dataNascimento: p.data_nascimento || '', email: p.email || '',
+          endereco: p.endereco || '', observacoes: p.observacoes || '',
+          criadoEm: p.criado_em || '',
+        }));
+        setPacientes(mapped);
+      }
+    } catch (err) { console.error('Error loading pacientes:', err); }
+  }, []);
+
+  // Load agendamentos from DB
+  const loadAgendamentos = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('agendamentos' as any).select('*').order('data', { ascending: false });
+      if (data && !error) {
+        const mapped: Agendamento[] = (data as any[]).map((a: any) => ({
+          id: a.id, pacienteId: a.paciente_id, pacienteNome: a.paciente_nome,
+          unidadeId: a.unidade_id, salaId: a.sala_id || '', setorId: a.setor_id || '',
+          profissionalId: a.profissional_id, profissionalNome: a.profissional_nome,
+          data: a.data, hora: a.hora, status: a.status, tipo: a.tipo,
+          observacoes: a.observacoes || '', origem: a.origem || 'recepcao',
+          googleEventId: a.google_event_id || '', syncStatus: a.sync_status || '',
+          criadoEm: a.criado_em || '', criadoPor: a.criado_por || '',
+        }));
+        setAgendamentos(mapped);
+      }
+    } catch (err) { console.error('Error loading agendamentos:', err); }
+  }, []);
+
+  // Load fila from DB
+  const loadFila = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from('fila_espera' as any).select('*').order('criado_em', { ascending: true });
+      if (data && !error) {
+        const mapped: FilaEspera[] = (data as any[]).map((f: any) => ({
+          id: f.id, pacienteId: f.paciente_id, pacienteNome: f.paciente_nome,
+          unidadeId: f.unidade_id, profissionalId: f.profissional_id || '',
+          setor: f.setor || '', prioridade: f.prioridade as FilaEspera['prioridade'],
+          status: f.status as FilaEspera['status'], posicao: f.posicao,
+          horaChegada: f.hora_chegada, horaChamada: f.hora_chamada || '',
+          observacoes: f.observacoes || '', criadoPor: f.criado_por || '',
+        }));
+        setFila(mapped);
+      }
+    } catch (err) { console.error('Error loading fila:', err); }
   }, []);
 
   useEffect(() => {
@@ -190,21 +208,106 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadSalas();
     loadFuncionarios();
     loadDisponibilidades();
-  }, [loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades]);
+    loadPacientes();
+    loadAgendamentos();
+    loadFila();
+  }, [loadUnidades, loadSalas, loadFuncionarios, loadDisponibilidades, loadPacientes, loadAgendamentos, loadFila]);
 
   const refreshFuncionarios = loadFuncionarios;
   const refreshDisponibilidades = loadDisponibilidades;
+  const refreshAgendamentos = loadAgendamentos;
+  const refreshPacientes = loadPacientes;
+  const refreshFila = loadFila;
 
-  const addAgendamento = useCallback((ag: Agendamento) => setAgendamentos(prev => [...prev, ag]), []);
-  const updateAgendamento = useCallback((id: string, data: Partial<Agendamento>) => 
-    setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, ...data } : a)), []);
-  const addPaciente = useCallback((p: Paciente) => setPacientes(prev => [...prev, p]), []);
-  const updatePaciente = useCallback((id: string, data: Partial<Paciente>) => 
-    setPacientes(prev => prev.map(p => p.id === id ? { ...p, ...data } : p)), []);
-  const addToFila = useCallback((f: FilaEspera) => setFila(prev => [...prev, f]), []);
-  const updateFila = useCallback((id: string, data: Partial<FilaEspera>) => 
-    setFila(prev => prev.map(f => f.id === id ? { ...f, ...data } : f)), []);
-  const removeFromFila = useCallback((id: string) => setFila(prev => prev.filter(f => f.id !== id)), []);
+  // --- PACIENTES: persist to DB ---
+  const addPaciente = useCallback(async (p: Paciente) => {
+    const { error } = await supabase.from('pacientes' as any).insert({
+      id: p.id, nome: p.nome, cpf: p.cpf, telefone: p.telefone,
+      data_nascimento: p.dataNascimento, email: p.email, endereco: p.endereco,
+      observacoes: p.observacoes,
+    } as any);
+    if (!error) setPacientes(prev => [...prev, p]);
+    else console.error('Error adding paciente:', error);
+  }, []);
+
+  const updatePaciente = useCallback(async (id: string, data: Partial<Paciente>) => {
+    const dbData: any = {};
+    if (data.nome !== undefined) dbData.nome = data.nome;
+    if (data.cpf !== undefined) dbData.cpf = data.cpf;
+    if (data.telefone !== undefined) dbData.telefone = data.telefone;
+    if (data.dataNascimento !== undefined) dbData.data_nascimento = data.dataNascimento;
+    if (data.email !== undefined) dbData.email = data.email;
+    if (data.endereco !== undefined) dbData.endereco = data.endereco;
+    if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    const { error } = await supabase.from('pacientes' as any).update(dbData).eq('id', id);
+    if (!error) setPacientes(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+    else console.error('Error updating paciente:', error);
+  }, []);
+
+  // --- AGENDAMENTOS: persist to DB ---
+  const addAgendamento = useCallback(async (ag: Agendamento) => {
+    const { error } = await supabase.from('agendamentos' as any).insert({
+      id: ag.id, paciente_id: ag.pacienteId, paciente_nome: ag.pacienteNome,
+      unidade_id: ag.unidadeId, sala_id: ag.salaId, setor_id: ag.setorId,
+      profissional_id: ag.profissionalId, profissional_nome: ag.profissionalNome,
+      data: ag.data, hora: ag.hora, status: ag.status, tipo: ag.tipo,
+      observacoes: ag.observacoes, origem: ag.origem,
+      google_event_id: ag.googleEventId || '', sync_status: ag.syncStatus || 'pendente',
+      criado_por: ag.criadoPor || '',
+    } as any);
+    if (!error) setAgendamentos(prev => [...prev, ag]);
+    else console.error('Error adding agendamento:', error);
+  }, []);
+
+  const updateAgendamento = useCallback(async (id: string, data: Partial<Agendamento>) => {
+    const dbData: any = {};
+    if (data.status !== undefined) dbData.status = data.status;
+    if (data.hora !== undefined) dbData.hora = data.hora;
+    if (data.data !== undefined) dbData.data = data.data;
+    if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.googleEventId !== undefined) dbData.google_event_id = data.googleEventId;
+    if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
+    if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+    const { error } = await supabase.from('agendamentos' as any).update(dbData).eq('id', id);
+    if (!error) setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, ...data } : a));
+    else console.error('Error updating agendamento:', error);
+  }, []);
+
+  // --- FILA DE ESPERA: persist to DB ---
+  const addToFila = useCallback(async (f: FilaEspera) => {
+    const { error } = await supabase.from('fila_espera' as any).insert({
+      id: f.id, paciente_id: f.pacienteId, paciente_nome: f.pacienteNome,
+      unidade_id: f.unidadeId, profissional_id: f.profissionalId || '',
+      setor: f.setor, prioridade: f.prioridade, status: f.status,
+      posicao: f.posicao, hora_chegada: f.horaChegada,
+      observacoes: f.observacoes || '', criado_por: f.criadoPor || 'sistema',
+    } as any);
+    if (!error) setFila(prev => [...prev, f]);
+    else console.error('Error adding to fila:', error);
+  }, []);
+
+  const updateFila = useCallback(async (id: string, data: Partial<FilaEspera>) => {
+    const dbData: any = {};
+    if (data.status !== undefined) dbData.status = data.status;
+    if (data.prioridade !== undefined) dbData.prioridade = data.prioridade;
+    if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
+    if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+    if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.horaChamada !== undefined) dbData.hora_chamada = data.horaChamada;
+    if (data.pacienteNome !== undefined) dbData.paciente_nome = data.pacienteNome;
+    if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;
+    if (data.setor !== undefined) dbData.setor = data.setor;
+    const { error } = await supabase.from('fila_espera' as any).update(dbData).eq('id', id);
+    if (!error) setFila(prev => prev.map(f => f.id === id ? { ...f, ...data } : f));
+    else console.error('Error updating fila:', error);
+  }, []);
+
+  const removeFromFila = useCallback(async (id: string) => {
+    const { error } = await supabase.from('fila_espera' as any).delete().eq('id', id);
+    if (!error) setFila(prev => prev.filter(f => f.id !== id));
+    else console.error('Error removing from fila:', error);
+  }, []);
+
   const addAtendimento = useCallback((a: Atendimento) => setAtendimentos(prev => [...prev, a]), []);
   const updateAtendimento = useCallback((id: string, data: Partial<Atendimento>) =>
     setAtendimentos(prev => prev.map(a => a.id === id ? { ...a, ...data } : a)), []);
@@ -270,23 +373,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // --- DISPONIBILIDADES: persist to DB ---
   const addDisponibilidade = useCallback(async (d: Disponibilidade) => {
     const { error } = await supabase.from('disponibilidades' as any).insert({
-      id: d.id,
-      profissional_id: d.profissionalId,
-      unidade_id: d.unidadeId,
-      sala_id: d.salaId || '',
-      data_inicio: d.dataInicio,
-      data_fim: d.dataFim,
-      hora_inicio: d.horaInicio,
-      hora_fim: d.horaFim,
-      vagas_por_hora: d.vagasPorHora,
-      vagas_por_dia: d.vagasPorDia,
-      dias_semana: d.diasSemana,
+      id: d.id, profissional_id: d.profissionalId, unidade_id: d.unidadeId,
+      sala_id: d.salaId || '', data_inicio: d.dataInicio, data_fim: d.dataFim,
+      hora_inicio: d.horaInicio, hora_fim: d.horaFim, vagas_por_hora: d.vagasPorHora,
+      vagas_por_dia: d.vagasPorDia, dias_semana: d.diasSemana,
     } as any);
-    if (!error) {
-      setDisponibilidades(prev => [...prev, d]);
-    } else {
-      console.error('Error adding disponibilidade:', error);
-    }
+    if (!error) setDisponibilidades(prev => [...prev, d]);
+    else console.error('Error adding disponibilidade:', error);
   }, []);
 
   const updateDisponibilidade = useCallback(async (id: string, data: Partial<Disponibilidade>) => {
@@ -301,22 +394,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.vagasPorHora !== undefined) dbData.vagas_por_hora = data.vagasPorHora;
     if (data.vagasPorDia !== undefined) dbData.vagas_por_dia = data.vagasPorDia;
     if (data.diasSemana !== undefined) dbData.dias_semana = data.diasSemana;
-    
     const { error } = await supabase.from('disponibilidades' as any).update(dbData).eq('id', id);
-    if (!error) {
-      setDisponibilidades(prev => prev.map(d => d.id === id ? { ...d, ...data } : d));
-    } else {
-      console.error('Error updating disponibilidade:', error);
-    }
+    if (!error) setDisponibilidades(prev => prev.map(d => d.id === id ? { ...d, ...data } : d));
+    else console.error('Error updating disponibilidade:', error);
   }, []);
 
   const deleteDisponibilidade = useCallback(async (id: string) => {
     const { error } = await supabase.from('disponibilidades' as any).delete().eq('id', id);
-    if (!error) {
-      setDisponibilidades(prev => prev.filter(d => d.id !== id));
-    } else {
-      console.error('Error deleting disponibilidade:', error);
-    }
+    if (!error) setDisponibilidades(prev => prev.filter(d => d.id !== id));
+    else console.error('Error deleting disponibilidade:', error);
   }, []);
 
   const updateConfiguracoes = useCallback((data: Partial<Configuracoes>) => 
@@ -339,14 +425,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const cancelAgendamento = useCallback((id: string): FilaEspera[] => {
     const ag = agendamentos.find(a => a.id === id);
     if (!ag) return [];
+    // Update in DB
+    supabase.from('agendamentos' as any).update({ status: 'cancelado' }).eq('id', id).then();
     setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status: 'cancelado' as const } : a));
     return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
   }, [agendamentos, checkFilaForSlot]);
 
-  const encaixarDaFila = useCallback((filaId: string, agData: Omit<Agendamento, 'id' | 'criadoEm'>) => {
+  const encaixarDaFila = useCallback(async (filaId: string, agData: Omit<Agendamento, 'id' | 'criadoEm'>) => {
     const newAg: Agendamento = { ...agData, id: `ag${Date.now()}`, criadoEm: new Date().toISOString() };
-    setAgendamentos(prev => [...prev, newAg]);
-    setFila(prev => prev.map(f => f.id === filaId ? { ...f, status: 'encaixado' as const } : f));
+    await addAgendamento(newAg);
+    await updateFila(filaId, { status: 'encaixado' as const });
   }, []);
 
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
@@ -443,7 +531,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addDisponibilidade, updateDisponibilidade, deleteDisponibilidade,
       getAvailableSlots, getAvailableDates, updateConfiguracoes,
       checkFilaForSlot, encaixarDaFila,
-      refreshFuncionarios, refreshDisponibilidades,
+      refreshFuncionarios, refreshDisponibilidades, refreshAgendamentos, refreshPacientes, refreshFila,
     }}>
       {children}
     </DataContext.Provider>
