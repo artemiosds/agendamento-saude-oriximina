@@ -9,14 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 const statusActions = [
-  { key: 'confirmado', label: 'Chegou', icon: Check, color: 'bg-success text-success-foreground' },
+  { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
   { key: 'atraso', label: 'Atrasou', icon: Clock, color: 'bg-warning text-warning-foreground' },
   { key: 'falta', label: 'Faltou', icon: X, color: 'bg-destructive text-destructive-foreground' },
   { key: 'concluido', label: 'Atendido', icon: UserCheck, color: 'bg-info text-info-foreground' },
@@ -24,9 +24,21 @@ const statusActions = [
 ] as const;
 
 const statusLabels: Record<string, string> = {
-  pendente: 'Pendente', confirmado: 'Confirmado', cancelado: 'Cancelado',
-  concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
+  pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
+  cancelado: 'Cancelado', concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
   remarcado: 'Remarcado', em_atendimento: 'Em Atendimento',
+};
+
+const statusBadgeClass: Record<string, string> = {
+  pendente: 'bg-warning/10 text-warning',
+  confirmado: 'bg-success/10 text-success',
+  confirmado_chegada: 'bg-emerald-500/10 text-emerald-600',
+  cancelado: 'bg-destructive/10 text-destructive',
+  concluido: 'bg-info/10 text-info',
+  falta: 'bg-destructive/10 text-destructive',
+  atraso: 'bg-warning/10 text-warning',
+  remarcado: 'bg-muted text-muted-foreground',
+  em_atendimento: 'bg-primary/10 text-primary',
 };
 
 const Agenda: React.FC = () => {
@@ -45,7 +57,11 @@ const Agenda: React.FC = () => {
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
-    if (isProfissional && user && a.profissionalId !== user.id) return false;
+    if (isProfissional && user) {
+      if (a.profissionalId !== user.id) return false;
+      // Profissional only sees confirmed arrivals and in-progress
+      if (a.status !== 'confirmado_chegada' && a.status !== 'em_atendimento' && a.status !== 'concluido') return false;
+    }
     if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     return true;
@@ -141,6 +157,10 @@ const Agenda: React.FC = () => {
     const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
     const unidade = unidades.find(u => u.id === ag.unidadeId);
 
+    if (newStatus === 'confirmado_chegada') {
+      toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
+    }
+
     if (newStatus === 'cancelado' || newStatus === 'remarcado') {
       notify({
         acao: newStatus === 'cancelado' ? 'cancelamento' : 'remarcacao',
@@ -209,7 +229,9 @@ const Agenda: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Agenda</h1>
-          <p className="text-muted-foreground text-sm">{isProfissional ? 'Seus agendamentos' : 'Gerenciar agendamentos'}</p>
+          <p className="text-muted-foreground text-sm">
+            {isProfissional ? 'Pacientes confirmados para atendimento' : 'Gerenciar agendamentos'}
+          </p>
         </div>
         {!isProfissional && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -281,9 +303,11 @@ const Agenda: React.FC = () => {
       {/* Appointments list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Nenhum agendamento para esta data.</CardContent></Card>
+          <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
+            {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
+          </CardContent></Card>
         ) : filtered.map(ag => {
-          const canStart = isProfissional && (ag.status === 'confirmado' || ag.status === 'pendente') && ag.data === new Date().toISOString().split('T')[0];
+          const canStart = isProfissional && ag.status === 'confirmado_chegada' && ag.data === new Date().toISOString().split('T')[0];
           const isEmAtendimento = ag.status === 'em_atendimento';
 
           return (
@@ -296,12 +320,7 @@ const Agenda: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={cn("text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                    ag.status === 'confirmado' ? 'bg-success/10 text-success' :
-                    ag.status === 'pendente' ? 'bg-warning/10 text-warning' :
-                    ag.status === 'cancelado' ? 'bg-destructive/10 text-destructive' :
-                    ag.status === 'concluido' ? 'bg-info/10 text-info' :
-                    ag.status === 'em_atendimento' ? 'bg-primary/10 text-primary' :
-                    'bg-muted text-muted-foreground'
+                    statusBadgeClass[ag.status] || 'bg-muted text-muted-foreground'
                   )}>
                     {statusLabels[ag.status] || ag.status}
                   </span>
@@ -334,7 +353,8 @@ const Agenda: React.FC = () => {
                   {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
                     statusActions.map(sa => (
                       <Button key={sa.key} size="sm" variant="outline" className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
-                        onClick={() => handleStatusChange(ag.id, sa.key)} disabled={ag.status === sa.key}>
+                        onClick={() => handleStatusChange(ag.id, sa.key)} disabled={ag.status === sa.key}
+                        title={sa.label}>
                         <sa.icon className="w-3.5 h-3.5" />
                       </Button>
                     ))

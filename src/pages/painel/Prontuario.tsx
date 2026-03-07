@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle } from 'lucide-react';
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -76,7 +76,6 @@ const ProntuarioPage: React.FC = () => {
   const isProfissional = user?.role === 'profissional';
   const canEdit = hasPermission(['master', 'coordenador', 'profissional']);
 
-  // Get tempo_atendimento for current professional (default 30)
   const tempoLimite = user?.tempoAtendimento || 30;
 
   const loadProntuarios = async () => {
@@ -113,22 +112,39 @@ const ProntuarioPage: React.FC = () => {
     const data = searchParams.get('data');
 
     if (pacienteId && pacienteNome) {
-      setEditId(null);
-      setForm({
-        ...emptyForm,
-        paciente_id: pacienteId,
-        paciente_nome: pacienteNome,
-        agendamento_id: agendamentoId || '',
-        data_atendimento: data || new Date().toISOString().split('T')[0],
-        hora_atendimento: horaInicio || '',
-      });
-      setDialogOpen(true);
+      // Check if a prontuario already exists for this agendamento
+      const existingForAgendamento = agendamentoId 
+        ? prontuarios.find(p => p.agendamento_id === agendamentoId)
+        : null;
+
+      if (existingForAgendamento) {
+        // Open existing prontuario for editing
+        openEdit(existingForAgendamento);
+      } else {
+        setEditId(null);
+        setForm({
+          ...emptyForm,
+          paciente_id: pacienteId,
+          paciente_nome: pacienteNome,
+          agendamento_id: agendamentoId || '',
+          data_atendimento: data || new Date().toISOString().split('T')[0],
+          hora_atendimento: horaInicio || '',
+        });
+        setDialogOpen(true);
+      }
 
       if (agendamentoId && horaInicio) {
         setActiveAtendimento({ agendamentoId, horaInicio });
       }
     }
-  }, [searchParams]);
+  }, [searchParams, prontuarios.length]);
+
+  // Patient history for the selected patient in the form
+  const patientHistory = useMemo(() => {
+    if (!form.paciente_id) return [];
+    return prontuarios.filter(p => p.paciente_id === form.paciente_id && p.id !== editId)
+      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
+  }, [form.paciente_id, prontuarios, editId]);
 
   const openNew = () => {
     setEditId(null);
@@ -209,7 +225,6 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleFinalizarAtendimento = async () => {
-    // Save prontuário first
     await handleSave();
 
     if (!activeAtendimento) return;
@@ -217,12 +232,10 @@ const ProntuarioPage: React.FC = () => {
     const now = new Date();
     const horaFim = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Calculate duration
     const [hi, mi] = activeAtendimento.horaInicio.split(':').map(Number);
     const [hf, mf] = horaFim.split(':').map(Number);
     const duracaoMinutos = (hf * 60 + mf) - (hi * 60 + mi);
 
-    // Update atendimento in DB
     try {
       await (supabase as any).from('atendimentos')
         .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: 'finalizado' })
@@ -231,7 +244,6 @@ const ProntuarioPage: React.FC = () => {
       console.error('Error finalizing atendimento:', err);
     }
 
-    // Update agendamento status
     updateAgendamento(activeAtendimento.agendamentoId, { status: 'concluido' });
 
     setActiveAtendimento(null);
@@ -309,34 +321,53 @@ const ProntuarioPage: React.FC = () => {
     printWindow.print();
   };
 
-  const filtered = prontuarios.filter(p =>
-    !search || p.paciente_nome.toLowerCase().includes(search.toLowerCase()) ||
-    p.profissional_nome.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter list: if pacienteId in query params, show only that patient's records
+  const queryPacienteId = searchParams.get('pacienteId');
+  
+  const filtered = prontuarios.filter(p => {
+    if (queryPacienteId) {
+      return p.paciente_id === queryPacienteId;
+    }
+    return !search || p.paciente_nome.toLowerCase().includes(search.toLowerCase()) ||
+      p.profissional_nome.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const queryPacienteNome = searchParams.get('pacienteNome');
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Prontuários</h1>
+          <h1 className="text-2xl font-bold font-display text-foreground">
+            {queryPacienteId ? `Prontuários — ${queryPacienteNome || 'Paciente'}` : 'Prontuários'}
+          </h1>
           <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
         </div>
-        {canEdit && (
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground">
-            <Plus className="w-4 h-4 mr-2" />Novo Prontuário
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {queryPacienteId && (
+            <Button variant="outline" onClick={() => navigate('/painel/prontuario')}>
+              Ver todos
+            </Button>
+          )}
+          {canEdit && (
+            <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+              <Plus className="w-4 h-4 mr-2" />Novo Prontuário
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por paciente ou profissional..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-10"
-        />
-      </div>
+      {!queryPacienteId && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por paciente ou profissional..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      )}
 
       {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
@@ -354,6 +385,24 @@ const ProntuarioPage: React.FC = () => {
               horaInicio={activeAtendimento.horaInicio}
               tempoLimite={tempoLimite}
             />
+          )}
+
+          {/* Patient history section */}
+          {patientHistory.length > 0 && (
+            <div className="bg-muted/50 rounded-lg p-3 border">
+              <div className="flex items-center gap-2 mb-2">
+                <History className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Histórico do Paciente ({patientHistory.length} registro(s) anterior(es))</span>
+              </div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {patientHistory.slice(0, 5).map(ph => (
+                  <div key={ph.id} className="flex items-center justify-between text-xs text-muted-foreground bg-background rounded px-2 py-1.5">
+                    <span>{new Date(ph.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')} — {ph.profissional_nome}</span>
+                    <span className="truncate ml-2 max-w-[200px]">{ph.queixa_principal || 'Sem queixa registrada'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           <div className="space-y-4">

@@ -92,7 +92,7 @@ export interface Agendamento {
   profissionalNome: string;
   data: string;
   hora: string;
-  status: 'pendente' | 'confirmado' | 'cancelado' | 'concluido' | 'falta' | 'atraso' | 'remarcado' | 'em_atendimento';
+  status: 'pendente' | 'confirmado' | 'confirmado_chegada' | 'cancelado' | 'concluido' | 'falta' | 'atraso' | 'remarcado' | 'em_atendimento';
   tipo: string;
   observacoes: string;
   origem: 'online' | 'recepcao';

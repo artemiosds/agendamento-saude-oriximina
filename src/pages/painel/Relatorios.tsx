@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, FileText, Filter, Clock } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)'];
@@ -30,18 +30,24 @@ interface AtendimentoDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { agendamentos, pacientes, funcionarios, unidades } = useData();
+  const { agendamentos, pacientes, funcionarios, unidades, salas } = useData();
   const { user } = useAuth();
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSetor, setFilterSetor] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional');
 
-  // Load atendimentos from DB for time/productivity
+  // Unique setores from atendimentos
+  const setoresUnicos = useMemo(() => {
+    const s = new Set(atendimentosDB.map(a => a.setor).filter(Boolean));
+    return Array.from(s).sort();
+  }, [atendimentosDB]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -68,7 +74,6 @@ const Relatorios: React.FC = () => {
       if (filterStatus !== 'all' && a.status !== filterStatus) return false;
       if (dateFrom && a.data < dateFrom) return false;
       if (dateTo && a.data > dateTo) return false;
-      // Role-based filtering
       if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
       if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
       if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
@@ -76,20 +81,20 @@ const Relatorios: React.FC = () => {
     });
   }, [agendamentos, filterUnit, filterProf, filterStatus, dateFrom, dateTo, user]);
 
-  // Filter atendimentos by date range too
   const filteredAtendimentos = useMemo(() => {
     return atendimentosDB.filter(a => {
       if (filterUnit !== 'all' && a.unidade_id !== filterUnit) return false;
       if (filterProf !== 'all' && a.profissional_id !== filterProf) return false;
+      if (filterSetor !== 'all' && a.setor !== filterSetor) return false;
       if (dateFrom && a.data < dateFrom) return false;
       if (dateTo && a.data > dateTo) return false;
       return true;
     });
-  }, [atendimentosDB, filterUnit, filterProf, dateFrom, dateTo]);
+  }, [atendimentosDB, filterUnit, filterProf, filterSetor, dateFrom, dateTo]);
 
   const stats = useMemo(() => {
     const total = filtered.length;
-    const confirmados = filtered.filter(a => a.status === 'confirmado').length;
+    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
     const pendentes = filtered.filter(a => a.status === 'pendente').length;
     const concluidos = filtered.filter(a => a.status === 'concluido').length;
     const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
@@ -103,16 +108,17 @@ const Relatorios: React.FC = () => {
   }, [filtered]);
 
   const porProfissional = useMemo(() => {
-    const map: Record<string, { total: number; concluidos: number; faltas: number; tempoTotal: number; atendimentos: number }> = {};
+    const map: Record<string, { total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number }> = {};
     filtered.forEach(a => {
-      if (!map[a.profissionalNome]) map[a.profissionalNome] = { total: 0, concluidos: 0, faltas: 0, tempoTotal: 0, atendimentos: 0 };
+      if (!map[a.profissionalNome]) map[a.profissionalNome] = { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0 };
       map[a.profissionalNome].total++;
       if (a.status === 'concluido') map[a.profissionalNome].concluidos++;
       if (a.status === 'falta') map[a.profissionalNome].faltas++;
+      if (a.status === 'cancelado') map[a.profissionalNome].cancelados++;
+      if (a.status === 'remarcado') map[a.profissionalNome].remarcados++;
     });
-    // Add time data from DB atendimentos
     filteredAtendimentos.forEach(at => {
-      if (!map[at.profissional_nome]) map[at.profissional_nome] = { total: 0, concluidos: 0, faltas: 0, tempoTotal: 0, atendimentos: 0 };
+      if (!map[at.profissional_nome]) map[at.profissional_nome] = { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0 };
       if (at.duracao_minutos && at.duracao_minutos > 0) {
         map[at.profissional_nome].tempoTotal += at.duracao_minutos;
         map[at.profissional_nome].atendimentos++;
@@ -123,6 +129,8 @@ const Relatorios: React.FC = () => {
       total: d.total,
       concluidos: d.concluidos,
       faltas: d.faltas,
+      cancelados: d.cancelados,
+      remarcados: d.remarcados,
       tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
       taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
     })).sort((a, b) => b.total - a.total);
@@ -138,6 +146,25 @@ const Relatorios: React.FC = () => {
     return Object.entries(map).map(([nome, total]) => ({ nome, total }));
   }, [filtered, unidades]);
 
+  // By Sala/Setor
+  const porSetor = useMemo(() => {
+    const map: Record<string, { total: number; tempoTotal: number; count: number }> = {};
+    filteredAtendimentos.forEach(a => {
+      const key = a.setor || 'Sem setor';
+      if (!map[key]) map[key] = { total: 0, tempoTotal: 0, count: 0 };
+      map[key].total++;
+      if (a.duracao_minutos && a.duracao_minutos > 0) {
+        map[key].tempoTotal += a.duracao_minutos;
+        map[key].count++;
+      }
+    });
+    return Object.entries(map).map(([setor, d]) => ({
+      setor,
+      total: d.total,
+      tempoMedio: d.count > 0 ? Math.round(d.tempoTotal / d.count) : 0,
+    })).sort((a, b) => b.total - a.total);
+  }, [filteredAtendimentos]);
+
   const statusData = useMemo(() => [
     { name: 'Confirmados', value: stats.confirmados },
     { name: 'Pendentes', value: stats.pendentes },
@@ -149,13 +176,26 @@ const Relatorios: React.FC = () => {
     { name: 'Atrasos', value: stats.atrasos },
   ].filter(d => d.value > 0), [stats]);
 
-  // Global time stats
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.duracao_minutos && a.duracao_minutos > 0);
     const totalMinutos = finalizados.reduce((s, a) => s + (a.duracao_minutos || 0), 0);
     const media = finalizados.length > 0 ? Math.round(totalMinutos / finalizados.length) : 0;
     return { totalAtendimentos: finalizados.length, tempoMedio: media, totalMinutos };
   }, [filteredAtendimentos]);
+
+  // Active professionals list
+  const profissionaisAtivos = useMemo(() => {
+    return funcionarios.filter(f => f.role === 'profissional' && f.ativo).map(f => {
+      const unidade = unidades.find(u => u.id === f.unidadeId);
+      return {
+        nome: f.nome,
+        profissao: f.profissao || f.cargo || '',
+        conselho: f.tipoConselho && f.numeroConselho ? `${f.tipoConselho} ${f.numeroConselho}/${f.ufConselho}` : '',
+        unidade: unidade?.nome || '',
+        setor: f.setor || '',
+      };
+    });
+  }, [funcionarios, unidades]);
 
   const exportCSV = () => {
     const headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem', 'Duração (min)'];
@@ -184,7 +224,7 @@ const Relatorios: React.FC = () => {
     }).join('');
     
     const prodRows = porProfissional.map(p =>
-      `<tr><td>${p.nome}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
+      `<tr><td>${p.nome}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.remarcados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
     ).join('');
 
     printWindow.document.write(`<!DOCTYPE html><html><head><title>Relatório SMS Oriximiná</title>
@@ -210,7 +250,7 @@ const Relatorios: React.FC = () => {
       <h2>Agendamentos</h2>
       <table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
       <h2>Produtividade por Profissional</h2>
-      <table><thead><tr><th>Profissional</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>
+      <table><thead><tr><th>Profissional</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>
       </body></html>`);
     printWindow.document.close();
     printWindow.print();
@@ -233,7 +273,7 @@ const Relatorios: React.FC = () => {
       <Card className="shadow-card border-0">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-3"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-foreground text-sm">Filtros</span></div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <div>
               <Label className="text-xs">Unidade</Label>
               <Select value={filterUnit} onValueChange={setFilterUnit}>
@@ -256,12 +296,23 @@ const Relatorios: React.FC = () => {
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pendente">Pendente</SelectItem>
                   <SelectItem value="confirmado">Confirmado</SelectItem>
+                  <SelectItem value="confirmado_chegada">Chegou</SelectItem>
                   <SelectItem value="em_atendimento">Em Atendimento</SelectItem>
                   <SelectItem value="concluido">Concluído</SelectItem>
                   <SelectItem value="falta">Falta</SelectItem>
                   <SelectItem value="cancelado">Cancelado</SelectItem>
                   <SelectItem value="remarcado">Remarcado</SelectItem>
                   <SelectItem value="atraso">Atraso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Setor</Label>
+              <Select value={filterSetor} onValueChange={setFilterSetor}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -388,6 +439,35 @@ const Relatorios: React.FC = () => {
         </Card>
       </div>
 
+      {/* Por Sala/Setor */}
+      {porSetor.length > 0 && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-5">
+            <h3 className="font-semibold font-display text-foreground mb-4">Atendimentos por Setor</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 text-muted-foreground font-medium">Setor</th>
+                    <th className="text-center py-2 text-muted-foreground font-medium">Total Atendimentos</th>
+                    <th className="text-center py-2 text-muted-foreground font-medium">Tempo Médio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porSetor.map(s => (
+                    <tr key={s.setor} className="border-b last:border-0">
+                      <td className="py-2 text-foreground">{s.setor}</td>
+                      <td className="py-2 text-center">{s.total}</td>
+                      <td className="py-2 text-center text-primary font-medium">{s.tempoMedio ? `${s.tempoMedio}min` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Produtividade por Profissional */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
@@ -400,6 +480,8 @@ const Relatorios: React.FC = () => {
                   <th className="text-center py-2 text-muted-foreground font-medium">Total</th>
                   <th className="text-center py-2 text-muted-foreground font-medium">Concluídos</th>
                   <th className="text-center py-2 text-muted-foreground font-medium">Faltas</th>
+                  <th className="text-center py-2 text-muted-foreground font-medium">Cancelados</th>
+                  <th className="text-center py-2 text-muted-foreground font-medium">Remarcados</th>
                   <th className="text-center py-2 text-muted-foreground font-medium">Tempo Médio</th>
                   <th className="text-center py-2 text-muted-foreground font-medium">Taxa Conclusão</th>
                 </tr>
@@ -411,8 +493,44 @@ const Relatorios: React.FC = () => {
                     <td className="py-2 text-center">{p.total}</td>
                     <td className="py-2 text-center text-success">{p.concluidos}</td>
                     <td className="py-2 text-center text-destructive">{p.faltas}</td>
+                    <td className="py-2 text-center text-muted-foreground">{p.cancelados}</td>
+                    <td className="py-2 text-center text-warning">{p.remarcados}</td>
                     <td className="py-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
                     <td className="py-2 text-center font-semibold">{p.taxaConclusao}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Profissionais Cadastrados */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold font-display text-foreground">Profissionais Cadastrados ({profissionaisAtivos.length})</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 text-muted-foreground font-medium">Nome</th>
+                  <th className="text-left py-2 text-muted-foreground font-medium">Profissão</th>
+                  <th className="text-left py-2 text-muted-foreground font-medium">Conselho</th>
+                  <th className="text-left py-2 text-muted-foreground font-medium">Unidade</th>
+                  <th className="text-left py-2 text-muted-foreground font-medium">Setor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profissionaisAtivos.map((p, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="py-2 text-foreground font-medium">{p.nome}</td>
+                    <td className="py-2 text-muted-foreground">{p.profissao || '-'}</td>
+                    <td className="py-2 text-muted-foreground">{p.conselho || '-'}</td>
+                    <td className="py-2 text-muted-foreground">{p.unidade || '-'}</td>
+                    <td className="py-2 text-muted-foreground">{p.setor || '-'}</td>
                   </tr>
                 ))}
               </tbody>
