@@ -125,6 +125,10 @@ const Funcionarios: React.FC = () => {
           cargo: form.cargo,
           role: form.role,
           tempo_atendimento: form.tempo_atendimento,
+          profissao: form.profissao,
+          tipo_conselho: form.tipo_conselho,
+          numero_conselho: form.numero_conselho,
+          uf_conselho: form.uf_conselho,
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -158,6 +162,10 @@ const Funcionarios: React.FC = () => {
             cargo: form.cargo,
             role: form.role,
             tempo_atendimento: form.tempo_atendimento,
+            profissao: form.profissao,
+            tipo_conselho: form.tipo_conselho,
+            numero_conselho: form.numero_conselho,
+            uf_conselho: form.uf_conselho,
             criado_por: user?.id || '',
           },
         });
