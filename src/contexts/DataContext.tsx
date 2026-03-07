@@ -82,9 +82,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [unidades, setUnidades] = useState<Unidade[]>(mockUnidades);
   const [salas, setSalas] = useState<Sala[]>(mockSalas);
   const [setores] = useState<Setor[]>(mockSetores);
-  const [funcionarios, setFuncionarios] = useState<User[]>(mockUsers);
+  const [funcionarios, setFuncionarios] = useState<User[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>(mockDisponibilidades);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
+
+  // Load funcionarios from the database
+  useEffect(() => {
+    const loadFuncionarios = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('funcionarios')
+          .select('*')
+          .eq('ativo', true);
+        if (data && !error) {
+          const mapped: User[] = data.map((f: any) => ({
+            id: f.id,
+            authUserId: f.auth_user_id || '',
+            nome: f.nome,
+            usuario: f.usuario,
+            email: f.email,
+            setor: f.setor || '',
+            unidadeId: f.unidade_id || '',
+            salaId: f.sala_id || '',
+            cargo: f.cargo || '',
+            role: f.role as User['role'],
+            ativo: f.ativo ?? true,
+            criadoEm: f.criado_em || '',
+            criadoPor: f.criado_por || '',
+            tempoAtendimento: f.tempo_atendimento || 30,
+            profissao: f.profissao || '',
+            tipoConselho: f.tipo_conselho || '',
+            numeroConselho: f.numero_conselho || '',
+            ufConselho: f.uf_conselho || '',
+          }));
+          setFuncionarios(mapped);
+        }
+      } catch (err) {
+        console.error('Error loading funcionarios:', err);
+      }
+    };
+    loadFuncionarios();
+  }, []);
 
   const addAgendamento = useCallback((ag: Agendamento) => setAgendamentos(prev => [...prev, ag]), []);
   const updateAgendamento = useCallback((id: string, data: Partial<Agendamento>) => 
