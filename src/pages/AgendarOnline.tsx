@@ -26,22 +26,27 @@ const AgendarOnline: React.FC = () => {
   });
 
   const unidadesComDisponibilidade = useMemo(() => {
-    // Show all active units that have at least one active professional linked
+    // Show units that have at least one active professional with availability configured
+    const unidadeIdsComDisponibilidade = new Set(
+      disponibilidades.map(d => d.unidadeId)
+    );
     const unidadeIdsComProfissional = new Set(
       funcionarios.filter(f => f.role === 'profissional' && f.ativo && f.unidadeId)
         .map(f => f.unidadeId)
     );
-    return unidades.filter(u => u.ativo && unidadeIdsComProfissional.has(u.id));
-  }, [unidades, funcionarios]);
+    return unidades.filter(u => u.ativo && unidadeIdsComProfissional.has(u.id) && unidadeIdsComDisponibilidade.has(u.id));
+  }, [unidades, funcionarios, disponibilidades]);
 
   const profissionaisComDisponibilidade = useMemo(() => {
     if (!form.unidadeId) return [];
-    // Show professionals that are active, have role 'profissional', linked to selected unit
-    // AND optionally have availability configured
-    return funcionarios.filter(f => 
-      f.role === 'profissional' && f.ativo && f.unidadeId === form.unidadeId
+    // Show only professionals that are active, linked to unit, AND have availability configured for that unit
+    const profIdsComDisponibilidade = new Set(
+      disponibilidades.filter(d => d.unidadeId === form.unidadeId).map(d => d.profissionalId)
     );
-  }, [funcionarios, form.unidadeId]);
+    return funcionarios.filter(f => 
+      f.role === 'profissional' && f.ativo && f.unidadeId === form.unidadeId && profIdsComDisponibilidade.has(f.id)
+    );
+  }, [funcionarios, disponibilidades, form.unidadeId]);
 
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];

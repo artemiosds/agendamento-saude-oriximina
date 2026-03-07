@@ -74,6 +74,51 @@ export type Database = {
         }
         Relationships: []
       }
+      disponibilidades: {
+        Row: {
+          criado_em: string | null
+          data_fim: string
+          data_inicio: string
+          dias_semana: number[]
+          hora_fim: string
+          hora_inicio: string
+          id: string
+          profissional_id: string
+          sala_id: string | null
+          unidade_id: string
+          vagas_por_dia: number
+          vagas_por_hora: number
+        }
+        Insert: {
+          criado_em?: string | null
+          data_fim: string
+          data_inicio: string
+          dias_semana?: number[]
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          profissional_id: string
+          sala_id?: string | null
+          unidade_id: string
+          vagas_por_dia?: number
+          vagas_por_hora?: number
+        }
+        Update: {
+          criado_em?: string | null
+          data_fim?: string
+          data_inicio?: string
+          dias_semana?: number[]
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          profissional_id?: string
+          sala_id?: string | null
+          unidade_id?: string
+          vagas_por_dia?: number
+          vagas_por_hora?: number
+        }
+        Relationships: []
+      }
       funcionarios: {
         Row: {
           ativo: boolean | null
@@ -245,6 +290,68 @@ export type Database = {
           sinais_sintomas?: string | null
           solicitacao_exames?: string | null
           unidade_id?: string
+        }
+        Relationships: []
+      }
+      salas: {
+        Row: {
+          ativo: boolean
+          criado_em: string | null
+          id: string
+          nome: string
+          unidade_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string | null
+          id: string
+          nome: string
+          unidade_id: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string | null
+          id?: string
+          nome?: string
+          unidade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salas_unidade_id_fkey"
+            columns: ["unidade_id"]
+            isOneToOne: false
+            referencedRelation: "unidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unidades: {
+        Row: {
+          ativo: boolean
+          criado_em: string | null
+          endereco: string
+          id: string
+          nome: string
+          telefone: string
+          whatsapp: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string | null
+          endereco?: string
+          id: string
+          nome: string
+          telefone?: string
+          whatsapp?: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string | null
+          endereco?: string
+          id?: string
+          nome?: string
+          telefone?: string
+          whatsapp?: string
         }
         Relationships: []
       }
