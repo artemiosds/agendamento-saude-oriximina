@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Phone, Mail, Pencil } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
+import { supabase } from '@/integrations/supabase/client';
 
 const Pacientes: React.FC = () => {
-  const { pacientes, addPaciente, updatePaciente } = useData();
+  const { pacientes, addPaciente, updatePaciente, agendamentos, logAction, refreshPacientes } = useData();
+  const { user, hasPermission } = useAuth();
+  const canDelete = hasPermission(['master', 'coordenador']);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -71,6 +76,28 @@ const Pacientes: React.FC = () => {
     }
   };
 
+  const handleDelete = async (p: typeof pacientes[0]) => {
+    // Check for active links (agendamentos)
+    const activeLinks = agendamentos.filter(a => a.pacienteId === p.id && !['cancelado', 'concluido', 'falta'].includes(a.status));
+    if (activeLinks.length > 0) {
+      toast.error(`Não é possível excluir: ${p.nome} possui ${activeLinks.length} agendamento(s) ativo(s).`);
+      return;
+    }
+
+    try {
+      await (supabase as any).from('pacientes').delete().eq('id', p.id);
+      await logAction({
+        acao: 'excluir', entidade: 'paciente', entidadeId: p.id,
+        detalhes: { nome: p.nome, cpf: p.cpf }, user,
+      });
+      await refreshPacientes();
+      toast.success('Paciente excluído!');
+    } catch (err) {
+      console.error('Error deleting patient:', err);
+      toast.error('Erro ao excluir paciente.');
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -128,9 +155,32 @@ const Pacientes: React.FC = () => {
                   <h3 className="font-semibold text-foreground">{p.nome}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">{p.cpf || 'Sem CPF'}</p>
                 </div>
-                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  {canDelete && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Excluir {p.nome}? Será verificado se há agendamentos ativos vinculados. Esta ação é irreversível e será registrada em log.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(p)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{p.telefone}</span>

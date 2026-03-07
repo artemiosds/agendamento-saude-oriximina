@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History } from 'lucide-react';
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -60,7 +61,7 @@ const emptyForm = {
 
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { pacientes, unidades, agendamentos, updateAgendamento } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
@@ -75,6 +76,7 @@ const ProntuarioPage: React.FC = () => {
 
   const isProfissional = user?.role === 'profissional';
   const canEdit = hasPermission(['master', 'coordenador', 'profissional']);
+  const canDelete = hasPermission(['master', 'coordenador']);
 
   const tempoLimite = user?.tempoAtendimento || 30;
 
@@ -112,13 +114,11 @@ const ProntuarioPage: React.FC = () => {
     const data = searchParams.get('data');
 
     if (pacienteId && pacienteNome) {
-      // Check if a prontuario already exists for this agendamento
       const existingForAgendamento = agendamentoId 
         ? prontuarios.find(p => p.agendamento_id === agendamentoId)
         : null;
 
       if (existingForAgendamento) {
-        // Open existing prontuario for editing
         openEdit(existingForAgendamento);
       } else {
         setEditId(null);
@@ -135,11 +135,19 @@ const ProntuarioPage: React.FC = () => {
 
       if (agendamentoId && horaInicio) {
         setActiveAtendimento({ agendamentoId, horaInicio });
+      } else if (agendamentoId) {
+        // Try to restore timer from localStorage
+        const stored = localStorage.getItem(`timer_${agendamentoId}`);
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setActiveAtendimento({ agendamentoId, horaInicio: parsed.horaInicio });
+          } catch { /* ignore */ }
+        }
       }
     }
   }, [searchParams, prontuarios.length]);
 
-  // Patient history for the selected patient in the form
   const patientHistory = useMemo(() => {
     if (!form.paciente_id) return [];
     return prontuarios.filter(p => p.paciente_id === form.paciente_id && p.id !== editId)
@@ -244,11 +252,30 @@ const ProntuarioPage: React.FC = () => {
       console.error('Error finalizing atendimento:', err);
     }
 
+    // Clean up localStorage timer
+    localStorage.removeItem(`timer_${activeAtendimento.agendamentoId}`);
+
     updateAgendamento(activeAtendimento.agendamentoId, { status: 'concluido' });
 
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado! Duração: ${Math.max(0, duracaoMinutos)} minutos.`);
     navigate('/painel/agenda');
+  };
+
+  const handleDelete = async (p: ProntuarioDB) => {
+    try {
+      await (supabase as any).from('prontuarios').delete().eq('id', p.id);
+      await logAction({
+        acao: 'excluir', entidade: 'prontuario', entidadeId: p.id,
+        detalhes: { paciente: p.paciente_nome, profissional: p.profissional_nome, data: p.data_atendimento },
+        user,
+      });
+      setProntuarios(prev => prev.filter(pr => pr.id !== p.id));
+      toast.success('Prontuário excluído!');
+    } catch (err) {
+      console.error('Error deleting:', err);
+      toast.error('Erro ao excluir prontuário.');
+    }
   };
 
   const handlePrint = (p: ProntuarioDB) => {
@@ -321,7 +348,6 @@ const ProntuarioPage: React.FC = () => {
     printWindow.print();
   };
 
-  // Filter list: if pacienteId in query params, show only that patient's records
   const queryPacienteId = searchParams.get('pacienteId');
   
   const filtered = prontuarios.filter(p => {
@@ -384,6 +410,7 @@ const ProntuarioPage: React.FC = () => {
             <AtendimentoTimer
               horaInicio={activeAtendimento.horaInicio}
               tempoLimite={tempoLimite}
+              agendamentoId={activeAtendimento.agendamentoId}
             />
           )}
 
@@ -508,6 +535,27 @@ const ProntuarioPage: React.FC = () => {
                     <Button size="icon" variant="ghost" onClick={() => handlePrint(p)}>
                       <Printer className="w-4 h-4" />
                     </Button>
+                    {canDelete && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Excluir o prontuário de {p.paciente_nome} ({new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')})? Esta ação será registrada em log de auditoria.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(p)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </div>
               </CardContent>

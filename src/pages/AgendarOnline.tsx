@@ -85,17 +85,27 @@ const AgendarOnline: React.FC = () => {
       let pacienteId: string;
       const normalizePhone = (t: string) => t.replace(/\D/g, '');
       const normalizeCpf = (c: string) => c.replace(/\D/g, '');
+      const normalizeEmail = (e: string) => e.trim().toLowerCase();
       const phoneNorm = normalizePhone(form.telefone);
       const cpfNorm = normalizeCpf(form.cpf);
+      const emailNorm = normalizeEmail(form.email);
 
+      // Deduplication by CPF, phone or email
       const existingPatient = pacientes.find(p => 
         (cpfNorm && normalizeCpf(p.cpf) === cpfNorm) || 
-        (phoneNorm && normalizePhone(p.telefone) === phoneNorm)
+        (phoneNorm && normalizePhone(p.telefone) === phoneNorm) ||
+        (emailNorm && p.email && p.email.trim().toLowerCase() === emailNorm)
       );
 
       if (existingPatient) {
         pacienteId = existingPatient.id;
+        // For "Retorno", we just link to existing patient without creating new record
       } else {
+        if (form.tipo === 'Retorno') {
+          toast.error('Não foi encontrado cadastro anterior. Para retorno, é necessário ter uma primeira consulta.');
+          setLoading(false);
+          return;
+        }
         pacienteId = `p${Date.now()}`;
         await addPaciente({
           id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
@@ -146,13 +156,16 @@ const AgendarOnline: React.FC = () => {
               </div>
               <h2 className="text-xl font-bold font-display text-foreground mb-2">Agendamento Confirmado!</h2>
               <p className="text-muted-foreground mb-4">
-                {form.nome}, sua consulta foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
+                {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
               </p>
               <p className="text-sm text-muted-foreground mb-2">
                 <strong>Profissional:</strong> {funcionarios.find(f => f.id === form.profissionalId)?.nome}
               </p>
               <p className="text-sm text-muted-foreground mb-2">
                 <strong>Unidade:</strong> {unidades.find(u => u.id === form.unidadeId)?.nome}
+              </p>
+              <p className="text-sm text-muted-foreground mb-2">
+                <strong>Tipo:</strong> {form.tipo}
               </p>
               <p className="text-sm text-muted-foreground mb-6">
                 Lembre-se de chegar com 15 minutos de antecedência.
@@ -223,12 +236,18 @@ const AgendarOnline: React.FC = () => {
                       <Select value={form.tipo} onValueChange={v => setForm(p => ({ ...p, tipo: v }))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Consulta">Consulta</SelectItem>
+                          <SelectItem value="Consulta">Primeira Consulta</SelectItem>
                           <SelectItem value="Retorno">Retorno</SelectItem>
                           <SelectItem value="Exame">Exame</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    {form.tipo === 'Retorno' && (
+                      <div className="flex items-center gap-2 p-3 bg-info/10 rounded-lg text-sm text-info">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>Para retorno, informe os mesmos dados (CPF, telefone ou e-mail) da primeira consulta.</span>
+                      </div>
+                    )}
                     <Button onClick={() => setStep(2)} className="w-full gradient-primary text-primary-foreground" disabled={!form.unidadeId || !form.profissionalId}>Próximo</Button>
                   </>
                 )}
