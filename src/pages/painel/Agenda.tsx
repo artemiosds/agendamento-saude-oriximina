@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
+import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,7 @@ const statusActions = [
 const Agenda: React.FC = () => {
   const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes } = useData();
   const gcal = useGoogleCalendar();
+  const { notify } = useWebhookNotify();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -41,11 +43,11 @@ const Agenda: React.FC = () => {
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
-  const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string }) => {
+  const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string; pacienteId?: string }) => {
     if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
     try {
       const unidade = unidades.find(u => u.id === ag.unidadeId);
-      const paciente = pacientes.find(p => p.nome === ag.pacienteNome);
+      const paciente = pacientes.find(p => p.nome === ag.pacienteNome || p.id === ag.pacienteId);
       const startDateTime = `${ag.data}T${ag.hora}:00`;
       const [h, m] = ag.hora.split(':').map(Number);
       const endH = m + 30 >= 60 ? h + 1 : h;
@@ -55,16 +57,20 @@ const Agenda: React.FC = () => {
       const description = [
         `Paciente: ${ag.pacienteNome}`,
         paciente?.telefone ? `Telefone: ${paciente.telefone}` : '',
+        paciente?.email ? `E-mail: ${paciente.email}` : '',
         `Profissional: ${ag.profissionalNome}`,
         `Tipo: ${ag.tipo}`,
         unidade ? `Unidade: ${unidade.nome}` : '',
       ].filter(Boolean).join('\n');
+
+      const attendees = paciente?.email ? [{ email: paciente.email }] : undefined;
 
       const result = await gcal.createEvent({
         summary: `${ag.tipo} - ${ag.pacienteNome}`,
         description,
         start: { dateTime: startDateTime, timeZone: 'America/Belem' },
         end: { dateTime: endDateTime, timeZone: 'America/Belem' },
+        attendees,
       });
       return result?.eventId || null;
     } catch (err) {
@@ -78,6 +84,7 @@ const Agenda: React.FC = () => {
     const prof = profissionais.find(p => p.id === newAg.profissionalId);
     if (!pac || !prof || !newAg.hora) return;
 
+    const unidade = unidades.find(u => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
       id: agId,
@@ -101,13 +108,27 @@ const Agenda: React.FC = () => {
     addAgendamento(agData);
 
     // Sync to Google Calendar
-    const googleEventId = await syncToGoogleCalendar(agData);
+    const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
     if (googleEventId) {
       updateAgendamento(agId, { googleEventId, syncStatus: 'ok' });
       toast.success('Agendamento criado e sincronizado com Google Agenda!');
     } else {
       toast.success('Agendamento criado!');
     }
+
+    // Send webhook notification
+    notify({
+      acao: 'novo_agendamento',
+      nome: pac.nome,
+      telefone: pac.telefone,
+      email: pac.email,
+      data: selectedDate,
+      hora: newAg.hora,
+      unidade: unidade?.nome || '',
+      profissional: prof.nome,
+      tipo_atendimento: newAg.tipo,
+      observacoes: newAg.obs,
+    });
 
     setDialogOpen(false);
     setNewAg({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
@@ -118,6 +139,24 @@ const Agenda: React.FC = () => {
     if (!ag) return;
 
     updateAgendamento(agId, { status: newStatus as any });
+
+    const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
+    const unidade = unidades.find(u => u.id === ag.unidadeId);
+
+    // Send webhook on cancel or reschedule
+    if (newStatus === 'cancelado' || newStatus === 'remarcado') {
+      notify({
+        acao: newStatus === 'cancelado' ? 'cancelamento' : 'remarcacao',
+        nome: ag.pacienteNome,
+        telefone: paciente?.telefone || '',
+        email: paciente?.email || '',
+        data: ag.data,
+        hora: ag.hora,
+        unidade: unidade?.nome || '',
+        profissional: ag.profissionalNome,
+        tipo_atendimento: ag.tipo,
+      });
+    }
 
     // Google Calendar sync on cancel/reschedule
     if (ag.googleEventId) {

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,11 +10,14 @@ import { Calendar, CheckCircle, ArrowLeft, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { validatePacienteFields } from '@/lib/validation';
 
 const AgendarOnline: React.FC = () => {
   const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots } = useData();
+  const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
@@ -21,13 +25,11 @@ const AgendarOnline: React.FC = () => {
     data: '', hora: '',
   });
 
-  // Only show units that have availability configured
   const unidadesComDisponibilidade = useMemo(() => {
     const unidadeIds = new Set(disponibilidades.map(d => d.unidadeId));
     return unidades.filter(u => unidadeIds.has(u.id) && u.ativo);
   }, [unidades, disponibilidades]);
 
-  // Only show professionals who have availability configured for the selected unit
   const profissionaisComDisponibilidade = useMemo(() => {
     return funcionarios.filter(f => 
       f.role === 'profissional' && f.ativo &&
@@ -36,20 +38,38 @@ const AgendarOnline: React.FC = () => {
     );
   }, [funcionarios, disponibilidades, form.unidadeId]);
 
-  // Available dates based on availability config
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
     return getAvailableDates(form.profissionalId, form.unidadeId);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
-  // Available time slots for selected date
   const availableSlots = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId || !form.data) return [];
     return getAvailableSlots(form.profissionalId, form.unidadeId, form.data);
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
-  const handleSubmit = () => {
-    if (!form.nome || !form.telefone || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
+  const validateStep2 = (): boolean => {
+    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
+    if (err) {
+      // Map error to field
+      const newErrors: Record<string, string> = {};
+      if (err.includes('Nome')) newErrors.nome = err;
+      else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
+      else if (err.includes('mail')) newErrors.email = err;
+      setErrors(newErrors);
+      toast.error(err);
+      return false;
+    }
+    setErrors({});
+    return true;
+  };
+
+  const handleNext2 = () => {
+    if (validateStep2()) setStep(3);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.nome || !form.telefone || !form.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
@@ -71,6 +91,7 @@ const AgendarOnline: React.FC = () => {
     }
 
     const prof = funcionarios.find(p => p.id === form.profissionalId);
+    const unidade = unidades.find(u => u.id === form.unidadeId);
     
     addAgendamento({
       id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
@@ -79,6 +100,20 @@ const AgendarOnline: React.FC = () => {
       data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
       observacoes: form.obs, origem: 'online', syncStatus: 'pendente',
       criadoEm: new Date().toISOString(), criadoPor: 'online',
+    });
+
+    // Send webhook notification
+    notify({
+      acao: 'novo_agendamento',
+      nome: form.nome,
+      telefone: form.telefone,
+      email: form.email,
+      data: form.data,
+      hora: form.hora,
+      unidade: unidade?.nome || '',
+      profissional: prof?.nome || '',
+      tipo_atendimento: form.tipo,
+      observacoes: form.obs,
     });
 
     toast.success('Agendamento realizado com sucesso!');
@@ -146,7 +181,7 @@ const AgendarOnline: React.FC = () => {
                 {unidadesComDisponibilidade.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-warning shrink-0" />
-                    <p className="text-sm text-warning">Nenhuma unidade possui horários disponíveis no momento. Tente novamente mais tarde.</p>
+                    <p className="text-sm text-warning">Nenhuma unidade possui horários disponíveis no momento.</p>
                   </div>
                 ) : (
                   <>
@@ -188,19 +223,31 @@ const AgendarOnline: React.FC = () => {
             {step === 2 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Seus Dados</h2>
-                <div><Label>Nome Completo *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
+                <div>
+                  <Label>Nome Completo *</Label>
+                  <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
+                  {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-                  <div><Label>Telefone *</Label><Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" /></div>
+                  <div>
+                    <Label>Telefone *</Label>
+                    <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
+                    {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
-                  <div><Label>E-mail</Label><Input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                  <div>
+                    <Label>E-mail *</Label>
+                    <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
+                    {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
+                  </div>
                 </div>
                 <div><Label>Observações</Label><Input value={form.obs} onChange={e => setForm(p => ({ ...p, obs: e.target.value }))} /></div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
-                  <Button onClick={() => setStep(3)} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone}>Próximo</Button>
+                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone || !form.email}>Próximo</Button>
                 </div>
               </div>
             )}
@@ -212,7 +259,7 @@ const AgendarOnline: React.FC = () => {
                 {availableDates.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-warning shrink-0" />
-                    <p className="text-sm text-warning">Não há datas disponíveis para este profissional nesta unidade. Volte e escolha outro profissional.</p>
+                    <p className="text-sm text-warning">Não há datas disponíveis para este profissional nesta unidade.</p>
                   </div>
                 ) : (
                   <>
