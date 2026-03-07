@@ -36,6 +36,7 @@ interface FuncionarioDB {
   ativo: boolean;
   criado_em: string;
   criado_por: string;
+  tempo_atendimento: number;
 }
 
 const Funcionarios: React.FC = () => {
@@ -47,7 +48,7 @@ const Funcionarios: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole,
+    nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
@@ -76,14 +77,14 @@ const Funcionarios: React.FC = () => {
     setForm({
       nome: f.nome, usuario: f.usuario, email: f.email, senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
-      cargo: f.cargo || '', role: f.role as UserRole,
+      cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
     });
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' });
+    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30 });
     setDialogOpen(true);
   };
 
@@ -107,6 +108,7 @@ const Funcionarios: React.FC = () => {
           sala_id: form.sala_id,
           cargo: form.cargo,
           role: form.role,
+          tempo_atendimento: form.tempo_atendimento,
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -139,6 +141,7 @@ const Funcionarios: React.FC = () => {
             sala_id: form.sala_id,
             cargo: form.cargo,
             role: form.role,
+            tempo_atendimento: form.tempo_atendimento,
             criado_por: user?.id || '',
           },
         });
@@ -175,7 +178,6 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  // Filter by coordenador's unit
   const visibleFuncionarios = user?.role === 'coordenador'
     ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
     : funcionarios;
@@ -193,7 +195,7 @@ const Funcionarios: React.FC = () => {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
@@ -225,17 +227,35 @@ const Funcionarios: React.FC = () => {
                 </Select>
               </div>
             </div>
-            <div>
-              <Label>Sala</Label>
-              <Select value={form.sala_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, sala_id: v === '__none__' ? '' : v }))}>
-                <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Todas</SelectItem>
-                  {salas.filter(s => !form.unidade_id || s.unidadeId === form.unidade_id).map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Sala</Label>
+                <Select value={form.sala_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, sala_id: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Todas</SelectItem>
+                    {salas.filter(s => !form.unidade_id || s.unidadeId === form.unidade_id).map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.role === 'profissional' && (
+                <div>
+                  <Label>Tempo de Atendimento</Label>
+                  <Select value={String(form.tempo_atendimento)} onValueChange={v => setForm(p => ({ ...p, tempo_atendimento: Number(v) }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 minutos</SelectItem>
+                      <SelectItem value="20">20 minutos</SelectItem>
+                      <SelectItem value="30">30 minutos</SelectItem>
+                      <SelectItem value="45">45 minutos</SelectItem>
+                      <SelectItem value="60">60 minutos</SelectItem>
+                      <SelectItem value="90">90 minutos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
@@ -261,7 +281,10 @@ const Funcionarios: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{f.nome}</p>
-                    <p className="text-sm text-muted-foreground">{f.cargo}{f.setor ? ` • ${f.setor}` : ''}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {f.cargo}{f.setor ? ` • ${f.setor}` : ''}
+                      {f.role === 'profissional' && f.tempo_atendimento ? ` • ${f.tempo_atendimento}min` : ''}
+                    </p>
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
                   </div>
                   <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>

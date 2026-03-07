@@ -15,6 +15,7 @@ export interface User {
   ativo: boolean;
   criadoEm: string;
   criadoPor: string;
+  tempoAtendimento?: number; // consultation duration in minutes
 }
 
 export interface Prontuario {
@@ -87,7 +88,7 @@ export interface Agendamento {
   profissionalNome: string;
   data: string;
   hora: string;
-  status: 'pendente' | 'confirmado' | 'cancelado' | 'concluido' | 'falta' | 'atraso' | 'remarcado';
+  status: 'pendente' | 'confirmado' | 'cancelado' | 'concluido' | 'falta' | 'atraso' | 'remarcado' | 'em_atendimento';
   tipo: string;
   observacoes: string;
   origem: 'online' | 'recepcao';
@@ -126,7 +127,10 @@ export interface Atendimento {
   procedimento: string;
   observacoes: string;
   data: string;
-  hora: string;
+  horaInicio: string;
+  horaFim: string;
+  duracaoMinutos?: number;
+  status: 'em_atendimento' | 'finalizado';
 }
 
 export interface Disponibilidade {
