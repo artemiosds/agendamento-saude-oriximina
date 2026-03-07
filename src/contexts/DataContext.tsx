@@ -19,9 +19,9 @@ const defaultConfiguracoes: Configuracoes = {
     lembrete: 'Lembrete: Sua consulta é amanhã, {data} às {hora} na {unidade} com {profissional}.',
   },
   webhook: {
-    ativo: false,
-    url: '',
-    status: 'inativo' as const,
+    ativo: true,
+    url: 'https://hook.us2.make.com/hxkbabk6af5xbc79rxf9klp9m7wzf3l2',
+    status: 'ativo' as const,
   },
 };
 
