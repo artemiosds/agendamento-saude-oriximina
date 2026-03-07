@@ -2,17 +2,45 @@ export type UserRole = 'master' | 'coordenador' | 'recepcao' | 'profissional' | 
 
 export interface User {
   id: string;
+  authUserId?: string;
   nome: string;
   usuario: string;
   email: string;
-  senha: string;
+  senha?: string;
   setor: string;
   unidadeId: string;
+  salaId?: string;
   cargo: string;
   role: UserRole;
   ativo: boolean;
   criadoEm: string;
   criadoPor: string;
+}
+
+export interface Prontuario {
+  id: string;
+  pacienteId: string;
+  pacienteNome: string;
+  profissionalId: string;
+  profissionalNome: string;
+  unidadeId: string;
+  salaId?: string;
+  setor?: string;
+  agendamentoId?: string;
+  dataAtendimento: string;
+  horaAtendimento?: string;
+  queixaPrincipal: string;
+  anamnese: string;
+  sinaisSintomas: string;
+  exameFisico: string;
+  hipotese: string;
+  conduta: string;
+  prescricao: string;
+  solicitacaoExames: string;
+  evolucao: string;
+  observacoes: string;
+  criadoEm: string;
+  atualizadoEm: string;
 }
 
 export interface Unidade {
