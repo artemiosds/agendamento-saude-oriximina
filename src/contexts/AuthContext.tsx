@@ -47,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ativo: data.ativo,
           criadoEm: data.criado_em || '',
           criadoPor: data.criado_por || '',
+          tempoAtendimento: data.tempo_atendimento || 30,
         });
       }
     } catch (err) {
