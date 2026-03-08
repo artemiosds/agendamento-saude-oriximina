@@ -146,10 +146,11 @@ const Agenda: React.FC = () => {
     }
 
     notify({
-      acao: 'novo_agendamento', nome: pac.nome, telefone: pac.telefone,
-      email: pac.email, data: selectedDate, hora: newAg.hora,
+      evento: 'novo_agendamento', paciente_nome: pac.nome, telefone: pac.telefone,
+      email: pac.email, data_consulta: selectedDate, hora_consulta: newAg.hora,
       unidade: unidade?.nome || '', profissional: prof.nome,
-      tipo_atendimento: newAg.tipo, observacoes: newAg.obs,
+      tipo_atendimento: newAg.tipo, status_agendamento: 'confirmado',
+      id_agendamento: agId, observacoes: newAg.obs,
     });
 
     setDialogOpen(false);
@@ -169,13 +170,24 @@ const Agenda: React.FC = () => {
       toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
     }
 
-    if (newStatus === 'cancelado' || newStatus === 'remarcado') {
+    // Notify for all relevant status changes
+    const statusToEvento: Record<string, string> = {
+      cancelado: 'cancelamento',
+      remarcado: 'reagendamento',
+      falta: 'nao_compareceu',
+      confirmado: 'confirmacao',
+      confirmado_chegada: 'confirmacao',
+      concluido: 'atendimento_finalizado',
+    };
+    const evento = statusToEvento[newStatus];
+    if (evento) {
       notify({
-        acao: newStatus === 'cancelado' ? 'cancelamento' : 'remarcacao',
-        nome: ag.pacienteNome, telefone: paciente?.telefone || '',
-        email: paciente?.email || '', data: ag.data, hora: ag.hora,
+        evento: evento as any,
+        paciente_nome: ag.pacienteNome, telefone: paciente?.telefone || '',
+        email: paciente?.email || '', data_consulta: ag.data, hora_consulta: ag.hora,
         unidade: unidade?.nome || '', profissional: ag.profissionalNome,
-        tipo_atendimento: ag.tipo,
+        tipo_atendimento: ag.tipo, status_agendamento: newStatus,
+        id_agendamento: agId,
       });
     }
 
