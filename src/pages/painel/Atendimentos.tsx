@@ -28,7 +28,7 @@ const Atendimentos: React.FC = () => {
   const { unidades, logAction } = useData();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
-  const canDelete = hasPermission(['master', 'coordenador']);
+  const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
 
   const load = async () => {
     setLoading(true);
