@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile } from 'lucide-react';
+import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const services = [
@@ -37,10 +37,16 @@ const Home: React.FC = () => {
                   Agendar Online
                 </Button>
               </Link>
-              <Link to="/login">
+              <Link to="/portal">
                 <Button size="lg" variant="outline" className="border-primary-foreground bg-primary-foreground/20 text-primary-foreground font-semibold hover:bg-primary-foreground/30 w-full sm:w-auto">
+                  <User className="w-5 h-5 mr-2" />
+                  Portal do Paciente
+                </Button>
+              </Link>
+              <Link to="/login">
+                <Button size="lg" variant="outline" className="border-primary-foreground/50 bg-transparent text-primary-foreground/80 font-semibold hover:bg-primary-foreground/10 w-full sm:w-auto">
                   <Shield className="w-5 h-5 mr-2" />
-                  Entrar
+                  Painel Interno
                 </Button>
               </Link>
             </div>

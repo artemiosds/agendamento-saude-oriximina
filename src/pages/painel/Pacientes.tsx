@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, logAction, refreshPacientes } = useData();
   const { user, hasPermission } = useAuth();
-  const canDelete = hasPermission(['master', 'coordenador']);
+  const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);

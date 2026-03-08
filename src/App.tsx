@@ -8,6 +8,7 @@ import { DataProvider } from "@/contexts/DataContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import AgendarOnline from "./pages/AgendarOnline";
+import PortalPaciente from "./pages/PortalPaciente";
 import PainelLayout from "./components/PainelLayout";
 import Dashboard from "./pages/painel/Dashboard";
 import Agenda from "./pages/painel/Agenda";
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<LoginRedirect />} />
               <Route path="/agendar" element={<AgendarOnline />} />
+              <Route path="/portal" element={<PortalPaciente />} />
               <Route path="/painel" element={<ProtectedRoute><PainelLayout /></ProtectedRoute>}>
                 <Route index element={<Dashboard />} />
                 <Route path="agenda" element={<Agenda />} />

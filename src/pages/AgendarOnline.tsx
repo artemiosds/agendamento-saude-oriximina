@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, CheckCircle, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Calendar, CheckCircle, ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
+import { supabase } from '@/integrations/supabase/client';
 
 const AgendarOnline: React.FC = () => {
   const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
@@ -19,11 +20,13 @@ const AgendarOnline: React.FC = () => {
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
     nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', obs: '',
     data: '', hora: '',
+    senha: '', senhaConfirm: '',
   });
 
   const unidadesComDisponibilidade = useMemo(() => {
@@ -66,6 +69,17 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
+    // Validate password
+    if (!form.senha || form.senha.length < 6) {
+      setErrors({ senha: 'Senha deve ter no mínimo 6 caracteres.' });
+      toast.error('Senha deve ter no mínimo 6 caracteres.');
+      return false;
+    }
+    if (form.senha !== form.senhaConfirm) {
+      setErrors({ senhaConfirm: 'As senhas não coincidem.' });
+      toast.error('As senhas não coincidem.');
+      return false;
+    }
     setErrors({});
     return true;
   };
@@ -99,7 +113,6 @@ const AgendarOnline: React.FC = () => {
 
       if (existingPatient) {
         pacienteId = existingPatient.id;
-        // For "Retorno", we just link to existing patient without creating new record
       } else {
         if (form.tipo === 'Retorno') {
           toast.error('Não foi encontrado cadastro anterior. Para retorno, é necessário ter uma primeira consulta.');
@@ -113,6 +126,15 @@ const AgendarOnline: React.FC = () => {
           observacoes: form.obs, criadoEm: new Date().toISOString(),
         });
         await refreshPacientes();
+      }
+
+      // Create patient portal account
+      try {
+        await supabase.functions.invoke('patient-signup', {
+          body: { email: emailNorm, senha: form.senha, pacienteId },
+        });
+      } catch (authErr) {
+        console.error('Patient account creation failed (non-blocking):', authErr);
       }
 
       const prof = funcionarios.find(p => p.id === form.profissionalId);
@@ -167,10 +189,17 @@ const AgendarOnline: React.FC = () => {
               <p className="text-sm text-muted-foreground mb-2">
                 <strong>Tipo:</strong> {form.tipo}
               </p>
-              <p className="text-sm text-muted-foreground mb-6">
+              <p className="text-sm text-muted-foreground mb-4">
                 Lembre-se de chegar com 15 minutos de antecedência.
               </p>
-              <Link to="/"><Button className="gradient-primary text-primary-foreground">Voltar ao Início</Button></Link>
+              <div className="bg-info/10 p-3 rounded-lg text-sm text-info mb-4">
+                <p className="font-medium">Sua conta no Portal do Paciente foi criada!</p>
+                <p className="text-xs mt-1">Acesse com seu e-mail e a senha escolhida para ver seus agendamentos.</p>
+              </div>
+              <div className="flex gap-3">
+                <Link to="/" className="flex-1"><Button variant="outline" className="w-full">Início</Button></Link>
+                <Link to="/portal" className="flex-1"><Button className="w-full gradient-primary text-primary-foreground">Meu Portal</Button></Link>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -278,10 +307,37 @@ const AgendarOnline: React.FC = () => {
                     {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
                   </div>
                 </div>
+
+                {/* Password fields for portal access */}
+                <div className="border-t pt-4 mt-2">
+                  <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>Senha *</Label>
+                      <div className="relative">
+                        <Input type={showPassword ? 'text' : 'password'} value={form.senha}
+                          onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Mín. 6 caracteres" />
+                        <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                          onClick={() => setShowPassword(!showPassword)}>
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {errors.senha && <p className="text-xs text-destructive mt-1">{errors.senha}</p>}
+                    </div>
+                    <div>
+                      <Label>Confirmar Senha *</Label>
+                      <Input type="password" value={form.senhaConfirm}
+                        onChange={e => setForm(p => ({ ...p, senhaConfirm: e.target.value }))} placeholder="Repita a senha" />
+                      {errors.senhaConfirm && <p className="text-xs text-destructive mt-1">{errors.senhaConfirm}</p>}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
+                </div>
+
                 <div><Label>Observações</Label><Input value={form.obs} onChange={e => setForm(p => ({ ...p, obs: e.target.value }))} /></div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
-                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone || !form.email}>Próximo</Button>
+                  <Button onClick={handleNext2} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.nome || !form.telefone || !form.email || !form.senha}>Próximo</Button>
                 </div>
               </div>
             )}

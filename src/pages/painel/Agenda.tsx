@@ -411,7 +411,7 @@ const Agenda: React.FC = () => {
                     ))
                   )}
                   {/* Delete button */}
-                  {!isProfissional && (
+                  {!isProfissional && user && ['master', 'coordenador', 'recepcao'].includes(user.role) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-destructive" title="Excluir">
