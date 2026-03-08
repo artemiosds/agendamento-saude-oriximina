@@ -184,6 +184,14 @@ export interface Configuracoes {
     url: string;
     status: 'ativo' | 'inativo' | 'erro';
   };
+  gmail?: {
+    ativo: boolean;
+    email: string;
+    senhaApp: string;
+    smtpHost: string;
+    smtpPort: number;
+  };
+  canalNotificacao?: 'webhook' | 'gmail' | 'ambos';
 }
 
 export interface AuditLog {
