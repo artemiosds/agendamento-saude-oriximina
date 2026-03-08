@@ -1,15 +1,17 @@
 import { supabase } from '@/integrations/supabase/client';
 
-interface WebhookPayload {
-  acao: 'novo_agendamento' | 'remarcacao' | 'cancelamento' | 'teste';
-  nome: string;
+export interface WebhookPayload {
+  evento: 'novo_agendamento' | 'reagendamento' | 'cancelamento' | 'nao_compareceu' | 'confirmacao' | 'fila_entrada' | 'fila_chamada' | 'atendimento_finalizado' | 'teste';
+  paciente_nome: string;
   telefone: string;
   email: string;
-  data: string;
-  hora: string;
+  data_consulta: string;
+  hora_consulta: string;
   unidade: string;
   profissional: string;
   tipo_atendimento: string;
+  status_agendamento: string;
+  id_agendamento: string;
   observacoes?: string;
 }
 
