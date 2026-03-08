@@ -428,6 +428,48 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_logs: {
+        Row: {
+          agendamento_id: string | null
+          canal: string
+          criado_em: string
+          destinatario_email: string | null
+          destinatario_telefone: string | null
+          erro: string | null
+          evento: string
+          id: string
+          payload: Json
+          resposta: string | null
+          status: string
+        }
+        Insert: {
+          agendamento_id?: string | null
+          canal?: string
+          criado_em?: string
+          destinatario_email?: string | null
+          destinatario_telefone?: string | null
+          erro?: string | null
+          evento: string
+          id?: string
+          payload?: Json
+          resposta?: string | null
+          status?: string
+        }
+        Update: {
+          agendamento_id?: string | null
+          canal?: string
+          criado_em?: string
+          destinatario_email?: string | null
+          destinatario_telefone?: string | null
+          erro?: string | null
+          evento?: string
+          id?: string
+          payload?: Json
+          resposta?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       pacientes: {
         Row: {
           auth_user_id: string | null

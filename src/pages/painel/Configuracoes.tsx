@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -275,15 +275,17 @@ const Configuracoes: React.FC = () => {
                   try {
                     const { data, error } = await supabase.functions.invoke('webhook-notify', {
                       body: {
-                        acao: 'teste',
-                        nome: 'Teste do Sistema',
+                        evento: 'teste',
+                        paciente_nome: 'Teste do Sistema',
                         telefone: '(00) 00000-0000',
                         email: 'teste@teste.com',
-                        data: new Date().toLocaleDateString('pt-BR'),
-                        hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        data_consulta: new Date().toLocaleDateString('pt-BR'),
+                        hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                         unidade: 'Unidade Teste',
                         profissional: 'Profissional Teste',
                         tipo_atendimento: 'Teste de Webhook',
+                        status_agendamento: 'teste',
+                        id_agendamento: 'teste-' + Date.now(),
                       },
                     });
                     if (error) throw error;
@@ -318,14 +320,78 @@ const Configuracoes: React.FC = () => {
             )}
 
             <p className="text-xs text-muted-foreground">
-              O webhook será acionado automaticamente em: novo agendamento, remarcação e cancelamento.
-              Payload enviado: nome, telefone, e-mail, data, hora, unidade, profissional, tipo de ação.
+              Eventos enviados: novo agendamento, reagendamento, cancelamento, falta, confirmação, fila de espera e atendimento finalizado.
+              Payload padronizado com todos os dados do paciente, profissional, unidade e status.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Templates */}
+      {/* Canal de Notificação */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+              <Send className="w-5 h-5 text-info" />
+            </div>
+            <div>
+              <h3 className="font-semibold font-display text-foreground">Canal de Notificação</h3>
+              <p className="text-sm text-muted-foreground">Escolha como enviar notificações</p>
+            </div>
+          </div>
+          <div>
+            <Label>Canal preferido</Label>
+            <Select value={configuracoes.canalNotificacao || 'webhook'} onValueChange={v => updateConfiguracoes({ canalNotificacao: v as any })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="webhook">Apenas Webhook (Make.com)</SelectItem>
+                <SelectItem value="gmail">Apenas Gmail SMTP</SelectItem>
+                <SelectItem value="ambos">Ambos (Webhook + Gmail)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-2">Se o webhook falhar e o canal for "Ambos", o sistema usará Gmail como fallback automaticamente.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Gmail SMTP */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-destructive" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold font-display text-foreground">Gmail SMTP</h3>
+              <p className="text-sm text-muted-foreground">Envio de e-mails via Gmail</p>
+            </div>
+            <Switch checked={configuracoes.gmail?.ativo || false} onCheckedChange={v => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, ativo: v } })} />
+          </div>
+          <div className="space-y-4">
+            <div>
+              <Label>E-mail remetente</Label>
+              <Input placeholder="seuemail@gmail.com" value={configuracoes.gmail?.email || ''} onChange={e => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, email: e.target.value } })} />
+            </div>
+            <div>
+              <Label>Senha de Aplicativo</Label>
+              <Input type="password" placeholder="Senha de app do Google" value={configuracoes.gmail?.senhaApp || ''} onChange={e => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, senhaApp: e.target.value } })} />
+              <p className="text-xs text-muted-foreground mt-1">Gere uma senha de aplicativo em myaccount.google.com → Segurança → Senhas de app</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Servidor SMTP</Label>
+                <Input value={configuracoes.gmail?.smtpHost || 'smtp.gmail.com'} onChange={e => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, smtpHost: e.target.value } })} />
+              </div>
+              <div>
+                <Label>Porta</Label>
+                <Input type="number" value={configuracoes.gmail?.smtpPort || 587} onChange={e => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, smtpPort: parseInt(e.target.value) || 587 } })} />
+              </div>
+            </div>
+            <Button className="gradient-primary text-primary-foreground w-full" onClick={() => toast.success('Configurações Gmail salvas!')}>Salvar Gmail</Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
           <div className="flex items-center gap-3 mb-4">

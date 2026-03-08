@@ -50,9 +50,17 @@ const defaultConfiguracoes: Configuracoes = {
   },
   webhook: {
     ativo: true,
-    url: 'https://hook.us2.make.com/hxkbabk6af5xbc79rxf9klp9m7wzf3l2',
+    url: 'https://hook.us2.make.com/a12e4puc3o58b3z78k9qu3wxevr5qkwa',
     status: 'ativo' as const,
   },
+  gmail: {
+    ativo: false,
+    email: '',
+    senhaApp: '',
+    smtpHost: 'smtp.gmail.com',
+    smtpPort: 587,
+  },
+  canalNotificacao: 'webhook',
 };
 
 interface DataContextType {
@@ -141,6 +149,8 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
     filaEspera: { ...defaultConfiguracoes.filaEspera, ...incoming.filaEspera },
     templates: { ...defaultConfiguracoes.templates, ...incoming.templates },
     webhook: { ...defaultConfiguracoes.webhook, ...incoming.webhook },
+    gmail: { ...defaultConfiguracoes.gmail!, ...incoming.gmail },
+    canalNotificacao: incoming.canalNotificacao || defaultConfiguracoes.canalNotificacao,
   };
 };
 

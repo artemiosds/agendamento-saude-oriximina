@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,7 @@ const statusLabels: Record<string, { label: string; color: string }> = {
 const FilaEspera: React.FC = () => {
   const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades } = useData();
   const { hasPermission } = useAuth();
+  const { notify } = useWebhookNotify();
   const canManage = hasPermission(['master', 'coordenador', 'recepcao', 'gestao']);
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
@@ -88,6 +90,18 @@ const FilaEspera: React.FC = () => {
         status: 'aguardando', posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         criadoPor: 'sistema',
+      });
+      const pac = pacientes.find(p => p.id === form.pacienteId);
+      const unidade = unidades.find(u => u.id === form.unidadeId);
+      const prof = form.profissionalId ? funcionarios.find(f => f.id === form.profissionalId) : null;
+      notify({
+        evento: 'fila_entrada',
+        paciente_nome: form.pacienteNome, telefone: pac?.telefone || '',
+        email: pac?.email || '', data_consulta: new Date().toISOString().split('T')[0],
+        hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        unidade: unidade?.nome || '', profissional: prof?.nome || '',
+        tipo_atendimento: 'Fila de Espera', status_agendamento: 'aguardando',
+        id_agendamento: '',
       });
       toast.success('Paciente adicionado à fila!');
     }
@@ -225,7 +239,20 @@ const FilaEspera: React.FC = () => {
                 </span>
                 {canManage && (
                   <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'chamado', horaChamada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) })} title="Chamar">
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => {
+                      updateFila(f.id, { status: 'chamado', horaChamada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+                      const pac = pacientes.find(p => p.id === f.pacienteId);
+                      const unidade = unidades.find(u => u.id === f.unidadeId);
+                      notify({
+                        evento: 'fila_chamada',
+                        paciente_nome: f.pacienteNome, telefone: pac?.telefone || '',
+                        email: pac?.email || '', data_consulta: new Date().toISOString().split('T')[0],
+                        hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        unidade: unidade?.nome || '', profissional: prof?.nome || '',
+                        tipo_atendimento: 'Chamada da Fila', status_agendamento: 'chamado',
+                        id_agendamento: '',
+                      });
+                    }} title="Chamar">
                       <Bell className="w-4 h-4" />
                     </Button>
                     <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'em_atendimento' })} title="Iniciar">

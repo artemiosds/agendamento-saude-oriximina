@@ -150,11 +150,12 @@ const AgendarOnline: React.FC = () => {
       });
 
       notify({
-        acao: 'novo_agendamento',
-        nome: form.nome, telefone: form.telefone, email: form.email,
-        data: form.data, hora: form.hora,
+        evento: 'novo_agendamento',
+        paciente_nome: form.nome, telefone: form.telefone, email: form.email,
+        data_consulta: form.data, hora_consulta: form.hora,
         unidade: unidade?.nome || '', profissional: prof?.nome || '',
-        tipo_atendimento: form.tipo, observacoes: form.obs,
+        tipo_atendimento: form.tipo, status_agendamento: 'pendente',
+        id_agendamento: `ag${Date.now()}`, observacoes: form.obs,
       });
 
       toast.success('Agendamento realizado com sucesso!');
