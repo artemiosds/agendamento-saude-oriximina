@@ -363,35 +363,31 @@ serve(async (req) => {
     // Get template
     const template = emailTemplates[payload.evento] || emailTemplates["teste"];
 
-    // Create SMTP client and send
-    const client = new SMTPClient({
-      connection: {
-        hostname: gmailConfig.smtpHost || "smtp.gmail.com",
-        port: gmailConfig.smtpPort || 587,
-        tls: false,
-        auth: {
-          username: gmailConfig.email,
-          password: gmailConfig.senhaApp,
-        },
+    // Create nodemailer transporter
+    const transporter = nodemailer.createTransport({
+      host: gmailConfig.smtpHost || "smtp.gmail.com",
+      port: gmailConfig.smtpPort || 587,
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: gmailConfig.email,
+        pass: gmailConfig.senhaApp,
       },
     });
 
     try {
-      await client.send({
-        from: gmailConfig.email,
+      const info = await transporter.sendMail({
+        from: `"SMS Oriximiná" <${gmailConfig.email}>`,
         to: recipientEmail,
         subject: template.subject,
-        content: "auto",
         html: template.body(payload),
       });
-
-      await client.close();
 
       const successMsg = payload.test_only
         ? `E-mail de teste enviado com sucesso para ${recipientEmail}`
         : `E-mail enviado para ${recipientEmail}`;
 
-      console.log(successMsg);
+      console.log(successMsg, "messageId:", info.messageId);
 
       await logNotification(supabaseAdmin, {
         agendamento_id: payload.id_agendamento || "",
@@ -401,7 +397,7 @@ serve(async (req) => {
         destinatario_telefone: payload.telefone || "",
         payload: payload as unknown as Record<string, unknown>,
         status: "enviado",
-        resposta: successMsg,
+        resposta: `${successMsg} (${info.messageId})`,
       });
 
       return new Response(
@@ -409,16 +405,14 @@ serve(async (req) => {
         { status: 200, headers: corsHeaders }
       );
     } catch (smtpErr) {
-      try { await client.close(); } catch (_) { /* ignore */ }
-
       const errorMsg = smtpErr instanceof Error ? smtpErr.message : "Erro SMTP desconhecido";
       console.error("SMTP Error:", errorMsg);
 
       // Classify error
       let errorStatus = "erro_envio";
-      if (errorMsg.includes("535") || errorMsg.includes("Authentication") || errorMsg.includes("auth") || errorMsg.includes("Username and Password not accepted")) {
+      if (errorMsg.includes("535") || errorMsg.includes("Authentication") || errorMsg.includes("auth") || errorMsg.includes("Username and Password not accepted") || errorMsg.includes("Invalid login")) {
         errorStatus = "erro_autenticacao";
-      } else if (errorMsg.includes("connect") || errorMsg.includes("ECONNREFUSED") || errorMsg.includes("timeout")) {
+      } else if (errorMsg.includes("connect") || errorMsg.includes("ECONNREFUSED") || errorMsg.includes("timeout") || errorMsg.includes("ETIMEDOUT")) {
         errorStatus = "erro_conexao";
       }
 
