@@ -275,15 +275,17 @@ const Configuracoes: React.FC = () => {
                   try {
                     const { data, error } = await supabase.functions.invoke('webhook-notify', {
                       body: {
-                        acao: 'teste',
-                        nome: 'Teste do Sistema',
+                        evento: 'teste',
+                        paciente_nome: 'Teste do Sistema',
                         telefone: '(00) 00000-0000',
                         email: 'teste@teste.com',
-                        data: new Date().toLocaleDateString('pt-BR'),
-                        hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        data_consulta: new Date().toLocaleDateString('pt-BR'),
+                        hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                         unidade: 'Unidade Teste',
                         profissional: 'Profissional Teste',
                         tipo_atendimento: 'Teste de Webhook',
+                        status_agendamento: 'teste',
+                        id_agendamento: 'teste-' + Date.now(),
                       },
                     });
                     if (error) throw error;
@@ -318,8 +320,8 @@ const Configuracoes: React.FC = () => {
             )}
 
             <p className="text-xs text-muted-foreground">
-              O webhook será acionado automaticamente em: novo agendamento, remarcação e cancelamento.
-              Payload enviado: nome, telefone, e-mail, data, hora, unidade, profissional, tipo de ação.
+              Eventos enviados: novo agendamento, reagendamento, cancelamento, falta, confirmação, fila de espera e atendimento finalizado.
+              Payload padronizado com todos os dados do paciente, profissional, unidade e status.
             </p>
           </div>
         </CardContent>
