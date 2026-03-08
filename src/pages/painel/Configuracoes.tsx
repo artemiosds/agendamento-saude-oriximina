@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes } = useData();
@@ -21,6 +22,10 @@ const Configuracoes: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState(webhook.url);
   const [webhookEditing, setWebhookEditing] = useState(!webhook.url);
   const [webhookTesting, setWebhookTesting] = useState(false);
+  const [gmailTesting, setGmailTesting] = useState(false);
+  const [gmailStatus, setGmailStatus] = useState<'idle' | 'conectado' | 'erro_autenticacao' | 'erro_conexao' | 'erro_envio' | 'nao_configurado'>('idle');
+  const [gmailMessage, setGmailMessage] = useState('');
+  const { testGmail } = useWebhookNotify();
 
   // Handle OAuth callback
   useEffect(() => {
@@ -365,7 +370,30 @@ const Configuracoes: React.FC = () => {
               <h3 className="font-semibold font-display text-foreground">Gmail SMTP</h3>
               <p className="text-sm text-muted-foreground">Envio de e-mails via Gmail</p>
             </div>
-            <Switch checked={configuracoes.gmail?.ativo || false} onCheckedChange={v => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, ativo: v } })} />
+            <div className="flex items-center gap-2">
+              {gmailStatus === 'conectado' && (
+                <Badge className="bg-success/10 text-success border-0">✅ Conectado</Badge>
+              )}
+              {gmailStatus === 'erro_autenticacao' && (
+                <Badge variant="destructive">❌ Erro de autenticação</Badge>
+              )}
+              {gmailStatus === 'erro_conexao' && (
+                <Badge variant="destructive">❌ Erro de conexão</Badge>
+              )}
+              {gmailStatus === 'erro_envio' && (
+                <Badge variant="destructive">❌ Erro de envio</Badge>
+              )}
+              {gmailStatus === 'nao_configurado' && (
+                <Badge variant="secondary">⚠️ Não configurado</Badge>
+              )}
+              {gmailStatus === 'idle' && configuracoes.gmail?.ativo && configuracoes.gmail?.email && configuracoes.gmail?.senhaApp && (
+                <Badge variant="secondary">⚙️ Configurado</Badge>
+              )}
+              {gmailStatus === 'idle' && (!configuracoes.gmail?.ativo || !configuracoes.gmail?.email) && (
+                <Badge variant="outline">Desativado</Badge>
+              )}
+              <Switch checked={configuracoes.gmail?.ativo || false} onCheckedChange={v => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, ativo: v } })} />
+            </div>
           </div>
           <div className="space-y-4">
             <div>
@@ -387,7 +415,65 @@ const Configuracoes: React.FC = () => {
                 <Input type="number" value={configuracoes.gmail?.smtpPort || 587} onChange={e => updateConfiguracoes({ gmail: { ...configuracoes.gmail!, smtpPort: parseInt(e.target.value) || 587 } })} />
               </div>
             </div>
-            <Button className="gradient-primary text-primary-foreground w-full" onClick={() => toast.success('Configurações Gmail salvas!')}>Salvar Gmail</Button>
+
+            {gmailMessage && (
+              <div className={`p-3 rounded-lg text-sm flex items-start gap-2 ${
+                gmailStatus === 'conectado' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+              }`}>
+                {gmailStatus === 'conectado' ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+                <span>{gmailMessage}</span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                className="gradient-primary text-primary-foreground flex-1"
+                disabled={!configuracoes.gmail?.email || !configuracoes.gmail?.senhaApp}
+                onClick={async () => {
+                  updateConfiguracoes({ gmail: { ...configuracoes.gmail! } });
+                  toast.success('Configurações Gmail salvas!');
+                  // Auto-test after save
+                  setGmailTesting(true);
+                  setGmailMessage('');
+                  const result = await testGmail();
+                  setGmailStatus(result.status as any);
+                  setGmailMessage(result.message);
+                  setGmailTesting(false);
+                  if (result.success) {
+                    toast.success('Gmail SMTP verificado com sucesso!');
+                  } else {
+                    toast.error(`Erro Gmail: ${result.message}`);
+                  }
+                }}
+              >
+                {gmailTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                Salvar Gmail
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!configuracoes.gmail?.ativo || !configuracoes.gmail?.email || !configuracoes.gmail?.senhaApp || gmailTesting}
+                onClick={async () => {
+                  setGmailTesting(true);
+                  setGmailMessage('');
+                  const result = await testGmail();
+                  setGmailStatus(result.status as any);
+                  setGmailMessage(result.message);
+                  setGmailTesting(false);
+                  if (result.success) {
+                    toast.success('E-mail de teste enviado com sucesso! Verifique sua caixa de entrada.');
+                  } else {
+                    toast.error(`Falha no teste: ${result.message}`);
+                  }
+                }}
+              >
+                {gmailTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                Testar Gmail
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              O teste enviará um e-mail real para o endereço remetente configurado, verificando conexão, autenticação e envio.
+            </p>
           </div>
         </CardContent>
       </Card>
