@@ -430,6 +430,7 @@ export type Database = {
       }
       pacientes: {
         Row: {
+          auth_user_id: string | null
           cpf: string
           criado_em: string | null
           data_nascimento: string
@@ -441,6 +442,7 @@ export type Database = {
           telefone: string
         }
         Insert: {
+          auth_user_id?: string | null
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
@@ -452,6 +454,7 @@ export type Database = {
           telefone?: string
         }
         Update: {
+          auth_user_id?: string | null
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
