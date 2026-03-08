@@ -22,6 +22,10 @@ const Configuracoes: React.FC = () => {
   const [webhookUrl, setWebhookUrl] = useState(webhook.url);
   const [webhookEditing, setWebhookEditing] = useState(!webhook.url);
   const [webhookTesting, setWebhookTesting] = useState(false);
+  const [gmailTesting, setGmailTesting] = useState(false);
+  const [gmailStatus, setGmailStatus] = useState<'idle' | 'conectado' | 'erro_autenticacao' | 'erro_conexao' | 'erro_envio' | 'nao_configurado'>('idle');
+  const [gmailMessage, setGmailMessage] = useState('');
+  const { testGmail } = useWebhookNotify();
 
   // Handle OAuth callback
   useEffect(() => {
