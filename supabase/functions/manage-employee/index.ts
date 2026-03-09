@@ -187,7 +187,7 @@ serve(async (req) => {
       JSON.stringify({
         error: err instanceof Error ? err.message : "Erro interno",
       }),
-      { status: 500, headers: corsHeaders }
+      { status: 200, headers: corsHeaders }
     );
   }
 });
