@@ -1,16 +1,16 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile, User } from 'lucide-react';
-import { motion } from 'framer-motion';
-import logoSms from '@/assets/logo-sms.jpeg';
+import React from "react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile, User } from "lucide-react";
+import { motion } from "framer-motion";
+import logoSms from "@/assets/logo-sms.jpeg";
 
 const services = [
-  { icon: Stethoscope, title: 'Clínica Geral', desc: 'Consultas médicas gerais' },
-  { icon: Baby, title: 'Pediatria', desc: 'Atendimento infantil' },
-  { icon: Smile, title: 'Odontologia', desc: 'Saúde bucal' },
-  { icon: Heart, title: 'Enfermagem', desc: 'Procedimentos e curativos' },
+  { icon: Stethoscope, title: "Clínica Geral", desc: "Consultas médicas gerais" },
+  { icon: Baby, title: "Pediatria", desc: "Atendimento infantil" },
+  { icon: Smile, title: "Odontologia", desc: "Saúde bucal" },
+  { icon: Heart, title: "Enfermagem", desc: "Procedimentos e curativos" },
 ];
 
 const Home: React.FC = () => {
@@ -34,19 +34,30 @@ const Home: React.FC = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link to="/agendar">
-                <Button size="lg" className="bg-primary-foreground text-foreground font-semibold hover:bg-primary-foreground/90 w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  className="bg-primary-foreground text-foreground font-semibold hover:bg-primary-foreground/90 w-full sm:w-auto"
+                >
                   <Calendar className="w-5 h-5 mr-2" />
                   Agendar Online
                 </Button>
               </Link>
               <Link to="/portal">
-                <Button size="lg" variant="outline" className="border-primary-foreground bg-primary-foreground/20 text-primary-foreground font-semibold hover:bg-primary-foreground/30 w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-primary-foreground bg-primary-foreground/20 text-primary-foreground font-semibold hover:bg-primary-foreground/30 w-full sm:w-auto"
+                >
                   <User className="w-5 h-5 mr-2" />
                   Portal do Paciente
                 </Button>
               </Link>
               <Link to="/login">
-                <Button size="lg" variant="outline" className="border-primary-foreground/50 bg-transparent text-primary-foreground/80 font-semibold hover:bg-primary-foreground/10 w-full sm:w-auto">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-primary-foreground/50 bg-transparent text-primary-foreground/80 font-semibold hover:bg-primary-foreground/10 w-full sm:w-auto"
+                >
                   <Shield className="w-5 h-5 mr-2" />
                   Painel Interno
                 </Button>
@@ -61,7 +72,12 @@ const Home: React.FC = () => {
         <h2 className="text-2xl font-bold font-display text-foreground text-center mb-8">Nossos Serviços</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {services.map((s, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+            >
               <Card className="shadow-card border-0 hover:shadow-elevated transition-shadow text-center">
                 <CardContent className="p-6">
                   <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4">
@@ -98,7 +114,11 @@ const Home: React.FC = () => {
               <Phone className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-foreground">Contato</h3>
-                <p className="text-sm text-muted-foreground">(93) 3544-0000<br />WhatsApp: (93) 99999-0000</p>
+                <p className="text-sm text-muted-foreground">
+                  (93) 3544-1587
+                  <br />
+                  WhatsApp: (93) 99999-0000
+                </p>
               </div>
             </div>
           </div>
