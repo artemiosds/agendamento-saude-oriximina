@@ -133,33 +133,51 @@ const Relatorios: React.FC = () => {
     return { totalAtendimentos: finalizados.length, tempoMedio: media, totalMinutos };
   }, [filteredAtendimentos]);
 
-  // === PRODUCTIVITY BY PROFESSIONAL ===
+  // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number }> = {};
+    const map: Record<string, { nome: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
-      if (!map[a.profissionalNome]) map[a.profissionalNome] = { nome: a.profissionalNome, total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0 };
-      const m = map[a.profissionalNome];
+      const un = unidades.find(u => u.id === a.unidadeId);
+      const key = a.profissionalNome;
+      if (!map[key]) map[key] = { nome: a.profissionalNome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const m = map[key];
       m.total++;
+      m.pacientesSet.add(a.pacienteId);
       if (a.status === 'concluido') m.concluidos++;
       if (a.status === 'falta') m.faltas++;
       if (a.status === 'cancelado') m.cancelados++;
       if (a.status === 'remarcado') m.remarcados++;
       if (a.tipo === 'Retorno') m.retornos++;
+      if (!m.unidade && un?.nome) m.unidade = un.nome;
     });
     filteredAtendimentos.forEach(at => {
-      if (!map[at.profissional_nome]) map[at.profissional_nome] = { nome: at.profissional_nome, total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0 };
+      const un = unidades.find(u => u.id === at.unidade_id);
+      const key = at.profissional_nome;
+      if (!map[key]) map[key] = { nome: at.profissional_nome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
-        map[at.profissional_nome].tempoTotal += at.duracao_minutos;
-        map[at.profissional_nome].atendimentos++;
+        map[key].tempoTotal += at.duracao_minutos;
+        map[key].atendimentos++;
       }
+      map[key].pacientesSet.add(at.paciente_id);
+      if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
     return Object.values(map).map(d => ({
-      ...d,
+      nome: d.nome,
+      unidade: d.unidade,
+      total: d.total,
+      concluidos: d.concluidos,
+      faltas: d.faltas,
+      cancelados: d.cancelados,
+      remarcados: d.remarcados,
+      retornos: d.retornos,
+      atendimentos: d.atendimentos,
+      tempoTotal: d.tempoTotal,
+      pacientesAtendidos: d.pacientesSet.size,
       tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
       taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
       taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
     })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos]);
+  }, [filtered, filteredAtendimentos, unidades]);
 
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
