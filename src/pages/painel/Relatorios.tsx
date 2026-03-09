@@ -336,44 +336,71 @@ const Relatorios: React.FC = () => {
 
     let body = '';
 
-    if (type === 'agendamentos' || type === 'geral') {
+    // Summary block reused across types
+    const summaryBlock = `
+      <div class="summary">
+        <div class="stat"><strong>${stats.total}</strong><small>Total Agendamentos</small></div>
+        <div class="stat"><strong>${tempoStats.totalAtendimentos}</strong><small>Atendimentos</small></div>
+        <div class="stat"><strong>${stats.concluidos}</strong><small>Concluídos</small></div>
+        <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
+        <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
+        <div class="stat"><strong>${stats.remarcados}</strong><small>Remarcados</small></div>
+        <div class="stat"><strong>${tempoStats.tempoMedio}min</strong><small>Tempo Médio</small></div>
+        <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
+      </div>`;
+
+    if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       const rows = filtered.map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
-        const at = atendimentosDB.find(at => at.agendamento_id === a.id);
+        const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
         return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>${at?.hora_inicio || '-'}</td><td>${at?.hora_fim || '-'}</td><td>${at?.duracao_minutos ? at.duracao_minutos + 'min' : '-'}</td></tr>`;
       }).join('');
       const prodRows = porProfissional.map(p =>
-        `<tr><td>${p.nome}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.remarcados}</td><td>${p.retornos}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
+        `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
       ).join('');
-      body = `
-        <div class="summary">
-          <div class="stat"><strong>${stats.total}</strong><small>Total</small></div>
-          <div class="stat"><strong>${stats.concluidos}</strong><small>Concluídos</small></div>
-          <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
-          <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
-          <div class="stat"><strong>${stats.remarcados}</strong><small>Remarcados</small></div>
-          <div class="stat"><strong>${tempoStats.tempoMedio}min</strong><small>Tempo Médio</small></div>
-          <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
-        </div>
+      body = `${summaryBlock}
         <h2>Agendamentos Detalhados</h2>
         <table><thead><tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Profissional</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Início</th><th>Fim</th><th>Duração</th></tr></thead><tbody>${rows}</tbody></table>
         <h2>Produtividade por Profissional</h2>
-        <table><thead><tr><th>Profissional</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>`;
+        <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>`;
+    } else if (type === 'produtividade') {
+      const prodRows = porProfissional.map(p =>
+        `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.remarcados}</td><td>${p.retornos}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td><td>${p.taxaRetorno}%</td></tr>`
+      ).join('');
+      body = `${summaryBlock}
+        <h2>Produtividade por Profissional</h2>
+        <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelamentos</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}</tbody></table>`;
     } else if (type === 'faltas') {
       const rows = faltasReport.map(f =>
         `<tr><td>${f.nome}</td><td>${f.email}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.unidade}</td><td>${f.total}</td><td>${f.datas.join(', ')}</td></tr>`
       ).join('');
-      body = `<h2>Relatório de Faltas</h2>
+      body = `${summaryBlock}
+        <h2>Relatório de Faltas</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Profissional</th><th>Unidade</th><th>Total</th><th>Datas</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'pacientes') {
       const rows = pacientesReport.map(p =>
         `<tr><td>${p.nome}</td><td>${p.email}</td><td>${p.telefone}</td><td>${p.totalAgendamentos}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.retornos}</td><td>${p.ultimaConsulta}</td></tr>`
       ).join('');
-      body = `<h2>Relatório de Pacientes</h2>
+      body = `${summaryBlock}
+        <h2>Relatório de Pacientes</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } else if (type === 'fila') {
+      const filaRows = filaReport.items.map(f => {
+        const unName = unidades.find(u => u.id === f.unidade_id)?.nome || '';
+        return `<tr><td>${f.posicao}</td><td>${f.paciente_nome}</td><td>${unName}</td><td>${f.setor}</td><td>${f.prioridade}</td><td>${f.status}</td><td>${f.hora_chegada}</td><td>${f.hora_chamada || '-'}</td></tr>`;
+      }).join('');
+      body = `
+        <div class="summary">
+          <div class="stat"><strong>${filaReport.total}</strong><small>Total na Fila</small></div>
+          <div class="stat"><strong>${filaReport.aguardando}</strong><small>Aguardando</small></div>
+          <div class="stat"><strong>${filaReport.chamados}</strong><small>Chamados</small></div>
+          <div class="stat"><strong>${filaReport.desistencias}</strong><small>Desistências</small></div>
+        </div>
+        <h2>Fila de Espera</h2>
+        <table><thead><tr><th>Posição</th><th>Paciente</th><th>Unidade</th><th>Setor</th><th>Prioridade</th><th>Status</th><th>Chegada</th><th>Chamada</th></tr></thead><tbody>${filaRows}</tbody></table>`;
     }
 
-    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', produtividade: 'Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
 
     printWindow.document.write(`<!DOCTYPE html><html><head><title>${titleMap[type] || 'Relatório'} — SMS Oriximiná</title>${css}</head><body>
       <div class="header"><div><h1>SMS Oriximiná — ${titleMap[type] || 'Relatório'}</h1><p>Secretaria Municipal de Saúde de Oriximiná</p></div><div style="text-align:right"><p>Emitido: ${new Date().toLocaleString('pt-BR')}</p></div></div>
@@ -383,7 +410,7 @@ const Relatorios: React.FC = () => {
     </body></html>`);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 300);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, atendimentosDB, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
