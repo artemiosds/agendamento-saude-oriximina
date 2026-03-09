@@ -154,7 +154,7 @@ const FilaEspera: React.FC = () => {
     }
 
     if (editId) {
-      await updateFila(editId, { ...form });
+      await updateFila(editId, { ...form, prioridade: form.prioridade as any });
       toast.success('Registro atualizado!');
     } else {
       await addToFila({
