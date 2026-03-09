@@ -28,8 +28,20 @@ serve(async (req) => {
       if (!nome || !usuario || !email || !senha) {
         return new Response(
           JSON.stringify({ error: "Nome, usuário, e-mail e senha são obrigatórios." }),
-          { status: 400, headers: corsHeaders }
+          { status: 200, headers: corsHeaders }
         );
+      }
+
+      // Check if email already exists in auth.users
+      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (!listError && existingUsers?.users) {
+        const emailExists = existingUsers.users.some(u => u.email === email);
+        if (emailExists) {
+          return new Response(
+            JSON.stringify({ error: "Este e-mail já está registrado no sistema." }),
+            { status: 200, headers: corsHeaders }
+          );
+        }
       }
 
       // Create auth user
@@ -43,7 +55,7 @@ serve(async (req) => {
       if (authErr) {
         return new Response(
           JSON.stringify({ error: "Erro ao criar acesso: " + authErr.message }),
-          { status: 400, headers: corsHeaders }
+          { status: 200, headers: corsHeaders }
         );
       }
 
