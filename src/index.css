@@ -91,3 +91,36 @@
     box-shadow: var(--shadow-elevated);
   }
 }
+
+/* Global print styles — hide UI chrome when printing from the app */
+@media print {
+  nav, aside, header, footer,
+  button, .no-print,
+  [data-radix-scroll-area-viewport],
+  .sidebar, .mobile-overlay {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+}
