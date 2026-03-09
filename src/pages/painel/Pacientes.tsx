@@ -115,7 +115,7 @@ const Pacientes: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
-          <p className="text-muted-foreground text-sm">{pacientes.length} cadastrados</p>
+          <p className="text-muted-foreground text-sm">{visiblePacientes.length} cadastrados</p>
         </div>
         <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
       </div>
