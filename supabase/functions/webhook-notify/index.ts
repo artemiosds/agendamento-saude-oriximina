@@ -8,7 +8,7 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-const DEFAULT_WEBHOOK_URL = "https://hook.us2.make.com/a12e4puc3o58b3z78k9qu3wxevr5qkwa";
+const DEFAULT_WEBHOOK_URL = "https://hook.us2.make.com/48rbpcb5o2vye4tmn7iur5gtv4hnmlk7";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 

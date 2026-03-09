@@ -51,7 +51,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
