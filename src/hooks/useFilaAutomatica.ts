@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
+import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { toast } from 'sonner';
 
 const RESERVA_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -22,6 +23,7 @@ export function useFilaAutomatica() {
     updateFila, addAgendamento, logAction, refreshFila, refreshAgendamentos,
   } = useData();
   const { notify } = useWebhookNotify();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
 
   /**
    * Find the next eligible patient in the queue for a given slot,
@@ -154,6 +156,18 @@ export function useFilaAutomatica() {
     });
 
     await updateFila(filaId, { status: 'encaixado' });
+
+    // Ensure portal access for encaixe
+    const encaixeUnidade = unidades.find(u => u.id === slot.unidadeId);
+    ensurePortalAccess({
+      pacienteId: filaItem.pacienteId,
+      contexto: 'encaixe',
+      data: slot.data,
+      hora: slot.hora,
+      unidade: encaixeUnidade?.nome || '',
+      profissional: slot.profissionalNome,
+      tipo: slot.tipo || 'Consulta',
+    }).catch(() => {});
 
     // Remove reservation
     localStorage.removeItem(`fila_reserva_${filaId}`);

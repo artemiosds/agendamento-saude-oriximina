@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
+import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 
 const statusActions = [
   { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
@@ -57,6 +58,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
   const { handleVagaLiberada } = useFilaAutomatica();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
@@ -138,6 +140,20 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     };
 
     await addAgendamento(agData);
+
+    // Ensure patient has portal access
+    const unidadeNome = unidade?.nome || '';
+    ensurePortalAccess({
+      pacienteId: pac.id,
+      contexto: 'agendamento',
+      data: selectedDate,
+      hora: newAg.hora,
+      unidade: unidadeNome,
+      profissional: prof.nome,
+      tipo: newAg.tipo,
+    }).then(result => {
+      if (result.created) toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? 'E-mail enviado.' : ''}`);
+    }).catch(() => {});
 
     const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
     if (googleEventId) {

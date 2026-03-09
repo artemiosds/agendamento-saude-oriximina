@@ -3,6 +3,7 @@ import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
+import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +65,7 @@ const FilaEspera: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
   const canManage = hasPermission(['master', 'coordenador', 'recepcao', 'gestao']);
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
@@ -157,8 +159,9 @@ const FilaEspera: React.FC = () => {
       await updateFila(editId, { ...form, prioridade: form.prioridade as any });
       toast.success('Registro atualizado!');
     } else {
+      const newId = `f${Date.now()}`;
       await addToFila({
-        id: `f${Date.now()}`, ...form,
+        id: newId, ...form,
         prioridade: form.prioridade as any,
         status: 'aguardando', posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -167,6 +170,20 @@ const FilaEspera: React.FC = () => {
       const pac = pacientes.find(p => p.id === form.pacienteId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
       const prof = form.profissionalId ? funcionarios.find(f => f.id === form.profissionalId) : null;
+
+      // Ensure portal access for patient
+      if (form.pacienteId) {
+        ensurePortalAccess({
+          pacienteId: form.pacienteId,
+          contexto: 'fila',
+          unidade: unidade?.nome || '',
+          profissional: prof?.nome || '',
+          posicaoFila: fila.length + 1,
+        }).then(result => {
+          if (result.created) toast.info(`Acesso ao portal criado para ${form.pacienteNome}. ${result.emailSent ? 'E-mail enviado.' : ''}`);
+        }).catch(() => {});
+      }
+
       await notify({
         evento: 'fila_entrada',
         paciente_nome: form.pacienteNome, telefone: pac?.telefone || '',
