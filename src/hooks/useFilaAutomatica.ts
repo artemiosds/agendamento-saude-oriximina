@@ -157,6 +157,18 @@ export function useFilaAutomatica() {
 
     await updateFila(filaId, { status: 'encaixado' });
 
+    // Ensure portal access for encaixe
+    const unidade = unidades.find(u => u.id === slot.unidadeId);
+    ensurePortalAccess({
+      pacienteId: filaItem.pacienteId,
+      contexto: 'encaixe',
+      data: slot.data,
+      hora: slot.hora,
+      unidade: unidade?.nome || '',
+      profissional: slot.profissionalNome,
+      tipo: slot.tipo || 'Consulta',
+    }).catch(() => {});
+
     // Remove reservation
     localStorage.removeItem(`fila_reserva_${filaId}`);
 
