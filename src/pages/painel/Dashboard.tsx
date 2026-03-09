@@ -101,9 +101,11 @@ const Dashboard: React.FC = () => {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      const count = atendimentosDB.filter(a => a.data === dateStr).length + 
-                    filteredAgendamentos.filter(a => a.data === dateStr && (a.status === 'concluido' || a.status === 'em_atendimento')).length;
-      result.push({ name: days[d.getDay()], atendimentos: count });
+      // Use atendimentos (finalized) as primary source; only add agendamentos not yet in atendimentos
+      const atendimentoCount = atendimentosDB.filter(a => a.data === dateStr).length;
+      const agendamentoIds = new Set(atendimentosDB.filter(a => a.data === dateStr).map(a => a.id));
+      const extraFromAgendamentos = filteredAgendamentos.filter(a => a.data === dateStr && (a.status === 'concluido' || a.status === 'em_atendimento') && !agendamentoIds.has(a.id)).length;
+      result.push({ name: days[d.getDay()], atendimentos: atendimentoCount + extraFromAgendamentos });
     }
     return result;
   }, [atendimentosDB, filteredAgendamentos]);
