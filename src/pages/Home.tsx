@@ -25,6 +25,7 @@ const Home: React.FC = () => {
             transition={{ duration: 0.6 }}
             className="max-w-2xl"
           >
+            <img src={logoSms} alt="SMS Oriximiná" className="w-20 h-20 rounded-2xl object-cover shadow-lg mb-4" />
             <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4">
               Secretaria Municipal de Saúde de Oriximiná
             </h1>
