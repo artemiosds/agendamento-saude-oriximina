@@ -56,6 +56,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
+  const { handleVagaLiberada } = useFilaAutomatica();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
