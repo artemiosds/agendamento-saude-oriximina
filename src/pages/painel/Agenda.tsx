@@ -215,8 +215,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         detalhes: { acao: 'exclusão de agendamento' }, user,
       });
       toast.success('Agendamento excluído!');
-      // Refresh
-      window.location.reload();
+      await refreshAgendamentos();
     } catch (err) {
       console.error('Error deleting:', err);
       toast.error('Erro ao excluir agendamento.');

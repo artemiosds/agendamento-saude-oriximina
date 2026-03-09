@@ -144,8 +144,9 @@ const AgendarOnline: React.FC = () => {
       const prof = funcionarios.find(p => p.id === form.profissionalId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
       
+      const agId = `ag${Date.now()}`;
       await addAgendamento({
-        id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
+        id: agId, pacienteId, pacienteNome: form.nome,
         unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
         profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
         data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
@@ -159,7 +160,7 @@ const AgendarOnline: React.FC = () => {
         data_consulta: form.data, hora_consulta: form.hora,
         unidade: unidade?.nome || '', profissional: prof?.nome || '',
         tipo_atendimento: form.tipo, status_agendamento: 'pendente',
-        id_agendamento: `ag${Date.now()}`, observacoes: form.obs,
+        id_agendamento: agId, observacoes: form.obs,
       });
 
       toast.success('Agendamento realizado com sucesso!');

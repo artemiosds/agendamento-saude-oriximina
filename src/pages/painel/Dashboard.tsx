@@ -111,15 +111,13 @@ const Dashboard: React.FC = () => {
   }, [atendimentosDB, filteredAgendamentos]);
 
   const profData = useMemo(() => {
+    // Use agendamentos as the single source to avoid double-counting
     const map: Record<string, number> = {};
     filteredAgendamentos.forEach(a => {
       if (a.profissionalNome) map[a.profissionalNome] = (map[a.profissionalNome] || 0) + 1;
     });
-    atendimentosDB.forEach(a => {
-      if (a.profissional_nome) map[a.profissional_nome] = (map[a.profissional_nome] || 0) + 1;
-    });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
-  }, [filteredAgendamentos, atendimentosDB]);
+  }, [filteredAgendamentos]);
 
   const totalAtendimentos = atendimentosDB.filter(a => a.status === 'finalizado').length;
 
