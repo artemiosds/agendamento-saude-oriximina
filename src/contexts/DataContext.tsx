@@ -494,6 +494,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.googleEventId !== undefined) dbData.google_event_id = data.googleEventId;
     if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
     if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+
+    // Reset reminder flags when rescheduled or date/time changes so new reminders are sent
+    if (data.status === 'remarcado' || data.data !== undefined || data.hora !== undefined) {
+      dbData.lembrete_24h_enviado_em = null;
+      dbData.lembrete_proximo_enviado_em = null;
+    }
+
     const { error } = await supabase.from('agendamentos' as any).update(dbData).eq('id', id);
     if (!error) {
       setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
