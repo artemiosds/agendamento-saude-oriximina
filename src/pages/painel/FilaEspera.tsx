@@ -65,6 +65,7 @@ const FilaEspera: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
   const canManage = hasPermission(['master', 'coordenador', 'recepcao', 'gestao']);
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
