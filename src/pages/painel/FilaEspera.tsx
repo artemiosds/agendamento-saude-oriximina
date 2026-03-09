@@ -94,7 +94,7 @@ const FilaEspera: React.FC = () => {
       const pac = pacientes.find(p => p.id === form.pacienteId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
       const prof = form.profissionalId ? funcionarios.find(f => f.id === form.profissionalId) : null;
-      notify({
+      await notify({
         evento: 'fila_entrada',
         paciente_nome: form.pacienteNome, telefone: pac?.telefone || '',
         email: pac?.email || '', data_consulta: new Date().toISOString().split('T')[0],
