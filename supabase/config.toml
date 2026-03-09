@@ -14,3 +14,12 @@ verify_jwt = false
 
 [functions.manage-employee]
 verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.send-reminders]
+verify_jwt = false
+
+[functions.patient-signup]
+verify_jwt = false
