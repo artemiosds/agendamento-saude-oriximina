@@ -195,24 +195,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     }
 
     if (newStatus === 'cancelado' || newStatus === 'falta') {
-      const nextInQueue = fila.find(f => f.status === 'aguardando' && f.unidadeId === ag.unidadeId && (!f.profissionalId || f.profissionalId === ag.profissionalId));
-      if (nextInQueue) {
-        const filaPac = pacientes.find(p => p.id === nextInQueue.pacienteId);
-        await notify({
-          evento: 'vaga_liberada',
-          paciente_nome: nextInQueue.pacienteNome,
-          telefone: filaPac?.telefone || '',
-          email: filaPac?.email || '',
-          data_consulta: ag.data,
-          hora_consulta: ag.hora,
-          unidade: unidade?.nome || '',
-          profissional: ag.profissionalNome,
-          tipo_atendimento: ag.tipo,
-          status_agendamento: 'aguardando',
-          id_agendamento: ag.id,
-        });
-        toast.info(`Vaga notificada para ${nextInQueue.pacienteNome} (fila de espera)`);
-      }
+      await handleVagaLiberada({
+        id: agId,
+        data: ag.data,
+        hora: ag.hora,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        unidadeId: ag.unidadeId,
+        salaId: ag.salaId,
+        tipo: ag.tipo,
+      }, newStatus === 'cancelado' ? 'cancelamento' : 'falta', user);
     }
 
     if (ag.googleEventId) {
