@@ -23,6 +23,7 @@ export function useFilaAutomatica() {
     updateFila, addAgendamento, logAction, refreshFila, refreshAgendamentos,
   } = useData();
   const { notify } = useWebhookNotify();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
 
   /**
    * Find the next eligible patient in the queue for a given slot,
