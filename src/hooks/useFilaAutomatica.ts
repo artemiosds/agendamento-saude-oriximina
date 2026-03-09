@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
+import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { toast } from 'sonner';
 
 const RESERVA_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
