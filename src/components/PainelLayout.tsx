@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import logoSms from '@/assets/logo-sms.jpeg';
 
 const menuItems = [
   { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, roles: ['master', 'coordenador', 'gestao'] },
@@ -58,9 +59,12 @@ const PainelLayout: React.FC = () => {
         "fixed lg:static inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col transition-transform duration-300",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        <div className="p-5 border-b border-sidebar-border">
-          <h2 className="text-lg font-bold font-display text-sidebar-foreground">SMS Oriximiná</h2>
-          <p className="text-xs text-sidebar-foreground/60 mt-0.5">Secretaria Municipal de Saúde</p>
+        <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
+          <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-lg object-cover" />
+          <div>
+            <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight">SMS Oriximiná</h2>
+            <p className="text-xs text-sidebar-foreground/60">Secretaria Municipal de Saúde</p>
+          </div>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">

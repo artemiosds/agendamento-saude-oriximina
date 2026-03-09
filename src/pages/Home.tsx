@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import logoSms from '@/assets/logo-sms.jpeg';
 
 const services = [
   { icon: Stethoscope, title: 'Clínica Geral', desc: 'Consultas médicas gerais' },
@@ -24,6 +25,7 @@ const Home: React.FC = () => {
             transition={{ duration: 0.6 }}
             className="max-w-2xl"
           >
+            <img src={logoSms} alt="SMS Oriximiná" className="w-20 h-20 rounded-2xl object-cover shadow-lg mb-4" />
             <h1 className="text-3xl md:text-5xl font-bold font-display leading-tight mb-4">
               Secretaria Municipal de Saúde de Oriximiná
             </h1>

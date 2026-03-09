@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { lovable } from '@/integrations/lovable/index';
+import logoSms from '@/assets/logo-sms.jpeg';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,9 +46,7 @@ const Login: React.FC = () => {
         <Card className="shadow-elevated border-0">
           <CardContent className="p-8">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-primary mb-4">
-                <Shield className="w-8 h-8 text-primary-foreground" />
-              </div>
+              <img src={logoSms} alt="SMS Oriximiná" className="w-20 h-20 mx-auto rounded-2xl object-cover mb-4 shadow-md" />
               <h1 className="text-2xl font-bold font-display text-foreground">
                 SMS Oriximiná
               </h1>
