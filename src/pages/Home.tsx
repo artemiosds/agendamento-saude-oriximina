@@ -84,7 +84,7 @@ const Home: React.FC = () => {
               <MapPin className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-foreground">Endereço</h3>
-                <p className="text-sm text-muted-foreground">Rua Principal, 100 - Centro<br />Oriximiná - PA</p>
+                <p className="text-sm text-muted-foreground">RUA BARÃO DO RIO BRANCO, Nº 2336 CENTRO, CEP: 68270-000</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
