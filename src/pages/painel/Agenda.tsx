@@ -141,6 +141,20 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
     await addAgendamento(agData);
 
+    // Ensure patient has portal access
+    const unidadeNome = unidade?.nome || '';
+    ensurePortalAccess({
+      pacienteId: pac.id,
+      contexto: 'agendamento',
+      data: selectedDate,
+      hora: newAg.hora,
+      unidade: unidadeNome,
+      profissional: prof.nome,
+      tipo: newAg.tipo,
+    }).then(result => {
+      if (result.created) toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? 'E-mail enviado.' : ''}`);
+    }).catch(() => {});
+
     const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
     if (googleEventId) {
       await updateAgendamento(agId, { googleEventId, syncStatus: 'ok' });
