@@ -145,7 +145,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       toast.success('Agendamento criado!');
     }
 
-    notify({
+    // Enviar notificação (aguardar para garantir que complete)
+    await notify({
       evento: 'novo_agendamento', paciente_nome: pac.nome, telefone: pac.telefone,
       email: pac.email, data_consulta: selectedDate, hora_consulta: newAg.hora,
       unidade: unidade?.nome || '', profissional: prof.nome,
@@ -181,7 +182,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     };
     const evento = statusToEvento[newStatus];
     if (evento) {
-      notify({
+      await notify({
         evento: evento as any,
         paciente_nome: ag.pacienteNome, telefone: paciente?.telefone || '',
         email: paciente?.email || '', data_consulta: ag.data, hora_consulta: ag.hora,
@@ -195,7 +196,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       const nextInQueue = fila.find(f => f.status === 'aguardando' && f.unidadeId === ag.unidadeId && (!f.profissionalId || f.profissionalId === ag.profissionalId));
       if (nextInQueue) {
         const filaPac = pacientes.find(p => p.id === nextInQueue.pacienteId);
-        notify({
+        await notify({
           evento: 'vaga_liberada',
           paciente_nome: nextInQueue.pacienteNome,
           telefone: filaPac?.telefone || '',

@@ -154,7 +154,8 @@ const AgendarOnline: React.FC = () => {
         criadoEm: new Date().toISOString(), criadoPor: 'online',
       });
 
-      notify({
+      // Enviar notificação (aguardar para garantir que complete)
+      await notify({
         evento: 'novo_agendamento',
         paciente_nome: form.nome, telefone: form.telefone, email: form.email,
         data_consulta: form.data, hora_consulta: form.hora,

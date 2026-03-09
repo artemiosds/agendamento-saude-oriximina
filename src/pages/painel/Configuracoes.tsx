@@ -332,29 +332,59 @@ const Configuracoes: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Canal de Notificação */}
-      <Card className="shadow-card border-0">
+      {/* Canal de Notificação - PROMINENT */}
+      <Card className="shadow-card border-0 ring-2 ring-primary/20">
         <CardContent className="p-5">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
-              <Send className="w-5 h-5 text-info" />
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Send className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold font-display text-foreground">Canal de Notificação</h3>
-              <p className="text-sm text-muted-foreground">Escolha como enviar notificações</p>
+              <h3 className="font-semibold font-display text-foreground">Canal de Notificação ao Paciente</h3>
+              <p className="text-sm text-muted-foreground">Define como o paciente recebe e-mails e notificações</p>
             </div>
           </div>
           <div>
-            <Label>Canal preferido</Label>
+            <Label className="font-medium">Canal ativo para envio</Label>
             <Select value={configuracoes.canalNotificacao || 'webhook'} onValueChange={v => updateConfiguracoes({ canalNotificacao: v as any })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="webhook">Apenas Webhook (Make.com)</SelectItem>
-                <SelectItem value="gmail">Apenas Gmail SMTP</SelectItem>
+                <SelectItem value="gmail">Apenas Gmail SMTP (e-mail direto)</SelectItem>
                 <SelectItem value="ambos">Ambos (Webhook + Gmail)</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground mt-2">Se o webhook falhar e o canal for "Ambos", o sistema usará Gmail como fallback automaticamente.</p>
+
+            {/* Warning when Gmail is configured but not selected */}
+            {configuracoes.gmail?.ativo && configuracoes.gmail?.email && configuracoes.gmail?.senhaApp && (configuracoes.canalNotificacao || 'webhook') === 'webhook' && (
+              <div className="mt-3 p-3 bg-warning/10 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium text-warning">Gmail configurado mas NÃO ativo como canal</p>
+                  <p className="text-muted-foreground text-xs mt-1">O canal está definido como "Apenas Webhook". Para enviar e-mails via Gmail, mude para "Apenas Gmail SMTP" ou "Ambos".</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 text-xs"
+                    onClick={() => {
+                      updateConfiguracoes({ canalNotificacao: 'ambos' });
+                      toast.success('Canal alterado para Ambos (Webhook + Gmail)!');
+                    }}
+                  >
+                    Ativar Gmail + Webhook agora
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {(configuracoes.canalNotificacao === 'gmail' || configuracoes.canalNotificacao === 'ambos') && (!configuracoes.gmail?.ativo || !configuracoes.gmail?.email || !configuracoes.gmail?.senhaApp) && (
+              <div className="mt-3 p-3 bg-destructive/10 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                <p className="text-sm text-destructive">Gmail selecionado como canal mas não está configurado. Configure o Gmail SMTP abaixo.</p>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground mt-2">Se o webhook falhar e o canal for "Ambos", o Gmail envia automaticamente como fallback.</p>
           </div>
         </CardContent>
       </Card>
@@ -430,8 +460,26 @@ const Configuracoes: React.FC = () => {
                 className="gradient-primary text-primary-foreground flex-1"
                 disabled={!configuracoes.gmail?.email || !configuracoes.gmail?.senhaApp}
                 onClick={async () => {
-                  updateConfiguracoes({ gmail: { ...configuracoes.gmail! } });
-                  toast.success('Configurações Gmail salvas!');
+                  // Save Gmail config with ativo=true and ensure defaults
+                  const gmailData = {
+                    ...configuracoes.gmail!,
+                    ativo: true,
+                    smtpHost: configuracoes.gmail?.smtpHost || 'smtp.gmail.com',
+                    smtpPort: configuracoes.gmail?.smtpPort || 587,
+                  };
+                  
+                  // Auto-switch canal to "ambos" if still on "webhook" only
+                  const currentCanal = configuracoes.canalNotificacao || 'webhook';
+                  const newCanal = currentCanal === 'webhook' ? 'ambos' : currentCanal;
+                  
+                  updateConfiguracoes({ gmail: gmailData, canalNotificacao: newCanal });
+                  
+                  if (currentCanal === 'webhook') {
+                    toast.success('Gmail salvo! Canal alterado para "Ambos" automaticamente.');
+                  } else {
+                    toast.success('Configurações Gmail salvas!');
+                  }
+                  
                   // Auto-test after save
                   setGmailTesting(true);
                   setGmailMessage('');
@@ -440,7 +488,7 @@ const Configuracoes: React.FC = () => {
                   setGmailMessage(result.message);
                   setGmailTesting(false);
                   if (result.success) {
-                    toast.success('Gmail SMTP verificado com sucesso!');
+                    toast.success('Gmail SMTP verificado com sucesso! E-mails serão enviados automaticamente.');
                   } else {
                     toast.error(`Erro Gmail: ${result.message}`);
                   }
