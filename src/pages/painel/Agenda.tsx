@@ -145,7 +145,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       toast.success('Agendamento criado!');
     }
 
-    notify({
+    // Enviar notificação (aguardar para garantir que complete)
+    await notify({
       evento: 'novo_agendamento', paciente_nome: pac.nome, telefone: pac.telefone,
       email: pac.email, data_consulta: selectedDate, hora_consulta: newAg.hora,
       unidade: unidade?.nome || '', profissional: prof.nome,
