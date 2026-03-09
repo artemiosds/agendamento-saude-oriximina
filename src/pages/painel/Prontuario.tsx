@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AtendimentoTimer from '@/components/AtendimentoTimer';
+import { openPrintDocument } from '@/lib/printLayout';
 
 interface ProntuarioDB {
   id: string;
