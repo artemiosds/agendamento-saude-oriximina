@@ -58,6 +58,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
   const { handleVagaLiberada } = useFilaAutomatica();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
