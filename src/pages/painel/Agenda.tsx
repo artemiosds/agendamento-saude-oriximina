@@ -196,7 +196,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       const nextInQueue = fila.find(f => f.status === 'aguardando' && f.unidadeId === ag.unidadeId && (!f.profissionalId || f.profissionalId === ag.profissionalId));
       if (nextInQueue) {
         const filaPac = pacientes.find(p => p.id === nextInQueue.pacienteId);
-        notify({
+        await notify({
           evento: 'vaga_liberada',
           paciente_nome: nextInQueue.pacienteNome,
           telefone: filaPac?.telefone || '',
