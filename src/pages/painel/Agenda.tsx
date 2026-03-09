@@ -182,7 +182,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     };
     const evento = statusToEvento[newStatus];
     if (evento) {
-      notify({
+      await notify({
         evento: evento as any,
         paciente_nome: ag.pacienteNome, telefone: paciente?.telefone || '',
         email: paciente?.email || '', data_consulta: ag.data, hora_consulta: ag.hora,
