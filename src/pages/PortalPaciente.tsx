@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { openPrintDocument } from '@/lib/printLayout';
 
 interface PacienteData {
   id: string;
