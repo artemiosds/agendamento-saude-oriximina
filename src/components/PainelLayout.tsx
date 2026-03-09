@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import logoSms from '@/assets/logo-sms.jpeg';
 
 const menuItems = [
   { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, roles: ['master', 'coordenador', 'gestao'] },
