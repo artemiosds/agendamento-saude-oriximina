@@ -2,7 +2,21 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calendar, Shield, Phone, MapPin, Clock, Heart, Stethoscope, Baby, Smile, User } from "lucide-react";
+import {
+  Calendar,
+  Shield,
+  Phone,
+  MapPin,
+  Clock,
+  Heart,
+  Stethoscope,
+  Baby,
+  Smile,
+  Activity,
+  Brain,
+  Apple,
+  User,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import logoSms from "@/assets/logo-sms.jpeg";
 
