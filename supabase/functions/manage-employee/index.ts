@@ -179,7 +179,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ error: "Ação inválida." }),
-      { status: 400, headers: corsHeaders }
+      { status: 200, headers: corsHeaders }
     );
   } catch (err) {
     console.error("Employee management error:", err);
