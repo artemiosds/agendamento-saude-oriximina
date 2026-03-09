@@ -460,8 +460,26 @@ const Configuracoes: React.FC = () => {
                 className="gradient-primary text-primary-foreground flex-1"
                 disabled={!configuracoes.gmail?.email || !configuracoes.gmail?.senhaApp}
                 onClick={async () => {
-                  updateConfiguracoes({ gmail: { ...configuracoes.gmail! } });
-                  toast.success('Configurações Gmail salvas!');
+                  // Save Gmail config with ativo=true and ensure defaults
+                  const gmailData = {
+                    ...configuracoes.gmail!,
+                    ativo: true,
+                    smtpHost: configuracoes.gmail?.smtpHost || 'smtp.gmail.com',
+                    smtpPort: configuracoes.gmail?.smtpPort || 587,
+                  };
+                  
+                  // Auto-switch canal to "ambos" if still on "webhook" only
+                  const currentCanal = configuracoes.canalNotificacao || 'webhook';
+                  const newCanal = currentCanal === 'webhook' ? 'ambos' : currentCanal;
+                  
+                  updateConfiguracoes({ gmail: gmailData, canalNotificacao: newCanal });
+                  
+                  if (currentCanal === 'webhook') {
+                    toast.success('Gmail salvo! Canal alterado para "Ambos" automaticamente.');
+                  } else {
+                    toast.success('Configurações Gmail salvas!');
+                  }
+                  
                   // Auto-test after save
                   setGmailTesting(true);
                   setGmailMessage('');
@@ -470,7 +488,7 @@ const Configuracoes: React.FC = () => {
                   setGmailMessage(result.message);
                   setGmailTesting(false);
                   if (result.success) {
-                    toast.success('Gmail SMTP verificado com sucesso!');
+                    toast.success('Gmail SMTP verificado com sucesso! E-mails serão enviados automaticamente.');
                   } else {
                     toast.error(`Erro Gmail: ${result.message}`);
                   }
