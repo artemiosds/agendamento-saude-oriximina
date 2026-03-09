@@ -3,6 +3,7 @@ import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
+import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
