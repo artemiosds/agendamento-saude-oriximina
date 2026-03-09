@@ -91,7 +91,7 @@ const Home: React.FC = () => {
               <Clock className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-foreground">Horário</h3>
-                <p className="text-sm text-muted-foreground">Seg a Sex: 07:00 às 17:00<br />Sábado: 07:00 às 12:00</p>
+                <p className="text-sm text-muted-foreground">Seg a Sex: 08:00 às 18:00</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
