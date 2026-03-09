@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AtendimentoTimer from '@/components/AtendimentoTimer';
+import { openPrintDocument } from '@/lib/printLayout';
 
 interface ProntuarioDB {
   id: string;
@@ -279,73 +280,40 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error('Habilite popups para imprimir.');
-      return;
-    }
-
     const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Prontuário - ${p.paciente_nome}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #333; font-size: 12px; }
-          .header { text-align: center; border-bottom: 2px solid #0369a1; padding-bottom: 12px; margin-bottom: 16px; }
-          .header h1 { font-size: 16px; color: #0369a1; }
-          .header p { font-size: 11px; color: #666; }
-          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; padding: 10px; background: #f8fafc; border-radius: 6px; }
-          .info-label { font-weight: 600; font-size: 10px; text-transform: uppercase; color: #666; }
-          .info-value { font-size: 12px; }
-          .section { margin-bottom: 12px; }
-          .section-title { font-weight: 600; font-size: 11px; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px; }
-          .section-content { font-size: 12px; line-height: 1.5; white-space: pre-wrap; min-height: 20px; }
-          .signature { margin-top: 50px; text-align: center; }
-          .signature-line { width: 250px; border-top: 1px solid #333; margin: 0 auto 4px; }
-          .footer { margin-top: 40px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-          @media print { body { padding: 10px; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-          <p>${unidadeNome}</p>
-          <p style="margin-top: 8px; font-size: 14px; font-weight: 600;">PRONTUÁRIO DE ATENDIMENTO</p>
-        </div>
-        <div class="info-grid">
-          <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
-          <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
-          <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
-          <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || '-'}</span></div>
-        </div>
-        ${p.queixa_principal ? `<div class="section"><div class="section-title">Queixa Principal</div><div class="section-content">${p.queixa_principal}</div></div>` : ''}
-        ${p.anamnese ? `<div class="section"><div class="section-title">Anamnese</div><div class="section-content">${p.anamnese}</div></div>` : ''}
-        ${p.sinais_sintomas ? `<div class="section"><div class="section-title">Sinais e Sintomas</div><div class="section-content">${p.sinais_sintomas}</div></div>` : ''}
-        ${p.exame_fisico ? `<div class="section"><div class="section-title">Exame Físico</div><div class="section-content">${p.exame_fisico}</div></div>` : ''}
-        ${p.hipotese ? `<div class="section"><div class="section-title">Hipótese / Avaliação</div><div class="section-content">${p.hipotese}</div></div>` : ''}
-        ${p.conduta ? `<div class="section"><div class="section-title">Conduta</div><div class="section-content">${p.conduta}</div></div>` : ''}
-        ${p.prescricao ? `<div class="section"><div class="section-title">Prescrição / Orientações</div><div class="section-content">${p.prescricao}</div></div>` : ''}
-        ${p.solicitacao_exames ? `<div class="section"><div class="section-title">Solicitação de Exames</div><div class="section-content">${p.solicitacao_exames}</div></div>` : ''}
-        ${p.evolucao ? `<div class="section"><div class="section-title">Evolução</div><div class="section-content">${p.evolucao}</div></div>` : ''}
-        ${p.observacoes ? `<div class="section"><div class="section-title">Observações Gerais</div><div class="section-content">${p.observacoes}</div></div>` : ''}
-        <div class="signature">
-          <div class="signature-line"></div>
-          <p>${p.profissional_nome}</p>
-          <p style="font-size: 10px; color: #666;">${p.setor || ''}</p>
-        </div>
-        <div class="footer">
-          <p style="font-size: 10px; color: #999;">Documento gerado em ${new Date().toLocaleString('pt-BR')} — SMS Oriximiná</p>
-        </div>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    const sections = [
+      { title: 'Queixa Principal', content: p.queixa_principal },
+      { title: 'Anamnese', content: p.anamnese },
+      { title: 'Sinais e Sintomas', content: p.sinais_sintomas },
+      { title: 'Exame Físico', content: p.exame_fisico },
+      { title: 'Hipótese / Avaliação', content: p.hipotese },
+      { title: 'Conduta', content: p.conduta },
+      { title: 'Prescrição / Orientações', content: p.prescricao },
+      { title: 'Solicitação de Exames', content: p.solicitacao_exames },
+      { title: 'Evolução', content: p.evolucao },
+      { title: 'Observações Gerais', content: p.observacoes },
+    ].filter(s => s.content).map(s =>
+      `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
+    ).join('');
+
+    const body = `
+      <div class="info-grid">
+        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${p.paciente_nome}</span></div>
+        <div><span class="info-label">Data:</span><br/><span class="info-value">${new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}</span></div>
+        <div><span class="info-label">Profissional:</span><br/><span class="info-value">${p.profissional_nome}</span></div>
+        <div><span class="info-label">Hora:</span><br/><span class="info-value">${p.hora_atendimento || '-'}</span></div>
+        <div><span class="info-label">Unidade:</span><br/><span class="info-value">${unidadeNome}</span></div>
+        <div><span class="info-label">Setor:</span><br/><span class="info-value">${p.setor || '-'}</span></div>
+      </div>
+      ${sections}
+      <div class="signature">
+        <div class="signature-line"></div>
+        <div class="name">${p.profissional_nome}</div>
+        <div class="role">${p.setor || ''}</div>
+      </div>`;
+
+    openPrintDocument('Prontuário de Atendimento', body, { 'Unidade': unidadeNome });
   };
 
   const queryPacienteId = searchParams.get('pacienteId');

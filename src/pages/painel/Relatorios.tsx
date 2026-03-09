@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { openPrintDocument } from '@/lib/printLayout';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -307,36 +308,12 @@ const Relatorios: React.FC = () => {
 
   // === EXPORT PDF ===
   const exportPDF = useCallback((type: string) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
     const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
     const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
 
-    const css = `<style>
-      *{margin:0;padding:0;box-sizing:border-box}
-      body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:20px;color:#1e293b;font-size:11px}
-      .header{background:linear-gradient(135deg,#0369a1,#0284c7);color:#fff;padding:20px;border-radius:8px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
-      .header h1{font-size:16px;font-weight:700}
-      .header p{font-size:10px;opacity:.85}
-      .meta{font-size:10px;color:#64748b;margin-bottom:12px;padding:8px;background:#f8fafc;border-radius:6px;display:flex;gap:16px;flex-wrap:wrap}
-      .meta span{font-weight:600;color:#334155}
-      .summary{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-      .stat{background:#f0f9ff;border:1px solid #bae6fd;padding:8px 14px;border-radius:8px;text-align:center;min-width:80px}
-      .stat strong{display:block;font-size:18px;color:#0369a1}
-      .stat small{font-size:9px;color:#64748b}
-      h2{font-size:13px;color:#0369a1;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid #e0f2fe}
-      table{width:100%;border-collapse:collapse;margin-bottom:12px}
-      th,td{border:1px solid #e2e8f0;padding:5px 8px;text-align:left;font-size:10px}
-      th{background:#f1f5f9;font-weight:600;color:#334155}
-      tr:nth-child(even){background:#f8fafc}
-      .footer{margin-top:20px;padding-top:8px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;text-align:center}
-      @media print{body{padding:10px}.header{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-    </style>`;
-
     let body = '';
 
-    // Summary block reused across types
     const summaryBlock = `
       <div class="summary">
         <div class="stat"><strong>${stats.total}</strong><small>Total Agendamentos</small></div>
@@ -402,14 +379,11 @@ const Relatorios: React.FC = () => {
 
     const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
 
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>${titleMap[type] || 'Relatório'} — SMS Oriximiná</title>${css}</head><body>
-      <div class="header"><div><h1>SMS Oriximiná — ${titleMap[type] || 'Relatório'}</h1><p>Secretaria Municipal de Saúde de Oriximiná</p></div><div style="text-align:right"><p>Emitido: ${new Date().toLocaleString('pt-BR')}</p></div></div>
-      <div class="meta"><span>Período:</span> ${periodo} | <span>Unidade:</span> ${un} | <span>Profissional:</span> ${prof}</div>
-      ${body}
-      <div class="footer">SMS Oriximiná — Sistema de Gestão em Saúde — Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')}</div>
-    </body></html>`);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 300);
+    openPrintDocument(
+      titleMap[type] || 'Relatório',
+      body,
+      { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
+    );
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   const clearFilters = () => {

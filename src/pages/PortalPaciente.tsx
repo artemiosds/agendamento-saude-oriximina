@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { openPrintDocument } from '@/lib/printLayout';
 
 interface PacienteData {
   id: string;
@@ -160,52 +161,26 @@ const PortalPaciente: React.FC = () => {
 
   const handlePrintComprovante = (ag: AgendamentoData) => {
     const unidade = unidades.find(u => u.id === ag.unidade_id);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { toast.error('Habilite popups.'); return; }
 
-    printWindow.document.write(`
-      <!DOCTYPE html><html><head><title>Comprovante</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; color: #333; }
-        .header { text-align: center; border-bottom: 2px solid #0369a1; padding-bottom: 16px; margin-bottom: 20px; }
-        .header h1 { font-size: 18px; color: #0369a1; }
-        .content { max-width: 500px; margin: 0 auto; }
-        .field { margin-bottom: 12px; }
-        .label { font-size: 11px; text-transform: uppercase; color: #666; font-weight: 600; }
-        .value { font-size: 14px; margin-top: 2px; }
-        .qr { text-align: center; margin-top: 30px; padding: 20px; border: 1px dashed #ccc; border-radius: 8px; }
-        .footer { text-align: center; margin-top: 30px; font-size: 10px; color: #999; }
-        @media print { body { padding: 15px; } }
-      </style></head>
-      <body>
-        <div class="header">
-          <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-          <p style="font-size: 14px; font-weight: 600; margin-top: 8px;">COMPROVANTE DE AGENDAMENTO</p>
+    const body = `
+      <div class="content-block">
+        <div class="field"><div class="field-label">Paciente</div><div class="field-value">${paciente?.nome || ''}</div></div>
+        <div class="field"><div class="field-label">CPF</div><div class="field-value">${paciente?.cpf || '-'}</div></div>
+        <div class="field"><div class="field-label">Data</div><div class="field-value">${new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
+        <div class="field"><div class="field-label">Horário</div><div class="field-value">${ag.hora}</div></div>
+        <div class="field"><div class="field-label">Profissional</div><div class="field-value">${ag.profissional_nome}</div></div>
+        <div class="field"><div class="field-label">Tipo</div><div class="field-value">${ag.tipo}</div></div>
+        <div class="field"><div class="field-label">Unidade</div><div class="field-value">${unidade?.nome || ''}</div></div>
+        <div class="field"><div class="field-label">Endereço</div><div class="field-value">${unidade?.endereco || ''}</div></div>
+        <div class="field"><div class="field-label">Status</div><div class="field-value">${ag.status}</div></div>
+        <div class="qr-area">
+          <p>Apresente este comprovante na recepção</p>
+          <p class="code">Código: ${ag.id}</p>
         </div>
-        <div class="content">
-          <div class="field"><div class="label">Paciente</div><div class="value">${paciente?.nome || ''}</div></div>
-          <div class="field"><div class="label">Data</div><div class="value">${new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
-          <div class="field"><div class="label">Horário</div><div class="value">${ag.hora}</div></div>
-          <div class="field"><div class="label">Profissional</div><div class="value">${ag.profissional_nome}</div></div>
-          <div class="field"><div class="label">Tipo</div><div class="value">${ag.tipo}</div></div>
-          <div class="field"><div class="label">Unidade</div><div class="value">${unidade?.nome || ''}</div></div>
-          <div class="field"><div class="label">Endereço</div><div class="value">${unidade?.endereco || ''}</div></div>
-          <div class="field"><div class="label">Status</div><div class="value">${ag.status}</div></div>
-          <div class="qr">
-            <p style="font-size: 12px; color: #666;">Apresente este comprovante na recepção</p>
-            <p style="font-size: 11px; color: #999; margin-top: 4px;">Código: ${ag.id}</p>
-          </div>
-        </div>
-        <div class="footer">
-          <p>Documento gerado em ${new Date().toLocaleString('pt-BR')} — SMS Oriximiná</p>
-          <p style="margin-top: 4px;">Chegue com 15 minutos de antecedência.</p>
-        </div>
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+        <p style="text-align:center;margin-top:16px;font-size:11px;color:#64748b;">Chegue com 15 minutos de antecedência.</p>
+      </div>`;
+
+    openPrintDocument('Comprovante de Agendamento', body, { 'Unidade': unidade?.nome || '' });
   };
 
   if (isLoading) {
