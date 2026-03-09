@@ -11,6 +11,9 @@ const services = [
   { icon: Baby, title: "Pediatria", desc: "Atendimento infantil" },
   { icon: Smile, title: "Odontologia", desc: "Saúde bucal" },
   { icon: Heart, title: "Enfermagem", desc: "Procedimentos e curativos" },
+  { icon: Activity, title: "Fisioterapia", desc: "Reabilitação e movimento" },
+  { icon: Brain, title: "Psicologia", desc: "Saúde mental e bem-estar" },
+  { icon: Apple, title: "Nutrição", desc: "Orientação alimentar" },
 ];
 
 const Home: React.FC = () => {
