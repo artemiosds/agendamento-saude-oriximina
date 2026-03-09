@@ -30,6 +30,7 @@ interface EmailPayload {
   status_agendamento: string;
   id_agendamento: string;
   observacoes?: string;
+  test_only?: boolean;
 }
 
 const emailTemplates: Record<string, { subject: string; body: (p: EmailPayload) => string }> = {
@@ -317,6 +318,32 @@ async function logNotification(supabaseAdmin: any, log: {
   }
 }
 
+// Send email with retry (up to 3 attempts)
+async function sendWithRetry(transporter: any, mailOptions: any, maxRetries = 3): Promise<any> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      return info;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`Tentativa ${attempt}/${maxRetries} falhou:`, lastError.message);
+      
+      // Don't retry auth errors - they won't succeed
+      if (lastError.message.includes("535") || lastError.message.includes("Authentication") || 
+          lastError.message.includes("Username and Password not accepted") || lastError.message.includes("Invalid login")) {
+        throw lastError;
+      }
+      
+      if (attempt < maxRetries) {
+        // Wait before retry (exponential backoff: 1s, 2s, 4s)
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+  throw lastError;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -327,21 +354,25 @@ serve(async (req) => {
   const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
   try {
-    const payload: EmailPayload & { test_only?: boolean } = await req.json();
+    const payload: EmailPayload = await req.json();
+
+    console.log(`[send-email] Evento: ${payload.evento}, Destinatário: ${payload.email || 'N/A'}, Test: ${!!payload.test_only}`);
 
     // Get Gmail config
     const gmailConfig = await getGmailConfig(supabaseAdmin);
 
     if (!gmailConfig) {
+      console.error("[send-email] Gmail SMTP não configurado ou desativado");
       return new Response(
-        JSON.stringify({ error: "Gmail SMTP não configurado ou desativado", status: "nao_configurado" }),
+        JSON.stringify({ error: "Gmail SMTP não configurado ou desativado", status: "nao_configurado", success: false }),
         { status: 400, headers: corsHeaders }
       );
     }
 
     if (!gmailConfig.email || !gmailConfig.senhaApp) {
+      console.error("[send-email] Credenciais Gmail incompletas");
       return new Response(
-        JSON.stringify({ error: "Credenciais Gmail incompletas (e-mail ou senha de aplicativo ausente)", status: "nao_configurado" }),
+        JSON.stringify({ error: "Credenciais Gmail incompletas (e-mail ou senha de aplicativo ausente)", status: "nao_configurado", success: false }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -351,11 +382,11 @@ serve(async (req) => {
       const missingFields: string[] = [];
       if (!payload.paciente_nome) missingFields.push("paciente_nome");
       if (!payload.email) missingFields.push("email");
-      if (!payload.telefone) missingFields.push("telefone");
       if (!payload.evento) missingFields.push("evento");
 
       if (missingFields.length > 0) {
         const errorMsg = `Campos obrigatórios ausentes: ${missingFields.join(", ")}`;
+        console.error(`[send-email] Validação falhou: ${errorMsg}`);
         await logNotification(supabaseAdmin, {
           agendamento_id: payload.id_agendamento,
           evento: payload.evento || "desconhecido",
@@ -367,7 +398,7 @@ serve(async (req) => {
           erro: errorMsg,
         });
         return new Response(
-          JSON.stringify({ error: errorMsg }),
+          JSON.stringify({ error: errorMsg, success: false }),
           { status: 400, headers: corsHeaders }
         );
       }
@@ -376,7 +407,7 @@ serve(async (req) => {
     const recipientEmail = payload.test_only ? gmailConfig.email : payload.email;
     if (!recipientEmail) {
       return new Response(
-        JSON.stringify({ error: "E-mail destinatário não informado" }),
+        JSON.stringify({ error: "E-mail destinatário não informado", success: false }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -384,31 +415,36 @@ serve(async (req) => {
     // Get template
     const template = emailTemplates[payload.evento] || emailTemplates["teste"];
 
-    // Create nodemailer transporter
+    // Create nodemailer transporter with correct Gmail config
     const transporter = nodemailer.createTransport({
       host: gmailConfig.smtpHost || "smtp.gmail.com",
       port: gmailConfig.smtpPort || 587,
-      secure: false,
+      secure: false, // false for port 587 (STARTTLS)
       requireTLS: true,
       auth: {
         user: gmailConfig.email,
         pass: gmailConfig.senhaApp,
       },
+      connectionTimeout: 10000, // 10s
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
 
+    const mailOptions = {
+      from: `"SMS Oriximiná" <${gmailConfig.email}>`,
+      to: recipientEmail,
+      subject: template.subject,
+      html: template.body(payload),
+    };
+
     try {
-      const info = await transporter.sendMail({
-        from: `"SMS Oriximiná" <${gmailConfig.email}>`,
-        to: recipientEmail,
-        subject: template.subject,
-        html: template.body(payload),
-      });
+      const info = await sendWithRetry(transporter, mailOptions);
 
       const successMsg = payload.test_only
         ? `E-mail de teste enviado com sucesso para ${recipientEmail}`
         : `E-mail enviado para ${recipientEmail}`;
 
-      console.log(successMsg, "messageId:", info.messageId);
+      console.log(`[send-email] ✅ ${successMsg} messageId: ${info.messageId}`);
 
       await logNotification(supabaseAdmin, {
         agendamento_id: payload.id_agendamento || "",
@@ -427,7 +463,7 @@ serve(async (req) => {
       );
     } catch (smtpErr) {
       const errorMsg = smtpErr instanceof Error ? smtpErr.message : "Erro SMTP desconhecido";
-      console.error("SMTP Error:", errorMsg);
+      console.error(`[send-email] ❌ SMTP Error: ${errorMsg}`);
 
       // Classify error
       let errorStatus = "erro_envio";
@@ -449,15 +485,15 @@ serve(async (req) => {
       });
 
       return new Response(
-        JSON.stringify({ error: errorMsg, status: errorStatus }),
+        JSON.stringify({ error: errorMsg, status: errorStatus, success: false }),
         { status: 502, headers: corsHeaders }
       );
     }
   } catch (err) {
-    console.error("Send email error:", err);
+    console.error("[send-email] Fatal error:", err);
     const errorMsg = err instanceof Error ? err.message : "Unknown error";
     return new Response(
-      JSON.stringify({ error: errorMsg, status: "erro" }),
+      JSON.stringify({ error: errorMsg, status: "erro", success: false }),
       { status: 500, headers: corsHeaders }
     );
   }
