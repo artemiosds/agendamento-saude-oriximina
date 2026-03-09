@@ -126,7 +126,7 @@ serve(async (req) => {
       if (dbErr) {
         return new Response(
           JSON.stringify({ error: "Erro ao atualizar: " + dbErr.message }),
-          { status: 400, headers: corsHeaders }
+          { status: 200, headers: corsHeaders }
         );
       }
 
