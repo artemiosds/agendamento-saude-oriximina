@@ -239,11 +239,11 @@ const FilaEspera: React.FC = () => {
                 </span>
                 {canManage && (
                   <div className="flex gap-1 shrink-0">
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => {
-                      updateFila(f.id, { status: 'chamado', horaChamada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+                    <Button size="sm" variant="ghost" className="h-8" onClick={async () => {
+                      await updateFila(f.id, { status: 'chamado', horaChamada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
                       const pac = pacientes.find(p => p.id === f.pacienteId);
                       const unidade = unidades.find(u => u.id === f.unidadeId);
-                      notify({
+                      await notify({
                         evento: 'fila_chamada',
                         paciente_nome: f.pacienteNome, telefone: pac?.telefone || '',
                         email: pac?.email || '', data_consulta: new Date().toISOString().split('T')[0],
@@ -252,6 +252,7 @@ const FilaEspera: React.FC = () => {
                         tipo_atendimento: 'Chamada da Fila', status_agendamento: 'chamado',
                         id_agendamento: '',
                       });
+                      toast.info('Paciente chamado!');
                     }} title="Chamar">
                       <Bell className="w-4 h-4" />
                     </Button>
