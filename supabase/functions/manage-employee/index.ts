@@ -88,7 +88,7 @@ serve(async (req) => {
         await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
         return new Response(
           JSON.stringify({ error: "Erro ao salvar funcionário: " + dbErr.message }),
-          { status: 400, headers: corsHeaders }
+          { status: 200, headers: corsHeaders }
         );
       }
 
