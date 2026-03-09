@@ -214,21 +214,42 @@ const emailTemplates: Record<string, { subject: string; body: (p: EmailPayload) 
         </div>
       </div>`,
   },
-  lembrete_2h: {
-    subject: "⏰ Lembrete: Consulta em 2 horas - SMS Oriximiná",
+  lembrete_1h: {
+    subject: "⏰ Lembrete: Consulta em 1 hora - SMS Oriximiná",
     body: (p) => `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border-radius:12px;">
         <div style="background:#f59e0b;color:#fff;padding:20px;border-radius:8px 8px 0 0;text-align:center;">
-          <h2 style="margin:0;">⏰ Consulta em 2 Horas!</h2>
+          <h2 style="margin:0;">⏰ Consulta em 1 Hora!</h2>
         </div>
         <div style="background:#fff;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;">
           <p>Olá <strong>${p.paciente_nome}</strong>,</p>
-          <p>Sua consulta é <strong>daqui a 2 horas</strong>!</p>
+          <p>Sua consulta é <strong>daqui a 1 hora</strong>!</p>
           <table style="width:100%;border-collapse:collapse;margin:16px 0;">
             <tr><td style="padding:8px;color:#64748b;">🕐 Horário:</td><td style="padding:8px;font-weight:bold;">${p.hora_consulta}</td></tr>
             <tr><td style="padding:8px;color:#64748b;">👨‍⚕️ Profissional:</td><td style="padding:8px;font-weight:bold;">${p.profissional}</td></tr>
             <tr><td style="padding:8px;color:#64748b;">🏥 Unidade:</td><td style="padding:8px;font-weight:bold;">${p.unidade}</td></tr>
           </table>
+          <p style="color:#94a3b8;font-size:11px;margin-top:20px;text-align:center;">SMS Oriximiná - Sistema de Gestão em Saúde</p>
+        </div>
+      </div>`,
+  },
+  vaga_liberada: {
+    subject: "✨ Vaga Liberada - SMS Oriximiná",
+    body: (p) => `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border-radius:12px;">
+        <div style="background:#10b981;color:#fff;padding:20px;border-radius:8px 8px 0 0;text-align:center;">
+          <h2 style="margin:0;">✨ Vaga Liberada!</h2>
+        </div>
+        <div style="background:#fff;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e2e8f0;">
+          <p>Olá <strong>${p.paciente_nome}</strong>,</p>
+          <p>Uma vaga na agenda acaba de ser liberada. Você era o próximo na fila de espera!</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+            <tr><td style="padding:8px;color:#64748b;">📅 Data:</td><td style="padding:8px;font-weight:bold;">${p.data_consulta}</td></tr>
+            <tr><td style="padding:8px;color:#64748b;">🕐 Horário:</td><td style="padding:8px;font-weight:bold;">${p.hora_consulta}</td></tr>
+            <tr><td style="padding:8px;color:#64748b;">👨‍⚕️ Profissional:</td><td style="padding:8px;font-weight:bold;">${p.profissional}</td></tr>
+            <tr><td style="padding:8px;color:#64748b;">🏥 Unidade:</td><td style="padding:8px;font-weight:bold;">${p.unidade}</td></tr>
+          </table>
+          <p>Por favor, entre em contato ou acesse o sistema para confirmar seu agendamento.</p>
           <p style="color:#94a3b8;font-size:11px;margin-top:20px;text-align:center;">SMS Oriximiná - Sistema de Gestão em Saúde</p>
         </div>
       </div>`,

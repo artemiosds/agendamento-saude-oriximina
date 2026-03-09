@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export interface WebhookPayload {
-  evento: 'novo_agendamento' | 'reagendamento' | 'cancelamento' | 'nao_compareceu' | 'confirmacao' | 'fila_entrada' | 'fila_chamada' | 'atendimento_finalizado' | 'lembrete_24h' | 'lembrete_2h' | 'teste';
+  evento: 'novo_agendamento' | 'reagendamento' | 'cancelamento' | 'nao_compareceu' | 'confirmacao' | 'fila_entrada' | 'fila_chamada' | 'vaga_liberada' | 'atendimento_finalizado' | 'lembrete_24h' | 'lembrete_1h' | 'teste';
   paciente_nome: string;
   telefone: string;
   email: string;

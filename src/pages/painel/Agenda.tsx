@@ -51,7 +51,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -189,6 +189,27 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         tipo_atendimento: ag.tipo, status_agendamento: newStatus,
         id_agendamento: agId,
       });
+    }
+
+    if (newStatus === 'cancelado' || newStatus === 'falta') {
+      const nextInQueue = fila.find(f => f.status === 'aguardando' && f.unidadeId === ag.unidadeId && (!f.profissionalId || f.profissionalId === ag.profissionalId));
+      if (nextInQueue) {
+        const filaPac = pacientes.find(p => p.id === nextInQueue.pacienteId);
+        notify({
+          evento: 'vaga_liberada',
+          paciente_nome: nextInQueue.pacienteNome,
+          telefone: filaPac?.telefone || '',
+          email: filaPac?.email || '',
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || '',
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: 'aguardando',
+          id_agendamento: ag.id,
+        });
+        toast.info(`Vaga notificada para ${nextInQueue.pacienteNome} (fila de espera)`);
+      }
     }
 
     if (ag.googleEventId) {
