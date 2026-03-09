@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, logAction, refreshPacientes } = useData();
   const { user, hasPermission } = useAuth();
+  const isProfissional = user?.role === 'profissional';
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -23,7 +24,18 @@ const Pacientes: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const filtered = pacientes.filter(p =>
+  // Profissionais só veem pacientes vinculados aos seus agendamentos
+  const visiblePacientes = useMemo(() => {
+    if (!isProfissional || !user) return pacientes;
+    const myPacienteIds = new Set(
+      agendamentos
+        .filter(a => a.profissionalId === user.id)
+        .map(a => a.pacienteId)
+    );
+    return pacientes.filter(p => myPacienteIds.has(p.id));
+  }, [pacientes, agendamentos, isProfissional, user]);
+
+  const filtered = visiblePacientes.filter(p =>
     p.nome.toLowerCase().includes(search.toLowerCase()) ||
     p.cpf.includes(search) ||
     p.telefone.includes(search)
