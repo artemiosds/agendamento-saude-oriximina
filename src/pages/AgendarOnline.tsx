@@ -104,12 +104,16 @@ const AgendarOnline: React.FC = () => {
       const cpfNorm = normalizeCpf(form.cpf);
       const emailNorm = normalizeEmail(form.email);
 
-      // Deduplication by CPF, phone or email
-      const existingPatient = pacientes.find(p => 
-        (cpfNorm && normalizeCpf(p.cpf) === cpfNorm) || 
-        (phoneNorm && normalizePhone(p.telefone) === phoneNorm) ||
-        (emailNorm && p.email && p.email.trim().toLowerCase() === emailNorm)
-      );
+      // Deduplication: query DB directly to avoid 1000-row limit on local state
+      let existingPatient: { id: string } | null = null;
+      const orFilters: string[] = [];
+      if (cpfNorm) orFilters.push(`cpf.eq.${cpfNorm}`);
+      if (phoneNorm) orFilters.push(`telefone.eq.${phoneNorm}`);
+      if (emailNorm) orFilters.push(`email.ilike.${emailNorm}`);
+      if (orFilters.length > 0) {
+        const { data: found } = await supabase.from('pacientes').select('id').or(orFilters.join(',')).limit(1);
+        if (found && found.length > 0) existingPatient = found[0];
+      }
 
       if (existingPatient) {
         pacienteId = existingPatient.id;
@@ -140,8 +144,9 @@ const AgendarOnline: React.FC = () => {
       const prof = funcionarios.find(p => p.id === form.profissionalId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
       
+      const agId = `ag${Date.now()}`;
       await addAgendamento({
-        id: `ag${Date.now()}`, pacienteId, pacienteNome: form.nome,
+        id: agId, pacienteId, pacienteNome: form.nome,
         unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
         profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
         data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
@@ -155,7 +160,7 @@ const AgendarOnline: React.FC = () => {
         data_consulta: form.data, hora_consulta: form.hora,
         unidade: unidade?.nome || '', profissional: prof?.nome || '',
         tipo_atendimento: form.tipo, status_agendamento: 'pendente',
-        id_agendamento: `ag${Date.now()}`, observacoes: form.obs,
+        id_agendamento: agId, observacoes: form.obs,
       });
 
       toast.success('Agendamento realizado com sucesso!');

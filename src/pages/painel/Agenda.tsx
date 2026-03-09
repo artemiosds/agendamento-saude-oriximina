@@ -51,8 +51,8 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-  const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction } = useData();
-  const { user } = useAuth();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos } = useData();
+  const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
   const navigate = useNavigate();
@@ -215,8 +215,7 @@ const Agenda: React.FC = () => {
         detalhes: { acao: 'exclusão de agendamento' }, user,
       });
       toast.success('Agendamento excluído!');
-      // Refresh
-      window.location.reload();
+      await refreshAgendamentos();
     } catch (err) {
       console.error('Error deleting:', err);
       toast.error('Erro ao excluir agendamento.');
