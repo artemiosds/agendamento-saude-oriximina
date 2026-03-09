@@ -111,7 +111,7 @@ serve(async (req) => {
       if (!current) {
         return new Response(
           JSON.stringify({ error: "Funcionário não encontrado." }),
-          { status: 404, headers: corsHeaders }
+          { status: 200, headers: corsHeaders }
         );
       }
 
