@@ -158,13 +158,13 @@ export function useFilaAutomatica() {
     await updateFila(filaId, { status: 'encaixado' });
 
     // Ensure portal access for encaixe
-    const unidade = unidades.find(u => u.id === slot.unidadeId);
+    const encaixeUnidade = unidades.find(u => u.id === slot.unidadeId);
     ensurePortalAccess({
       pacienteId: filaItem.pacienteId,
       contexto: 'encaixe',
       data: slot.data,
       hora: slot.hora,
-      unidade: unidade?.nome || '',
+      unidade: encaixeUnidade?.nome || '',
       profissional: slot.profissionalNome,
       tipo: slot.tipo || 'Consulta',
     }).catch(() => {});
