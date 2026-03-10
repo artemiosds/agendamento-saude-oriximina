@@ -53,7 +53,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -63,9 +63,13 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
+  const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
+  const [retornoForm, setRetornoForm] = useState({ data: '', hora: '' });
   const [newAg, setNewAg] = useState({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
 
   const isProfissional = user?.role === 'profissional';
+  const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
 
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
@@ -300,6 +304,45 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     navigate(`/painel/prontuario?${params.toString()}`);
   };
 
+  const handleAgendarRetorno = async () => {
+    if (!retornoAg || !retornoForm.data || !retornoForm.hora || !user) return;
+    const agId = `ag${Date.now()}`;
+    const pac = pacientes.find(p => p.id === retornoAg.pacienteId);
+    const unidade = unidades.find(u => u.id === user.unidadeId);
+    const agData = {
+      id: agId, pacienteId: retornoAg.pacienteId, pacienteNome: retornoAg.pacienteNome,
+      unidadeId: user.unidadeId, salaId: user.salaId || '', setorId: '',
+      profissionalId: user.id, profissionalNome: user.nome,
+      data: retornoForm.data, hora: retornoForm.hora, status: 'confirmado' as const,
+      tipo: 'Retorno', observacoes: 'Retorno agendado pelo profissional',
+      origem: 'recepcao' as const, criadoEm: new Date().toISOString(), criadoPor: user.id,
+    };
+    await addAgendamento(agData);
+    await logAction({ acao: 'agendar_retorno', entidade: 'agendamento', entidadeId: agId, modulo: 'agendamento', detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora }, user });
+
+    // Notify patient
+    if (pac) {
+      await notify({
+        evento: 'novo_agendamento', paciente_nome: pac.nome, telefone: pac.telefone,
+        email: pac.email, data_consulta: retornoForm.data, hora_consulta: retornoForm.hora,
+        unidade: unidade?.nome || '', profissional: user.nome,
+        tipo_atendimento: 'Retorno', status_agendamento: 'confirmado',
+        id_agendamento: agId, observacoes: 'Retorno agendado pelo profissional',
+      });
+      // Ensure portal access
+      ensurePortalAccess({
+        pacienteId: pac.id, contexto: 'agendamento',
+        data: retornoForm.data, hora: retornoForm.hora,
+        unidade: unidade?.nome || '', profissional: user.nome, tipo: 'Retorno',
+      }).catch(() => {});
+    }
+
+    toast.success('Retorno agendado com sucesso!');
+    setRetornoDialogOpen(false);
+    setRetornoAg(null);
+    setRetornoForm({ data: '', hora: '' });
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -444,6 +487,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
                     </Button>
                   )}
+                  {/* Retorno button for authorized professionals */}
+                  {canRetorno && ag.status === 'concluido' && (
+                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs border-accent text-accent-foreground" onClick={() => {
+                      setRetornoAg({ pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome });
+                      setRetornoForm({ data: '', hora: '' });
+                      setRetornoDialogOpen(true);
+                    }}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
+                    </Button>
+                  )}
                   {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
                     statusActions.map(sa => (
                       <Button key={sa.key} size="sm" variant="outline" className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
@@ -481,6 +534,23 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           );
         })}
       </div>
+
+      {/* Retorno Dialog */}
+      <Dialog open={retornoDialogOpen} onOpenChange={setRetornoDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle className="font-display">Agendar Retorno</DialogTitle></DialogHeader>
+          {retornoAg && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Paciente: <strong className="text-foreground">{retornoAg.pacienteNome}</strong></p>
+              <div><Label>Data</Label><Input type="date" value={retornoForm.data} onChange={e => setRetornoForm(p => ({ ...p, data: e.target.value }))} /></div>
+              <div><Label>Horário</Label><Input type="time" value={retornoForm.hora} onChange={e => setRetornoForm(p => ({ ...p, hora: e.target.value }))} /></div>
+              <Button onClick={handleAgendarRetorno} disabled={!retornoForm.data || !retornoForm.hora} className="w-full gradient-primary text-primary-foreground">
+                Confirmar Retorno
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -298,6 +298,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           tipoConselho: f.tipo_conselho || '',
           numeroConselho: f.numero_conselho || '',
           ufConselho: f.uf_conselho || '',
+          podeAgendarRetorno: f.pode_agendar_retorno ?? false,
         }));
         setFuncionarios(mapped);
       }

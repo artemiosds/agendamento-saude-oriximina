@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plus, Pencil, Trash2, Loader2, CalendarCheck } from 'lucide-react';
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,10 +42,11 @@ interface FuncionarioDB {
   tipo_conselho: string;
   numero_conselho: string;
   uf_conselho: string;
+  pode_agendar_retorno: boolean;
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas, refreshFuncionarios } = useData();
+  const { unidades, salas, refreshFuncionarios, logAction } = useData();
   const { hasPermission, user } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +55,7 @@ const Funcionarios: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
-    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '',
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false,
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
@@ -94,13 +96,14 @@ const Funcionarios: React.FC = () => {
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
+      pode_agendar_retorno: f.pode_agendar_retorno ?? false,
     });
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '' });
+    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false });
     setDialogOpen(true);
   };
 
@@ -129,6 +132,7 @@ const Funcionarios: React.FC = () => {
           tipo_conselho: form.tipo_conselho,
           numero_conselho: form.numero_conselho,
           uf_conselho: form.uf_conselho,
+          pode_agendar_retorno: form.pode_agendar_retorno,
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -166,6 +170,7 @@ const Funcionarios: React.FC = () => {
             tipo_conselho: form.tipo_conselho,
             numero_conselho: form.numero_conselho,
             uf_conselho: form.uf_conselho,
+            pode_agendar_retorno: form.pode_agendar_retorno,
             criado_por: user?.id || '',
           },
         });
@@ -331,6 +336,20 @@ const Funcionarios: React.FC = () => {
                 </div>
               </>
             )}
+            {form.role === 'profissional' && canManage && (
+              <div className="border-t pt-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold">Permissão de Retorno</Label>
+                    <p className="text-xs text-muted-foreground">Permitir que este profissional agende retorno de paciente</p>
+                  </div>
+                  <Switch
+                    checked={form.pode_agendar_retorno}
+                    onCheckedChange={v => setForm(p => ({ ...p, pode_agendar_retorno: v }))}
+                  />
+                </div>
+              </div>
+            )}
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editId ? 'Salvar' : 'Cadastrar'}
@@ -363,6 +382,9 @@ const Funcionarios: React.FC = () => {
                       <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
                     )}
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
+                    {f.role === 'profissional' && f.pode_agendar_retorno && (
+                      <Badge variant="outline" className="text-xs mt-1 border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-1" />Retorno</Badge>
+                    )}
                     {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
                   </div>
                   <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>

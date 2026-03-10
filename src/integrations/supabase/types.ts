@@ -355,6 +355,7 @@ export type Database = {
           id: string
           nome: string
           numero_conselho: string
+          pode_agendar_retorno: boolean
           profissao: string
           role: string
           sala_id: string | null
@@ -375,6 +376,7 @@ export type Database = {
           id?: string
           nome: string
           numero_conselho?: string
+          pode_agendar_retorno?: boolean
           profissao?: string
           role?: string
           sala_id?: string | null
@@ -395,6 +397,7 @@ export type Database = {
           id?: string
           nome?: string
           numero_conselho?: string
+          pode_agendar_retorno?: boolean
           profissao?: string
           role?: string
           sala_id?: string | null

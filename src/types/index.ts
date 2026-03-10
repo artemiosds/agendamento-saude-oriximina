@@ -20,6 +20,7 @@ export interface User {
   tipoConselho?: string;
   numeroConselho?: string;
   ufConselho?: string;
+  podeAgendarRetorno?: boolean;
 }
 
 export interface Prontuario {
