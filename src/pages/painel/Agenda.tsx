@@ -53,7 +53,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -63,6 +63,9 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterUnit, setFilterUnit] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
+  const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
+  const [retornoForm, setRetornoForm] = useState({ data: '', hora: '' });
   const [newAg, setNewAg] = useState({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
 
   const isProfissional = user?.role === 'profissional';
