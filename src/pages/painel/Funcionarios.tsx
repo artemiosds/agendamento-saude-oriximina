@@ -382,6 +382,9 @@ const Funcionarios: React.FC = () => {
                       <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
                     )}
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
+                    {f.role === 'profissional' && f.pode_agendar_retorno && (
+                      <Badge variant="outline" className="text-xs mt-1 border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-1" />Retorno</Badge>
+                    )}
                     {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
                   </div>
                   <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>

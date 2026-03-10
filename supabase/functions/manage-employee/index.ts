@@ -79,6 +79,7 @@ serve(async (req) => {
           tipo_conselho: tipo_conselho || "",
           numero_conselho: numero_conselho || "",
           uf_conselho: uf_conselho || "",
+          pode_agendar_retorno: pode_agendar_retorno ?? false,
         })
         .select()
         .single();
