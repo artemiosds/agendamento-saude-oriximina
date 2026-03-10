@@ -336,6 +336,20 @@ const Funcionarios: React.FC = () => {
                 </div>
               </>
             )}
+            {form.role === 'profissional' && canManage && (
+              <div className="border-t pt-3 mt-2">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold">Permissão de Retorno</Label>
+                    <p className="text-xs text-muted-foreground">Permitir que este profissional agende retorno de paciente</p>
+                  </div>
+                  <Switch
+                    checked={form.pode_agendar_retorno}
+                    onCheckedChange={v => setForm(p => ({ ...p, pode_agendar_retorno: v }))}
+                  />
+                </div>
+              </div>
+            )}
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editId ? 'Salvar' : 'Cadastrar'}
