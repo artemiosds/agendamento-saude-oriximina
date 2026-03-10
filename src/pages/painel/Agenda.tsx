@@ -534,6 +534,23 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           );
         })}
       </div>
+
+      {/* Retorno Dialog */}
+      <Dialog open={retornoDialogOpen} onOpenChange={setRetornoDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle className="font-display">Agendar Retorno</DialogTitle></DialogHeader>
+          {retornoAg && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Paciente: <strong className="text-foreground">{retornoAg.pacienteNome}</strong></p>
+              <div><Label>Data</Label><Input type="date" value={retornoForm.data} onChange={e => setRetornoForm(p => ({ ...p, data: e.target.value }))} /></div>
+              <div><Label>Horário</Label><Input type="time" value={retornoForm.hora} onChange={e => setRetornoForm(p => ({ ...p, hora: e.target.value }))} /></div>
+              <Button onClick={handleAgendarRetorno} disabled={!retornoForm.data || !retornoForm.hora} className="w-full gradient-primary text-primary-foreground">
+                Confirmar Retorno
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
