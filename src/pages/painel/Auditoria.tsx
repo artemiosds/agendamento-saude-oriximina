@@ -126,7 +126,7 @@ const Auditoria: React.FC = () => {
 
       const { data, count, error } = await query;
       if (error) throw error;
-      setLogs((data as LogEntry[]) || []);
+      setLogs((data as unknown as LogEntry[]) || []);
       setTotalCount(count || 0);
     } catch (err) {
       console.error('Error loading logs:', err);
