@@ -16,6 +16,8 @@ import {
   Brain,
   Apple,
   User,
+  HeartHandshake,
+  HandMetal,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import logoSms from "@/assets/logo-sms.jpeg";
@@ -28,6 +30,9 @@ const services = [
   { icon: Activity, title: "Fisioterapia", desc: "Reabilitação e movimento" },
   { icon: Brain, title: "Psicologia", desc: "Saúde mental e bem-estar" },
   { icon: Apple, title: "Nutrição", desc: "Orientação alimentar" },
+  { icon: Baby, title: "Odontopediatria", desc: "Saúde bucal infantil" },
+  { icon: HeartHandshake, title: "Assistência Social", desc: "Apoio e orientação social" },
+  { icon: HandMetal, title: "Terapia Ocupacional", desc: "Reabilitação funcional" },
 ];
 
 const Home: React.FC = () => {
