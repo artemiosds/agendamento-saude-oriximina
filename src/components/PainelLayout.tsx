@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
-  Activity, CalendarClock, Stethoscope
+  Activity, CalendarClock, Stethoscope, ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,7 @@ const menuItems = [
   { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, roles: ['master', 'coordenador'] },
   { to: '/painel/unidades', label: 'Unidades/Salas', icon: Building2, roles: ['master', 'coordenador'] },
   { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: Activity, roles: ['master', 'coordenador'] },
+  { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ];
 

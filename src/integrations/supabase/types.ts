@@ -21,8 +21,12 @@ export type Database = {
           detalhes: Json
           entidade: string
           entidade_id: string
+          erro: string | null
           id: string
+          ip: string | null
+          modulo: string
           role: string
+          status: string
           unidade_id: string
           user_id: string
           user_nome: string
@@ -33,8 +37,12 @@ export type Database = {
           detalhes?: Json
           entidade: string
           entidade_id?: string
+          erro?: string | null
           id?: string
+          ip?: string | null
+          modulo?: string
           role?: string
+          status?: string
           unidade_id?: string
           user_id?: string
           user_nome?: string
@@ -45,8 +53,12 @@ export type Database = {
           detalhes?: Json
           entidade?: string
           entidade_id?: string
+          erro?: string | null
           id?: string
+          ip?: string | null
+          modulo?: string
           role?: string
+          status?: string
           unidade_id?: string
           user_id?: string
           user_nome?: string

@@ -112,7 +112,7 @@ interface DataContextType {
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
-  logAction: (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string }) => Promise<void>;
+  logAction: (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string; modulo?: string; status?: string; erro?: string }) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -167,7 +167,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
-  const logAction = useCallback(async (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string }) => {
+  const logAction = useCallback(async (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string; modulo?: string; status?: string; erro?: string }) => {
     try {
       const actor = input.user;
       await supabase.from('action_logs' as any).insert({
@@ -179,6 +179,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         entidade: input.entidade,
         entidade_id: input.entidadeId || '',
         detalhes: input.detalhes || {},
+        modulo: input.modulo || input.entidade || '',
+        status: input.status || 'sucesso',
+        erro: input.erro || '',
       } as any);
     } catch (err) {
       console.error('Error writing action log:', err);

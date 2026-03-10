@@ -1,0 +1,6 @@
+
+ALTER TABLE public.action_logs
+  ADD COLUMN IF NOT EXISTS modulo text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'sucesso',
+  ADD COLUMN IF NOT EXISTS erro text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS ip text DEFAULT '';
