@@ -304,6 +304,45 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     navigate(`/painel/prontuario?${params.toString()}`);
   };
 
+  const handleAgendarRetorno = async () => {
+    if (!retornoAg || !retornoForm.data || !retornoForm.hora || !user) return;
+    const agId = `ag${Date.now()}`;
+    const pac = pacientes.find(p => p.id === retornoAg.pacienteId);
+    const unidade = unidades.find(u => u.id === user.unidadeId);
+    const agData = {
+      id: agId, pacienteId: retornoAg.pacienteId, pacienteNome: retornoAg.pacienteNome,
+      unidadeId: user.unidadeId, salaId: user.salaId || '', setorId: '',
+      profissionalId: user.id, profissionalNome: user.nome,
+      data: retornoForm.data, hora: retornoForm.hora, status: 'confirmado' as const,
+      tipo: 'Retorno', observacoes: 'Retorno agendado pelo profissional',
+      origem: 'recepcao' as const, criadoEm: new Date().toISOString(), criadoPor: user.id,
+    };
+    await addAgendamento(agData);
+    await logAction({ acao: 'agendar_retorno', entidade: 'agendamento', entidadeId: agId, modulo: 'agendamento', detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora }, user });
+
+    // Notify patient
+    if (pac) {
+      await notify({
+        evento: 'novo_agendamento', paciente_nome: pac.nome, telefone: pac.telefone,
+        email: pac.email, data_consulta: retornoForm.data, hora_consulta: retornoForm.hora,
+        unidade: unidade?.nome || '', profissional: user.nome,
+        tipo_atendimento: 'Retorno', status_agendamento: 'confirmado',
+        id_agendamento: agId, observacoes: 'Retorno agendado pelo profissional',
+      });
+      // Ensure portal access
+      ensurePortalAccess({
+        pacienteId: pac.id, contexto: 'agendamento',
+        data: retornoForm.data, hora: retornoForm.hora,
+        unidade: unidade?.nome || '', profissional: user.nome, tipo: 'Retorno',
+      }).catch(() => {});
+    }
+
+    toast.success('Retorno agendado com sucesso!');
+    setRetornoDialogOpen(false);
+    setRetornoAg(null);
+    setRetornoForm({ data: '', hora: '' });
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
