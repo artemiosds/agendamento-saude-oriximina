@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
-  Activity, CalendarClock, Stethoscope
+  Activity, CalendarClock, Stethoscope, ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
