@@ -69,6 +69,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [newAg, setNewAg] = useState({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
 
   const isProfissional = user?.role === 'profissional';
+  const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
 
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
