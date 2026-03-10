@@ -96,6 +96,7 @@ const Funcionarios: React.FC = () => {
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
+      pode_agendar_retorno: f.pode_agendar_retorno ?? false,
     });
     setDialogOpen(true);
   };
