@@ -487,6 +487,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
                     </Button>
                   )}
+                  {/* Retorno button for authorized professionals */}
+                  {canRetorno && ag.status === 'concluido' && (
+                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs border-accent text-accent-foreground" onClick={() => {
+                      setRetornoAg({ pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome });
+                      setRetornoForm({ data: '', hora: '' });
+                      setRetornoDialogOpen(true);
+                    }}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
+                    </Button>
+                  )}
                   {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
                     statusActions.map(sa => (
                       <Button key={sa.key} size="sm" variant="outline" className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
