@@ -22,6 +22,7 @@ import UnidadesSalas from "./pages/painel/UnidadesSalas";
 import Disponibilidade from "./pages/painel/Disponibilidade";
 import Configuracoes from "./pages/painel/Configuracoes";
 import Prontuario from "./pages/painel/Prontuario";
+import Auditoria from "./pages/painel/Auditoria";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
