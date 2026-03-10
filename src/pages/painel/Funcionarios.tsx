@@ -132,6 +132,7 @@ const Funcionarios: React.FC = () => {
           tipo_conselho: form.tipo_conselho,
           numero_conselho: form.numero_conselho,
           uf_conselho: form.uf_conselho,
+          pode_agendar_retorno: form.pode_agendar_retorno,
         };
         if (form.senha) updateData.senha = form.senha;
 
