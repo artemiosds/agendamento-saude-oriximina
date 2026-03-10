@@ -1,0 +1,1 @@
+ALTER TABLE public.funcionarios ADD COLUMN pode_agendar_retorno boolean NOT NULL DEFAULT false;
