@@ -112,7 +112,7 @@ interface DataContextType {
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
-  logAction: (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string }) => Promise<void>;
+  logAction: (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string; modulo?: string; status?: string; erro?: string }) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
