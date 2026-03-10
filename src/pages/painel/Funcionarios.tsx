@@ -46,7 +46,7 @@ interface FuncionarioDB {
 }
 
 const Funcionarios: React.FC = () => {
-  const { unidades, salas, refreshFuncionarios } = useData();
+  const { unidades, salas, refreshFuncionarios, logAction } = useData();
   const { hasPermission, user } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ const Funcionarios: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
-    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '',
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false,
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
