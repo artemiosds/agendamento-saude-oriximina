@@ -614,3 +614,4 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 };
 
 export default Agenda;
+
