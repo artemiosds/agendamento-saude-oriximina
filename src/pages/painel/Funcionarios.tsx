@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Loader2, CalendarCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff } from 'lucide-react';
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';

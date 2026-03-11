@@ -52,6 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           tipoConselho: data.tipo_conselho || '',
           numeroConselho: data.numero_conselho || '',
           ufConselho: data.uf_conselho || '',
+          podeAgendarRetorno: data.pode_agendar_retorno ?? false,
         });
       }
     } catch (err) {
