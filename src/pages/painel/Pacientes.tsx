@@ -120,7 +120,14 @@ const Pacientes: React.FC = () => {
           <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
           <p className="text-muted-foreground text-sm">{visiblePacientes.length} cadastrados</p>
         </div>
-        <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+        <div className="flex gap-2">
+          {canImportCSV && (
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileDown className="w-4 h-4 mr-2" /> Importar CSV
+            </Button>
+          )}
+          <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setErrors({}); }}>
