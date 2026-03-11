@@ -71,6 +71,25 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
 
+  // Available slots for new appointment dialog (internal)
+  const newAgSlots = React.useMemo(() => {
+    if (!newAg.profissionalId) return [];
+    const prof = profissionais.find(p => p.id === newAg.profissionalId);
+    if (!prof?.unidadeId) return [];
+    return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
+  }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
+
+  // Available dates/slots for retorno dialog
+  const retornoAvailableDates = React.useMemo(() => {
+    if (!user || !retornoDialogOpen) return [];
+    return getAvailableDates(user.id, user.unidadeId);
+  }, [user, retornoDialogOpen, getAvailableDates]);
+
+  const retornoAvailableSlots = React.useMemo(() => {
+    if (!user || !retornoForm.data) return [];
+    return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
+  }, [user, retornoForm.data, getAvailableSlots]);
+
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
