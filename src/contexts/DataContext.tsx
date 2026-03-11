@@ -402,6 +402,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           horaChamada: f.hora_chamada || '',
           observacoes: f.observacoes || '',
           criadoPor: f.criado_por || '',
+          criadoEm: f.criado_em || '',
         }));
         setFila(mapped);
       }

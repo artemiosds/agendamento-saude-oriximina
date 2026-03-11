@@ -61,6 +61,37 @@ interface ReservaInfo {
   expiresAt: number;
 }
 
+// Calculate wait time in minutes from criadoEm or horaChegada
+const getWaitMinutes = (f: { criadoEm?: string; horaChegada: string }, nowMs: number): number => {
+  if (f.criadoEm) {
+    const entryTime = new Date(f.criadoEm).getTime();
+    if (!isNaN(entryTime)) return Math.floor((nowMs - entryTime) / 60000);
+  }
+  // Fallback: parse horaChegada as today's time
+  const [h, m] = f.horaChegada.split(':').map(Number);
+  if (!isNaN(h) && !isNaN(m)) {
+    const today = new Date();
+    today.setHours(h, m, 0, 0);
+    return Math.max(0, Math.floor((nowMs - today.getTime()) / 60000));
+  }
+  return 0;
+};
+
+// Get color indicator: green (<30min), yellow (30-60), red (>60 or urgente)
+const getWaitColor = (minutes: number, prioridade: string): { bg: string; text: string; label: string } => {
+  if (prioridade === 'urgente') return { bg: 'bg-destructive', text: 'text-destructive-foreground', label: 'Urgente' };
+  if (minutes > 60) return { bg: 'bg-destructive', text: 'text-destructive-foreground', label: `${minutes}min` };
+  if (minutes >= 30) return { bg: 'bg-warning', text: 'text-warning-foreground', label: `${minutes}min` };
+  return { bg: 'bg-success', text: 'text-success-foreground', label: `${minutes}min` };
+};
+
+const formatWaitTime = (minutes: number): string => {
+  if (minutes < 60) return `${minutes}min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${m}min` : `${h}h`;
+};
+
 const FilaEspera: React.FC = () => {
   const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades, addPaciente, refreshPacientes, logAction } = useData();
   const { user, hasPermission } = useAuth();
@@ -75,6 +106,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [now, setNow] = useState(Date.now());
 
@@ -127,19 +159,47 @@ const FilaEspera: React.FC = () => {
   }, [now, reservas, fila, expirarReserva, user]);
 
   const filteredFila = useMemo(() => {
+    const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
+
     return [...fila]
       .filter(f => filterUnidade === 'all' || f.unidadeId === filterUnidade)
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
       .sort((a, b) => {
-        const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
-        if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6)) return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
+        if (sortField === 'prioridade') {
+          if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
+            return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
+          return a.horaChegada.localeCompare(b.horaChegada);
+        }
+        if (sortField === 'tempo') {
+          const aMin = getWaitMinutes(a, now);
+          const bMin = getWaitMinutes(b, now);
+          return bMin - aMin; // longest wait first
+        }
+        // entrada
         return a.horaChegada.localeCompare(b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
 
+  // Summary stats
+  const activeQueue = fila.filter(f => ['aguardando', 'chamado', 'em_atendimento'].includes(f.status));
   const aguardandoCount = fila.filter(f => f.status === 'aguardando').length;
   const chamadoCount = fila.filter(f => f.status === 'chamado').length;
+  const emAtendimentoCount = fila.filter(f => f.status === 'em_atendimento').length;
+
+  const greenCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return false;
+    return getWaitMinutes(f, now) < 30;
+  }).length;
+  const yellowCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return false;
+    const m = getWaitMinutes(f, now);
+    return m >= 30 && m <= 60;
+  }).length;
+  const redCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return true;
+    return getWaitMinutes(f, now) > 60;
+  }).length;
 
   const openNew = () => {
     setEditId(null);
@@ -348,7 +408,7 @@ const FilaEspera: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Fila de Espera</h1>
           <p className="text-muted-foreground text-sm">
-            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`}
+            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`} {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -368,8 +428,47 @@ const FilaEspera: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {/* Summary indicators panel */}
+      {activeQueue.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-success-foreground font-bold text-sm">
+                {greenCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Recentes</p>
+                <p className="text-xs text-muted-foreground">&lt; 30 min</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-warning flex items-center justify-center text-warning-foreground font-bold text-sm">
+                {yellowCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Atenção</p>
+                <p className="text-xs text-muted-foreground">30–60 min</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-destructive flex items-center justify-center text-destructive-foreground font-bold text-sm">
+                {redCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Crítico</p>
+                <p className="text-xs text-muted-foreground">&gt; 60 min / Urgente</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Filters + Sort */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
           <SelectContent>
@@ -395,6 +494,14 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="atendido">Atendido</SelectItem>
             <SelectItem value="falta">Faltou</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortField} onValueChange={v => setSortField(v as any)}>
+          <SelectTrigger><SelectValue placeholder="Ordenar por" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="prioridade">Prioridade</SelectItem>
+            <SelectItem value="tempo">Tempo de espera</SelectItem>
+            <SelectItem value="entrada">Data de entrada</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -597,15 +704,41 @@ const FilaEspera: React.FC = () => {
           const unidade = unidades.find(u => u.id === f.unidadeId);
           const reservaTime = getReservaTimeLeft(f.id);
           const isChamado = f.status === 'chamado';
+          const isActive = ['aguardando', 'chamado', 'em_atendimento'].includes(f.status);
+          const waitMin = getWaitMinutes(f, now);
+          const waitColor = getWaitColor(waitMin, f.prioridade);
 
           return (
-            <Card key={f.id} className={cn('shadow-card border-0', isChamado && 'ring-2 ring-primary/30')}>
+            <Card key={f.id} className={cn(
+              'shadow-card border-0 transition-all',
+              isChamado && 'ring-2 ring-primary/30',
+              isActive && waitMin > 60 && 'border-l-4 border-l-destructive',
+              isActive && waitMin >= 30 && waitMin <= 60 && 'border-l-4 border-l-warning',
+              isActive && waitMin < 30 && f.prioridade !== 'urgente' && 'border-l-4 border-l-success',
+              isActive && f.prioridade === 'urgente' && 'border-l-4 border-l-destructive',
+            )}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                  {i + 1}
+                {/* Position + wait time indicator */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className={cn('w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm', isActive ? `${waitColor.bg} ${waitColor.text}` : 'gradient-primary text-primary-foreground')}>
+                    {i + 1}
+                  </div>
+                  {isActive && (
+                    <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
+                      {formatWaitTime(waitMin)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                    {isActive && (
+                      <span className={cn('inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
+                        <Clock className="w-3 h-3" />
+                        {f.prioridade === 'urgente' ? 'URGENTE' : `Espera: ${formatWaitTime(waitMin)}`}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? prof.nome : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
