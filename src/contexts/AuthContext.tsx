@@ -85,6 +85,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, [loadProfile]);
 
+  const getDeviceInfo = useCallback(() => {
+    const ua = navigator.userAgent;
+    let browser = 'Desconhecido';
+    let os = 'Desconhecido';
+    if (ua.includes('Firefox')) browser = 'Firefox';
+    else if (ua.includes('Edg')) browser = 'Edge';
+    else if (ua.includes('Chrome')) browser = 'Chrome';
+    else if (ua.includes('Safari')) browser = 'Safari';
+    if (ua.includes('Windows')) os = 'Windows';
+    else if (ua.includes('Mac')) os = 'macOS';
+    else if (ua.includes('Linux')) os = 'Linux';
+    else if (ua.includes('Android')) os = 'Android';
+    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+    return `${browser} / ${os}`;
+  }, []);
+
+  const logAuthAction = useCallback(async (acao: string, userData?: User | null, extra?: Record<string, unknown>) => {
+    try {
+      await supabase.from('action_logs' as any).insert({
+        user_id: userData?.id || '',
+        user_nome: userData?.nome || 'sistema',
+        role: userData?.role || 'sistema',
+        unidade_id: userData?.unidadeId || '',
+        acao,
+        entidade: 'auth',
+        entidade_id: '',
+        detalhes: { ...extra, usuario_cpf: userData?.cpf || '', dispositivo: getDeviceInfo() },
+        modulo: 'auth',
+        status: acao.includes('falha') ? 'erro' : 'sucesso',
+        erro: '',
+        ip: '',
+      } as any);
+    } catch (err) {
+      console.error('Error logging auth action:', err);
+    }
+  }, [getDeviceInfo]);
+
   const login = useCallback(async (usuario: string, senha: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('auth-login', {
@@ -102,10 +139,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }
         } catch (_) { /* fallback to generic */ }
+
+        // Log LOGIN_FALHA
+        await logAuthAction('login_falha', null, { usuario_tentado: usuario.trim(), erro: errorMsg });
+
         return { success: false, error: errorMsg };
       }
 
       if (data?.error) {
+        await logAuthAction('login_falha', null, { usuario_tentado: usuario.trim(), erro: data.error });
         return { success: false, error: data.error };
       }
 
@@ -117,19 +159,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data?.user) {
-        setUser({
+        const loggedUser: User = {
           ...data.user,
+          cpf: data.user.cpf || '',
           criadoEm: '',
           criadoPor: '',
-        });
+        };
+        setUser(loggedUser);
+
+        // Log LOGIN_SUCESSO
+        await logAuthAction('login_sucesso', loggedUser);
       }
 
       return { success: true };
     } catch (err) {
       console.error('Login error:', err);
+      await logAuthAction('login_falha', null, { usuario_tentado: usuario.trim(), erro: 'Erro ao conectar ao servidor.' });
       return { success: false, error: 'Erro ao conectar ao servidor.' };
     }
-  }, []);
+  }, [logAuthAction]);
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
