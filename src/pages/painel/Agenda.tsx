@@ -291,6 +291,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
     await updateAgendamento(ag.id, { status: 'em_atendimento' });
 
+    const pac = pacientes.find(p => p.id === ag.pacienteId);
+
     try {
       await (supabase as any).from('atendimentos').insert({
         agendamento_id: ag.id, paciente_id: ag.pacienteId,
@@ -311,6 +313,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       unidadeId: ag.unidadeId, salaId: ag.salaId, setor: user?.setor || '',
       procedimento: ag.tipo, observacoes: '', data: ag.data,
       horaInicio, horaFim: '', status: 'em_atendimento',
+    });
+
+    // Log ATENDIMENTO_INICIADO
+    await logAction({
+      acao: 'atendimento_iniciado', entidade: 'atendimento', entidadeId: ag.id,
+      modulo: 'atendimento', user,
+      detalhes: {
+        paciente_nome: ag.pacienteNome, paciente_cpf: pac?.cpf || '',
+        hora_inicio: horaInicio, unidade: ag.unidadeId, sala: ag.salaId || '',
+      },
     });
 
     toast.success('Atendimento iniciado!');

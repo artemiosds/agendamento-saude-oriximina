@@ -7,6 +7,7 @@ export interface User {
   usuario: string;
   email: string;
   senha?: string;
+  cpf?: string;
   setor: string;
   unidadeId: string;
   salaId?: string;

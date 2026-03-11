@@ -71,6 +71,7 @@ const ProntuarioPage: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
   const [search, setSearch] = useState('');
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
@@ -165,7 +166,7 @@ const ProntuarioPage: React.FC = () => {
   const openEdit = (p: ProntuarioDB) => {
     setEditId(p.id);
     setActiveAtendimento(null);
-    setForm({
+    const formData = {
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
       agendamento_id: p.agendamento_id || '',
@@ -181,8 +182,18 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || '',
       evolucao: p.evolucao || '',
       observacoes: p.observacoes || '',
-    });
+    };
+    setForm(formData);
+    setPreviousForm(formData);
     setDialogOpen(true);
+
+    // Log PRONTUARIO_VISUALIZADO
+    const pac = pacientes.find(px => px.id === p.paciente_id);
+    logAction({
+      acao: 'prontuario_visualizado', entidade: 'prontuario', entidadeId: p.id,
+      modulo: 'prontuario', user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || '' },
+    });
   };
 
   const handleSave = async () => {
@@ -215,17 +226,51 @@ const ProntuarioPage: React.FC = () => {
         observacoes: form.observacoes,
       };
 
+      const pac = pacientes.find(px => px.id === (form.paciente_id || record.paciente_id));
+
       if (editId) {
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', editId);
         if (error) throw error;
+
+        // Log PRONTUARIO_EDITADO with field-level diffs
+        const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
+        if (previousForm) {
+          const fieldLabels: Record<string, string> = {
+            queixa_principal: 'Queixa Principal', anamnese: 'Anamnese', sinais_sintomas: 'Sinais/Sintomas',
+            exame_fisico: 'Exame Físico', hipotese: 'Hipótese', conduta: 'Conduta',
+            prescricao: 'Prescrição', solicitacao_exames: 'Solicitação Exames', evolucao: 'Evolução', observacoes: 'Observações',
+          };
+          for (const [key, label] of Object.entries(fieldLabels)) {
+            const prev = (previousForm as any)[key] || '';
+            const curr = (form as any)[key] || '';
+            if (prev !== curr) {
+              camposAlterados[label] = { anterior: prev.substring(0, 200), novo: curr.substring(0, 200) };
+            }
+          }
+        }
+        await logAction({
+          acao: 'prontuario_editado', entidade: 'prontuario', entidadeId: editId,
+          modulo: 'prontuario', user,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '', campos_alterados: camposAlterados },
+        });
+
         toast.success('Prontuário atualizado!');
       } else {
-        const { error } = await (supabase as any).from('prontuarios').insert(record);
+        const { data: inserted, error } = await (supabase as any).from('prontuarios').insert(record).select('id').single();
         if (error) throw error;
+
+        // Log PRONTUARIO_CRIADO
+        await logAction({
+          acao: 'prontuario_criado', entidade: 'prontuario', entidadeId: inserted?.id || '',
+          modulo: 'prontuario', user,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '' },
+        });
+
         toast.success('Prontuário criado!');
       }
 
       setDialogOpen(false);
+      setPreviousForm(null);
       await loadProntuarios();
     } catch (err: any) {
       toast.error('Erro ao salvar: ' + (err?.message || 'erro desconhecido'));
@@ -245,6 +290,8 @@ const ProntuarioPage: React.FC = () => {
     const [hf, mf] = horaFim.split(':').map(Number);
     const duracaoMinutos = (hf * 60 + mf) - (hi * 60 + mi);
 
+    const pac = pacientes.find(px => px.id === form.paciente_id);
+
     try {
       await (supabase as any).from('atendimentos')
         .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: 'finalizado' })
@@ -252,6 +299,18 @@ const ProntuarioPage: React.FC = () => {
     } catch (err) {
       console.error('Error finalizing atendimento:', err);
     }
+
+    // Log ATENDIMENTO_FINALIZADO
+    await logAction({
+      acao: 'atendimento_finalizado', entidade: 'atendimento', entidadeId: activeAtendimento.agendamentoId,
+      modulo: 'atendimento', user,
+      detalhes: {
+        paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '',
+        hora_inicio: activeAtendimento.horaInicio, hora_fim: horaFim,
+        duracao_minutos: Math.max(0, duracaoMinutos),
+        unidade: user?.unidadeId || '', sala: user?.salaId || '',
+      },
+    });
 
     // Clean up localStorage timer
     localStorage.removeItem(`timer_${activeAtendimento.agendamentoId}`);
@@ -280,6 +339,12 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
+    const pac = pacientes.find(px => px.id === p.paciente_id);
+    logAction({
+      acao: 'prontuario_exportado_pdf', entidade: 'prontuario', entidadeId: p.id,
+      modulo: 'prontuario', user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || '' },
+    });
     const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
 
     const sections = [
