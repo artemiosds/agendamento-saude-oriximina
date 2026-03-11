@@ -12,9 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer } from 'lucide-react';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { validatePacienteFields } from '@/lib/validation';
 
 const prioridadeColors: Record<string, string> = {
   normal: 'bg-muted text-muted-foreground',
@@ -61,7 +62,7 @@ interface ReservaInfo {
 }
 
 const FilaEspera: React.FC = () => {
-  const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades } = useData();
+  const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades, addPaciente, refreshPacientes, logAction } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
@@ -76,6 +77,12 @@ const FilaEspera: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [now, setNow] = useState(Date.now());
+
+  // New patient creation mode
+  const [criarPaciente, setCriarPaciente] = useState(false);
+  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+  const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
+  const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '',
@@ -101,7 +108,7 @@ const FilaEspera: React.FC = () => {
     const interval = setInterval(() => {
       setNow(Date.now());
       loadReservas();
-    }, 15000); // refresh every 15s
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -137,6 +144,10 @@ const FilaEspera: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '' });
+    setCriarPaciente(false);
+    setNovoPaciente({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+    setDuplicataEncontrada(null);
+    setPacienteErrors({});
     setDialogOpen(true);
   };
 
@@ -146,7 +157,144 @@ const FilaEspera: React.FC = () => {
       pacienteNome: f.pacienteNome, pacienteId: f.pacienteId, unidadeId: f.unidadeId,
       profissionalId: f.profissionalId || '', setor: f.setor, prioridade: f.prioridade, observacoes: f.observacoes || '',
     });
+    setCriarPaciente(false);
+    setDuplicataEncontrada(null);
+    setPacienteErrors({});
     setDialogOpen(true);
+  };
+
+  // Check for duplicate patients
+  const checkDuplicidade = (dados: typeof novoPaciente) => {
+    const cpfClean = dados.cpf.replace(/\D/g, '');
+    const telClean = dados.telefone.replace(/\D/g, '');
+    const emailLower = dados.email.toLowerCase().trim();
+
+    if (cpfClean.length >= 11) {
+      const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
+      if (found) return found;
+    }
+    if (telClean.length >= 8) {
+      const found = pacientes.find(p => p.telefone.replace(/\D/g, '') === telClean);
+      if (found) return found;
+    }
+    if (emailLower && emailLower.includes('@')) {
+      const found = pacientes.find(p => p.email.toLowerCase().trim() === emailLower);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const handleCriarPacienteEAdicionarFila = async () => {
+    // Validate patient fields
+    const err = validatePacienteFields({ nome: novoPaciente.nome, telefone: novoPaciente.telefone, email: novoPaciente.email });
+    if (err) {
+      const newErrors: Record<string, string> = {};
+      if (err.includes('Nome')) newErrors.nome = err;
+      else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
+      else if (err.includes('mail')) newErrors.email = err;
+      setPacienteErrors(newErrors);
+      toast.error(err);
+      return;
+    }
+    setPacienteErrors({});
+
+    // Check duplicates before creating
+    const dup = checkDuplicidade(novoPaciente);
+    if (dup) {
+      setDuplicataEncontrada(dup);
+      return;
+    }
+
+    // Create patient
+    const pacienteId = `p${Date.now()}`;
+    try {
+      await addPaciente({
+        id: pacienteId,
+        nome: novoPaciente.nome,
+        cpf: novoPaciente.cpf,
+        telefone: novoPaciente.telefone,
+        email: novoPaciente.email,
+        dataNascimento: novoPaciente.dataNascimento,
+        endereco: novoPaciente.endereco,
+        observacoes: '',
+        criadoEm: new Date().toISOString(),
+      });
+
+      await logAction({
+        acao: 'criar', entidade: 'paciente', entidadeId: pacienteId,
+        detalhes: { nome: novoPaciente.nome, origem: 'fila_espera' }, user,
+      });
+
+      // Set patient in form and proceed
+      setForm(prev => ({ ...prev, pacienteNome: novoPaciente.nome, pacienteId }));
+      setCriarPaciente(false);
+      toast.success(`Paciente ${novoPaciente.nome} cadastrado!`);
+
+      // Now add to queue
+      await addToFilaWithPatient(pacienteId, novoPaciente.nome, novoPaciente.telefone, novoPaciente.email);
+    } catch {
+      toast.error('Erro ao cadastrar paciente.');
+    }
+  };
+
+  const usarPacienteExistente = (p: typeof pacientes[0]) => {
+    setForm(prev => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }));
+    setCriarPaciente(false);
+    setDuplicataEncontrada(null);
+    toast.info(`Paciente ${p.nome} selecionado.`);
+  };
+
+  const addToFilaWithPatient = async (pacienteId: string, pacienteNome: string, telefone: string, email: string) => {
+    if (!form.unidadeId) {
+      toast.error('Selecione a unidade antes de adicionar.');
+      return;
+    }
+
+    const newId = `f${Date.now()}`;
+    await addToFila({
+      id: newId, pacienteId, pacienteNome,
+      unidadeId: form.unidadeId,
+      profissionalId: form.profissionalId,
+      setor: form.setor,
+      prioridade: form.prioridade as any,
+      status: 'aguardando', posicao: fila.length + 1,
+      horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      criadoPor: user?.id || 'sistema',
+      observacoes: form.observacoes,
+    });
+
+    const unidade = unidades.find(u => u.id === form.unidadeId);
+    const prof = form.profissionalId ? funcionarios.find(f => f.id === form.profissionalId) : null;
+
+    // Ensure portal access
+    ensurePortalAccess({
+      pacienteId,
+      contexto: 'fila',
+      unidade: unidade?.nome || '',
+      profissional: prof?.nome || '',
+      posicaoFila: fila.length + 1,
+    }).then(result => {
+      if (result.created) toast.info(`Acesso ao portal criado para ${pacienteNome}. ${result.emailSent ? 'E-mail enviado.' : ''}`);
+    }).catch(() => {});
+
+    await notify({
+      evento: 'fila_entrada',
+      paciente_nome: pacienteNome, telefone,
+      email, data_consulta: new Date().toISOString().split('T')[0],
+      hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      unidade: unidade?.nome || '', profissional: prof?.nome || '',
+      tipo_atendimento: 'Fila de Espera', status_agendamento: 'aguardando',
+      id_agendamento: '',
+    });
+
+    await logAction({
+      acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
+      detalhes: { pacienteNome, unidade: unidade?.nome }, user,
+      modulo: 'fila_espera',
+    });
+
+    toast.success('Paciente adicionado à fila!');
+    setDialogOpen(false);
   };
 
   const handleSave = async () => {
@@ -158,44 +306,11 @@ const FilaEspera: React.FC = () => {
     if (editId) {
       await updateFila(editId, { ...form, prioridade: form.prioridade as any });
       toast.success('Registro atualizado!');
+      setDialogOpen(false);
     } else {
-      const newId = `f${Date.now()}`;
-      await addToFila({
-        id: newId, ...form,
-        prioridade: form.prioridade as any,
-        status: 'aguardando', posicao: fila.length + 1,
-        horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        criadoPor: user?.id || 'sistema',
-      });
       const pac = pacientes.find(p => p.id === form.pacienteId);
-      const unidade = unidades.find(u => u.id === form.unidadeId);
-      const prof = form.profissionalId ? funcionarios.find(f => f.id === form.profissionalId) : null;
-
-      // Ensure portal access for patient
-      if (form.pacienteId) {
-        ensurePortalAccess({
-          pacienteId: form.pacienteId,
-          contexto: 'fila',
-          unidade: unidade?.nome || '',
-          profissional: prof?.nome || '',
-          posicaoFila: fila.length + 1,
-        }).then(result => {
-          if (result.created) toast.info(`Acesso ao portal criado para ${form.pacienteNome}. ${result.emailSent ? 'E-mail enviado.' : ''}`);
-        }).catch(() => {});
-      }
-
-      await notify({
-        evento: 'fila_entrada',
-        paciente_nome: form.pacienteNome, telefone: pac?.telefone || '',
-        email: pac?.email || '', data_consulta: new Date().toISOString().split('T')[0],
-        hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        unidade: unidade?.nome || '', profissional: prof?.nome || '',
-        tipo_atendimento: 'Fila de Espera', status_agendamento: 'aguardando',
-        id_agendamento: '',
-      });
-      toast.success('Paciente adicionado à fila!');
+      await addToFilaWithPatient(form.pacienteId, form.pacienteNome, pac?.telefone || '', pac?.email || '');
     }
-    setDialogOpen(false);
   };
 
   const getReservaTimeLeft = (filaId: string) => {
@@ -336,23 +451,93 @@ const FilaEspera: React.FC = () => {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Adicionar à'} Fila de Espera</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Paciente *</Label>
-              <Input value={form.pacienteNome} onChange={e => setForm(p => ({ ...p, pacienteNome: e.target.value }))} placeholder="Nome do paciente" />
-              {form.pacienteNome.length >= 2 && (
-                <div className="mt-1 max-h-24 overflow-y-auto border rounded-md">
-                  {pacientes.filter(p => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).slice(0, 5).map(p => (
-                    <button key={p.id} className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
-                      onClick={() => setForm(prev => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }))}>
-                      {p.nome} — {p.telefone}
-                    </button>
-                  ))}
+            {/* Patient selection or creation */}
+            {!criarPaciente ? (
+              <div>
+                <Label>Paciente *</Label>
+                <Input value={form.pacienteNome} onChange={e => setForm(p => ({ ...p, pacienteNome: e.target.value, pacienteId: '' }))} placeholder="Buscar paciente pelo nome..." />
+                {form.pacienteNome.length >= 2 && !form.pacienteId && (
+                  <div className="mt-1 max-h-32 overflow-y-auto border rounded-md bg-background">
+                    {pacientes.filter(p => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).slice(0, 5).map(p => (
+                      <button key={p.id} className="w-full text-left px-3 py-2 text-sm hover:bg-muted border-b last:border-b-0"
+                        onClick={() => setForm(prev => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }))}>
+                        <span className="font-medium">{p.nome}</span>
+                        <span className="text-muted-foreground ml-2">— {p.telefone}</span>
+                      </button>
+                    ))}
+                    {pacientes.filter(p => p.nome.toLowerCase().includes(form.pacienteNome.toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground italic">Nenhum paciente encontrado</div>
+                    )}
+                  </div>
+                )}
+                {!editId && (
+                  <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-primary" onClick={() => {
+                    setCriarPaciente(true);
+                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+                    setDuplicataEncontrada(null);
+                    setPacienteErrors({});
+                  }}>
+                    <Plus className="w-3 h-3 mr-1" /> Criar novo paciente
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3 p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Novo Paciente</Label>
+                  <Button variant="ghost" size="sm" onClick={() => { setCriarPaciente(false); setDuplicataEncontrada(null); setPacienteErrors({}); }}>
+                    Voltar à busca
+                  </Button>
                 </div>
-              )}
-            </div>
+
+                {duplicataEncontrada && (
+                  <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
+                    <p className="font-medium text-warning">⚠️ Paciente semelhante encontrado:</p>
+                    <p><strong>{duplicataEncontrada.nome}</strong> — {duplicataEncontrada.telefone} — {duplicataEncontrada.cpf || 'Sem CPF'}</p>
+                    <Button size="sm" variant="outline" onClick={() => usarPacienteExistente(duplicataEncontrada)}>
+                      Selecionar este paciente
+                    </Button>
+                  </div>
+                )}
+
+                <div>
+                  <Label>Nome completo *</Label>
+                  <Input value={novoPaciente.nome} onChange={e => setNovoPaciente(p => ({ ...p, nome: e.target.value }))} />
+                  {pacienteErrors.nome && <p className="text-xs text-destructive mt-1">{pacienteErrors.nome}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>CPF</Label>
+                    <Input value={novoPaciente.cpf} onChange={e => setNovoPaciente(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
+                  </div>
+                  <div>
+                    <Label>Telefone *</Label>
+                    <Input value={novoPaciente.telefone} onChange={e => setNovoPaciente(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
+                    {pacienteErrors.telefone && <p className="text-xs text-destructive mt-1">{pacienteErrors.telefone}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>E-mail *</Label>
+                    <Input type="email" value={novoPaciente.email} onChange={e => setNovoPaciente(p => ({ ...p, email: e.target.value }))} />
+                    {pacienteErrors.email && <p className="text-xs text-destructive mt-1">{pacienteErrors.email}</p>}
+                  </div>
+                  <div>
+                    <Label>Data Nasc.</Label>
+                    <Input type="date" value={novoPaciente.dataNascimento} onChange={e => setNovoPaciente(p => ({ ...p, dataNascimento: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <Label>Endereço</Label>
+                  <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
+                </div>
+              </div>
+            )}
+
+            {/* Queue fields */}
             <div>
               <Label>Unidade *</Label>
               <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v }))}>
@@ -389,9 +574,16 @@ const FilaEspera: React.FC = () => {
               <Label>Observações</Label>
               <Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações..." />
             </div>
-            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
-              {editId ? 'Atualizar' : 'Adicionar'}
-            </Button>
+
+            {criarPaciente ? (
+              <Button onClick={handleCriarPacienteEAdicionarFila} className="w-full gradient-primary text-primary-foreground">
+                Cadastrar Paciente e Adicionar à Fila
+              </Button>
+            ) : (
+              <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
+                {editId ? 'Atualizar' : 'Adicionar'}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -418,7 +610,6 @@ const FilaEspera: React.FC = () => {
                     {unidade?.nome || f.setor} • {prof ? prof.nome : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
                   {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">{f.observacoes}</p>}
-                  {/* Reservation timer */}
                   {isChamado && reservaTime && !reservaTime.expired && (
                     <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
                       <Timer className="w-3 h-3" />
@@ -441,7 +632,6 @@ const FilaEspera: React.FC = () => {
                 </span>
                 {canManage && (
                   <div className="flex gap-1 shrink-0 flex-wrap">
-                    {/* Confirm slot for "chamado" patients */}
                     {isChamado && reservaTime?.slot && (
                       <Button size="sm" variant="default" className="h-8 bg-success text-success-foreground hover:bg-success/90"
                         onClick={() => confirmarEncaixe(f.id, reservaTime.slot, user)}
@@ -449,7 +639,6 @@ const FilaEspera: React.FC = () => {
                         <CheckCircle className="w-4 h-4 mr-1" /> Confirmar
                       </Button>
                     )}
-                    {/* Expire reservation manually */}
                     {isChamado && reservaTime?.slot && (
                       <Button size="sm" variant="outline" className="h-8"
                         onClick={() => expirarReserva(f.id, reservaTime.slot, user)}
@@ -457,7 +646,6 @@ const FilaEspera: React.FC = () => {
                         <ArrowRight className="w-4 h-4 mr-1" /> Próximo
                       </Button>
                     )}
-                    {/* Standard actions for non-chamado */}
                     {!isChamado && f.status === 'aguardando' && (
                       <Button size="sm" variant="ghost" className="h-8" onClick={async () => {
                         await updateFila(f.id, { status: 'chamado', horaChamada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
