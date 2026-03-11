@@ -858,6 +858,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return slots;
   }, [disponibilidades, agendamentos, funcionarios, isSlotBlocked, statusOcupaVaga]);
 
+  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
+    const dates = getAvailableDatesInternal(profissionalId, unidadeId);
+    if (!isPublic) return dates;
+    // For public: filter out dates where no public slots remain
+    return dates.filter(d => getAvailableSlots(profissionalId, unidadeId, d, true).length > 0);
+  }, [getAvailableDatesInternal, getAvailableSlots]);
+
   const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
     const suggestions: string[] = [];
     const dates = getAvailableDates(profissionalId, unidadeId, isPublic).filter((d) => d >= fromDate);
