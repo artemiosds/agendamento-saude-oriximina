@@ -100,9 +100,9 @@ interface DataContextType {
   addBloqueio: (b: Omit<BloqueioAgenda, 'id'>) => Promise<void>;
   updateBloqueio: (id: string, data: Partial<BloqueioAgenda>) => Promise<void>;
   deleteBloqueio: (id: string) => Promise<void>;
-  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string) => string[];
-  getAvailableDates: (profissionalId: string, unidadeId: string) => string[];
-  getNextAvailableSlots: (profissionalId: string, unidadeId: string, fromDate: string, limit?: number) => string[];
+  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean) => string[];
+  getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
+  getNextAvailableSlots: (profissionalId: string, unidadeId: string, fromDate: string, limit?: number, isPublic?: boolean) => string[];
   updateConfiguracoes: (data: Partial<Configuracoes>) => void;
   checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
   encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, 'id' | 'criadoEm'>) => void;
@@ -755,7 +755,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await updateFila(filaId, { status: 'encaixado' as const });
   }, [addAgendamento, updateFila]);
 
-  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
+  // Statuses that occupy a slot
+  const statusOcupaVaga = useCallback((status: string) => {
+    const libera = ['cancelado', 'falta'];
+    return !libera.includes(status);
+  }, []);
+
+  const getAvailableDatesInternal = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
 
@@ -772,7 +778,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const dayOfWeek = current.getDay();
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
-          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && a.status !== 'cancelado');
+          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
           if (dayAppointments.length < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
             if (!dates.includes(dateStr)) dates.push(dateStr);
           }
@@ -782,9 +788,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return dates.sort();
-  }, [disponibilidades, agendamentos, isSlotBlocked]);
+  }, [disponibilidades, agendamentos, isSlotBlocked, statusOcupaVaga]);
 
-  const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string): string[] => {
+  const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
     const dateObj = new Date(`${date}T00:00:00`);
     const dayOfWeek = dateObj.getDay();
 
@@ -797,7 +803,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const endHour = parseInt(disp.horaFim.split(':')[0]);
     const endMin = parseInt(disp.horaFim.split(':')[1] || '0');
 
-    const dayAppointments = agendamentos.filter((a) => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && a.status !== 'cancelado');
+    const dayAppointments = agendamentos.filter((a) => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
     if (dayAppointments.length >= disp.vagasPorDia) return [];
 
     const prof = funcionarios.find((f) => f.id === profissionalId);
@@ -821,13 +827,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         continue;
       }
 
-      const slotTaken = dayAppointments.some((a) => a.hora === timeStr);
+      const slotAppointments = dayAppointments.filter((a) => a.hora === timeStr);
       const hourStr = `${String(h).padStart(2, '0')}:`;
       const hourAppointments = dayAppointments.filter((a) => a.hora.startsWith(hourStr));
       const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
 
-      if (!slotTaken && !blocked && hourAppointments.length < disp.vagasPorHora) {
-        slots.push(timeStr);
+      if (!blocked && hourAppointments.length < disp.vagasPorHora) {
+        if (isPublic) {
+          // Public: slot available only if ZERO bookings at this exact time
+          if (slotAppointments.length === 0) {
+            slots.push(timeStr);
+          }
+        } else {
+          // Internal: slot available if capacity at this exact time not reached
+          // Each slot can hold vagasPorHora appointments (shared across the hour)
+          // But also check that the exact time slot hasn't exceeded a fair share
+          if (slotAppointments.length < disp.vagasPorHora) {
+            slots.push(timeStr);
+          }
+        }
       }
 
       m += intervalMinutes;
@@ -838,14 +856,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return slots;
-  }, [disponibilidades, agendamentos, funcionarios, isSlotBlocked]);
+  }, [disponibilidades, agendamentos, funcionarios, isSlotBlocked, statusOcupaVaga]);
 
-  const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5): string[] => {
+  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
+    const dates = getAvailableDatesInternal(profissionalId, unidadeId);
+    if (!isPublic) return dates;
+    // For public: filter out dates where no public slots remain
+    return dates.filter(d => getAvailableSlots(profissionalId, unidadeId, d, true).length > 0);
+  }, [getAvailableDatesInternal, getAvailableSlots]);
+
+  const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
     const suggestions: string[] = [];
-    const dates = getAvailableDates(profissionalId, unidadeId).filter((d) => d >= fromDate);
+    const dates = getAvailableDates(profissionalId, unidadeId, isPublic).filter((d) => d >= fromDate);
 
     for (const d of dates) {
-      const slots = getAvailableSlots(profissionalId, unidadeId, d);
+      const slots = getAvailableSlots(profissionalId, unidadeId, d, isPublic);
       for (const s of slots) {
         suggestions.push(`${d} ${s}`);
         if (suggestions.length >= limit) return suggestions;
