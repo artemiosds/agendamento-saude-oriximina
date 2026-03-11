@@ -569,8 +569,39 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           {retornoAg && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Paciente: <strong className="text-foreground">{retornoAg.pacienteNome}</strong></p>
-              <div><Label>Data</Label><Input type="date" value={retornoForm.data} onChange={e => setRetornoForm(p => ({ ...p, data: e.target.value }))} /></div>
-              <div><Label>Horário</Label><Input type="time" value={retornoForm.hora} onChange={e => setRetornoForm(p => ({ ...p, hora: e.target.value }))} /></div>
+              <div>
+                <Label>Data</Label>
+                {retornoAvailableDates.length === 0 ? (
+                  <p className="text-sm text-warning mt-1">Não há datas disponíveis na sua agenda.</p>
+                ) : (
+                  <Select value={retornoForm.data} onValueChange={v => setRetornoForm(p => ({ ...p, data: v, hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a data" /></SelectTrigger>
+                    <SelectContent>
+                      {retornoAvailableDates.slice(0, 30).map(d => {
+                        const dateObj = new Date(d + 'T12:00:00');
+                        const label = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+                        return <SelectItem key={d} value={d}>{label}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {retornoForm.data && (
+                <div>
+                  <Label>Horário</Label>
+                  {retornoAvailableSlots.length === 0 ? (
+                    <p className="text-sm text-warning mt-1">Não há horários disponíveis para esta data.</p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {retornoAvailableSlots.map(slot => (
+                        <Button key={slot} variant={retornoForm.hora === slot ? 'default' : 'outline'}
+                          className={retornoForm.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                          size="sm" onClick={() => setRetornoForm(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <Button onClick={handleAgendarRetorno} disabled={!retornoForm.data || !retornoForm.hora} className="w-full gradient-primary text-primary-foreground">
                 Confirmar Retorno
               </Button>
