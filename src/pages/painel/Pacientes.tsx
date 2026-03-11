@@ -7,18 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Phone, Mail, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
+import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, logAction, refreshPacientes } = useData();
   const { user, hasPermission } = useAuth();
   const isProfissional = user?.role === 'profissional';
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
+  const canImportCSV = hasPermission(['master', 'coordenador']);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -117,7 +120,14 @@ const Pacientes: React.FC = () => {
           <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
           <p className="text-muted-foreground text-sm">{visiblePacientes.length} cadastrados</p>
         </div>
-        <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+        <div className="flex gap-2">
+          {canImportCSV && (
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileDown className="w-4 h-4 mr-2" /> Importar CSV
+            </Button>
+          )}
+          <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+        </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setErrors({}); }}>
@@ -202,6 +212,7 @@ const Pacientes: React.FC = () => {
           </Card>
         ))}
       </div>
+      {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
     </div>
   );
 };
