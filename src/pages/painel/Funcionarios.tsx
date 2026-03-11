@@ -29,6 +29,7 @@ interface FuncionarioDB {
   nome: string;
   usuario: string;
   email: string;
+  cpf: string;
   setor: string;
   unidade_id: string;
   sala_id: string;
