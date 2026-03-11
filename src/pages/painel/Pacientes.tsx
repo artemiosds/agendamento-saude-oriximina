@@ -18,8 +18,10 @@ const Pacientes: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const isProfissional = user?.role === 'profissional';
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
+  const canImportCSV = hasPermission(['master', 'coordenador']);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
