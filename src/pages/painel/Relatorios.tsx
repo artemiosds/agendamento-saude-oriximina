@@ -824,6 +824,56 @@ const Relatorios: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Gráficos 4 e 5 — Ranking + Evolução Mensal */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Ranking de Atendimentos</h3>
+                {rankingProdutividade.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={Math.max(200, rankingProdutividade.length * 40)}>
+                    <BarChart data={rankingProdutividade} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis type="number" tick={{ fontSize: 10 }} />
+                      <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" name="Atendimentos">
+                        {rankingProdutividade.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                      <Legend payload={[
+                        { value: 'Profissional', type: 'square', color: 'hsl(152,60%,42%)' },
+                        { value: 'Coordenador', type: 'square', color: 'hsl(199,89%,38%)' },
+                        { value: 'Master', type: 'square', color: 'hsl(0,72%,51%)' },
+                      ]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Evolução Mensal</h3>
+                {evolucaoMensal.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={evolucaoMensal}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,89%,38%)" fill="hsl(199,89%,38%)" fillOpacity={0.2} strokeWidth={2} dot={{ r: 4, fill: 'hsl(199,89%,38%)' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* === FALTAS === */}
