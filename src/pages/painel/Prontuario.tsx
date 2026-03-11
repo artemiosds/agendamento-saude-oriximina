@@ -226,17 +226,51 @@ const ProntuarioPage: React.FC = () => {
         observacoes: form.observacoes,
       };
 
+      const pac = pacientes.find(px => px.id === (form.paciente_id || record.paciente_id));
+
       if (editId) {
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', editId);
         if (error) throw error;
+
+        // Log PRONTUARIO_EDITADO with field-level diffs
+        const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
+        if (previousForm) {
+          const fieldLabels: Record<string, string> = {
+            queixa_principal: 'Queixa Principal', anamnese: 'Anamnese', sinais_sintomas: 'Sinais/Sintomas',
+            exame_fisico: 'Exame Físico', hipotese: 'Hipótese', conduta: 'Conduta',
+            prescricao: 'Prescrição', solicitacao_exames: 'Solicitação Exames', evolucao: 'Evolução', observacoes: 'Observações',
+          };
+          for (const [key, label] of Object.entries(fieldLabels)) {
+            const prev = (previousForm as any)[key] || '';
+            const curr = (form as any)[key] || '';
+            if (prev !== curr) {
+              camposAlterados[label] = { anterior: prev.substring(0, 200), novo: curr.substring(0, 200) };
+            }
+          }
+        }
+        await logAction({
+          acao: 'prontuario_editado', entidade: 'prontuario', entidadeId: editId,
+          modulo: 'prontuario', user,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '', campos_alterados: camposAlterados },
+        });
+
         toast.success('Prontuário atualizado!');
       } else {
-        const { error } = await (supabase as any).from('prontuarios').insert(record);
+        const { data: inserted, error } = await (supabase as any).from('prontuarios').insert(record).select('id').single();
         if (error) throw error;
+
+        // Log PRONTUARIO_CRIADO
+        await logAction({
+          acao: 'prontuario_criado', entidade: 'prontuario', entidadeId: inserted?.id || '',
+          modulo: 'prontuario', user,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '' },
+        });
+
         toast.success('Prontuário criado!');
       }
 
       setDialogOpen(false);
+      setPreviousForm(null);
       await loadProntuarios();
     } catch (err: any) {
       toast.error('Erro ao salvar: ' + (err?.message || 'erro desconhecido'));
