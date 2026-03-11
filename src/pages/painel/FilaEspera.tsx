@@ -61,6 +61,37 @@ interface ReservaInfo {
   expiresAt: number;
 }
 
+// Calculate wait time in minutes from criadoEm or horaChegada
+const getWaitMinutes = (f: { criadoEm?: string; horaChegada: string }, nowMs: number): number => {
+  if (f.criadoEm) {
+    const entryTime = new Date(f.criadoEm).getTime();
+    if (!isNaN(entryTime)) return Math.floor((nowMs - entryTime) / 60000);
+  }
+  // Fallback: parse horaChegada as today's time
+  const [h, m] = f.horaChegada.split(':').map(Number);
+  if (!isNaN(h) && !isNaN(m)) {
+    const today = new Date();
+    today.setHours(h, m, 0, 0);
+    return Math.max(0, Math.floor((nowMs - today.getTime()) / 60000));
+  }
+  return 0;
+};
+
+// Get color indicator: green (<30min), yellow (30-60), red (>60 or urgente)
+const getWaitColor = (minutes: number, prioridade: string): { bg: string; text: string; label: string } => {
+  if (prioridade === 'urgente') return { bg: 'bg-destructive', text: 'text-destructive-foreground', label: 'Urgente' };
+  if (minutes > 60) return { bg: 'bg-destructive', text: 'text-destructive-foreground', label: `${minutes}min` };
+  if (minutes >= 30) return { bg: 'bg-warning', text: 'text-warning-foreground', label: `${minutes}min` };
+  return { bg: 'bg-success', text: 'text-success-foreground', label: `${minutes}min` };
+};
+
+const formatWaitTime = (minutes: number): string => {
+  if (minutes < 60) return `${minutes}min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h${m}min` : `${h}h`;
+};
+
 const FilaEspera: React.FC = () => {
   const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades, addPaciente, refreshPacientes, logAction } = useData();
   const { user, hasPermission } = useAuth();
@@ -75,6 +106,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [now, setNow] = useState(Date.now());
 
@@ -127,19 +159,47 @@ const FilaEspera: React.FC = () => {
   }, [now, reservas, fila, expirarReserva, user]);
 
   const filteredFila = useMemo(() => {
+    const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
+
     return [...fila]
       .filter(f => filterUnidade === 'all' || f.unidadeId === filterUnidade)
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
       .sort((a, b) => {
-        const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
-        if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6)) return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
+        if (sortField === 'prioridade') {
+          if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
+            return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
+          return a.horaChegada.localeCompare(b.horaChegada);
+        }
+        if (sortField === 'tempo') {
+          const aMin = getWaitMinutes(a, now);
+          const bMin = getWaitMinutes(b, now);
+          return bMin - aMin; // longest wait first
+        }
+        // entrada
         return a.horaChegada.localeCompare(b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
 
+  // Summary stats
+  const activeQueue = fila.filter(f => ['aguardando', 'chamado', 'em_atendimento'].includes(f.status));
   const aguardandoCount = fila.filter(f => f.status === 'aguardando').length;
   const chamadoCount = fila.filter(f => f.status === 'chamado').length;
+  const emAtendimentoCount = fila.filter(f => f.status === 'em_atendimento').length;
+
+  const greenCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return false;
+    return getWaitMinutes(f, now) < 30;
+  }).length;
+  const yellowCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return false;
+    const m = getWaitMinutes(f, now);
+    return m >= 30 && m <= 60;
+  }).length;
+  const redCount = activeQueue.filter(f => {
+    if (f.prioridade === 'urgente') return true;
+    return getWaitMinutes(f, now) > 60;
+  }).length;
 
   const openNew = () => {
     setEditId(null);
