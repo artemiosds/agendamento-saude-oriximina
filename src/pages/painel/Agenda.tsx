@@ -104,6 +104,10 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   }).sort((a, b) => a.hora.localeCompare(b.hora));
 
   const changeDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
 
   const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string; pacienteId?: string }) => {
     if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
