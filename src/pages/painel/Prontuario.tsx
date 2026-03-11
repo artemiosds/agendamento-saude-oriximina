@@ -71,6 +71,7 @@ const ProntuarioPage: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
   const [search, setSearch] = useState('');
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
