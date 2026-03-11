@@ -166,7 +166,7 @@ const ProntuarioPage: React.FC = () => {
   const openEdit = (p: ProntuarioDB) => {
     setEditId(p.id);
     setActiveAtendimento(null);
-    setForm({
+    const formData = {
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
       agendamento_id: p.agendamento_id || '',
@@ -182,8 +182,18 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || '',
       evolucao: p.evolucao || '',
       observacoes: p.observacoes || '',
-    });
+    };
+    setForm(formData);
+    setPreviousForm(formData);
     setDialogOpen(true);
+
+    // Log PRONTUARIO_VISUALIZADO
+    const pac = pacientes.find(px => px.id === p.paciente_id);
+    logAction({
+      acao: 'prontuario_visualizado', entidade: 'prontuario', entidadeId: p.id,
+      modulo: 'prontuario', user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || '' },
+    });
   };
 
   const handleSave = async () => {
