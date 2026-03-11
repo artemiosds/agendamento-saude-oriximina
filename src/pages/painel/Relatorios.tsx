@@ -137,11 +137,12 @@ const Relatorios: React.FC = () => {
 
   // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { nome: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    const map: Record<string, { id: string; nome: string; role: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
-      const key = a.profissionalNome;
-      if (!map[key]) map[key] = { nome: a.profissionalNome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const func = funcionarios.find(f => f.id === a.profissionalId);
+      const key = a.profissionalId || a.profissionalNome;
+      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       const m = map[key];
       m.total++;
       m.pacientesSet.add(a.pacienteId);
@@ -154,8 +155,9 @@ const Relatorios: React.FC = () => {
     });
     filteredAtendimentos.forEach(at => {
       const un = unidades.find(u => u.id === at.unidade_id);
-      const key = at.profissional_nome;
-      if (!map[key]) map[key] = { nome: at.profissional_nome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const func = funcionarios.find(f => f.id === at.profissional_id);
+      const key = at.profissional_id || at.profissional_nome;
+      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
@@ -163,23 +165,27 @@ const Relatorios: React.FC = () => {
       map[key].pacientesSet.add(at.paciente_id);
       if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
-    return Object.values(map).map(d => ({
-      nome: d.nome,
-      unidade: d.unidade,
-      total: d.total,
-      concluidos: d.concluidos,
-      faltas: d.faltas,
-      cancelados: d.cancelados,
-      remarcados: d.remarcados,
-      retornos: d.retornos,
-      atendimentos: d.atendimentos,
-      tempoTotal: d.tempoTotal,
-      pacientesAtendidos: d.pacientesSet.size,
-      tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
-      taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
-      taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
-    })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades]);
+    return Object.values(map)
+      .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
+      .map(d => ({
+        id: d.id,
+        nome: d.nome,
+        role: d.role,
+        unidade: d.unidade,
+        total: d.total,
+        concluidos: d.concluidos,
+        faltas: d.faltas,
+        cancelados: d.cancelados,
+        remarcados: d.remarcados,
+        retornos: d.retornos,
+        atendimentos: d.atendimentos,
+        tempoTotal: d.tempoTotal,
+        pacientesAtendidos: d.pacientesSet.size,
+        tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
+        taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
+        taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
+      })).sort((a, b) => b.total - a.total);
+  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd]);
 
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
