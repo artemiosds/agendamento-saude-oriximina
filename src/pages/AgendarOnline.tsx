@@ -359,6 +359,11 @@ const AgendarOnline: React.FC = () => {
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Data e Horário</h2>
                 
+                <div className="flex items-center gap-2 p-3 bg-info/10 rounded-lg text-sm text-info">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Agendamentos disponíveis a partir de amanhã.</span>
+                </div>
+
                 {availableDates.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-warning shrink-0" />
