@@ -39,6 +39,7 @@ const Relatorios: React.FC = () => {
   const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
+  const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -136,11 +137,12 @@ const Relatorios: React.FC = () => {
 
   // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { nome: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    const map: Record<string, { id: string; nome: string; role: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
-      const key = a.profissionalNome;
-      if (!map[key]) map[key] = { nome: a.profissionalNome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const func = funcionarios.find(f => f.id === a.profissionalId);
+      const key = a.profissionalId || a.profissionalNome;
+      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       const m = map[key];
       m.total++;
       m.pacientesSet.add(a.pacienteId);
@@ -153,8 +155,9 @@ const Relatorios: React.FC = () => {
     });
     filteredAtendimentos.forEach(at => {
       const un = unidades.find(u => u.id === at.unidade_id);
-      const key = at.profissional_nome;
-      if (!map[key]) map[key] = { nome: at.profissional_nome, unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const func = funcionarios.find(f => f.id === at.profissional_id);
+      const key = at.profissional_id || at.profissional_nome;
+      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
@@ -162,23 +165,27 @@ const Relatorios: React.FC = () => {
       map[key].pacientesSet.add(at.paciente_id);
       if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
-    return Object.values(map).map(d => ({
-      nome: d.nome,
-      unidade: d.unidade,
-      total: d.total,
-      concluidos: d.concluidos,
-      faltas: d.faltas,
-      cancelados: d.cancelados,
-      remarcados: d.remarcados,
-      retornos: d.retornos,
-      atendimentos: d.atendimentos,
-      tempoTotal: d.tempoTotal,
-      pacientesAtendidos: d.pacientesSet.size,
-      tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
-      taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
-      taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
-    })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades]);
+    return Object.values(map)
+      .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
+      .map(d => ({
+        id: d.id,
+        nome: d.nome,
+        role: d.role,
+        unidade: d.unidade,
+        total: d.total,
+        concluidos: d.concluidos,
+        faltas: d.faltas,
+        cancelados: d.cancelados,
+        remarcados: d.remarcados,
+        retornos: d.retornos,
+        atendimentos: d.atendimentos,
+        tempoTotal: d.tempoTotal,
+        pacientesAtendidos: d.pacientesSet.size,
+        tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
+        taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
+        taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
+      })).sort((a, b) => b.total - a.total);
+  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd]);
 
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
@@ -282,8 +289,11 @@ const Relatorios: React.FC = () => {
         return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, at?.hora_inicio || '', at?.hora_fim || '', at?.duracao_minutos?.toString() || ''];
       });
     } else if (type === 'produtividade') {
-      headers = ['Profissional', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
-      rows = porProfissional.map(p => [p.nome, p.unidade, p.pacientesAtendidos.toString(), p.total.toString(), p.concluidos.toString(), p.faltas.toString(), p.cancelados.toString(), p.remarcados.toString(), p.retornos.toString(), p.tempoMedio.toString(), p.taxaConclusao.toString(), p.taxaRetorno.toString()]);
+      headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
+      rows = porProfissional.map(p => {
+        const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+        return [p.nome, roleLabel, p.unidade, p.pacientesAtendidos.toString(), p.total.toString(), p.concluidos.toString(), p.faltas.toString(), p.cancelados.toString(), p.remarcados.toString(), p.retornos.toString(), p.tempoMedio.toString(), p.taxaConclusao.toString(), p.taxaRetorno.toString()];
+      });
     } else if (type === 'faltas') {
       headers = ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total Faltas', 'Datas'];
       rows = faltasReport.map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total.toString(), f.datas.join(', ')]);
@@ -599,9 +609,18 @@ const Relatorios: React.FC = () => {
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
+                    <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os perfis</SelectItem>
+                      <SelectItem value="profissional">Profissional</SelectItem>
+                      <SelectItem value="coordenador">Coordenador</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
                 </div>
@@ -623,22 +642,34 @@ const Relatorios: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {porProfissional.map(p => (
-                      <tr key={p.nome} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-3 text-foreground font-medium">{p.nome}</td>
-                        <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
-                        <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
-                        <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
-                        <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
-                        <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                        <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                        <td className="py-2.5 px-2 text-center">
-                          <Badge variant={p.taxaConclusao >= 70 ? 'default' : 'destructive'} className="text-xs">{p.taxaConclusao}%</Badge>
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground">{p.taxaRetorno}%</td>
-                      </tr>
-                    ))}
+                    {porProfissional.map(p => {
+                      const roleBadge = p.role === 'master'
+                        ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
+                        : p.role === 'coordenador'
+                        ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
+                        : { label: 'Profissional', class: 'bg-success/10 text-success' };
+                      return (
+                        <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 px-3 text-foreground font-medium">
+                            <div className="flex items-center gap-2">
+                              {p.nome}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
+                          <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
+                          <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
+                          <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
+                          <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
+                          <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                          <td className="py-2.5 px-2 text-center">
+                            <Badge variant={p.taxaConclusao >= 70 ? 'default' : 'destructive'} className="text-xs">{p.taxaConclusao}%</Badge>
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.taxaRetorno}%</td>
+                        </tr>
+                      );
+                    })}
                     {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
                   </tbody>
                 </table>
