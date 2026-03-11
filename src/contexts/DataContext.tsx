@@ -13,6 +13,7 @@ import {
 } from '@/types';
 import { mockSetores } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
+import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
 
 interface BloqueioAgenda {
   id: string;
