@@ -13,6 +13,7 @@ import {
 } from '@/types';
 import { mockSetores } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
+import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
 
 interface BloqueioAgenda {
   id: string;
@@ -167,29 +168,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
-  const getDeviceInfo = useCallback(() => {
-    const ua = navigator.userAgent;
-    let browser = 'Desconhecido';
-    let os = 'Desconhecido';
-    if (ua.includes('Firefox')) browser = 'Firefox';
-    else if (ua.includes('Edg')) browser = 'Edge';
-    else if (ua.includes('Chrome')) browser = 'Chrome';
-    else if (ua.includes('Safari')) browser = 'Safari';
-    if (ua.includes('Windows')) os = 'Windows';
-    else if (ua.includes('Mac')) os = 'macOS';
-    else if (ua.includes('Linux')) os = 'Linux';
-    else if (ua.includes('Android')) os = 'Android';
-    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-    return `${browser} / ${os}`;
-  }, []);
-
   const logAction = useCallback(async (input: { acao: string; entidade: string; entidadeId?: string; detalhes?: Record<string, unknown>; user?: User | null; unidadeId?: string; modulo?: string; status?: string; erro?: string }) => {
     try {
       const actor = input.user;
+      const ip = await getPublicIp();
+      const dispositivo = getDeviceInfo();
       const detalhes = {
         ...(input.detalhes || {}),
         usuario_cpf: actor?.cpf || '',
-        dispositivo: getDeviceInfo(),
+        dispositivo,
       };
       await supabase.from('action_logs' as any).insert({
         user_id: actor?.id || '',
@@ -203,12 +190,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         modulo: input.modulo || input.entidade || '',
         status: input.status || 'sucesso',
         erro: input.erro || '',
-        ip: '',
+        ip,
       } as any);
     } catch (err) {
       console.error('Error writing action log:', err);
     }
-  }, [getDeviceInfo]);
+  }, []);
 
   const isSlotBlocked = useCallback((profissionalId: string, unidadeId: string, date: string, time?: string) => {
     const dateRef = new Date(`${date}T00:00:00`).getTime();

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
 
 interface AuthContextType {
   user: User | null;
@@ -85,24 +86,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, [loadProfile]);
 
-  const getDeviceInfo = useCallback(() => {
-    const ua = navigator.userAgent;
-    let browser = 'Desconhecido';
-    let os = 'Desconhecido';
-    if (ua.includes('Firefox')) browser = 'Firefox';
-    else if (ua.includes('Edg')) browser = 'Edge';
-    else if (ua.includes('Chrome')) browser = 'Chrome';
-    else if (ua.includes('Safari')) browser = 'Safari';
-    if (ua.includes('Windows')) os = 'Windows';
-    else if (ua.includes('Mac')) os = 'macOS';
-    else if (ua.includes('Linux')) os = 'Linux';
-    else if (ua.includes('Android')) os = 'Android';
-    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-    return `${browser} / ${os}`;
-  }, []);
-
   const logAuthAction = useCallback(async (acao: string, userData?: User | null, extra?: Record<string, unknown>) => {
     try {
+      const ip = await getPublicIp();
+      const dispositivo = getDeviceInfo();
       await supabase.from('action_logs' as any).insert({
         user_id: userData?.id || '',
         user_nome: userData?.nome || 'sistema',
@@ -111,16 +98,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         acao,
         entidade: 'auth',
         entidade_id: '',
-        detalhes: { ...extra, usuario_cpf: userData?.cpf || '', dispositivo: getDeviceInfo() },
+        detalhes: { ...extra, usuario_cpf: userData?.cpf || '', dispositivo },
         modulo: 'auth',
         status: acao.includes('falha') ? 'erro' : 'sucesso',
         erro: '',
-        ip: '',
+        ip,
       } as any);
     } catch (err) {
       console.error('Error logging auth action:', err);
     }
-  }, [getDeviceInfo]);
+  }, []);
 
   const login = useCallback(async (usuario: string, senha: string) => {
     try {
