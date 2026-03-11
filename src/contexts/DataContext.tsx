@@ -761,7 +761,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !libera.includes(status);
   }, []);
 
-  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
+  const getAvailableDatesInternal = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
 
@@ -779,16 +779,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
           const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
-          // For public: use vagasPorDia as limit; for internal: same
           if (dayAppointments.length < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
-            // For public mode, also check if there are ANY slots left (simplified view)
-            if (isPublic) {
-              // Check if at least one slot has zero bookings
-              const hasOpenSlot = getAvailableSlots(profissionalId, unidadeId, dateStr, true).length > 0;
-              if (hasOpenSlot && !dates.includes(dateStr)) dates.push(dateStr);
-            } else {
-              if (!dates.includes(dateStr)) dates.push(dateStr);
-            }
+            if (!dates.includes(dateStr)) dates.push(dateStr);
           }
         }
         current.setDate(current.getDate() + 1);
