@@ -50,7 +50,13 @@ const AgendarOnline: React.FC = () => {
 
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
-    return getAvailableDates(form.profissionalId, form.unidadeId);
+    const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
+    // REGRA 1: Paciente não pode agendar para hoje — apenas a partir de amanhã
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(0, 0, 0, 0);
+    const amanhaStr = amanha.toISOString().split('T')[0];
+    return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
   const availableSlots = useMemo(() => {
