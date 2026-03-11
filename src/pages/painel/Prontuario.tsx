@@ -325,6 +325,12 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handlePrint = (p: ProntuarioDB) => {
+    const pac = pacientes.find(px => px.id === p.paciente_id);
+    logAction({
+      acao: 'prontuario_exportado_pdf', entidade: 'prontuario', entidadeId: p.id,
+      modulo: 'prontuario', user,
+      detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || '' },
+    });
     const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
 
     const sections = [
