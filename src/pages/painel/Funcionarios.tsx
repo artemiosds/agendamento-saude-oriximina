@@ -124,6 +124,7 @@ const Funcionarios: React.FC = () => {
           nome: form.nome,
           usuario: form.usuario,
           email: form.email,
+          cpf: form.cpf,
           setor: form.setor,
           unidade_id: form.unidade_id,
           sala_id: form.sala_id,
