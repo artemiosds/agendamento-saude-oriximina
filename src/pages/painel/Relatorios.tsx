@@ -605,27 +605,81 @@ const Relatorios: React.FC = () => {
 
         {/* === GERAL === */}
         <TabsContent value="geral" className="space-y-5 mt-4">
-          {/* Timeline */}
-          {timelineData.length > 1 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Evolução por Dia</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={timelineData}>
+          {/* Gráfico 1 — Timeline com agrupamento */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground">Atendimentos por Período</h3>
+                <div className="flex gap-1">
+                  {(['dia', 'semana', 'mes'] as const).map(g => (
+                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {timelineGrouped.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={timelineGrouped}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis dataKey="data" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="agendamentos" name="Agendamentos" stroke="hsl(199,89%,38%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="hsl(200,18%,46%)" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráficos 2 e 3 — Pico + Novos vs Retorno */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Horários de Pico</h3>
+                {peakHoursData.some(d => d.total > 0) ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={peakHoursData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" name="Agendamentos" fill="hsl(199,89%,38%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
               </CardContent>
             </Card>
-          )}
 
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Novos vs Retorno</h3>
+                {novosVsRetorno.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        <Cell fill="hsl(199,89%,38%)" />
+                        <Cell fill="hsl(152,60%,42%)" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Existing charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
