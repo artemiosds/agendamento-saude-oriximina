@@ -606,9 +606,18 @@ const Relatorios: React.FC = () => {
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
+                    <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os perfis</SelectItem>
+                      <SelectItem value="profissional">Profissional</SelectItem>
+                      <SelectItem value="coordenador">Coordenador</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
                 </div>
@@ -630,22 +639,34 @@ const Relatorios: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {porProfissional.map(p => (
-                      <tr key={p.nome} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-3 text-foreground font-medium">{p.nome}</td>
-                        <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
-                        <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
-                        <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
-                        <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
-                        <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                        <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                        <td className="py-2.5 px-2 text-center">
-                          <Badge variant={p.taxaConclusao >= 70 ? 'default' : 'destructive'} className="text-xs">{p.taxaConclusao}%</Badge>
-                        </td>
-                        <td className="py-2.5 px-2 text-center text-muted-foreground">{p.taxaRetorno}%</td>
-                      </tr>
-                    ))}
+                    {porProfissional.map(p => {
+                      const roleBadge = p.role === 'master'
+                        ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
+                        : p.role === 'coordenador'
+                        ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
+                        : { label: 'Profissional', class: 'bg-success/10 text-success' };
+                      return (
+                        <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 px-3 text-foreground font-medium">
+                            <div className="flex items-center gap-2">
+                              {p.nome}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
+                          <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
+                          <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
+                          <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
+                          <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
+                          <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                          <td className="py-2.5 px-2 text-center">
+                            <Badge variant={p.taxaConclusao >= 70 ? 'default' : 'destructive'} className="text-xs">{p.taxaConclusao}%</Badge>
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.taxaRetorno}%</td>
+                        </tr>
+                      );
+                    })}
                     {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
                   </tbody>
                 </table>
