@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { getPublicIp, getDeviceInfo } from '@/lib/clientInfo';
 
 interface AuthContextType {
   user: User | null;
