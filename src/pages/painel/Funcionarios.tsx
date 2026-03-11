@@ -162,6 +162,7 @@ const Funcionarios: React.FC = () => {
             nome: form.nome,
             usuario: form.usuario,
             email: form.email,
+            cpf: form.cpf,
             senha: form.senha,
             setor: form.setor,
             unidade_id: form.unidade_id,
