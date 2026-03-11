@@ -755,7 +755,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await updateFila(filaId, { status: 'encaixado' as const });
   }, [addAgendamento, updateFila]);
 
-  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
+  // Statuses that occupy a slot
+  const statusOcupaVaga = useCallback((status: string) => {
+    const libera = ['cancelado', 'falta'];
+    return !libera.includes(status);
+  }, []);
+
+  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
     const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
 
@@ -772,9 +778,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const dayOfWeek = current.getDay();
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
-          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && a.status !== 'cancelado');
+          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
+          // For public: use vagasPorDia as limit; for internal: same
           if (dayAppointments.length < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
-            if (!dates.includes(dateStr)) dates.push(dateStr);
+            // For public mode, also check if there are ANY slots left (simplified view)
+            if (isPublic) {
+              // Check if at least one slot has zero bookings
+              const hasOpenSlot = getAvailableSlots(profissionalId, unidadeId, dateStr, true).length > 0;
+              if (hasOpenSlot && !dates.includes(dateStr)) dates.push(dateStr);
+            } else {
+              if (!dates.includes(dateStr)) dates.push(dateStr);
+            }
           }
         }
         current.setDate(current.getDate() + 1);
@@ -782,7 +796,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return dates.sort();
-  }, [disponibilidades, agendamentos, isSlotBlocked]);
+  }, [disponibilidades, agendamentos, isSlotBlocked, statusOcupaVaga]);
 
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string): string[] => {
     const dateObj = new Date(`${date}T00:00:00`);
