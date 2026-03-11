@@ -117,6 +117,7 @@ export interface FilaEspera {
   horaChamada?: string;
   observacoes?: string;
   criadoPor?: string;
+  criadoEm?: string;
 }
 
 export interface Atendimento {
