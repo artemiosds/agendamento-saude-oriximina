@@ -100,9 +100,9 @@ interface DataContextType {
   addBloqueio: (b: Omit<BloqueioAgenda, 'id'>) => Promise<void>;
   updateBloqueio: (id: string, data: Partial<BloqueioAgenda>) => Promise<void>;
   deleteBloqueio: (id: string) => Promise<void>;
-  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string) => string[];
-  getAvailableDates: (profissionalId: string, unidadeId: string) => string[];
-  getNextAvailableSlots: (profissionalId: string, unidadeId: string, fromDate: string, limit?: number) => string[];
+  getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean) => string[];
+  getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
+  getNextAvailableSlots: (profissionalId: string, unidadeId: string, fromDate: string, limit?: number, isPublic?: boolean) => string[];
   updateConfiguracoes: (data: Partial<Configuracoes>) => void;
   checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
   encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, 'id' | 'criadoEm'>) => void;
