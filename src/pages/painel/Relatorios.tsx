@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
@@ -40,6 +40,7 @@ const Relatorios: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
+  const [timelineGroup, setTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -275,7 +276,100 @@ const Relatorios: React.FC = () => {
     { name: 'Remarcados', value: stats.remarcados },
   ].filter(d => d.value > 0), [stats]);
 
-  // === EXPORT CSV (uses same datasets as screen) ===
+  // === TIMELINE GROUPED (dia/semana/mês) ===
+  const timelineGrouped = useMemo(() => {
+    const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
+    filtered.forEach(a => {
+      let key: string;
+      const d = new Date(a.data + 'T12:00:00');
+      if (timelineGroup === 'dia') {
+        key = a.data;
+      } else if (timelineGroup === 'semana') {
+        const startOfWeek = new Date(d);
+        startOfWeek.setDate(d.getDate() - d.getDay());
+        key = startOfWeek.toISOString().split('T')[0];
+      } else {
+        key = a.data.substring(0, 7); // YYYY-MM
+      }
+      if (!map[key]) {
+        const label = timelineGroup === 'mes'
+          ? d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+          : timelineGroup === 'semana'
+          ? `Sem ${key.substring(5)}`
+          : key.substring(5);
+        map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
+      }
+      if (a.status === 'concluido') map[key].concluidos++;
+      if (a.status === 'falta') map[key].faltas++;
+      if (a.status === 'cancelado') map[key].cancelados++;
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
+  }, [filtered, timelineGroup]);
+
+  // === PEAK HOURS ===
+  const peakHoursData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (let h = 7; h <= 18; h++) {
+      const label = `${String(h).padStart(2, '0')}:00`;
+      map[label] = 0;
+    }
+    filtered.forEach(a => {
+      const hourKey = (a.hora || '').substring(0, 2);
+      const h = parseInt(hourKey);
+      if (h >= 7 && h <= 18) {
+        const label = `${String(h).padStart(2, '0')}:00`;
+        map[label] = (map[label] || 0) + 1;
+      }
+    });
+    return Object.entries(map).map(([hora, total]) => ({ hora, total }));
+  }, [filtered]);
+
+  // === NOVOS VS RETORNO ===
+  const novosVsRetorno = useMemo(() => {
+    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
+    const novos = filtered.length - retornos;
+    return [
+      { name: 'Novos', value: novos },
+      { name: 'Retorno', value: retornos },
+    ].filter(d => d.value > 0);
+  }, [filtered]);
+
+  // === FALTAS POR UNIDADE (pie) ===
+  const faltasPorUnidade = useMemo(() => {
+    const map: Record<string, { name: string; value: number }> = {};
+    filtered.filter(a => a.status === 'falta').forEach(a => {
+      const un = unidades.find(u => u.id === a.unidadeId);
+      const name = un?.nome || 'Desconhecida';
+      if (!map[name]) map[name] = { name, value: 0 };
+      map[name].value++;
+    });
+    return Object.values(map).sort((a, b) => b.value - a.value);
+  }, [filtered, unidades]);
+
+  // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
+  const evolucaoMensal = useMemo(() => {
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const map: Record<string, number> = {};
+    filtered.filter(a => a.status === 'concluido').forEach(a => {
+      const key = a.data.substring(0, 7);
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([key, total]) => {
+      const [, m] = key.split('-');
+      return { mes: meses[parseInt(m) - 1] || key, total };
+    });
+  }, [filtered]);
+
+  // === RANKING PRODUTIVIDADE (barras horizontais) ===
+  const rankingProdutividade = useMemo(() => {
+    return porProfissional.map(p => ({
+      nome: p.nome,
+      total: p.concluidos,
+      role: p.role,
+      fill: p.role === 'master' ? 'hsl(0,72%,51%)' : p.role === 'coordenador' ? 'hsl(199,89%,38%)' : 'hsl(152,60%,42%)',
+    })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
+  }, [porProfissional]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -511,27 +605,81 @@ const Relatorios: React.FC = () => {
 
         {/* === GERAL === */}
         <TabsContent value="geral" className="space-y-5 mt-4">
-          {/* Timeline */}
-          {timelineData.length > 1 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Evolução por Dia</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={timelineData}>
+          {/* Gráfico 1 — Timeline com agrupamento */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground">Atendimentos por Período</h3>
+                <div className="flex gap-1">
+                  {(['dia', 'semana', 'mes'] as const).map(g => (
+                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {timelineGrouped.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={timelineGrouped}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis dataKey="data" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="agendamentos" name="Agendamentos" stroke="hsl(199,89%,38%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="hsl(200,18%,46%)" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráficos 2 e 3 — Pico + Novos vs Retorno */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Horários de Pico</h3>
+                {peakHoursData.some(d => d.total > 0) ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={peakHoursData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" name="Agendamentos" fill="hsl(199,89%,38%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
               </CardContent>
             </Card>
-          )}
 
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Novos vs Retorno</h3>
+                {novosVsRetorno.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        <Cell fill="hsl(199,89%,38%)" />
+                        <Cell fill="hsl(152,60%,42%)" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Existing charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
@@ -676,6 +824,56 @@ const Relatorios: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Gráficos 4 e 5 — Ranking + Evolução Mensal */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Ranking de Atendimentos</h3>
+                {rankingProdutividade.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={Math.max(200, rankingProdutividade.length * 40)}>
+                    <BarChart data={rankingProdutividade} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis type="number" tick={{ fontSize: 10 }} />
+                      <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" name="Atendimentos">
+                        {rankingProdutividade.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                      <Legend payload={[
+                        { value: 'Profissional', type: 'square', color: 'hsl(152,60%,42%)' },
+                        { value: 'Coordenador', type: 'square', color: 'hsl(199,89%,38%)' },
+                        { value: 'Master', type: 'square', color: 'hsl(0,72%,51%)' },
+                      ]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Evolução Mensal</h3>
+                {evolucaoMensal.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={evolucaoMensal}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,89%,38%)" fill="hsl(199,89%,38%)" fillOpacity={0.2} strokeWidth={2} dot={{ r: 4, fill: 'hsl(199,89%,38%)' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* === FALTAS === */}
@@ -725,6 +923,24 @@ const Relatorios: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Gráfico 6 — Faltas por Unidade */}
+          {faltasPorUnidade.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Faltas por Unidade</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={faltasPorUnidade} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                      {faltasPorUnidade.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => [`${value} faltas`, 'Total']} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* === PACIENTES === */}
