@@ -276,7 +276,100 @@ const Relatorios: React.FC = () => {
     { name: 'Remarcados', value: stats.remarcados },
   ].filter(d => d.value > 0), [stats]);
 
-  // === EXPORT CSV (uses same datasets as screen) ===
+  // === TIMELINE GROUPED (dia/semana/mês) ===
+  const timelineGrouped = useMemo(() => {
+    const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
+    filtered.forEach(a => {
+      let key: string;
+      const d = new Date(a.data + 'T12:00:00');
+      if (timelineGroup === 'dia') {
+        key = a.data;
+      } else if (timelineGroup === 'semana') {
+        const startOfWeek = new Date(d);
+        startOfWeek.setDate(d.getDate() - d.getDay());
+        key = startOfWeek.toISOString().split('T')[0];
+      } else {
+        key = a.data.substring(0, 7); // YYYY-MM
+      }
+      if (!map[key]) {
+        const label = timelineGroup === 'mes'
+          ? d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+          : timelineGroup === 'semana'
+          ? `Sem ${key.substring(5)}`
+          : key.substring(5);
+        map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
+      }
+      if (a.status === 'concluido') map[key].concluidos++;
+      if (a.status === 'falta') map[key].faltas++;
+      if (a.status === 'cancelado') map[key].cancelados++;
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
+  }, [filtered, timelineGroup]);
+
+  // === PEAK HOURS ===
+  const peakHoursData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (let h = 7; h <= 18; h++) {
+      const label = `${String(h).padStart(2, '0')}:00`;
+      map[label] = 0;
+    }
+    filtered.forEach(a => {
+      const hourKey = (a.hora || '').substring(0, 2);
+      const h = parseInt(hourKey);
+      if (h >= 7 && h <= 18) {
+        const label = `${String(h).padStart(2, '0')}:00`;
+        map[label] = (map[label] || 0) + 1;
+      }
+    });
+    return Object.entries(map).map(([hora, total]) => ({ hora, total }));
+  }, [filtered]);
+
+  // === NOVOS VS RETORNO ===
+  const novosVsRetorno = useMemo(() => {
+    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
+    const novos = filtered.length - retornos;
+    return [
+      { name: 'Novos', value: novos },
+      { name: 'Retorno', value: retornos },
+    ].filter(d => d.value > 0);
+  }, [filtered]);
+
+  // === FALTAS POR UNIDADE (pie) ===
+  const faltasPorUnidade = useMemo(() => {
+    const map: Record<string, { name: string; value: number }> = {};
+    filtered.filter(a => a.status === 'falta').forEach(a => {
+      const un = unidades.find(u => u.id === a.unidadeId);
+      const name = un?.nome || 'Desconhecida';
+      if (!map[name]) map[name] = { name, value: 0 };
+      map[name].value++;
+    });
+    return Object.values(map).sort((a, b) => b.value - a.value);
+  }, [filtered, unidades]);
+
+  // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
+  const evolucaoMensal = useMemo(() => {
+    const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const map: Record<string, number> = {};
+    filtered.filter(a => a.status === 'concluido').forEach(a => {
+      const key = a.data.substring(0, 7);
+      map[key] = (map[key] || 0) + 1;
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([key, total]) => {
+      const [, m] = key.split('-');
+      return { mes: meses[parseInt(m) - 1] || key, total };
+    });
+  }, [filtered]);
+
+  // === RANKING PRODUTIVIDADE (barras horizontais) ===
+  const rankingProdutividade = useMemo(() => {
+    return porProfissional.map(p => ({
+      nome: p.nome,
+      total: p.concluidos,
+      role: p.role,
+      fill: p.role === 'master' ? 'hsl(0,72%,51%)' : p.role === 'coordenador' ? 'hsl(199,89%,38%)' : 'hsl(152,60%,42%)',
+    })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
+  }, [porProfissional]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
