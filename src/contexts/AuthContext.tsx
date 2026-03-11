@@ -180,9 +180,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [logAuthAction]);
 
   const logout = useCallback(async () => {
+    if (user) {
+      await logAuthAction('logout', user);
+    }
     await supabase.auth.signOut();
     setUser(null);
-  }, []);
+  }, [user, logAuthAction]);
 
   const hasPermission = useCallback(
     (roles: UserRole[]) => {
