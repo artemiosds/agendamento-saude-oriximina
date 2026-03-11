@@ -93,7 +93,7 @@ const Funcionarios: React.FC = () => {
   const openEdit = (f: FuncionarioDB) => {
     setEditId(f.id);
     setForm({
-      nome: f.nome, usuario: f.usuario, email: f.email, senha: '',
+      nome: f.nome, usuario: f.usuario, email: f.email, cpf: f.cpf || '', senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
