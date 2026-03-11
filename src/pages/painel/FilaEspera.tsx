@@ -408,7 +408,7 @@ const FilaEspera: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Fila de Espera</h1>
           <p className="text-muted-foreground text-sm">
-            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`}
+            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`} {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -428,8 +428,47 @@ const FilaEspera: React.FC = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {/* Summary indicators panel */}
+      {activeQueue.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-success-foreground font-bold text-sm">
+                {greenCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Recentes</p>
+                <p className="text-xs text-muted-foreground">&lt; 30 min</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-warning flex items-center justify-center text-warning-foreground font-bold text-sm">
+                {yellowCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Atenção</p>
+                <p className="text-xs text-muted-foreground">30–60 min</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-destructive flex items-center justify-center text-destructive-foreground font-bold text-sm">
+                {redCount}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Crítico</p>
+                <p className="text-xs text-muted-foreground">&gt; 60 min / Urgente</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Filters + Sort */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
           <SelectContent>
@@ -455,6 +494,14 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="atendido">Atendido</SelectItem>
             <SelectItem value="falta">Faltou</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sortField} onValueChange={v => setSortField(v as any)}>
+          <SelectTrigger><SelectValue placeholder="Ordenar por" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="prioridade">Prioridade</SelectItem>
+            <SelectItem value="tempo">Tempo de espera</SelectItem>
+            <SelectItem value="entrada">Data de entrada</SelectItem>
           </SelectContent>
         </Select>
       </div>
