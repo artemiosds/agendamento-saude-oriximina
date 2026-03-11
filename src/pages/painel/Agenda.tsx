@@ -70,6 +70,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
+  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
   // Available slots for new appointment dialog (internal)
   const newAgSlots = React.useMemo(() => {
@@ -103,12 +104,6 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   }).sort((a, b) => a.hora.localeCompare(b.hora));
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
-  };
-
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
   const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string; pacienteId?: string }) => {
     if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
