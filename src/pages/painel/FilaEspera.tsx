@@ -704,15 +704,41 @@ const FilaEspera: React.FC = () => {
           const unidade = unidades.find(u => u.id === f.unidadeId);
           const reservaTime = getReservaTimeLeft(f.id);
           const isChamado = f.status === 'chamado';
+          const isActive = ['aguardando', 'chamado', 'em_atendimento'].includes(f.status);
+          const waitMin = getWaitMinutes(f, now);
+          const waitColor = getWaitColor(waitMin, f.prioridade);
 
           return (
-            <Card key={f.id} className={cn('shadow-card border-0', isChamado && 'ring-2 ring-primary/30')}>
+            <Card key={f.id} className={cn(
+              'shadow-card border-0 transition-all',
+              isChamado && 'ring-2 ring-primary/30',
+              isActive && waitMin > 60 && 'border-l-4 border-l-destructive',
+              isActive && waitMin >= 30 && waitMin <= 60 && 'border-l-4 border-l-warning',
+              isActive && waitMin < 30 && f.prioridade !== 'urgente' && 'border-l-4 border-l-success',
+              isActive && f.prioridade === 'urgente' && 'border-l-4 border-l-destructive',
+            )}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                  {i + 1}
+                {/* Position + wait time indicator */}
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div className={cn('w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm', isActive ? `${waitColor.bg} ${waitColor.text}` : 'gradient-primary text-primary-foreground')}>
+                    {i + 1}
+                  </div>
+                  {isActive && (
+                    <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
+                      {formatWaitTime(waitMin)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                    {isActive && (
+                      <span className={cn('inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
+                        <Clock className="w-3 h-3" />
+                        {f.prioridade === 'urgente' ? 'URGENTE' : `Espera: ${formatWaitTime(waitMin)}`}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? prof.nome : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
