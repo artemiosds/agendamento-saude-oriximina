@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Pencil, Trash2, Loader2, CalendarCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff } from 'lucide-react';
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +29,7 @@ interface FuncionarioDB {
   nome: string;
   usuario: string;
   email: string;
+  cpf: string;
   setor: string;
   unidade_id: string;
   sala_id: string;
@@ -53,8 +54,9 @@ const Funcionarios: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [showSenha, setShowSenha] = useState(false);
   const [form, setForm] = useState({
-    nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
+    nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false,
   });
 
@@ -91,7 +93,7 @@ const Funcionarios: React.FC = () => {
   const openEdit = (f: FuncionarioDB) => {
     setEditId(f.id);
     setForm({
-      nome: f.nome, usuario: f.usuario, email: f.email, senha: '',
+      nome: f.nome, usuario: f.usuario, email: f.email, cpf: f.cpf || '', senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
       cargo: f.cargo || '', role: f.role as UserRole, tempo_atendimento: f.tempo_atendimento || 30,
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
@@ -103,7 +105,7 @@ const Funcionarios: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false });
     setDialogOpen(true);
   };
 
@@ -122,6 +124,7 @@ const Funcionarios: React.FC = () => {
           nome: form.nome,
           usuario: form.usuario,
           email: form.email,
+          cpf: form.cpf,
           setor: form.setor,
           unidade_id: form.unidade_id,
           sala_id: form.sala_id,
@@ -159,6 +162,7 @@ const Funcionarios: React.FC = () => {
             nome: form.nome,
             usuario: form.usuario,
             email: form.email,
+            cpf: form.cpf,
             senha: form.senha,
             setor: form.setor,
             unidade_id: form.unidade_id,
@@ -233,9 +237,20 @@ const Funcionarios: React.FC = () => {
             <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Usuário *</Label><Input value={form.usuario} onChange={e => setForm(p => ({ ...p, usuario: e.target.value }))} /></div>
-              <div><Label>{editId ? 'Nova Senha (opcional)' : 'Senha *'}</Label><Input type="password" value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} /></div>
+              <div>
+                <Label>{editId ? 'Nova Senha (opcional)' : 'Senha *'}</Label>
+                <div className="relative">
+                  <Input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="pr-10" />
+                  <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
             </div>
-            <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+              <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Cargo</Label><Input value={form.cargo} onChange={e => setForm(p => ({ ...p, cargo: e.target.value }))} /></div>
               <div><Label>Perfil</Label>

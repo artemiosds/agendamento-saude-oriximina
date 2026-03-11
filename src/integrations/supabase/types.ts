@@ -349,6 +349,7 @@ export type Database = {
           ativo: boolean | null
           auth_user_id: string | null
           cargo: string | null
+          cpf: string
           criado_em: string | null
           criado_por: string | null
           email: string
@@ -370,6 +371,7 @@ export type Database = {
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
+          cpf?: string
           criado_em?: string | null
           criado_por?: string | null
           email: string
@@ -391,6 +393,7 @@ export type Database = {
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
+          cpf?: string
           criado_em?: string | null
           criado_por?: string | null
           email?: string
