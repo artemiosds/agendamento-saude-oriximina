@@ -290,6 +290,8 @@ const ProntuarioPage: React.FC = () => {
     const [hf, mf] = horaFim.split(':').map(Number);
     const duracaoMinutos = (hf * 60 + mf) - (hi * 60 + mi);
 
+    const pac = pacientes.find(px => px.id === form.paciente_id);
+
     try {
       await (supabase as any).from('atendimentos')
         .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: 'finalizado' })
@@ -297,6 +299,18 @@ const ProntuarioPage: React.FC = () => {
     } catch (err) {
       console.error('Error finalizing atendimento:', err);
     }
+
+    // Log ATENDIMENTO_FINALIZADO
+    await logAction({
+      acao: 'atendimento_finalizado', entidade: 'atendimento', entidadeId: activeAtendimento.agendamentoId,
+      modulo: 'atendimento', user,
+      detalhes: {
+        paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '',
+        hora_inicio: activeAtendimento.horaInicio, hora_fim: horaFim,
+        duracao_minutos: Math.max(0, duracaoMinutos),
+        unidade: user?.unidadeId || '', sala: user?.salaId || '',
+      },
+    });
 
     // Clean up localStorage timer
     localStorage.removeItem(`timer_${activeAtendimento.agendamentoId}`);
