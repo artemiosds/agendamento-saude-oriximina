@@ -212,6 +212,7 @@ const Pacientes: React.FC = () => {
           </Card>
         ))}
       </div>
+      {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
     </div>
   );
 };
