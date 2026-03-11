@@ -803,11 +803,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const prof = funcionarios.find((f) => f.id === profissionalId);
     const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
 
+    // Filter past slots when date is today (30min margin)
+    const agora = new Date();
+    const ehHoje = date === agora.toISOString().split('T')[0];
+    const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
+
     let h = startHour;
     let m = startMin;
 
     while (h < endHour || (h === endHour && m < endMin)) {
       const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+      // Skip past slots for today
+      if (ehHoje && (h * 60 + m) <= limiteMinutos) {
+        m += intervalMinutes;
+        while (m >= 60) { m -= 60; h++; }
+        continue;
+      }
+
       const slotTaken = dayAppointments.some((a) => a.hora === timeStr);
       const hourStr = `${String(h).padStart(2, '0')}:`;
       const hourAppointments = dayAppointments.filter((a) => a.hora.startsWith(hourStr));

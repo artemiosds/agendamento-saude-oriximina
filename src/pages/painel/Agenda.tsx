@@ -53,7 +53,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades, getAvailableSlots, getAvailableDates } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -70,6 +70,26 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
+  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+
+  // Available slots for new appointment dialog (internal)
+  const newAgSlots = React.useMemo(() => {
+    if (!newAg.profissionalId) return [];
+    const prof = profissionais.find(p => p.id === newAg.profissionalId);
+    if (!prof?.unidadeId) return [];
+    return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
+  }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
+
+  // Available dates/slots for retorno dialog
+  const retornoAvailableDates = React.useMemo(() => {
+    if (!user || !retornoDialogOpen) return [];
+    return getAvailableDates(user.id, user.unidadeId);
+  }, [user, retornoDialogOpen, getAvailableDates]);
+
+  const retornoAvailableSlots = React.useMemo(() => {
+    if (!user || !retornoForm.data) return [];
+    return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
+  }, [user, retornoForm.data, getAvailableSlots]);
 
   const filtered = agendamentos.filter(a => {
     if (a.data !== selectedDate) return false;
@@ -84,12 +104,6 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   }).sort((a, b) => a.hora.localeCompare(b.hora));
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split('T')[0]);
-  };
-
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
   const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string; pacienteId?: string }) => {
     if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
@@ -381,22 +395,35 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                     <SelectContent>{salas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Horário</Label><Input type="time" value={newAg.hora} onChange={e => setNewAg(p => ({ ...p, hora: e.target.value }))} /></div>
-                  <div>
-                    <Label>Tipo</Label>
-                    <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Consulta">Primeira Consulta</SelectItem>
-                        <SelectItem value="Retorno">Retorno</SelectItem>
-                        <SelectItem value="Exame">Exame</SelectItem>
-                        <SelectItem value="Procedimento">Procedimento</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label>Tipo</Label>
+                  <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                      <SelectItem value="Retorno">Retorno</SelectItem>
+                      <SelectItem value="Exame">Exame</SelectItem>
+                      <SelectItem value="Procedimento">Procedimento</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground">Agendar</Button>
+                <div>
+                  <Label>Horário Disponível</Label>
+                  {newAgSlots.length === 0 ? (
+                    <p className="text-sm text-warning mt-1">
+                      {!newAg.profissionalId ? 'Selecione um profissional.' : 'Não há horários disponíveis para hoje. Selecione outro dia.'}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {newAgSlots.map(slot => (
+                        <Button key={slot} variant={newAg.hora === slot ? 'default' : 'outline'}
+                          className={newAg.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                          size="sm" onClick={() => setNewAg(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground" disabled={!newAg.hora || !newAg.pacienteId || !newAg.profissionalId}>Agendar</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -542,8 +569,39 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           {retornoAg && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Paciente: <strong className="text-foreground">{retornoAg.pacienteNome}</strong></p>
-              <div><Label>Data</Label><Input type="date" value={retornoForm.data} onChange={e => setRetornoForm(p => ({ ...p, data: e.target.value }))} /></div>
-              <div><Label>Horário</Label><Input type="time" value={retornoForm.hora} onChange={e => setRetornoForm(p => ({ ...p, hora: e.target.value }))} /></div>
+              <div>
+                <Label>Data</Label>
+                {retornoAvailableDates.length === 0 ? (
+                  <p className="text-sm text-warning mt-1">Não há datas disponíveis na sua agenda.</p>
+                ) : (
+                  <Select value={retornoForm.data} onValueChange={v => setRetornoForm(p => ({ ...p, data: v, hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione a data" /></SelectTrigger>
+                    <SelectContent>
+                      {retornoAvailableDates.slice(0, 30).map(d => {
+                        const dateObj = new Date(d + 'T12:00:00');
+                        const label = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+                        return <SelectItem key={d} value={d}>{label}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {retornoForm.data && (
+                <div>
+                  <Label>Horário</Label>
+                  {retornoAvailableSlots.length === 0 ? (
+                    <p className="text-sm text-warning mt-1">Não há horários disponíveis para esta data.</p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {retornoAvailableSlots.map(slot => (
+                        <Button key={slot} variant={retornoForm.hora === slot ? 'default' : 'outline'}
+                          className={retornoForm.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                          size="sm" onClick={() => setRetornoForm(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <Button onClick={handleAgendarRetorno} disabled={!retornoForm.data || !retornoForm.hora} className="w-full gradient-primary text-primary-foreground">
                 Confirmar Retorno
               </Button>
