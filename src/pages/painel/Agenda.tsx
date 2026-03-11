@@ -400,22 +400,35 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                     <SelectContent>{salas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Horário</Label><Input type="time" value={newAg.hora} onChange={e => setNewAg(p => ({ ...p, hora: e.target.value }))} /></div>
-                  <div>
-                    <Label>Tipo</Label>
-                    <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Consulta">Primeira Consulta</SelectItem>
-                        <SelectItem value="Retorno">Retorno</SelectItem>
-                        <SelectItem value="Exame">Exame</SelectItem>
-                        <SelectItem value="Procedimento">Procedimento</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label>Tipo</Label>
+                  <Select value={newAg.tipo} onValueChange={v => setNewAg(p => ({ ...p, tipo: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                      <SelectItem value="Retorno">Retorno</SelectItem>
+                      <SelectItem value="Exame">Exame</SelectItem>
+                      <SelectItem value="Procedimento">Procedimento</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground">Agendar</Button>
+                <div>
+                  <Label>Horário Disponível</Label>
+                  {newAgSlots.length === 0 ? (
+                    <p className="text-sm text-warning mt-1">
+                      {!newAg.profissionalId ? 'Selecione um profissional.' : 'Não há horários disponíveis para hoje. Selecione outro dia.'}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {newAgSlots.map(slot => (
+                        <Button key={slot} variant={newAg.hora === slot ? 'default' : 'outline'}
+                          className={newAg.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                          size="sm" onClick={() => setNewAg(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Button onClick={handleCreate} className="w-full gradient-primary text-primary-foreground" disabled={!newAg.hora || !newAg.pacienteId || !newAg.profissionalId}>Agendar</Button>
               </div>
             </DialogContent>
           </Dialog>
