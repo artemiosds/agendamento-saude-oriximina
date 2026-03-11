@@ -39,6 +39,7 @@ const Relatorios: React.FC = () => {
   const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
+  const [filterRoleProd, setFilterRoleProd] = useState('all');
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
