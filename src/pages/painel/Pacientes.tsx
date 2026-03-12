@@ -185,7 +185,7 @@ const Pacientes: React.FC = () => {
 
   const openFilaDialog = (p: typeof pacientes[0]) => {
     setFilaPaciente(p);
-    setFilaForm({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '' });
+    setFilaForm({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
     setFilaDialogOpen(true);
   };
 
