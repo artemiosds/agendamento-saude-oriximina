@@ -503,6 +503,21 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         )}
       </div>
 
+      {/* Blocked date indicator */}
+      {blockedForDate.length > 0 && (
+        <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
+          <CardContent className="p-4 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">🚫 Data bloqueada para agendamentos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {blockedForDate.map(b => b.titulo).join(' • ')}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Appointments list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
