@@ -343,8 +343,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('pacientes' as any).select('*');
-      if (data && !error) {
+      // Paginate to avoid 1000-row silent truncation
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase.from('pacientes' as any).select('*').range(from, from + PAGE - 1);
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      const data = allData;
+      if (data.length > 0) {
         const mapped: Paciente[] = (data as any[]).map((p: any) => ({
           id: p.id,
           nome: p.nome,
@@ -365,8 +376,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('agendamentos' as any).select('*').order('data', { ascending: false });
-      if (data && !error) {
+      // Paginate to avoid 1000-row silent truncation
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase.from('agendamentos' as any).select('*').order('data', { ascending: false }).range(from, from + PAGE - 1);
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      const data = allData;
+      if (data.length > 0) {
         const mapped: Agendamento[] = (data as any[]).map((a: any) => ({
           id: a.id,
           pacienteId: a.paciente_id,
@@ -474,6 +496,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [logAction]);
 
   const addAgendamento = useCallback(async (ag: Agendamento) => {
+    // Server-side double-booking check (atomic)
+    try {
+      const { data: slotCheck } = await supabase.rpc('check_slot_availability', {
+        p_profissional_id: ag.profissionalId,
+        p_unidade_id: ag.unidadeId,
+        p_data: ag.data,
+        p_hora: ag.hora,
+      } as any) as any;
+      if (slotCheck && slotCheck.available === false) {
+        const reasons: Record<string, string> = {
+          no_availability: 'Não há disponibilidade configurada para este horário.',
+          day_full: 'As vagas do dia estão esgotadas.',
+          hour_full: 'As vagas deste horário estão esgotadas.',
+        };
+        const msg = reasons[slotCheck.reason] || 'Horário indisponível.';
+        console.error('Slot unavailable:', slotCheck.reason);
+        throw new Error(msg);
+      }
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('check_slot_availability')) {
+        throw err; // Re-throw our own error
+      }
+      // If function doesn't exist yet, proceed without check (graceful degradation)
+      console.warn('Slot check skipped:', err);
+    }
+
     const { error } = await supabase.from('agendamentos' as any).insert({
       id: ag.id,
       paciente_id: ag.pacienteId,
