@@ -197,21 +197,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // Match the exact same logic as the DB RPC is_date_blocked
   const isSlotBlocked = useCallback((profissionalId: string, unidadeId: string, date: string, time?: string) => {
     const dateRef = new Date(`${date}T00:00:00`).getTime();
     return bloqueios.some((b) => {
-      if (b.unidadeId && b.unidadeId !== unidadeId) return false;
-      if (b.profissionalId && b.profissionalId !== profissionalId) return false;
-
       const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
       const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
       if (dateRef < ini || dateRef > fim) return false;
+
+      // Scope matching (mirrors RPC logic exactly):
+      const isGlobal = (!b.unidadeId || b.unidadeId === '') && (!b.profissionalId || b.profissionalId === '');
+      const isUnitLevel = (b.unidadeId === unidadeId) && (!b.profissionalId || b.profissionalId === '');
+      const isProfLevel = (b.profissionalId === profissionalId);
+
+      if (!isGlobal && !isUnitLevel && !isProfLevel) return false;
 
       if (b.diaInteiro || !time) return true;
       const start = b.horaInicio || '00:00';
       const end = b.horaFim || '23:59';
       return time >= start && time < end;
     });
+  }, [bloqueios]);
+
+  // Get blocking info for a specific date (for calendar UI enrichment)
+  const getBlockingInfo = useCallback((profissionalId: string, unidadeId: string, date: string): { blocked: boolean; type?: string; label?: string } => {
+    const dateRef = new Date(`${date}T00:00:00`).getTime();
+    for (const b of bloqueios) {
+      const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
+      if (dateRef < ini || dateRef > fim) continue;
+
+      const isGlobal = (!b.unidadeId || b.unidadeId === '') && (!b.profissionalId || b.profissionalId === '');
+      const isUnitLevel = (b.unidadeId === unidadeId) && (!b.profissionalId || b.profissionalId === '');
+      const isProfLevel = (b.profissionalId === profissionalId);
+
+      if (!isGlobal && !isUnitLevel && !isProfLevel) continue;
+      if (!b.diaInteiro) continue; // Only whole-day blocks affect calendar
+
+      return { blocked: true, type: b.tipo, label: `${b.titulo || b.tipo}` };
+    }
+    return { blocked: false };
   }, [bloqueios]);
 
   const loadConfiguracoes = useCallback(async () => {
