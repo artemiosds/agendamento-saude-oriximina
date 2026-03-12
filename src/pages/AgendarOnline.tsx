@@ -314,7 +314,21 @@ const AgendarOnline: React.FC = () => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
+                  <div>
+                    <Label>Data Nasc.</Label>
+                    <Input
+                      type="text"
+                      value={form.dataNascimento}
+                      onChange={e => {
+                        const masked = applyDateMask(e.target.value);
+                        setForm(p => ({ ...p, dataNascimento: masked }));
+                      }}
+                      placeholder="DD/MM/AAAA"
+                      maxLength={10}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Digite a data no formato: 23/11/1985</p>
+                    {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
+                  </div>
                   <div>
                     <Label>E-mail *</Label>
                     <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
