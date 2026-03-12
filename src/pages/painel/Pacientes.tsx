@@ -43,7 +43,7 @@ const Pacientes: React.FC = () => {
   // Fila dialog
   const [filaDialogOpen, setFilaDialogOpen] = useState(false);
   const [filaPaciente, setFilaPaciente] = useState<typeof pacientes[0] | null>(null);
-  const [filaForm, setFilaForm] = useState({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '' });
+  const [filaForm, setFilaForm] = useState({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
   const [savingFila, setSavingFila] = useState(false);
 
   // Set of patient IDs currently in active queue
