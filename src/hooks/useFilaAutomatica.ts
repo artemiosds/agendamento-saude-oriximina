@@ -41,10 +41,24 @@ export function useFilaAutomatica() {
         (!f.profissionalId || f.profissionalId === profissionalId)
       )
       .sort((a, b) => {
+        // 1. Priority (lower rank = higher priority)
         const aRank = priorityRank[a.prioridade] ?? 99;
         const bRank = priorityRank[b.prioridade] ?? 99;
         if (aRank !== bRank) return aRank - bRank;
-        return a.horaChegada.localeCompare(b.horaChegada);
+        // 2. dataSolicitacaoOriginal ASC (oldest first) — stored as YYYY-MM-DD
+        if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal) {
+          const cmp = a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (cmp !== 0) return cmp;
+        }
+        if (a.dataSolicitacaoOriginal && !b.dataSolicitacaoOriginal) return -1;
+        if (!a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal) return 1;
+        // 3. criadoEm ASC (oldest record first)
+        const aCreated = a.criadoEm || '';
+        const bCreated = b.criadoEm || '';
+        if (aCreated && bCreated) return aCreated.localeCompare(bCreated);
+        if (aCreated) return -1;
+        if (bCreated) return 1;
+        return 0;
       });
   }, [fila]);
 
