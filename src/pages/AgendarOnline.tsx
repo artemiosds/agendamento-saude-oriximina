@@ -134,7 +134,7 @@ const AgendarOnline: React.FC = () => {
         await addPaciente({
           id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
           dataNascimento: form.dataNascimento, email: form.email, endereco: '',
-          observacoes: form.obs, criadoEm: new Date().toISOString(),
+          observacoes: form.obs, descricaoClinica: '', cid: '', criadoEm: new Date().toISOString(),
         });
         await refreshPacientes();
       }

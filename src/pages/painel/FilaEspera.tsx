@@ -277,6 +277,8 @@ const FilaEspera: React.FC = () => {
         dataNascimento: novoPaciente.dataNascimento,
         endereco: novoPaciente.endereco,
         observacoes: '',
+        descricaoClinica: novoPaciente.descricaoClinica || '',
+        cid: novoPaciente.cid || '',
         criadoEm: new Date().toISOString(),
       });
 
