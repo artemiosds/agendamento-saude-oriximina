@@ -554,6 +554,37 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         </Card>
       )}
 
+      {/* Weekend indicator */}
+      {weekendInfo.isWeekend && !weekendInfo.hasAvailability && (
+        <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
+          <CardContent className="p-4 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">🔴 Fim de semana — sem atendimento</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Nenhum profissional possui disponibilidade cadastrada para este dia.
+                {user && ['master', 'coordenador'].includes(user.role) && (
+                  <span className="block mt-1 text-warning">Master/Coordenador pode forçar encaixe ao criar agendamento.</span>
+                )}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {weekendInfo.isWeekend && weekendInfo.hasAvailability && (
+        <Card className="shadow-card border-0 bg-orange-50 ring-1 ring-orange-300 dark:bg-orange-500/10 dark:ring-orange-500/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-orange-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">🟠 Fim de semana — com atendimento disponível</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Há profissionais com disponibilidade cadastrada para este dia.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Appointments list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (

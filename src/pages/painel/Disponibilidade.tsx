@@ -185,19 +185,39 @@ const Disponibilidade: React.FC = () => {
             <div>
               <Label className="mb-2 block">Dias da Semana</Label>
               <div className="grid grid-cols-7 gap-1.5">
-                {diasSemanaLabels.map((label, i) => (
-                  <Button
-                    key={i}
-                    type="button"
-                    size="sm"
-                    variant={form.diasSemana.includes(i) ? 'default' : 'outline'}
-                    className={`w-full text-center text-xs font-medium ${form.diasSemana.includes(i) ? 'gradient-primary text-primary-foreground' : ''}`}
-                    onClick={() => toggleDia(i)}
-                  >
-                    {label}
-                  </Button>
-                ))}
+                {diasSemanaLabels.map((label, i) => {
+                  const isFds = i === 0 || i === 6;
+                  const isSelected = form.diasSemana.includes(i);
+                  return (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isSelected ? 'default' : 'outline'}
+                        className={cn(
+                          'w-full text-center text-xs font-medium',
+                          isSelected && !isFds && 'gradient-primary text-primary-foreground',
+                          isSelected && isFds && 'bg-orange-500 text-white hover:bg-orange-600 border-orange-500',
+                          !isSelected && isFds && 'border-destructive/40 text-destructive bg-destructive/5',
+                        )}
+                        onClick={() => toggleDia(i)}
+                      >
+                        {label}
+                      </Button>
+                      {isFds && (
+                        <span className={cn('text-[10px] leading-tight', isSelected ? 'text-orange-500 font-medium' : 'text-destructive/60')}>
+                          {isSelected ? 'Ativo FDS' : 'FDS'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+              {form.diasSemana.some(d => d === 0 || d === 6) && (
+                <p className="text-xs text-orange-500 mt-2 flex items-center gap-1">
+                  ⚠️ Atenção: disponibilidade em fim de semana. Certifique-se de que é intencional.
+                </p>
+              )}
             </div>
             <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">Salvar</Button>
           </div>
