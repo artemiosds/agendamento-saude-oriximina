@@ -716,6 +716,7 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="prioridade">Prioridade</SelectItem>
             <SelectItem value="tempo">Tempo de espera</SelectItem>
             <SelectItem value="entrada">Data de entrada</SelectItem>
+            <SelectItem value="solicitacao">Data solicitação original</SelectItem>
           </SelectContent>
         </Select>
       </div>
