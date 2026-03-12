@@ -482,13 +482,28 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
             <DialogContent className="sm:max-w-md">
               <DialogHeader><DialogTitle className="font-display">Novo Agendamento</DialogTitle></DialogHeader>
               <div className="space-y-4">
-                <div>
+                <div className="space-y-2">
                   <Label>Paciente</Label>
                   <BuscaPaciente
                     pacientes={pacientes}
                     value={newAg.pacienteId}
                     onChange={(id) => setNewAg(p => ({ ...p, pacienteId: id }))}
                   />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex-1 h-px bg-border" />
+                    <span>ou selecione pela lista</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  <Select value={newAg.pacienteId} onValueChange={v => setNewAg(p => ({ ...p, pacienteId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione um paciente..." /></SelectTrigger>
+                    <SelectContent>
+                      {pacientes.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}{p.cpf ? ` — ${p.cpf}` : ''}{p.telefone ? ` — ${p.telefone}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Profissional</Label>
