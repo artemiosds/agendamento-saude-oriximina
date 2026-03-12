@@ -780,7 +780,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_slot_availability: {
+        Args: {
+          p_data: string
+          p_hora: string
+          p_profissional_id: string
+          p_unidade_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
