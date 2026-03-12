@@ -182,15 +182,27 @@ const FilaEspera: React.FC = () => {
         if (sortField === 'prioridade') {
           if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
             return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
-          return a.horaChegada.localeCompare(b.horaChegada);
+          // Then by dataSolicitacaoOriginal if available
+          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
+            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (a.dataSolicitacaoOriginal) return -1;
+          if (b.dataSolicitacaoOriginal) return 1;
+          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         if (sortField === 'tempo') {
           const aMin = getWaitMinutes(a, now);
           const bMin = getWaitMinutes(b, now);
-          return bMin - aMin; // longest wait first
+          return bMin - aMin;
+        }
+        if (sortField === 'solicitacao') {
+          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
+            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (a.dataSolicitacaoOriginal) return -1;
+          if (b.dataSolicitacaoOriginal) return 1;
+          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         // entrada
-        return a.horaChegada.localeCompare(b.horaChegada);
+        return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
   }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
 
