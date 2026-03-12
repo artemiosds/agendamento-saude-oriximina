@@ -17,6 +17,7 @@ import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useData();
+  const { user } = useAuth();
   const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,17 +30,29 @@ const Configuracoes: React.FC = () => {
   const { testGmail } = useWebhookNotify();
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [triageLoading, setTriageLoading] = useState(true);
+  const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
 
-  // Load triage settings
+  // Load triage settings for current unit
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await (supabase as any).from('triage_settings').select('*').limit(1).maybeSingle();
-        setTriageEnabled(data?.enabled || false);
+        const unitId = user?.unidadeId || '';
+        // Try to find setting for this unit, or a global one (null unidade_id)
+        const { data } = await supabase
+          .from('triage_settings')
+          .select('*')
+          .or(`unidade_id.eq.${unitId},unidade_id.is.null`)
+          .order('unidade_id', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          setTriageEnabled(data.enabled || false);
+          setTriageSettingId(data.id);
+        }
       } catch {}
       setTriageLoading(false);
     })();
-  }, []);
+  }, [user?.unidadeId]);
 
   // Handle OAuth callback
   useEffect(() => {
