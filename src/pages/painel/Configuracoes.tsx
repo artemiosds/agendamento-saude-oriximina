@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 
 const Configuracoes: React.FC = () => {
   const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useData();
+  const { user } = useAuth();
   const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,17 +30,29 @@ const Configuracoes: React.FC = () => {
   const { testGmail } = useWebhookNotify();
   const [triageEnabled, setTriageEnabled] = useState(false);
   const [triageLoading, setTriageLoading] = useState(true);
+  const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
 
-  // Load triage settings
+  // Load triage settings for current unit
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await (supabase as any).from('triage_settings').select('*').limit(1).maybeSingle();
-        setTriageEnabled(data?.enabled || false);
+        const unitId = user?.unidadeId || '';
+        // Try to find setting for this unit, or a global one (null unidade_id)
+        const { data } = await supabase
+          .from('triage_settings')
+          .select('*')
+          .or(`unidade_id.eq.${unitId},unidade_id.is.null`)
+          .order('unidade_id', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          setTriageEnabled(data.enabled || false);
+          setTriageSettingId(data.id);
+        }
       } catch {}
       setTriageLoading(false);
     })();
-  }, []);
+  }, [user?.unidadeId]);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -258,14 +272,28 @@ const Configuracoes: React.FC = () => {
                 onCheckedChange={async (v) => {
                   setTriageEnabled(v);
                   try {
-                    await (supabase as any).from('triage_settings').upsert({
-                      id: 'default',
-                      enabled: v,
-                      unidade_id: null,
-                      profissional_id: null,
-                    }, { onConflict: 'id' });
+                    const unitId = user?.unidadeId || null;
+                    if (triageSettingId) {
+                      // Update existing
+                      const { error } = await supabase
+                        .from('triage_settings')
+                        .update({ enabled: v, updated_at: new Date().toISOString() })
+                        .eq('id', triageSettingId);
+                      if (error) throw error;
+                    } else {
+                      // Insert new
+                      const { data: inserted, error } = await supabase
+                        .from('triage_settings')
+                        .insert({ enabled: v, unidade_id: unitId, profissional_id: null })
+                        .select('id')
+                        .single();
+                      if (error) throw error;
+                      if (inserted) setTriageSettingId(inserted.id);
+                    }
                     toast.success(v ? 'Triagem habilitada!' : 'Triagem desabilitada.');
-                  } catch {
+                  } catch (err) {
+                    console.error('Erro ao salvar triagem:', err);
+                    setTriageEnabled(!v);
                     toast.error('Erro ao salvar configuração de triagem.');
                   }
                 }}

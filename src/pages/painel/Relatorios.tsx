@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3 } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 
@@ -35,6 +35,11 @@ interface FilaDB {
   hora_chegada: string; hora_chamada: string | null; criado_em: string;
 }
 
+interface TriagemDB {
+  id: string; agendamento_id: string; tecnico_id: string;
+  criado_em: string | null; confirmado_em: string | null; iniciado_em: string | null;
+}
+
 const Relatorios: React.FC = () => {
   const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
   const { user } = useAuth();
@@ -50,8 +55,11 @@ const Relatorios: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
+  const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional');
+  const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
+
   const setoresUnicos = useMemo(() => {
     const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
@@ -65,8 +73,9 @@ const Relatorios: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        let qAt = (supabase as any).from('atendimentos').select('*');
-        let qFila = (supabase as any).from('fila_espera').select('*');
+        let qAt = supabase.from('atendimentos').select('*');
+        let qFila = supabase.from('fila_espera').select('*');
+        let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
         if (user?.role === 'coordenador' && user.unidadeId) {
           qAt = qAt.eq('unidade_id', user.unidadeId);
           qFila = qFila.eq('unidade_id', user.unidadeId);
@@ -75,9 +84,13 @@ const Relatorios: React.FC = () => {
           qAt = qAt.eq('profissional_id', user.id);
           qFila = qFila.eq('profissional_id', user.id);
         }
-        const [{ data: atData }, { data: filaData }] = await Promise.all([qAt, qFila]);
+        if (user?.role === 'tecnico' && user.id) {
+          qTriage = qTriage.eq('tecnico_id', user.id);
+        }
+        const [{ data: atData }, { data: filaData }, { data: triageData }] = await Promise.all([qAt, qFila, qTriage]);
         if (atData) setAtendimentosDB(atData);
         if (filaData) setFilaDB(filaData);
+        if (triageData) setTriagensDB(triageData as TriagemDB[]);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
@@ -253,6 +266,31 @@ const Relatorios: React.FC = () => {
     const desistencias = filteredFila.filter(f => f.status === 'desistiu' || f.status === 'cancelado').length;
     return { items: filteredFila.sort((a, b) => a.posicao - b.posicao), aguardando, chamados, desistencias, total: filteredFila.length };
   }, [filaDB, filterUnit, filterProf]);
+
+  // === TRIAGEM REPORT ===
+  const triagemReport = useMemo(() => {
+    const filteredTriagens = triagensDB.filter(t => {
+      if (dateFrom && t.criado_em && t.criado_em < dateFrom) return false;
+      if (dateTo && t.criado_em && t.criado_em > dateTo + 'T23:59:59') return false;
+      return true;
+    });
+    const total = filteredTriagens.length;
+    const confirmadas = filteredTriagens.filter(t => t.confirmado_em).length;
+    const pendentes = total - confirmadas;
+
+    // Por técnico
+    const porTecnico: Record<string, { id: string; nome: string; total: number; confirmadas: number; pendentes: number }> = {};
+    filteredTriagens.forEach(t => {
+      const tec = funcionarios.find(f => f.id === t.tecnico_id);
+      const nome = tec?.nome || 'Desconhecido';
+      if (!porTecnico[t.tecnico_id]) porTecnico[t.tecnico_id] = { id: t.tecnico_id, nome, total: 0, confirmadas: 0, pendentes: 0 };
+      porTecnico[t.tecnico_id].total++;
+      if (t.confirmado_em) porTecnico[t.tecnico_id].confirmadas++;
+      else porTecnico[t.tecnico_id].pendentes++;
+    });
+
+    return { total, confirmadas, pendentes, porTecnico: Object.values(porTecnico).sort((a, b) => b.total - a.total) };
+  }, [triagensDB, funcionarios, dateFrom, dateTo]);
 
   // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
@@ -600,6 +638,7 @@ const Relatorios: React.FC = () => {
           <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
+          <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
         </TabsList>
 
@@ -1042,6 +1081,95 @@ const Relatorios: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* === TRIAGEM === */}
+        <TabsContent value="triagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-primary">{triagemReport.total}</p>
+                <p className="text-xs text-muted-foreground">Total Triagens</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-success">{triagemReport.confirmadas}</p>
+                <p className="text-xs text-muted-foreground">Confirmadas</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-warning">{triagemReport.pendentes}</p>
+                <p className="text-xs text-muted-foreground">Pendentes/Rascunho</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-info">{tecnicos.length}</p>
+                <p className="text-xs text-muted-foreground">Técnicos Ativos</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <HeartPulse className="w-5 h-5 text-primary" /> Produtividade por Técnico de Enfermagem
+              </h3>
+              {triagemReport.porTecnico.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhum registro de triagem encontrado no período.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Técnico(a)</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Confirmadas</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pendentes</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {triagemReport.porTecnico.map(t => (
+                        <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 px-3 font-medium text-foreground">{t.nome}</td>
+                          <td className="text-center py-2.5 px-2 text-foreground font-semibold">{t.total}</td>
+                          <td className="text-center py-2.5 px-2 text-success font-medium">{t.confirmadas}</td>
+                          <td className="text-center py-2.5 px-2 text-warning font-medium">{t.pendentes}</td>
+                          <td className="text-center py-2.5 px-2">
+                            <Badge variant="outline" className="text-xs">
+                              {t.total > 0 ? Math.round((t.confirmadas / t.total) * 100) : 0}%
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {triagemReport.porTecnico.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Triagens por Técnico</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={triagemReport.porTecnico}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="confirmadas" name="Confirmadas" fill="hsl(152,60%,42%)" />
+                    <Bar dataKey="pendentes" name="Pendentes" fill="hsl(45,93%,47%)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* === DETALHADO === */}
