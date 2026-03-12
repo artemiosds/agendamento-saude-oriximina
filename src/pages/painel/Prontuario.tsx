@@ -60,6 +60,24 @@ const emptyForm = {
   observacoes: '',
 };
 
+const classificarIMC = (imc: number): string => {
+  if (imc < 18.5) return 'Abaixo do peso';
+  if (imc < 25) return 'Normal';
+  if (imc < 30) return 'Sobrepeso';
+  if (imc < 35) return 'Obesidade grau I';
+  if (imc < 40) return 'Obesidade grau II';
+  return 'Obesidade grau III';
+};
+
+interface TriagemData {
+  peso?: number; altura?: number; imc?: number;
+  pressao_arterial?: string; temperatura?: number;
+  frequencia_cardiaca?: number; saturacao_oxigenio?: number;
+  glicemia?: number; alergias?: string[]; medicamentos?: string[];
+  queixa?: string; confirmado_em?: string;
+  tecnico_nome?: string; tecnico_coren?: string;
+}
+
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { pacientes, unidades, agendamentos, updateAgendamento, logAction } = useData();
@@ -74,6 +92,7 @@ const ProntuarioPage: React.FC = () => {
   const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
   const [search, setSearch] = useState('');
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
+  const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   const isProfissional = user?.role === 'profissional';
