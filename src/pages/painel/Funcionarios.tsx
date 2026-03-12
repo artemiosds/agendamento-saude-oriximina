@@ -45,6 +45,7 @@ interface FuncionarioDB {
   numero_conselho: string;
   uf_conselho: string;
   pode_agendar_retorno: boolean;
+  coren: string;
 }
 
 const Funcionarios: React.FC = () => {
