@@ -523,6 +523,8 @@ const ProntuarioPage: React.FC = () => {
           )}
           {form.agendamento_id && !triagem && (
             <p className="text-xs text-muted-foreground italic">Triagem não realizada para este atendimento.</p>
+          )}
+
           {/* Patient history section */}
           {patientHistory.length > 0 && (
             <div className="bg-muted/50 rounded-lg p-3 border">
