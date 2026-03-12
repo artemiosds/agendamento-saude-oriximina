@@ -109,7 +109,6 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
     if (isProfissional && user) {
       if (a.profissionalId !== user.id) return false;
-      if (a.status !== 'confirmado_chegada' && a.status !== 'em_atendimento' && a.status !== 'concluido') return false;
     }
     if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
