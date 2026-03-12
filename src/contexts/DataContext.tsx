@@ -1079,6 +1079,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         getAvailableSlots,
         getAvailableDates,
         getNextAvailableSlots,
+        getBlockingInfo,
+        getDayInfoMap,
         updateConfiguracoes,
         checkFilaForSlot,
         encaixarDaFila,
