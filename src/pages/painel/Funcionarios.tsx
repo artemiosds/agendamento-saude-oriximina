@@ -179,6 +179,7 @@ const Funcionarios: React.FC = () => {
             numero_conselho: form.numero_conselho,
             uf_conselho: form.uf_conselho,
             pode_agendar_retorno: form.pode_agendar_retorno,
+            coren: form.coren,
             criado_por: user?.id || '',
           },
         });
