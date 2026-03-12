@@ -16,11 +16,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 const roleLabels: Record<UserRole, string> = {
-  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão',
+  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão', tecnico: 'Técnico de Enfermagem',
 };
 const roleColors: Record<UserRole, string> = {
   master: 'bg-destructive/10 text-destructive', coordenador: 'bg-warning/10 text-warning',
   recepcao: 'bg-info/10 text-info', profissional: 'bg-success/10 text-success', gestao: 'bg-accent text-accent-foreground',
+  tecnico: 'bg-primary/10 text-primary',
 };
 
 interface FuncionarioDB {
