@@ -112,6 +112,12 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
+    // Validate birth date if provided
+    if (form.dataNascimento && !validateDateBrazilian(form.dataNascimento)) {
+      setErrors({ dataNascimento: 'Data de nascimento inválida.' });
+      toast.error('Data de nascimento inválida.');
+      return false;
+    }
     // Validate password
     if (!form.senha || form.senha.length < 6) {
       setErrors({ senha: 'Senha deve ter no mínimo 6 caracteres.' });
