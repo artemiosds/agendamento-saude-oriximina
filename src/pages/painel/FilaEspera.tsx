@@ -771,9 +771,11 @@ const FilaEspera: React.FC = () => {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {unidade?.nome || f.setor} • {prof ? prof.nome : 'Qualquer profissional'} • Chegou: {f.horaChegada}
+                    {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
-                  {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">{f.observacoes}</p>}
+                  {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
+                  {f.descricaoClinica && <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>}
+                  {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
                   {isChamado && reservaTime && !reservaTime.expired && (
                     <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
                       <Timer className="w-3 h-3" />
