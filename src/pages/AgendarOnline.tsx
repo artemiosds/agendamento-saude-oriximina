@@ -14,6 +14,42 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 
+// Helper function to apply date mask DD/MM/AAAA
+const applyDateMask = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+};
+
+// Validate date in DD/MM/AAAA format
+const validateDateBrazilian = (dateStr: string): boolean => {
+  if (!dateStr) return true; // Optional field
+  const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  const match = dateStr.match(regex);
+  if (!match) return false;
+  
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  
+  if (day < 1 || day > 31) return false;
+  if (month < 1 || month > 12) return false;
+  if (year < 1900 || year > new Date().getFullYear()) return false;
+  
+  // Check if date is valid
+  const date = new Date(year, month - 1, day);
+  return date.getDate() === day && date.getMonth() === month - 1;
+};
+
+// Convert DD/MM/AAAA to YYYY-MM-DD for database
+const convertBrazilianToISO = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+  return `${match[3]}-${match[2]}-${match[1]}`;
+};
+
 const AgendarOnline: React.FC = () => {
   const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
   const { notify } = useWebhookNotify();
@@ -76,6 +112,12 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
+    // Validate birth date if provided
+    if (form.dataNascimento && !validateDateBrazilian(form.dataNascimento)) {
+      setErrors({ dataNascimento: 'Data de nascimento inválida.' });
+      toast.error('Data de nascimento inválida.');
+      return false;
+    }
     // Validate password
     if (!form.senha || form.senha.length < 6) {
       setErrors({ senha: 'Senha deve ter no mínimo 6 caracteres.' });
@@ -133,7 +175,7 @@ const AgendarOnline: React.FC = () => {
         pacienteId = `p${Date.now()}`;
         await addPaciente({
           id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
-          dataNascimento: form.dataNascimento, email: form.email, endereco: '',
+          dataNascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, endereco: '',
           observacoes: form.obs, descricaoClinica: '', cid: '', criadoEm: new Date().toISOString(),
         });
         await refreshPacientes();
@@ -314,7 +356,21 @@ const AgendarOnline: React.FC = () => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
+                  <div>
+                    <Label>Data Nasc.</Label>
+                    <Input
+                      type="text"
+                      value={form.dataNascimento}
+                      onChange={e => {
+                        const masked = applyDateMask(e.target.value);
+                        setForm(p => ({ ...p, dataNascimento: masked }));
+                      }}
+                      placeholder="DD/MM/AAAA"
+                      maxLength={10}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Digite a data no formato: 23/11/1985</p>
+                    {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
+                  </div>
                   <div>
                     <Label>E-mail *</Label>
                     <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
