@@ -126,6 +126,28 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user]);
 
+  // Load triage data for an agendamento
+  const loadTriagem = async (agendamentoId: string) => {
+    try {
+      const { data } = await (supabase as any)
+        .from('triage_records')
+        .select('*')
+        .eq('agendamento_id', agendamentoId)
+        .not('confirmado_em', 'is', null)
+        .maybeSingle();
+      if (data) {
+        // Fetch tecnico info
+        const { data: tecnico } = await supabase.from('funcionarios')
+          .select('nome, coren')
+          .eq('id', data.tecnico_id)
+          .maybeSingle();
+        setTriagem({ ...data, tecnico_nome: (tecnico as any)?.nome || '', tecnico_coren: (tecnico as any)?.coren || '' });
+      } else {
+        setTriagem(null);
+      }
+    } catch { setTriagem(null); }
+  };
+
   // Auto-open form when coming from "Iniciar Atendimento"
   useEffect(() => {
     const pacienteId = searchParams.get('pacienteId');
@@ -135,6 +157,8 @@ const ProntuarioPage: React.FC = () => {
     const data = searchParams.get('data');
 
     if (pacienteId && pacienteNome) {
+      if (agendamentoId) loadTriagem(agendamentoId);
+
       const existingForAgendamento = agendamentoId 
         ? prontuarios.find(p => p.agendamento_id === agendamentoId)
         : null;
