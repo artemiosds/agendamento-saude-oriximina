@@ -444,6 +444,11 @@ const Pacientes: React.FC = () => {
                           <Clock className="w-3 h-3 mr-0.5" /> FILA DE ESPERA
                         </Badge>
                       )}
+                      {pacientesDemandaReprimida.has(p.id) && (
+                        <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{p.cpf || 'Sem CPF'}</p>
                     {naFila && filaEntry && (
