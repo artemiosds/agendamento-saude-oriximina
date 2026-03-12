@@ -35,6 +35,11 @@ interface FilaDB {
   hora_chegada: string; hora_chamada: string | null; criado_em: string;
 }
 
+interface TriagemDB {
+  id: string; agendamento_id: string; tecnico_id: string;
+  criado_em: string | null; confirmado_em: string | null; iniciado_em: string | null;
+}
+
 const Relatorios: React.FC = () => {
   const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
   const { user } = useAuth();
