@@ -101,6 +101,7 @@ const Funcionarios: React.FC = () => {
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
+      coren: f.coren || '',
     });
     setDialogOpen(true);
   };
