@@ -24,6 +24,7 @@ import Configuracoes from "./pages/painel/Configuracoes";
 import Prontuario from "./pages/painel/Prontuario";
 import Auditoria from "./pages/painel/Auditoria";
 import Triagem from "./pages/painel/Triagem";
+import Bloqueios from "./pages/painel/Bloqueios";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
