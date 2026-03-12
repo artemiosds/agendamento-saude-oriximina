@@ -789,6 +789,10 @@ export type Database = {
         }
         Returns: Json
       }
+      iniciar_atendimento: {
+        Args: { p_agendamento_id: string; p_profissional_id: string }
+        Returns: undefined
+      }
       is_date_blocked: {
         Args: {
           p_date: string

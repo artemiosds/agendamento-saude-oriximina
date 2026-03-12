@@ -31,6 +31,7 @@ const statusLabels: Record<string, string> = {
   pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
   cancelado: 'Cancelado', concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
   remarcado: 'Remarcado', em_atendimento: 'Em Atendimento', aguardando_triagem: 'Aguard. Triagem',
+  aguardando_atendimento: 'Aguard. Atendimento',
 };
 
 const statusBadgeClass: Record<string, string> = {
@@ -44,6 +45,7 @@ const statusBadgeClass: Record<string, string> = {
   remarcado: 'bg-muted text-muted-foreground',
   em_atendimento: 'bg-primary/10 text-primary',
   aguardando_triagem: 'bg-warning/10 text-warning',
+  aguardando_atendimento: 'bg-emerald-500/10 text-emerald-600',
 };
 
 const tipoBadge: Record<string, { label: string; class: string }> = {
@@ -107,7 +109,6 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
     if (isProfissional && user) {
       if (a.profissionalId !== user.id) return false;
-      if (a.status !== 'confirmado_chegada' && a.status !== 'em_atendimento' && a.status !== 'concluido') return false;
     }
     if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
@@ -318,6 +319,27 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   };
 
   const handleIniciarAtendimento = async (ag: typeof agendamentos[0]) => {
+    // Backend validation first
+    try {
+      const { error: rpcError } = await supabase.rpc('iniciar_atendimento', {
+        p_agendamento_id: ag.id,
+        p_profissional_id: user?.id || '',
+      });
+      if (rpcError) {
+        if (rpcError.message.includes('arrival_not_confirmed')) {
+          toast.error('A chegada do paciente ainda não foi confirmada pela recepção.');
+        } else if (rpcError.message.includes('not_authorized')) {
+          toast.error('Você não tem permissão para este agendamento.');
+        } else {
+          toast.error('Não foi possível iniciar o atendimento.');
+        }
+        return;
+      }
+    } catch (err) {
+      toast.error('Erro ao validar início do atendimento.');
+      return;
+    }
+
     const now = new Date();
     const horaInicio = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -330,7 +352,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     };
     localStorage.setItem(`timer_${ag.id}`, JSON.stringify(timerState));
 
-    await updateAgendamento(ag.id, { status: 'em_atendimento' });
+    // Status already updated by RPC, refresh local state
+    await refreshAgendamentos();
 
     const pac = pacientes.find(p => p.id === ag.pacienteId);
 
@@ -525,7 +548,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
             {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
           </CardContent></Card>
         ) : filtered.map(ag => {
-          const canStart = isProfissional && ag.status === 'confirmado_chegada' && ag.data === new Date().toISOString().split('T')[0];
+          const ehHoje = ag.data === new Date().toISOString().split('T')[0];
+          const canStart = isProfissional && (ag.status === 'confirmado_chegada' || ag.status === 'aguardando_atendimento') && ehHoje;
           const isEmAtendimento = ag.status === 'em_atendimento';
           const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground' };
           const paciente = pacientes.find(p => p.id === ag.pacienteId);
@@ -570,21 +594,67 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                 </div>
 
                 <div className="flex gap-1 flex-wrap">
-                  {canStart && (
-                    <Button size="sm" className="h-8 px-3 text-xs gradient-primary text-primary-foreground" onClick={() => handleIniciarAtendimento(ag)}>
-                      <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
-                    </Button>
-                  )}
-                  {isEmAtendimento && isProfissional && (
-                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
-                      const params = new URLSearchParams({
-                        pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
-                        agendamentoId: ag.id, data: ag.data,
-                      });
-                      navigate(`/painel/prontuario?${params.toString()}`);
-                    }}>
-                      <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
-                    </Button>
+                  {/* Professional status-based action buttons */}
+                  {isProfissional && (
+                    <>
+                      {(ag.status === 'pendente' || ag.status === 'confirmado') && ehHoje && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="ghost" className="h-8 px-3 text-xs cursor-not-allowed opacity-50" disabled>
+                              ⏳ Aguardando chegada
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {ag.status === 'aguardando_triagem' && ehHoje && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning" disabled>
+                              🩺 Em triagem
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {canStart && (
+                        <Button size="sm" className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90" onClick={() => handleIniciarAtendimento(ag)}>
+                          <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
+                        </Button>
+                      )}
+                      {isEmAtendimento && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                          const params = new URLSearchParams({
+                            pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+                            agendamentoId: ag.id, data: ag.data,
+                          });
+                          navigate(`/painel/prontuario?${params.toString()}`);
+                        }}>
+                          <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
+                        </Button>
+                      )}
+                      {ag.status === 'concluido' && (
+                        <Button size="sm" variant="ghost" className="h-8 px-3 text-xs" onClick={() => {
+                          const params = new URLSearchParams({
+                            pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+                            agendamentoId: ag.id, data: ag.data,
+                          });
+                          navigate(`/painel/prontuario?${params.toString()}`);
+                        }}>
+                          ✅ Ver prontuário
+                        </Button>
+                      )}
+                      {(ag.status === 'falta' || ag.status === 'cancelado') && (
+                        <span className="text-xs text-muted-foreground px-2 py-1">
+                          {ag.status === 'falta' ? 'Faltou' : 'Cancelado'}
+                        </span>
+                      )}
+                      {!ehHoje && !['falta', 'cancelado', 'concluido'].includes(ag.status) && (
+                        <span className="text-xs text-muted-foreground px-2 py-1">
+                          📅 Agendado para {new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                      )}
+                    </>
                   )}
                   {/* Retorno button for authorized professionals */}
                   {canRetorno && ag.status === 'concluido' && (
