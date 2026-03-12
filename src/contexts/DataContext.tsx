@@ -343,7 +343,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('pacientes' as any).select('*');
+      // Paginate to avoid 1000-row silent truncation
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase.from('pacientes' as any).select('*').range(from, from + PAGE - 1);
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      const data = allData;
       if (data && !error) {
         const mapped: Paciente[] = (data as any[]).map((p: any) => ({
           id: p.id,
