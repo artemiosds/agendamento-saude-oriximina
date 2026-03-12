@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 
 const Configuracoes: React.FC = () => {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useData();
   const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +26,19 @@ const Configuracoes: React.FC = () => {
   const [gmailStatus, setGmailStatus] = useState<'idle' | 'conectado' | 'erro_autenticacao' | 'erro_conexao' | 'erro_envio' | 'nao_configurado'>('idle');
   const [gmailMessage, setGmailMessage] = useState('');
   const { testGmail } = useWebhookNotify();
+  const [triageEnabled, setTriageEnabled] = useState(false);
+  const [triageLoading, setTriageLoading] = useState(true);
+
+  // Load triage settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await (supabase as any).from('triage_settings').select('*').limit(1).maybeSingle();
+        setTriageEnabled(data?.enabled || false);
+      } catch {}
+      setTriageLoading(false);
+    })();
+  }, []);
 
   // Handle OAuth callback
   useEffect(() => {
