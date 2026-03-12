@@ -51,7 +51,7 @@ const convertBrazilianToISO = (dateStr: string): string => {
 };
 
 const AgendarOnline: React.FC = () => {
-  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
+  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, getDayInfoMap, refreshPacientes } = useData();
   const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
@@ -95,6 +95,11 @@ const AgendarOnline: React.FC = () => {
     const amanhaStr = amanha.toISOString().split('T')[0];
     return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
+
+  const dayInfoMap = useMemo(() => {
+    if (!form.profissionalId || !form.unidadeId) return {};
+    return getDayInfoMap(form.profissionalId, form.unidadeId, true);
+  }, [form.profissionalId, form.unidadeId, getDayInfoMap]);
 
   const availableSlots = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId || !form.data) return [];
@@ -435,6 +440,8 @@ const AgendarOnline: React.FC = () => {
                           availableDates={availableDates.slice(0, 60)}
                           selectedDate={form.data}
                           onSelectDate={(d) => setForm(p => ({ ...p, data: d, hora: '' }))}
+                          dayInfoMap={dayInfoMap}
+                          blockToday={true}
                         />
                       </div>
                     </div>
