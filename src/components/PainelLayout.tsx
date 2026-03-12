@@ -47,6 +47,7 @@ const PainelLayout: React.FC = () => {
     recepcao: 'Recepção',
     profissional: 'Profissional',
     gestao: 'Gestão',
+    tecnico: 'Técnico de Enfermagem',
   };
 
   return (

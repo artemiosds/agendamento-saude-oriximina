@@ -22,6 +22,34 @@ export interface User {
   numeroConselho?: string;
   ufConselho?: string;
   podeAgendarRetorno?: boolean;
+  coren?: string;
+}
+
+export interface TriagemRecord {
+  id: string;
+  agendamentoId: string;
+  tecnicoId: string;
+  peso?: number;
+  altura?: number;
+  imc?: number;
+  pressaoArterial?: string;
+  temperatura?: number;
+  frequenciaCardiaca?: number;
+  saturacaoOxigenio?: number;
+  glicemia?: number;
+  alergias: string[];
+  medicamentos: string[];
+  queixa?: string;
+  iniciadoEm?: string;
+  confirmadoEm?: string;
+  criadoEm?: string;
+}
+
+export interface TriagemSettings {
+  id: string;
+  unidadeId?: string;
+  profissionalId?: string;
+  enabled: boolean;
 }
 
 export interface Prontuario {
