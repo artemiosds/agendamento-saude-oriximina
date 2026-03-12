@@ -292,8 +292,10 @@ export type Database = {
       }
       fila_espera: {
         Row: {
+          cid: string
           criado_em: string | null
           criado_por: string
+          descricao_clinica: string
           hora_chamada: string | null
           hora_chegada: string
           id: string
@@ -309,8 +311,10 @@ export type Database = {
           unidade_id: string
         }
         Insert: {
+          cid?: string
           criado_em?: string | null
           criado_por?: string
+          descricao_clinica?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id: string
@@ -326,8 +330,10 @@ export type Database = {
           unidade_id?: string
         }
         Update: {
+          cid?: string
           criado_em?: string | null
           criado_por?: string
+          descricao_clinica?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id?: string
@@ -494,9 +500,11 @@ export type Database = {
       pacientes: {
         Row: {
           auth_user_id: string | null
+          cid: string
           cpf: string
           criado_em: string | null
           data_nascimento: string
+          descricao_clinica: string
           email: string
           endereco: string
           id: string
@@ -506,9 +514,11 @@ export type Database = {
         }
         Insert: {
           auth_user_id?: string | null
+          cid?: string
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
+          descricao_clinica?: string
           email?: string
           endereco?: string
           id: string
@@ -518,9 +528,11 @@ export type Database = {
         }
         Update: {
           auth_user_id?: string | null
+          cid?: string
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
+          descricao_clinica?: string
           email?: string
           endereco?: string
           id?: string
