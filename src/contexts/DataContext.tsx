@@ -492,6 +492,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.email !== undefined) dbData.email = data.email;
     if (data.endereco !== undefined) dbData.endereco = data.endereco;
     if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
+    if (data.cid !== undefined) dbData.cid = data.cid;
     const { error } = await supabase.from('pacientes' as any).update(dbData).eq('id', id);
     if (!error) {
       setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
