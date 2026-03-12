@@ -43,6 +43,7 @@ const statusBadgeClass: Record<string, string> = {
   atraso: 'bg-warning/10 text-warning',
   remarcado: 'bg-muted text-muted-foreground',
   em_atendimento: 'bg-primary/10 text-primary',
+  aguardando_triagem: 'bg-warning/10 text-warning',
 };
 
 const tipoBadge: Record<string, { label: string; class: string }> = {
