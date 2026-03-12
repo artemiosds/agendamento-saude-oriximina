@@ -96,6 +96,11 @@ const AgendarOnline: React.FC = () => {
     return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
+  const dayInfoMap = useMemo(() => {
+    if (!form.profissionalId || !form.unidadeId) return {};
+    return getDayInfoMap(form.profissionalId, form.unidadeId, true);
+  }, [form.profissionalId, form.unidadeId, getDayInfoMap]);
+
   const availableSlots = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId || !form.data) return [];
     return getAvailableSlots(form.profissionalId, form.unidadeId, form.data, true);
