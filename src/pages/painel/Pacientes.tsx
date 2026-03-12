@@ -210,6 +210,8 @@ const Pacientes: React.FC = () => {
         horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         criadoPor: user?.id || 'sistema',
         observacoes: filaForm.observacoes,
+        descricaoClinica: filaForm.descricaoClinica,
+        cid: filaForm.cid,
       });
 
       const unidade = unidades.find(u => u.id === filaForm.unidadeId);
