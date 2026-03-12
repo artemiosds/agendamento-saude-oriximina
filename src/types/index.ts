@@ -108,6 +108,8 @@ export interface Paciente {
   email: string;
   endereco: string;
   observacoes: string;
+  descricaoClinica: string;
+  cid: string;
   criadoEm: string;
 }
 
