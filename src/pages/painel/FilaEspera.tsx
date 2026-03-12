@@ -936,7 +936,136 @@ const FilaEspera: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Queue List */}
+      {/* Import Old List Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <FileUp className="w-5 h-5" /> Importar Lista Antiga (Demanda Reprimida)
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Cadastre pacientes da lista em papel anterior ao sistema. Eles entrarão na fila de espera com a etiqueta DEMANDA REPRIMIDA.</p>
+
+          {importDup && (
+            <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
+              <p className="font-medium text-warning flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Paciente já cadastrado:</p>
+              <p><strong>{importDup.nome}</strong> — {importDup.telefone} — {importDup.cpf || 'Sem CPF'}</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => { handleImportSave(importDup); }}>
+                  Usar este e adicionar à fila
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setImportDup(null)}>Corrigir dados</Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label>Nome Completo *</Label>
+                <Input value={importForm.nome} onChange={e => setImportForm(p => ({ ...p, nome: e.target.value }))} />
+                {importErrors.nome && <p className="text-xs text-destructive mt-1">{importErrors.nome}</p>}
+              </div>
+              <div>
+                <Label>Telefone *</Label>
+                <Input value={importForm.telefone} onChange={e => setImportForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
+                {importErrors.telefone && <p className="text-xs text-destructive mt-1">{importErrors.telefone}</p>}
+              </div>
+              <div>
+                <Label>CPF (opcional)</Label>
+                <Input value={importForm.cpf} onChange={e => setImportForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <Label>E-mail (opcional)</Label>
+                <Input type="email" value={importForm.email} onChange={e => setImportForm(p => ({ ...p, email: e.target.value }))} />
+                {importErrors.email && <p className="text-xs text-destructive mt-1">{importErrors.email}</p>}
+              </div>
+              <div>
+                <Label>Data Nasc.</Label>
+                <Input type="date" value={importForm.dataNascimento} onChange={e => setImportForm(p => ({ ...p, dataNascimento: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-semibold text-foreground mb-2">📋 Dados da Fila</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Data de Solicitação Original * <span className="text-xs text-muted-foreground">(da ficha de papel)</span></Label>
+                  <Input type="date" value={importForm.dataSolicitacaoOriginal} onChange={e => setImportForm(p => ({ ...p, dataSolicitacaoOriginal: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Unidade *</Label>
+                  <Select value={importForm.unidadeId} onValueChange={v => setImportForm(p => ({ ...p, unidadeId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Profissional Desejado</Label>
+                  <Select value={importForm.profissionalId || 'none'} onValueChange={v => setImportForm(p => ({ ...p, profissionalId: v === 'none' ? '' : v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Qualquer</SelectItem>
+                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Tipo</Label>
+                    <Select value={importForm.tipo} onValueChange={v => setImportForm(p => ({ ...p, tipo: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="primeira_consulta">Primeira Consulta</SelectItem>
+                        <SelectItem value="retorno">Retorno</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Prioridade</Label>
+                    <Select value={importForm.prioridade} onValueChange={v => setImportForm(p => ({ ...p, prioridade: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="gestante">Gestante</SelectItem>
+                        <SelectItem value="idoso">Idoso 60+</SelectItem>
+                        <SelectItem value="urgente">Urgente</SelectItem>
+                        <SelectItem value="crianca">Criança 0-12</SelectItem>
+                        <SelectItem value="pcd">PNE</SelectItem>
+                        <SelectItem value="alta">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-semibold text-foreground mb-2">🩺 Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica (opcional)</Label>
+                  <Textarea value={importForm.descricaoClinica} onChange={e => setImportForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Motivo de espera / queixa principal..." rows={2} />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={importForm.cid} onChange={e => setImportForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea value={importForm.observacoes} onChange={e => setImportForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações administrativas..." rows={2} />
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={() => handleImportSave()} className="w-full gradient-primary text-primary-foreground" disabled={importSaving}>
+              {importSaving ? 'Importando...' : 'Importar para Fila de Espera'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <div className="space-y-2">
         {filteredFila.length === 0 ? (
           <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent></Card>
