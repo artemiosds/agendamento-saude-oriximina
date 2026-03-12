@@ -1102,6 +1102,11 @@ const FilaEspera: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                    {f.origemCadastro === 'demanda_reprimida' && (
+                      <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                        <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
+                      </Badge>
+                    )}
                     {isActive && (
                       <span className={cn('inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
                         <Clock className="w-3 h-3" />
@@ -1112,6 +1117,9 @@ const FilaEspera: React.FC = () => {
                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
+                  {f.dataSolicitacaoOriginal && (
+                    <p className="text-xs text-muted-foreground mt-0.5">📅 Solicitação original: {f.dataSolicitacaoOriginal}</p>
+                  )}
                   {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
                   {f.descricaoClinica && <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>}
                   {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
