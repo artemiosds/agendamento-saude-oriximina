@@ -118,7 +118,7 @@ const FilaEspera: React.FC = () => {
 
   const [form, setForm] = useState({
     pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '',
-    setor: '', prioridade: 'normal' as string, observacoes: '',
+    setor: '', prioridade: 'normal' as string, observacoes: '', descricaoClinica: '', cid: '',
   });
 
   // Load reservations from localStorage and tick timer
