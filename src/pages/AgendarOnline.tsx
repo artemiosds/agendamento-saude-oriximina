@@ -373,25 +373,14 @@ const AgendarOnline: React.FC = () => {
                 ) : (
                   <>
                     <div>
-                      <Label>Data Disponível *</Label>
-                      <Select value={form.data} onValueChange={v => setForm(p => ({ ...p, data: v, hora: '' }))}>
-                        <SelectTrigger><SelectValue placeholder="Selecione a data" /></SelectTrigger>
-                        <SelectContent>
-                          {availableDates.slice(0, 30).map(d => {
-                            const dateObj = new Date(d + 'T12:00:00');
-                            const dayOfWeek = dateObj.getDay();
-                            const isFds = dayOfWeek === 0 || dayOfWeek === 6;
-                            const label = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-                            return (
-                              <SelectItem key={d} value={d}>
-                                <span className={isFds ? 'text-orange-500 font-medium' : ''}>
-                                  {isFds ? '🟠 ' : ''}{label}
-                                </span>
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
+                      <Label>Selecione a data *</Label>
+                      <div className="mt-2">
+                        <CalendarioDisponibilidade
+                          availableDates={availableDates.slice(0, 60)}
+                          selectedDate={form.data}
+                          onSelectDate={(d) => setForm(p => ({ ...p, data: d, hora: '' }))}
+                        />
+                      </div>
                     </div>
 
                     {form.data && (
@@ -410,13 +399,6 @@ const AgendarOnline: React.FC = () => {
                         )}
                       </div>
                     )}
-
-                    {/* Legenda de fim de semana */}
-                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-2 border-t">
-                      <span>⚪ Dia útil disponível</span>
-                      <span className="text-orange-500">🟠 Fim de semana — com atendimento</span>
-                      <span className="text-destructive">🔴 Fim de semana — sem atendimento (bloqueado)</span>
-                    </div>
                   </>
                 )}
 
