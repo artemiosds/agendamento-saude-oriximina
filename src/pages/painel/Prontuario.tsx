@@ -490,6 +490,39 @@ const ProntuarioPage: React.FC = () => {
             />
           )}
 
+          {/* Triage Data (read-only) */}
+          {triagem && (
+            <div className="space-y-3 pointer-events-none select-text">
+              {triagem.alergias && triagem.alergias.length > 0 && (
+                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+                  <strong className="text-destructive">⚠️ ALERGIAS:</strong> {triagem.alergias.join(', ')}
+                </div>
+              )}
+              <div className="text-sm text-muted-foreground">
+                Triagem realizada por: <strong className="text-foreground">{triagem.tecnico_nome}</strong>
+                {triagem.tecnico_coren && ` | COREN: ${triagem.tecnico_coren}`}
+                {triagem.confirmado_em && ` às ${new Date(triagem.confirmado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm bg-muted/50 rounded-lg p-3 border">
+                {triagem.peso && <span>Peso: <strong>{triagem.peso}kg</strong></span>}
+                {triagem.altura && <span>Altura: <strong>{triagem.altura}cm</strong></span>}
+                {triagem.imc && <span>IMC: <strong>{triagem.imc} ({classificarIMC(triagem.imc)})</strong></span>}
+                {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial} mmHg</strong></span>}
+                {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
+                {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
+                {triagem.saturacao_oxigenio && <span>SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
+                {triagem.glicemia && <span>Glicemia: <strong>{triagem.glicemia} mg/dL</strong></span>}
+              </div>
+              {triagem.medicamentos && triagem.medicamentos.length > 0 && (
+                <div className="text-sm"><strong>Medicamentos em uso:</strong> {triagem.medicamentos.join(', ')}</div>
+              )}
+              {triagem.queixa && (
+                <div className="text-sm"><strong>Queixa (triagem):</strong> {triagem.queixa}</div>
+              )}
+            </div>
+          )}
+          {form.agendamento_id && !triagem && (
+            <p className="text-xs text-muted-foreground italic">Triagem não realizada para este atendimento.</p>
           {/* Patient history section */}
           {patientHistory.length > 0 && (
             <div className="bg-muted/50 rounded-lg p-3 border">
