@@ -175,6 +175,20 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     const prof = profissionais.find(p => p.id === newAg.profissionalId);
     if (!pac || !prof || !newAg.hora) return;
 
+    // Weekend check for internal scheduling
+    if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
+      if (user?.role === 'recepcao') {
+        toast.error('Não é possível agendar em fim de semana sem disponibilidade cadastrada.');
+        return;
+      }
+      if (user && ['master', 'coordenador'].includes(user.role)) {
+        const confirmou = window.confirm(
+          'Este dia é fim de semana sem disponibilidade cadastrada. Deseja criar um encaixe mesmo assim?'
+        );
+        if (!confirmou) return;
+      }
+    }
+
     const unidade = unidades.find(u => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
