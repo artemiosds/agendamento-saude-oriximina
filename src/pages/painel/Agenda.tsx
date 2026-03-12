@@ -30,7 +30,7 @@ const statusActions = [
 const statusLabels: Record<string, string> = {
   pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
   cancelado: 'Cancelado', concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
-  remarcado: 'Remarcado', em_atendimento: 'Em Atendimento',
+  remarcado: 'Remarcado', em_atendimento: 'Em Atendimento', aguardando_triagem: 'Aguard. Triagem',
 };
 
 const statusBadgeClass: Record<string, string> = {
@@ -43,6 +43,7 @@ const statusBadgeClass: Record<string, string> = {
   atraso: 'bg-warning/10 text-warning',
   remarcado: 'bg-muted text-muted-foreground',
   em_atendimento: 'bg-primary/10 text-primary',
+  aguardando_triagem: 'bg-warning/10 text-warning',
 };
 
 const tipoBadge: Record<string, { label: string; class: string }> = {
@@ -201,6 +202,36 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const handleStatusChange = async (agId: string, newStatus: string) => {
     const ag = agendamentos.find(a => a.id === agId);
     if (!ag) return;
+
+    // Check if triage is needed when confirming arrival
+    if (newStatus === 'confirmado_chegada') {
+      try {
+        const { data: setting } = await (supabase as any)
+          .from('triage_settings')
+          .select('enabled')
+          .or(`unidade_id.eq.${ag.unidadeId},unidade_id.is.null`)
+          .eq('enabled', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (setting) {
+          // Check if there's a tecnico in the unit
+          const { count } = await supabase.from('funcionarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'tecnico')
+            .eq('unidade_id', ag.unidadeId)
+            .eq('ativo', true);
+
+          if ((count ?? 0) > 0) {
+            await updateAgendamento(agId, { status: 'aguardando_triagem' as any });
+            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking triage settings:', err);
+      }
+    }
 
     await updateAgendamento(agId, { status: newStatus as any });
 

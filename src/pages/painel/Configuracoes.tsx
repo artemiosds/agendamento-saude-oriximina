@@ -8,14 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 
 const Configuracoes: React.FC = () => {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes, unidades, funcionarios } = useData();
   const { whatsapp, googleCalendar, filaEspera, templates, webhook } = configuracoes;
   const gcal = useGoogleCalendar();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,6 +26,19 @@ const Configuracoes: React.FC = () => {
   const [gmailStatus, setGmailStatus] = useState<'idle' | 'conectado' | 'erro_autenticacao' | 'erro_conexao' | 'erro_envio' | 'nao_configurado'>('idle');
   const [gmailMessage, setGmailMessage] = useState('');
   const { testGmail } = useWebhookNotify();
+  const [triageEnabled, setTriageEnabled] = useState(false);
+  const [triageLoading, setTriageLoading] = useState(true);
+
+  // Load triage settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await (supabase as any).from('triage_settings').select('*').limit(1).maybeSingle();
+        setTriageEnabled(data?.enabled || false);
+      } catch {}
+      setTriageLoading(false);
+    })();
+  }, []);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -223,6 +236,56 @@ const Configuracoes: React.FC = () => {
               </Select>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Triagem de Enfermagem */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <HeartPulse className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold font-display text-foreground">Triagem de Enfermagem</h3>
+              <p className="text-sm text-muted-foreground">Etapa opcional antes do atendimento</p>
+            </div>
+            {triageLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Switch
+                checked={triageEnabled}
+                onCheckedChange={async (v) => {
+                  setTriageEnabled(v);
+                  try {
+                    await (supabase as any).from('triage_settings').upsert({
+                      id: 'default',
+                      enabled: v,
+                      unidade_id: null,
+                      profissional_id: null,
+                    }, { onConflict: 'id' });
+                    toast.success(v ? 'Triagem habilitada!' : 'Triagem desabilitada.');
+                  } catch {
+                    toast.error('Erro ao salvar configuração de triagem.');
+                  }
+                }}
+              />
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Quando habilitada, ao confirmar a chegada do paciente na recepção, ele será encaminhado primeiro para triagem
+            por um Técnico de Enfermagem antes de ir para o atendimento com o profissional. É necessário ter ao menos um
+            funcionário com perfil "Técnico de Enfermagem" cadastrado na unidade.
+          </p>
+          {triageEnabled && (
+            <div className="mt-3 p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+              <strong className="text-foreground">Técnicos cadastrados:</strong>{' '}
+              {funcionarios.filter(f => f.role === 'tecnico' && f.ativo).length === 0
+                ? <span className="text-destructive">Nenhum técnico cadastrado. Cadastre um em Funcionários com perfil "Técnico de Enfermagem".</span>
+                : funcionarios.filter(f => f.role === 'tecnico' && f.ativo).map(f => f.nome).join(', ')
+              }
+            </div>
+          )}
         </CardContent>
       </Card>
 

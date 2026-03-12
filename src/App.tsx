@@ -23,6 +23,7 @@ import Disponibilidade from "./pages/painel/Disponibilidade";
 import Configuracoes from "./pages/painel/Configuracoes";
 import Prontuario from "./pages/painel/Prontuario";
 import Auditoria from "./pages/painel/Auditoria";
+import Triagem from "./pages/painel/Triagem";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="configuracoes" element={<Configuracoes />} />
                 <Route path="prontuario" element={<Prontuario />} />
                 <Route path="auditoria" element={<Auditoria />} />
+                <Route path="triagem" element={<Triagem />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

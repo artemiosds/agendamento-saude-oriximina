@@ -16,11 +16,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 const roleLabels: Record<UserRole, string> = {
-  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão',
+  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão', tecnico: 'Técnico de Enfermagem',
 };
 const roleColors: Record<UserRole, string> = {
   master: 'bg-destructive/10 text-destructive', coordenador: 'bg-warning/10 text-warning',
   recepcao: 'bg-info/10 text-info', profissional: 'bg-success/10 text-success', gestao: 'bg-accent text-accent-foreground',
+  tecnico: 'bg-primary/10 text-primary',
 };
 
 interface FuncionarioDB {
@@ -44,6 +45,7 @@ interface FuncionarioDB {
   numero_conselho: string;
   uf_conselho: string;
   pode_agendar_retorno: boolean;
+  coren: string;
 }
 
 const Funcionarios: React.FC = () => {
@@ -57,7 +59,7 @@ const Funcionarios: React.FC = () => {
   const [showSenha, setShowSenha] = useState(false);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
-    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false,
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
@@ -99,13 +101,14 @@ const Funcionarios: React.FC = () => {
       profissao: f.profissao || '', tipo_conselho: f.tipo_conselho || '',
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
+      coren: f.coren || '',
     });
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
     setDialogOpen(true);
   };
 
@@ -136,6 +139,7 @@ const Funcionarios: React.FC = () => {
           numero_conselho: form.numero_conselho,
           uf_conselho: form.uf_conselho,
           pode_agendar_retorno: form.pode_agendar_retorno,
+          coren: form.coren,
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -175,6 +179,7 @@ const Funcionarios: React.FC = () => {
             numero_conselho: form.numero_conselho,
             uf_conselho: form.uf_conselho,
             pode_agendar_retorno: form.pode_agendar_retorno,
+            coren: form.coren,
             criado_por: user?.id || '',
           },
         });
@@ -260,6 +265,7 @@ const Funcionarios: React.FC = () => {
                     <SelectItem value="coordenador">Coordenador</SelectItem>
                     <SelectItem value="recepcao">Recepção</SelectItem>
                     <SelectItem value="profissional">Profissional</SelectItem>
+                    <SelectItem value="tecnico">Técnico de Enfermagem</SelectItem>
                     <SelectItem value="gestao">Gestão</SelectItem>
                   </SelectContent>
                 </Select>
@@ -304,51 +310,61 @@ const Funcionarios: React.FC = () => {
                 </div>
               )}
             </div>
-            {form.role === 'profissional' && (
+            {(form.role === 'profissional' || form.role === 'tecnico') && (
               <>
                 <div className="border-t pt-3 mt-2">
                   <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                {form.role === 'tecnico' && (
                   <div>
-                    <Label>Profissão</Label>
-                    <Select value={form.profissao || '__none__'} onValueChange={v => {
-                      const prof = v === '__none__' ? '' : v;
-                      const conselho = conselhoMap[prof] || '';
-                      setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
-                    }}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Selecione</SelectItem>
-                        {Object.keys(conselhoMap).map(p => (
-                          <SelectItem key={p} value={p}>{p}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>COREN</Label>
+                    <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
                   </div>
-                  <div>
-                    <Label>Tipo de Conselho</Label>
-                    <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Nº do Conselho</Label>
-                    <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
-                  </div>
-                  <div>
-                    <Label>UF do Conselho</Label>
-                    <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
-                      <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">—</SelectItem>
-                        {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
-                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                )}
+                {form.role === 'profissional' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Profissão</Label>
+                        <Select value={form.profissao || '__none__'} onValueChange={v => {
+                          const prof = v === '__none__' ? '' : v;
+                          const conselho = conselhoMap[prof] || '';
+                          setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
+                        }}>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Selecione</SelectItem>
+                            {Object.keys(conselhoMap).map(p => (
+                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Tipo de Conselho</Label>
+                        <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label>Nº do Conselho</Label>
+                        <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
+                      </div>
+                      <div>
+                        <Label>UF do Conselho</Label>
+                        <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
+                          <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
+                              <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
             {form.role === 'profissional' && canManage && (

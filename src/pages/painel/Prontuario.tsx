@@ -60,6 +60,24 @@ const emptyForm = {
   observacoes: '',
 };
 
+const classificarIMC = (imc: number): string => {
+  if (imc < 18.5) return 'Abaixo do peso';
+  if (imc < 25) return 'Normal';
+  if (imc < 30) return 'Sobrepeso';
+  if (imc < 35) return 'Obesidade grau I';
+  if (imc < 40) return 'Obesidade grau II';
+  return 'Obesidade grau III';
+};
+
+interface TriagemData {
+  peso?: number; altura?: number; imc?: number;
+  pressao_arterial?: string; temperatura?: number;
+  frequencia_cardiaca?: number; saturacao_oxigenio?: number;
+  glicemia?: number; alergias?: string[]; medicamentos?: string[];
+  queixa?: string; confirmado_em?: string;
+  tecnico_nome?: string; tecnico_coren?: string;
+}
+
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { pacientes, unidades, agendamentos, updateAgendamento, logAction } = useData();
@@ -74,6 +92,7 @@ const ProntuarioPage: React.FC = () => {
   const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
   const [search, setSearch] = useState('');
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
+  const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   const isProfissional = user?.role === 'profissional';
@@ -107,6 +126,28 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user]);
 
+  // Load triage data for an agendamento
+  const loadTriagem = async (agendamentoId: string) => {
+    try {
+      const { data } = await (supabase as any)
+        .from('triage_records')
+        .select('*')
+        .eq('agendamento_id', agendamentoId)
+        .not('confirmado_em', 'is', null)
+        .maybeSingle();
+      if (data) {
+        // Fetch tecnico info
+        const { data: tecnico } = await supabase.from('funcionarios')
+          .select('nome, coren')
+          .eq('id', data.tecnico_id)
+          .maybeSingle();
+        setTriagem({ ...data, tecnico_nome: (tecnico as any)?.nome || '', tecnico_coren: (tecnico as any)?.coren || '' });
+      } else {
+        setTriagem(null);
+      }
+    } catch { setTriagem(null); }
+  };
+
   // Auto-open form when coming from "Iniciar Atendimento"
   useEffect(() => {
     const pacienteId = searchParams.get('pacienteId');
@@ -116,6 +157,8 @@ const ProntuarioPage: React.FC = () => {
     const data = searchParams.get('data');
 
     if (pacienteId && pacienteNome) {
+      if (agendamentoId) loadTriagem(agendamentoId);
+
       const existingForAgendamento = agendamentoId 
         ? prontuarios.find(p => p.agendamento_id === agendamentoId)
         : null;
@@ -445,6 +488,41 @@ const ProntuarioPage: React.FC = () => {
               tempoLimite={tempoLimite}
               agendamentoId={activeAtendimento.agendamentoId}
             />
+          )}
+
+          {/* Triage Data (read-only) */}
+          {triagem && (
+            <div className="space-y-3 pointer-events-none select-text">
+              {triagem.alergias && triagem.alergias.length > 0 && (
+                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+                  <strong className="text-destructive">⚠️ ALERGIAS:</strong> {triagem.alergias.join(', ')}
+                </div>
+              )}
+              <div className="text-sm text-muted-foreground">
+                Triagem realizada por: <strong className="text-foreground">{triagem.tecnico_nome}</strong>
+                {triagem.tecnico_coren && ` | COREN: ${triagem.tecnico_coren}`}
+                {triagem.confirmado_em && ` às ${new Date(triagem.confirmado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm bg-muted/50 rounded-lg p-3 border">
+                {triagem.peso && <span>Peso: <strong>{triagem.peso}kg</strong></span>}
+                {triagem.altura && <span>Altura: <strong>{triagem.altura}cm</strong></span>}
+                {triagem.imc && <span>IMC: <strong>{triagem.imc} ({classificarIMC(triagem.imc)})</strong></span>}
+                {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial} mmHg</strong></span>}
+                {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
+                {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
+                {triagem.saturacao_oxigenio && <span>SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
+                {triagem.glicemia && <span>Glicemia: <strong>{triagem.glicemia} mg/dL</strong></span>}
+              </div>
+              {triagem.medicamentos && triagem.medicamentos.length > 0 && (
+                <div className="text-sm"><strong>Medicamentos em uso:</strong> {triagem.medicamentos.join(', ')}</div>
+              )}
+              {triagem.queixa && (
+                <div className="text-sm"><strong>Queixa (triagem):</strong> {triagem.queixa}</div>
+              )}
+            </div>
+          )}
+          {form.agendamento_id && !triagem && (
+            <p className="text-xs text-muted-foreground italic">Triagem não realizada para este atendimento.</p>
           )}
 
           {/* Patient history section */}
