@@ -403,7 +403,183 @@ const FilaEspera: React.FC = () => {
     }
   };
 
-  const getReservaTimeLeft = (filaId: string) => {
+  // ---- Import old list handler ----
+  const checkImportDuplicidade = (dados: typeof importForm) => {
+    const cpfClean = dados.cpf.replace(/\D/g, '');
+    const telClean = dados.telefone.replace(/\D/g, '');
+    const emailLower = dados.email.toLowerCase().trim();
+
+    if (cpfClean.length >= 11) {
+      const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
+      if (found) return found;
+    }
+    if (telClean.length >= 8) {
+      const found = pacientes.find(p => p.telefone.replace(/\D/g, '') === telClean);
+      if (found) return found;
+    }
+    if (emailLower && emailLower.includes('@')) {
+      const found = pacientes.find(p => p.email.toLowerCase().trim() === emailLower);
+      if (found) return found;
+    }
+    // name + birthday
+    if (dados.nome.trim() && dados.dataNascimento) {
+      const found = pacientes.find(p =>
+        p.nome.toLowerCase().trim() === dados.nome.toLowerCase().trim() &&
+        p.dataNascimento === dados.dataNascimento
+      );
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const handleImportSave = async (existingPatient?: typeof pacientes[0]) => {
+    if (!importForm.nome.trim() && !existingPatient) {
+      toast.error('Informe o nome do paciente.');
+      return;
+    }
+    if (!importForm.unidadeId) {
+      toast.error('Selecione a unidade.');
+      return;
+    }
+    if (!importForm.dataSolicitacaoOriginal) {
+      toast.error('Informe a data de solicitação original.');
+      return;
+    }
+
+    setImportSaving(true);
+    try {
+      let pacienteId: string;
+      let pacienteNome: string;
+      let telefone: string;
+      let email: string;
+
+      if (existingPatient) {
+        pacienteId = existingPatient.id;
+        pacienteNome = existingPatient.nome;
+        telefone = existingPatient.telefone;
+        email = existingPatient.email;
+      } else {
+        // Check duplicate
+        const dup = checkImportDuplicidade(importForm);
+        if (dup && !importDup) {
+          setImportDup(dup);
+          setImportSaving(false);
+          return;
+        }
+
+        // Validate
+        const err = validatePacienteFields({ nome: importForm.nome, telefone: importForm.telefone, email: importForm.email });
+        if (err) {
+          const newErrors: Record<string, string> = {};
+          if (err.includes('Nome')) newErrors.nome = err;
+          else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
+          else if (err.includes('mail')) newErrors.email = err;
+          setImportErrors(newErrors);
+          toast.error(err);
+          setImportSaving(false);
+          return;
+        }
+
+        // Create patient
+        pacienteId = `p${Date.now()}`;
+        pacienteNome = importForm.nome;
+        telefone = importForm.telefone;
+        email = importForm.email;
+
+        await addPaciente({
+          id: pacienteId,
+          nome: importForm.nome,
+          cpf: importForm.cpf,
+          telefone: importForm.telefone,
+          email: importForm.email,
+          dataNascimento: importForm.dataNascimento,
+          endereco: '',
+          observacoes: importForm.observacoes,
+          descricaoClinica: importForm.descricaoClinica || '',
+          cid: importForm.cid || '',
+          criadoEm: new Date().toISOString(),
+        });
+
+        await logAction({
+          acao: 'criar', entidade: 'paciente', entidadeId: pacienteId,
+          detalhes: { nome: importForm.nome, origem: 'demanda_reprimida', dataSolicitacaoOriginal: importForm.dataSolicitacaoOriginal }, user,
+        });
+      }
+
+      // Convert DD/MM/YYYY to sortable YYYY-MM-DD
+      let sortableDate = importForm.dataSolicitacaoOriginal;
+      const parts = sortableDate.split('/');
+      if (parts.length === 3 && parts[0].length <= 2) {
+        sortableDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+
+      // Add to queue
+      const newId = `f${Date.now()}`;
+      await addToFila({
+        id: newId, pacienteId, pacienteNome,
+        unidadeId: importForm.unidadeId,
+        profissionalId: importForm.profissionalId,
+        setor: '',
+        prioridade: importForm.prioridade as any,
+        status: 'aguardando', posicao: fila.length + 1,
+        horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        criadoPor: user?.id || 'sistema',
+        observacoes: importForm.observacoes,
+        descricaoClinica: importForm.descricaoClinica,
+        cid: importForm.cid,
+        dataSolicitacaoOriginal: sortableDate,
+        origemCadastro: 'demanda_reprimida',
+      });
+
+      const unidade = unidades.find(u => u.id === importForm.unidadeId);
+      const prof = importForm.profissionalId ? funcionarios.find(f => f.id === importForm.profissionalId) : null;
+
+      // Ensure portal access
+      ensurePortalAccess({
+        pacienteId,
+        contexto: 'fila',
+        unidade: unidade?.nome || '',
+        profissional: prof?.nome || '',
+        posicaoFila: fila.length + 1,
+      }).catch(() => {});
+
+      // Notify
+      if (email) {
+        await notify({
+          evento: 'fila_entrada',
+          paciente_nome: pacienteNome, telefone,
+          email, data_consulta: new Date().toISOString().split('T')[0],
+          hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          unidade: unidade?.nome || '', profissional: prof?.nome || '',
+          tipo_atendimento: importForm.tipo === 'retorno' ? 'Retorno' : 'Primeira Consulta',
+          status_agendamento: 'aguardando',
+          id_agendamento: '',
+        });
+      }
+
+      await logAction({
+        acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
+        detalhes: {
+          pacienteNome, unidade: unidade?.nome, profissional: prof?.nome,
+          origemCadastro: 'demanda_reprimida',
+          dataSolicitacaoOriginal: sortableDate,
+          descricaoClinica: importForm.descricaoClinica || undefined,
+          cid: importForm.cid || undefined,
+        }, user, modulo: 'fila_espera',
+      });
+
+      toast.success(`${pacienteNome} importado da lista antiga para a fila!`);
+      setImportDialogOpen(false);
+      setImportDup(null);
+      setImportErrors({});
+    } catch {
+      toast.error('Erro ao importar paciente.');
+    } finally {
+      setImportSaving(false);
+    }
+  };
+
+
     const r = reservas[filaId];
     if (!r) return null;
     const remaining = Math.max(0, r.expiresAt - now);
