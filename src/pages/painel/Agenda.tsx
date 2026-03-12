@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw, CalendarOff } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw, CalendarOff, Calendar as CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -84,6 +84,19 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       return dateRef >= ini && dateRef <= fim && b.diaInteiro;
     });
   }, [selectedDate, bloqueios]);
+
+  // Check if selected date is a weekend without availability
+  const weekendInfo = React.useMemo(() => {
+    const dateObj = new Date(`${selectedDate}T12:00:00`);
+    const dayOfWeek = dateObj.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (!isWeekend) return { isWeekend: false, hasAvailability: true };
+    // Check if any professional has availability for this day of week on this date
+    const hasAvailability = disponibilidades.some(d => 
+      d.diasSemana.includes(dayOfWeek) && selectedDate >= d.dataInicio && selectedDate <= d.dataFim
+    );
+    return { isWeekend, hasAvailability };
+  }, [selectedDate, disponibilidades]);
 
   // Available slots for new appointment dialog (internal)
   const newAgSlots = React.useMemo(() => {
@@ -161,6 +174,20 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     const pac = pacientes.find(p => p.id === newAg.pacienteId);
     const prof = profissionais.find(p => p.id === newAg.profissionalId);
     if (!pac || !prof || !newAg.hora) return;
+
+    // Weekend check for internal scheduling
+    if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
+      if (user?.role === 'recepcao') {
+        toast.error('Não é possível agendar em fim de semana sem disponibilidade cadastrada.');
+        return;
+      }
+      if (user && ['master', 'coordenador'].includes(user.role)) {
+        const confirmou = window.confirm(
+          'Este dia é fim de semana sem disponibilidade cadastrada. Deseja criar um encaixe mesmo assim?'
+        );
+        if (!confirmou) return;
+      }
+    }
 
     const unidade = unidades.find(u => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
@@ -535,6 +562,37 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
               <p className="text-sm font-semibold text-destructive">🚫 Data bloqueada para agendamentos</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {blockedForDate.map(b => b.titulo).join(' • ')}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Weekend indicator */}
+      {weekendInfo.isWeekend && !weekendInfo.hasAvailability && (
+        <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
+          <CardContent className="p-4 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">🔴 Fim de semana — sem atendimento</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Nenhum profissional possui disponibilidade cadastrada para este dia.
+                {user && ['master', 'coordenador'].includes(user.role) && (
+                  <span className="block mt-1 text-warning">Master/Coordenador pode forçar encaixe ao criar agendamento.</span>
+                )}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {weekendInfo.isWeekend && weekendInfo.hasAvailability && (
+        <Card className="shadow-card border-0 bg-orange-50 ring-1 ring-orange-300 dark:bg-orange-500/10 dark:ring-orange-500/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <CalendarIcon className="w-5 h-5 text-orange-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">🟠 Fim de semana — com atendimento disponível</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Há profissionais com disponibilidade cadastrada para este dia.
               </p>
             </div>
           </CardContent>
