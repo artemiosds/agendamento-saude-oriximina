@@ -617,9 +617,17 @@ const FilaEspera: React.FC = () => {
             {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`} {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {canManage && (
             <>
+              <Button variant="outline" onClick={() => {
+                setImportForm({ nome: '', telefone: '', cpf: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
+                setImportDup(null);
+                setImportErrors({});
+                setImportDialogOpen(true);
+              }}>
+                <FileUp className="w-4 h-4 mr-2" />Importar Lista Antiga
+              </Button>
               <Button variant="outline" onClick={() => {
                 setManualSlot({ data: new Date().toISOString().split('T')[0], hora: '', profissionalId: '', unidadeId: '' });
                 setManualCallDialog(true);
