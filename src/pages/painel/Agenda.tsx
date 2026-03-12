@@ -203,6 +203,36 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     const ag = agendamentos.find(a => a.id === agId);
     if (!ag) return;
 
+    // Check if triage is needed when confirming arrival
+    if (newStatus === 'confirmado_chegada') {
+      try {
+        const { data: setting } = await (supabase as any)
+          .from('triage_settings')
+          .select('enabled')
+          .or(`unidade_id.eq.${ag.unidadeId},unidade_id.is.null`)
+          .eq('enabled', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (setting) {
+          // Check if there's a tecnico in the unit
+          const { count } = await supabase.from('funcionarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'tecnico')
+            .eq('unidade_id', ag.unidadeId)
+            .eq('ativo', true);
+
+          if ((count ?? 0) > 0) {
+            await updateAgendamento(agId, { status: 'aguardando_triagem' as any });
+            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking triage settings:', err);
+      }
+    }
+
     await updateAgendamento(agId, { status: newStatus as any });
 
     const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
