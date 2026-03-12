@@ -272,14 +272,28 @@ const Configuracoes: React.FC = () => {
                 onCheckedChange={async (v) => {
                   setTriageEnabled(v);
                   try {
-                    await (supabase as any).from('triage_settings').upsert({
-                      id: 'default',
-                      enabled: v,
-                      unidade_id: null,
-                      profissional_id: null,
-                    }, { onConflict: 'id' });
+                    const unitId = user?.unidadeId || null;
+                    if (triageSettingId) {
+                      // Update existing
+                      const { error } = await supabase
+                        .from('triage_settings')
+                        .update({ enabled: v, updated_at: new Date().toISOString() })
+                        .eq('id', triageSettingId);
+                      if (error) throw error;
+                    } else {
+                      // Insert new
+                      const { data: inserted, error } = await supabase
+                        .from('triage_settings')
+                        .insert({ enabled: v, unidade_id: unitId, profissional_id: null })
+                        .select('id')
+                        .single();
+                      if (error) throw error;
+                      if (inserted) setTriageSettingId(inserted.id);
+                    }
                     toast.success(v ? 'Triagem habilitada!' : 'Triagem desabilitada.');
-                  } catch {
+                  } catch (err) {
+                    console.error('Erro ao salvar triagem:', err);
+                    setTriageEnabled(!v);
                     toast.error('Erro ao salvar configuração de triagem.');
                   }
                 }}
