@@ -613,6 +613,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
     if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
     if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
+    if (data.cid !== undefined) dbData.cid = data.cid;
     if (data.horaChamada !== undefined) dbData.hora_chamada = data.horaChamada;
     if (data.pacienteNome !== undefined) dbData.paciente_nome = data.pacienteNome;
     if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;
