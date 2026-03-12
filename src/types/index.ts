@@ -108,6 +108,8 @@ export interface Paciente {
   email: string;
   endereco: string;
   observacoes: string;
+  descricaoClinica: string;
+  cid: string;
   criadoEm: string;
 }
 
@@ -145,6 +147,8 @@ export interface FilaEspera {
   horaChegada: string;
   horaChamada?: string;
   observacoes?: string;
+  descricaoClinica?: string;
+  cid?: string;
   criadoPor?: string;
   criadoEm?: string;
 }

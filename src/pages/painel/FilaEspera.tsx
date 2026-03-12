@@ -112,13 +112,13 @@ const FilaEspera: React.FC = () => {
 
   // New patient creation mode
   const [criarPaciente, setCriarPaciente] = useState(false);
-  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '',
-    setor: '', prioridade: 'normal' as string, observacoes: '',
+    setor: '', prioridade: 'normal' as string, observacoes: '', descricaoClinica: '', cid: '',
   });
 
   // Load reservations from localStorage and tick timer
@@ -203,9 +203,9 @@ const FilaEspera: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '' });
+    setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
     setCriarPaciente(false);
-    setNovoPaciente({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+    setNovoPaciente({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
     setDuplicataEncontrada(null);
     setPacienteErrors({});
     setDialogOpen(true);
@@ -216,6 +216,7 @@ const FilaEspera: React.FC = () => {
     setForm({
       pacienteNome: f.pacienteNome, pacienteId: f.pacienteId, unidadeId: f.unidadeId,
       profissionalId: f.profissionalId || '', setor: f.setor, prioridade: f.prioridade, observacoes: f.observacoes || '',
+      descricaoClinica: f.descricaoClinica || '', cid: f.cid || '',
     });
     setCriarPaciente(false);
     setDuplicataEncontrada(null);
@@ -277,6 +278,8 @@ const FilaEspera: React.FC = () => {
         dataNascimento: novoPaciente.dataNascimento,
         endereco: novoPaciente.endereco,
         observacoes: '',
+        descricaoClinica: novoPaciente.descricaoClinica || '',
+        cid: novoPaciente.cid || '',
         criadoEm: new Date().toISOString(),
       });
 
@@ -321,6 +324,8 @@ const FilaEspera: React.FC = () => {
       horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       criadoPor: user?.id || 'sistema',
       observacoes: form.observacoes,
+      descricaoClinica: form.descricaoClinica,
+      cid: form.cid,
     });
 
     const unidade = unidades.find(u => u.id === form.unidadeId);
@@ -349,7 +354,7 @@ const FilaEspera: React.FC = () => {
 
     await logAction({
       acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
-      detalhes: { pacienteNome, unidade: unidade?.nome }, user,
+      detalhes: { pacienteNome, unidade: unidade?.nome, descricaoClinica: form.descricaoClinica || undefined, cid: form.cid || undefined }, user,
       modulo: 'fila_espera',
     });
 
@@ -480,7 +485,7 @@ const FilaEspera: React.FC = () => {
           <SelectTrigger><SelectValue placeholder="Profissional" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos Profissionais</SelectItem>
-            {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+            {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -523,7 +528,7 @@ const FilaEspera: React.FC = () => {
               <Label>Profissional *</Label>
               <Select value={manualSlot.profissionalId} onValueChange={v => setManualSlot(p => ({ ...p, profissionalId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -583,7 +588,7 @@ const FilaEspera: React.FC = () => {
                 {!editId && (
                   <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-primary" onClick={() => {
                     setCriarPaciente(true);
-                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
                     setDuplicataEncontrada(null);
                     setPacienteErrors({});
                   }}>
@@ -641,6 +646,19 @@ const FilaEspera: React.FC = () => {
                   <Label>Endereço</Label>
                   <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
                 </div>
+                <div className="border-t pt-3 mt-1">
+                  <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Descrição Clínica</Label>
+                      <Input value={novoPaciente.descricaoClinica} onChange={e => setNovoPaciente(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
+                    </div>
+                    <div>
+                      <Label>CID (opcional)</Label>
+                      <Input value={novoPaciente.cid} onChange={e => setNovoPaciente(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -658,7 +676,7 @@ const FilaEspera: React.FC = () => {
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Qualquer</SelectItem>
-                  {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                  {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -678,8 +696,21 @@ const FilaEspera: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Observações</Label>
-              <Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações..." />
+              <Label>Observação Geral</Label>
+              <Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações administrativas ou complementares..." />
+            </div>
+            <div className="border-t pt-3 mt-1">
+              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica</Label>
+                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Motivo de espera / queixa principal..." />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+              </div>
             </div>
 
             {criarPaciente ? (
@@ -740,9 +771,11 @@ const FilaEspera: React.FC = () => {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {unidade?.nome || f.setor} • {prof ? prof.nome : 'Qualquer profissional'} • Chegou: {f.horaChegada}
+                    {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
-                  {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">{f.observacoes}</p>}
+                  {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
+                  {f.descricaoClinica && <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>}
+                  {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}
                   {isChamado && reservaTime && !reservaTime.expired && (
                     <div className="flex items-center gap-1 mt-1 text-xs font-medium text-primary">
                       <Timer className="w-3 h-3" />

@@ -365,6 +365,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: p.email || '',
           endereco: p.endereco || '',
           observacoes: p.observacoes || '',
+          descricaoClinica: p.descricao_clinica || '',
+          cid: p.cid || '',
           criadoEm: p.criado_em || '',
         }));
         setPacientes(mapped);
@@ -433,6 +435,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           horaChegada: f.hora_chegada,
           horaChamada: f.hora_chamada || '',
           observacoes: f.observacoes || '',
+          descricaoClinica: f.descricao_clinica || '',
+          cid: f.cid || '',
           criadoPor: f.criado_por || '',
           criadoEm: f.criado_em || '',
         }));
@@ -472,6 +476,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: p.email,
       endereco: p.endereco,
       observacoes: p.observacoes,
+      descricao_clinica: p.descricaoClinica || '',
+      cid: p.cid || '',
     } as any);
     if (!error) {
       setPacientes((prev) => [...prev, p]);
@@ -488,6 +494,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.email !== undefined) dbData.email = data.email;
     if (data.endereco !== undefined) dbData.endereco = data.endereco;
     if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
+    if (data.cid !== undefined) dbData.cid = data.cid;
     const { error } = await supabase.from('pacientes' as any).update(dbData).eq('id', id);
     if (!error) {
       setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
@@ -585,6 +593,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       posicao: f.posicao,
       hora_chegada: f.horaChegada,
       observacoes: f.observacoes || '',
+      descricao_clinica: f.descricaoClinica || '',
+      cid: f.cid || '',
       criado_por: f.criadoPor || 'sistema',
     } as any);
     if (!error) {
@@ -603,6 +613,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
     if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
     if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
+    if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
+    if (data.cid !== undefined) dbData.cid = data.cid;
     if (data.horaChamada !== undefined) dbData.hora_chamada = data.horaChamada;
     if (data.pacienteNome !== undefined) dbData.paciente_nome = data.pacienteNome;
     if (data.pacienteId !== undefined) dbData.paciente_id = data.pacienteId;

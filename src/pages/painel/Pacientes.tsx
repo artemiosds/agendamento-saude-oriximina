@@ -32,7 +32,7 @@ const Pacientes: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
+  const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -43,7 +43,7 @@ const Pacientes: React.FC = () => {
   // Fila dialog
   const [filaDialogOpen, setFilaDialogOpen] = useState(false);
   const [filaPaciente, setFilaPaciente] = useState<typeof pacientes[0] | null>(null);
-  const [filaForm, setFilaForm] = useState({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '' });
+  const [filaForm, setFilaForm] = useState({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
   const [savingFila, setSavingFila] = useState(false);
 
   // Set of patient IDs currently in active queue
@@ -117,14 +117,14 @@ const Pacientes: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '' });
+    setForm({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
     setErrors({});
     setDialogOpen(true);
   };
 
   const openEdit = (p: typeof pacientes[0]) => {
     setEditId(p.id);
-    setForm({ nome: p.nome, cpf: p.cpf, telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '' });
+    setForm({ nome: p.nome, cpf: p.cpf, telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
     setErrors({});
     setDialogOpen(true);
   };
@@ -149,7 +149,7 @@ const Pacientes: React.FC = () => {
         toast.success('Paciente atualizado!');
       } else {
         await addPaciente({
-          id: `p${Date.now()}`, ...form, observacoes: '',
+          id: `p${Date.now()}`, ...form, observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
           criadoEm: new Date().toISOString(),
         });
         toast.success('Paciente cadastrado com sucesso!');
@@ -185,7 +185,7 @@ const Pacientes: React.FC = () => {
 
   const openFilaDialog = (p: typeof pacientes[0]) => {
     setFilaPaciente(p);
-    setFilaForm({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '' });
+    setFilaForm({ unidadeId: '', profissionalId: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
     setFilaDialogOpen(true);
   };
 
@@ -210,6 +210,8 @@ const Pacientes: React.FC = () => {
         horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         criadoPor: user?.id || 'sistema',
         observacoes: filaForm.observacoes,
+        descricaoClinica: filaForm.descricaoClinica,
+        cid: filaForm.cid,
       });
 
       const unidade = unidades.find(u => u.id === filaForm.unidadeId);
@@ -242,7 +244,7 @@ const Pacientes: React.FC = () => {
 
       await logAction({
         acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
-        detalhes: { pacienteNome: filaPaciente.nome, unidade: unidade?.nome, origem: 'tela_pacientes' }, user,
+        detalhes: { pacienteNome: filaPaciente.nome, unidade: unidade?.nome, origem: 'tela_pacientes', descricaoClinica: filaForm.descricaoClinica || undefined, cid: filaForm.cid || undefined }, user,
         modulo: 'fila_espera',
       });
 
@@ -302,6 +304,19 @@ const Pacientes: React.FC = () => {
               </div>
             </div>
             <div><Label>Endereço</Label><Input value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))} /></div>
+            <div className="border-t pt-3 mt-1">
+              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica</Label>
+                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+              </div>
+            </div>
             <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={saving}>
               {saving ? 'Salvando...' : editId ? 'Atualizar' : 'Cadastrar'}
             </Button>
@@ -334,7 +349,7 @@ const Pacientes: React.FC = () => {
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Qualquer</SelectItem>
-                    {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -354,8 +369,21 @@ const Pacientes: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label>Observações</Label>
-                <Input value={filaForm.observacoes} onChange={e => setFilaForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações..." />
+                <Label>Observação Geral</Label>
+                <Input value={filaForm.observacoes} onChange={e => setFilaForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações administrativas..." />
+              </div>
+              <div className="border-t pt-3 mt-1">
+                <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Descrição Clínica</Label>
+                    <Input value={filaForm.descricaoClinica} onChange={e => setFilaForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Motivo de espera / queixa principal..." />
+                  </div>
+                  <div>
+                    <Label>CID (opcional)</Label>
+                    <Input value={filaForm.cid} onChange={e => setFilaForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                  </div>
+                </div>
               </div>
               <Button onClick={handleAddToFila} className="w-full gradient-primary text-primary-foreground" disabled={savingFila}>
                 {savingFila ? 'Adicionando...' : 'Adicionar à Fila'}
@@ -450,6 +478,12 @@ const Pacientes: React.FC = () => {
                   <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{p.telefone}</span>
                   {p.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{p.email}</span>}
                 </div>
+                {(p.descricaoClinica || p.cid) && (
+                  <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
+                    {p.descricaoClinica && <p>🩺 {p.descricaoClinica}</p>}
+                    {p.cid && <p>CID: {p.cid}</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
