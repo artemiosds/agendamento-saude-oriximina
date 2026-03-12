@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, CheckCircle, ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
