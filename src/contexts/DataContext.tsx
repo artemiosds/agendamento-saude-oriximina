@@ -104,6 +104,8 @@ interface DataContextType {
   getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean) => string[];
   getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
   getNextAvailableSlots: (profissionalId: string, unidadeId: string, fromDate: string, limit?: number, isPublic?: boolean) => string[];
+  getBlockingInfo: (profissionalId: string, unidadeId: string, date: string) => { blocked: boolean; type?: string; label?: string };
+  getDayInfoMap: (profissionalId: string, unidadeId: string, isPublic?: boolean) => Record<string, import('@/components/CalendarioDisponibilidade').DayInfo>;
   updateConfiguracoes: (data: Partial<Configuracoes>) => void;
   checkFilaForSlot: (profissionalId: string, unidadeId: string, data: string, hora: string) => FilaEspera[];
   encaixarDaFila: (filaId: string, agendamento: Omit<Agendamento, 'id' | 'criadoEm'>) => void;
