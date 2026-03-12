@@ -1083,6 +1083,95 @@ const Relatorios: React.FC = () => {
           </Card>
         </TabsContent>
 
+        {/* === TRIAGEM === */}
+        <TabsContent value="triagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-primary">{triagemReport.total}</p>
+                <p className="text-xs text-muted-foreground">Total Triagens</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-success">{triagemReport.confirmadas}</p>
+                <p className="text-xs text-muted-foreground">Confirmadas</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-warning">{triagemReport.pendentes}</p>
+                <p className="text-xs text-muted-foreground">Pendentes/Rascunho</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-info">{tecnicos.length}</p>
+                <p className="text-xs text-muted-foreground">Técnicos Ativos</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <HeartPulse className="w-5 h-5 text-primary" /> Produtividade por Técnico de Enfermagem
+              </h3>
+              {triagemReport.porTecnico.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhum registro de triagem encontrado no período.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Técnico(a)</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Confirmadas</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pendentes</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {triagemReport.porTecnico.map(t => (
+                        <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 px-3 font-medium text-foreground">{t.nome}</td>
+                          <td className="text-center py-2.5 px-2 text-foreground font-semibold">{t.total}</td>
+                          <td className="text-center py-2.5 px-2 text-success font-medium">{t.confirmadas}</td>
+                          <td className="text-center py-2.5 px-2 text-warning font-medium">{t.pendentes}</td>
+                          <td className="text-center py-2.5 px-2">
+                            <Badge variant="outline" className="text-xs">
+                              {t.total > 0 ? Math.round((t.confirmadas / t.total) * 100) : 0}%
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {triagemReport.porTecnico.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Triagens por Técnico</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={triagemReport.porTecnico}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="confirmadas" name="Confirmadas" fill="hsl(152,60%,42%)" />
+                    <Bar dataKey="pendentes" name="Pendentes" fill="hsl(45,93%,47%)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         {/* === DETALHADO === */}
         <TabsContent value="detalhado" className="space-y-5 mt-4">
           <Card className="shadow-card border-0">
