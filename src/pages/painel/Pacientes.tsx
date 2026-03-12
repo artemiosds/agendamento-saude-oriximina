@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
