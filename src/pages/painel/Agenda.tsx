@@ -574,7 +574,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       {weekendInfo.isWeekend && weekendInfo.hasAvailability && (
         <Card className="shadow-card border-0 bg-orange-50 ring-1 ring-orange-300 dark:bg-orange-500/10 dark:ring-orange-500/30">
           <CardContent className="p-4 flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-orange-500 shrink-0" />
+            <CalendarIcon className="w-5 h-5 text-orange-500 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">🟠 Fim de semana — com atendimento disponível</p>
               <p className="text-xs text-muted-foreground mt-0.5">
