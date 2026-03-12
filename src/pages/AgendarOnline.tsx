@@ -14,6 +14,42 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 
+// Helper function to apply date mask DD/MM/AAAA
+const applyDateMask = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+};
+
+// Validate date in DD/MM/AAAA format
+const validateDateBrazilian = (dateStr: string): boolean => {
+  if (!dateStr) return true; // Optional field
+  const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+  const match = dateStr.match(regex);
+  if (!match) return false;
+  
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  
+  if (day < 1 || day > 31) return false;
+  if (month < 1 || month > 12) return false;
+  if (year < 1900 || year > new Date().getFullYear()) return false;
+  
+  // Check if date is valid
+  const date = new Date(year, month - 1, day);
+  return date.getDate() === day && date.getMonth() === month - 1;
+};
+
+// Convert DD/MM/AAAA to YYYY-MM-DD for database
+const convertBrazilianToISO = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+  return `${match[3]}-${match[2]}-${match[1]}`;
+};
+
 const AgendarOnline: React.FC = () => {
   const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
   const { notify } = useWebhookNotify();
