@@ -261,6 +261,7 @@ const Funcionarios: React.FC = () => {
                     <SelectItem value="coordenador">Coordenador</SelectItem>
                     <SelectItem value="recepcao">Recepção</SelectItem>
                     <SelectItem value="profissional">Profissional</SelectItem>
+                    <SelectItem value="tecnico">Técnico de Enfermagem</SelectItem>
                     <SelectItem value="gestao">Gestão</SelectItem>
                   </SelectContent>
                 </Select>
