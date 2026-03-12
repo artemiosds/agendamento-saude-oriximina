@@ -22,6 +22,7 @@ const menuItems = [
   { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, roles: ['master', 'coordenador'] },
   { to: '/painel/unidades', label: 'Unidades/Salas', icon: Building2, roles: ['master', 'coordenador'] },
   { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: Activity, roles: ['master', 'coordenador'] },
+  { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, roles: ['master', 'coordenador', 'tecnico'] },
   { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ];
