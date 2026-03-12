@@ -962,10 +962,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
     const dates = getAvailableDatesInternal(profissionalId, unidadeId);
-    if (!isPublic) return dates;
-    // For public: filter out dates where no public slots remain
-    return dates.filter(d => getAvailableSlots(profissionalId, unidadeId, d, true).length > 0);
+    // For both public and internal: verify actual slot availability
+    return dates.filter(d => getAvailableSlots(profissionalId, unidadeId, d, isPublic).length > 0);
   }, [getAvailableDatesInternal, getAvailableSlots]);
+
+  // Build a map of day info for calendar visual enrichment
+  const getDayInfoMap = useCallback((profissionalId: string, unidadeId: string, isPublic = false): Record<string, import('@/components/CalendarioDisponibilidade').DayInfo> => {
+    const map: Record<string, import('@/components/CalendarioDisponibilidade').DayInfo> = {};
+    const disps = disponibilidades.filter(d => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
+    if (disps.length === 0) return map;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Iterate through 90 days from today
+    for (let i = 0; i < 90; i++) {
+      const current = new Date(today);
+      current.setDate(current.getDate() + i);
+      const dateStr = current.toISOString().split('T')[0];
+      const dayOfWeek = current.getDay();
+
+      // Check if this day has any availability configuration
+      const hasDisp = disps.some(d => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim);
+
+      if (!hasDisp) {
+        // No availability configured — don't add to map (will show as unavailable by default)
+        continue;
+      }
+
+      // Check blocks
+      const blockInfo = getBlockingInfo(profissionalId, unidadeId, dateStr);
+      if (blockInfo.blocked) {
+        const isHoliday = blockInfo.type === 'feriado';
+        map[dateStr] = {
+          dateStr,
+          status: isHoliday ? 'holiday' : 'blocked',
+          label: blockInfo.label || (isHoliday ? 'Feriado' : 'Bloqueado'),
+        };
+        continue;
+      }
+
+      // Check if day is full (all slots taken)
+      const slots = getAvailableSlots(profissionalId, unidadeId, dateStr, isPublic);
+      if (slots.length === 0) {
+        // Has availability config but no slots left
+        const disp = disps.find(d => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim);
+        if (disp) {
+          const dayAppointments = agendamentos.filter(a => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
+          if (dayAppointments.length > 0) {
+            map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
+          }
+        }
+        continue;
+      }
+
+      // Available — don't need to add to map (calendar handles this via availableDates)
+    }
+
+    return map;
+  }, [disponibilidades, agendamentos, getAvailableSlots, getBlockingInfo, statusOcupaVaga]);
 
   const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
     const suggestions: string[] = [];
