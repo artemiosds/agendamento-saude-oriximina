@@ -94,6 +94,8 @@ const Pacientes: React.FC = () => {
       list = list.filter(p => pacientesNaFila.has(p.id));
     } else if (filterFila === 'sem_fila') {
       list = list.filter(p => !pacientesNaFila.has(p.id));
+    } else if (filterFila === 'demanda_reprimida') {
+      list = list.filter(p => pacientesDemandaReprimida.has(p.id));
     }
 
     // Sort
