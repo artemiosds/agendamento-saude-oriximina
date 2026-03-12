@@ -51,7 +51,7 @@ const convertBrazilianToISO = (dateStr: string): string => {
 };
 
 const AgendarOnline: React.FC = () => {
-  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, refreshPacientes } = useData();
+  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, getDayInfoMap, refreshPacientes } = useData();
   const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
