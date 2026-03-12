@@ -71,6 +71,7 @@ const App = () => (
                 <Route path="prontuario" element={<Prontuario />} />
                 <Route path="auditoria" element={<Auditoria />} />
                 <Route path="triagem" element={<Triagem />} />
+                <Route path="bloqueios" element={<Bloqueios />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
