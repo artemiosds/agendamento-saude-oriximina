@@ -579,7 +579,7 @@ const FilaEspera: React.FC = () => {
     }
   };
 
-
+  const getReservaTimeLeft = (filaId: string) => {
     const r = reservas[filaId];
     if (!r) return null;
     const remaining = Math.max(0, r.expiresAt - now);
