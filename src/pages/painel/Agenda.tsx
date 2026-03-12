@@ -73,6 +73,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
 
+  // Check if selected date is blocked
+  const blockedForDate = React.useMemo(() => {
+    const dateRef = new Date(`${selectedDate}T00:00:00`).getTime();
+    return bloqueios.filter(b => {
+      const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
+      return dateRef >= ini && dateRef <= fim && b.diaInteiro;
+    });
+  }, [selectedDate, bloqueios]);
+
   // Available slots for new appointment dialog (internal)
   const newAgSlots = React.useMemo(() => {
     if (!newAg.profissionalId) return [];
