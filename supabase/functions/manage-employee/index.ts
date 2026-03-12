@@ -81,6 +81,7 @@ serve(async (req) => {
           uf_conselho: uf_conselho || "",
           pode_agendar_retorno: pode_agendar_retorno ?? false,
           cpf: cpf || "",
+          coren: coren || "",
         })
         .select()
         .single();
