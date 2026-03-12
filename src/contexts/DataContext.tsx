@@ -439,6 +439,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cid: f.cid || '',
           criadoPor: f.criado_por || '',
           criadoEm: f.criado_em || '',
+          dataSolicitacaoOriginal: f.data_solicitacao_original || '',
+          origemCadastro: f.origem_cadastro || 'normal',
         }));
         setFila(mapped);
       }
