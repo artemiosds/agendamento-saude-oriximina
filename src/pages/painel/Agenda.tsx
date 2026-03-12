@@ -30,7 +30,7 @@ const statusActions = [
 const statusLabels: Record<string, string> = {
   pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
   cancelado: 'Cancelado', concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
-  remarcado: 'Remarcado', em_atendimento: 'Em Atendimento',
+  remarcado: 'Remarcado', em_atendimento: 'Em Atendimento', aguardando_triagem: 'Aguard. Triagem',
 };
 
 const statusBadgeClass: Record<string, string> = {
