@@ -267,6 +267,31 @@ const Relatorios: React.FC = () => {
     return { items: filteredFila.sort((a, b) => a.posicao - b.posicao), aguardando, chamados, desistencias, total: filteredFila.length };
   }, [filaDB, filterUnit, filterProf]);
 
+  // === TRIAGEM REPORT ===
+  const triagemReport = useMemo(() => {
+    const filteredTriagens = triagensDB.filter(t => {
+      if (dateFrom && t.criado_em && t.criado_em < dateFrom) return false;
+      if (dateTo && t.criado_em && t.criado_em > dateTo + 'T23:59:59') return false;
+      return true;
+    });
+    const total = filteredTriagens.length;
+    const confirmadas = filteredTriagens.filter(t => t.confirmado_em).length;
+    const pendentes = total - confirmadas;
+
+    // Por técnico
+    const porTecnico: Record<string, { id: string; nome: string; total: number; confirmadas: number; pendentes: number }> = {};
+    filteredTriagens.forEach(t => {
+      const tec = funcionarios.find(f => f.id === t.tecnico_id);
+      const nome = tec?.nome || 'Desconhecido';
+      if (!porTecnico[t.tecnico_id]) porTecnico[t.tecnico_id] = { id: t.tecnico_id, nome, total: 0, confirmadas: 0, pendentes: 0 };
+      porTecnico[t.tecnico_id].total++;
+      if (t.confirmado_em) porTecnico[t.tecnico_id].confirmadas++;
+      else porTecnico[t.tecnico_id].pendentes++;
+    });
+
+    return { total, confirmadas, pendentes, porTecnico: Object.values(porTecnico).sort((a, b) => b.total - a.total) };
+  }, [triagensDB, funcionarios, dateFrom, dateTo]);
+
   // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     const map: Record<string, { data: string; agendamentos: number; concluidos: number; faltas: number }> = {};
