@@ -59,7 +59,7 @@ const Funcionarios: React.FC = () => {
   const [showSenha, setShowSenha] = useState(false);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
-    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false,
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
 
   const canManage = hasPermission(['master', 'coordenador']);
