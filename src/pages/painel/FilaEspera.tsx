@@ -324,6 +324,8 @@ const FilaEspera: React.FC = () => {
       horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       criadoPor: user?.id || 'sistema',
       observacoes: form.observacoes,
+      descricaoClinica: form.descricaoClinica,
+      cid: form.cid,
     });
 
     const unidade = unidades.find(u => u.id === form.unidadeId);
