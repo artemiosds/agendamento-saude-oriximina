@@ -666,11 +666,6 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                     </Button>
                   )}
-                  {!isProfissional && canStart && (
-                    <Button size="sm" className="h-8 px-3 text-xs gradient-primary text-primary-foreground" onClick={() => handleIniciarAtendimento(ag)}>
-                      <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
-                    </Button>
-                  )}
                   {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
                     statusActions.map(sa => (
                       <Button key={sa.key} size="sm" variant="outline" className={cn("h-8 px-2 text-xs", ag.status === sa.key && sa.color)}
