@@ -355,7 +355,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         from += PAGE;
       }
       const data = allData;
-      if (data && !error) {
+      if (data.length > 0) {
         const mapped: Paciente[] = (data as any[]).map((p: any) => ({
           id: p.id,
           nome: p.nome,
