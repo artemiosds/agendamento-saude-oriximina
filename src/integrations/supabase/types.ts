@@ -789,6 +789,14 @@ export type Database = {
         }
         Returns: Json
       }
+      is_date_blocked: {
+        Args: {
+          p_date: string
+          p_profissional_id: string
+          p_unidade_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

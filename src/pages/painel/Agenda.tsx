@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw, CalendarOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -54,7 +54,7 @@ const tipoBadge: Record<string, { label: string; class: string }> = {
 };
 
 const Agenda: React.FC = () => {
-const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades, getAvailableSlots, getAvailableDates } = useData();
+const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades, getAvailableSlots, getAvailableDates, bloqueios } = useData();
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -72,6 +72,16 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+
+  // Check if selected date is blocked
+  const blockedForDate = React.useMemo(() => {
+    const dateRef = new Date(`${selectedDate}T00:00:00`).getTime();
+    return bloqueios.filter(b => {
+      const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
+      return dateRef >= ini && dateRef <= fim && b.diaInteiro;
+    });
+  }, [selectedDate, bloqueios]);
 
   // Available slots for new appointment dialog (internal)
   const newAgSlots = React.useMemo(() => {
@@ -492,6 +502,21 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           </Select>
         )}
       </div>
+
+      {/* Blocked date indicator */}
+      {blockedForDate.length > 0 && (
+        <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
+          <CardContent className="p-4 flex items-center gap-3">
+            <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">🚫 Data bloqueada para agendamentos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {blockedForDate.map(b => b.titulo).join(' • ')}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Appointments list */}
       <div className="space-y-2">
