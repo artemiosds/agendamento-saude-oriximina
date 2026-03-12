@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
+import { BuscaPaciente } from '@/components/BuscaPaciente';
 
 const statusActions = [
   { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
