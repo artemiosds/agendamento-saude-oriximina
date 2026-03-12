@@ -440,6 +440,8 @@ const AgendarOnline: React.FC = () => {
                           availableDates={availableDates.slice(0, 60)}
                           selectedDate={form.data}
                           onSelectDate={(d) => setForm(p => ({ ...p, data: d, hora: '' }))}
+                          dayInfoMap={dayInfoMap}
+                          blockToday={true}
                         />
                       </div>
                     </div>
