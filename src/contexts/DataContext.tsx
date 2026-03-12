@@ -593,6 +593,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       posicao: f.posicao,
       hora_chegada: f.horaChegada,
       observacoes: f.observacoes || '',
+      descricao_clinica: f.descricaoClinica || '',
+      cid: f.cid || '',
       criado_por: f.criadoPor || 'sistema',
     } as any);
     if (!error) {
