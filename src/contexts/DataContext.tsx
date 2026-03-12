@@ -474,6 +474,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: p.email,
       endereco: p.endereco,
       observacoes: p.observacoes,
+      descricao_clinica: p.descricaoClinica || '',
+      cid: p.cid || '',
     } as any);
     if (!error) {
       setPacientes((prev) => [...prev, p]);
