@@ -107,7 +107,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada'>('prioridade');
+  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada' | 'solicitacao'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [now, setNow] = useState(Date.now());
 
@@ -116,6 +116,18 @@ const FilaEspera: React.FC = () => {
   const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
+
+  // Import old list dialog
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importForm, setImportForm] = useState({
+    nome: '', telefone: '', cpf: '', email: '', dataNascimento: '',
+    unidadeId: '', profissionalId: '', tipo: 'primeira_consulta',
+    dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '',
+    prioridade: 'normal',
+  });
+  const [importDup, setImportDup] = useState<typeof pacientes[0] | null>(null);
+  const [importErrors, setImportErrors] = useState<Record<string, string>>({});
+  const [importSaving, setImportSaving] = useState(false);
 
   const [form, setForm] = useState({
     pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '',
