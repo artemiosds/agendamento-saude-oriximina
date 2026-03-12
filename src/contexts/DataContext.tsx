@@ -365,6 +365,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: p.email || '',
           endereco: p.endereco || '',
           observacoes: p.observacoes || '',
+          descricaoClinica: p.descricao_clinica || '',
+          cid: p.cid || '',
           criadoEm: p.criado_em || '',
         }));
         setPacientes(mapped);
