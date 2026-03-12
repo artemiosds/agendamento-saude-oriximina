@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
+import { BuscaPaciente } from '@/components/BuscaPaciente';
 
 const statusActions = [
   { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
@@ -483,10 +484,11 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
               <div className="space-y-4">
                 <div>
                   <Label>Paciente</Label>
-                  <Select value={newAg.pacienteId} onValueChange={v => setNewAg(p => ({ ...p, pacienteId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{pacientes.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <BuscaPaciente
+                    pacientes={pacientes}
+                    value={newAg.pacienteId}
+                    onChange={(id) => setNewAg(p => ({ ...p, pacienteId: id }))}
+                  />
                 </div>
                 <div>
                   <Label>Profissional</Label>
