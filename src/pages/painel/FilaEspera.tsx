@@ -585,7 +585,7 @@ const FilaEspera: React.FC = () => {
                 {!editId && (
                   <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-primary" onClick={() => {
                     setCriarPaciente(true);
-                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '' });
+                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
                     setDuplicataEncontrada(null);
                     setPacienteErrors({});
                   }}>
