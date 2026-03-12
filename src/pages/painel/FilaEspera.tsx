@@ -643,6 +643,19 @@ const FilaEspera: React.FC = () => {
                   <Label>Endereço</Label>
                   <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
                 </div>
+                <div className="border-t pt-3 mt-1">
+                  <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+                  <div className="space-y-3">
+                    <div>
+                      <Label>Descrição Clínica</Label>
+                      <Input value={novoPaciente.descricaoClinica} onChange={e => setNovoPaciente(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
+                    </div>
+                    <div>
+                      <Label>CID (opcional)</Label>
+                      <Input value={novoPaciente.cid} onChange={e => setNovoPaciente(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

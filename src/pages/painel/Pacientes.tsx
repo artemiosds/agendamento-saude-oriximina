@@ -302,6 +302,19 @@ const Pacientes: React.FC = () => {
               </div>
             </div>
             <div><Label>Endereço</Label><Input value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))} /></div>
+            <div className="border-t pt-3 mt-1">
+              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica</Label>
+                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+              </div>
+            </div>
             <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={saving}>
               {saving ? 'Salvando...' : editId ? 'Atualizar' : 'Cadastrar'}
             </Button>
