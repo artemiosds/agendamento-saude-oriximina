@@ -85,6 +85,19 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     });
   }, [selectedDate, bloqueios]);
 
+  // Check if selected date is a weekend without availability
+  const weekendInfo = React.useMemo(() => {
+    const dateObj = new Date(`${selectedDate}T12:00:00`);
+    const dayOfWeek = dateObj.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (!isWeekend) return { isWeekend: false, hasAvailability: true };
+    // Check if any professional has availability for this day of week on this date
+    const hasAvailability = disponibilidades.some(d => 
+      d.diasSemana.includes(dayOfWeek) && selectedDate >= d.dataInicio && selectedDate <= d.dataFim
+    );
+    return { isWeekend, hasAvailability };
+  }, [selectedDate, disponibilidades]);
+
   // Available slots for new appointment dialog (internal)
   const newAgSlots = React.useMemo(() => {
     if (!newAg.profissionalId) return [];
