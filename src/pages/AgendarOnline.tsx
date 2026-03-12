@@ -175,7 +175,7 @@ const AgendarOnline: React.FC = () => {
         pacienteId = `p${Date.now()}`;
         await addPaciente({
           id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
-          dataNascimento: form.dataNascimento, email: form.email, endereco: '',
+          dataNascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, endereco: '',
           observacoes: form.obs, descricaoClinica: '', cid: '', criadoEm: new Date().toISOString(),
         });
         await refreshPacientes();
