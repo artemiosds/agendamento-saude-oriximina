@@ -478,6 +478,12 @@ const Pacientes: React.FC = () => {
                   <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{p.telefone}</span>
                   {p.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" />{p.email}</span>}
                 </div>
+                {(p.descricaoClinica || p.cid) && (
+                  <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
+                    {p.descricaoClinica && <p>🩺 {p.descricaoClinica}</p>}
+                    {p.cid && <p>CID: {p.cid}</p>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
