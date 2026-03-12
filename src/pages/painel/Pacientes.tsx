@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +54,13 @@ const Pacientes: React.FC = () => {
     );
   }, [fila]);
 
+  // Set of patient IDs from demanda reprimida
+  const pacientesDemandaReprimida = useMemo(() => {
+    return new Set(
+      fila.filter(f => f.origemCadastro === 'demanda_reprimida').map(f => f.pacienteId)
+    );
+  }, [fila]);
+
   // Get fila entry for a patient (for sorting)
   const filaEntryMap = useMemo(() => {
     const map = new Map<string, typeof fila[0]>();
@@ -87,6 +94,8 @@ const Pacientes: React.FC = () => {
       list = list.filter(p => pacientesNaFila.has(p.id));
     } else if (filterFila === 'sem_fila') {
       list = list.filter(p => !pacientesNaFila.has(p.id));
+    } else if (filterFila === 'demanda_reprimida') {
+      list = list.filter(p => pacientesDemandaReprimida.has(p.id));
     }
 
     // Sort
@@ -404,6 +413,7 @@ const Pacientes: React.FC = () => {
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="fila">Na Fila de Espera</SelectItem>
+            <SelectItem value="demanda_reprimida">Demanda Reprimida</SelectItem>
             <SelectItem value="sem_fila">Sem fila</SelectItem>
           </SelectContent>
         </Select>
@@ -432,6 +442,11 @@ const Pacientes: React.FC = () => {
                       {naFila && (
                         <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] px-1.5 py-0">
                           <Clock className="w-3 h-3 mr-0.5" /> FILA DE ESPERA
+                        </Badge>
+                      )}
+                      {pacientesDemandaReprimida.has(p.id) && (
+                        <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
                         </Badge>
                       )}
                     </div>

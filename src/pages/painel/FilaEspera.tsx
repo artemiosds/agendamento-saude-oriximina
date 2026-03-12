@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus } from 'lucide-react';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
@@ -106,7 +107,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada'>('prioridade');
+  const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada' | 'solicitacao'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [now, setNow] = useState(Date.now());
 
@@ -115,6 +116,18 @@ const FilaEspera: React.FC = () => {
   const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
+
+  // Import old list dialog
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importForm, setImportForm] = useState({
+    nome: '', telefone: '', cpf: '', email: '', dataNascimento: '',
+    unidadeId: '', profissionalId: '', tipo: 'primeira_consulta',
+    dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '',
+    prioridade: 'normal',
+  });
+  const [importDup, setImportDup] = useState<typeof pacientes[0] | null>(null);
+  const [importErrors, setImportErrors] = useState<Record<string, string>>({});
+  const [importSaving, setImportSaving] = useState(false);
 
   const [form, setForm] = useState({
     pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '',
@@ -169,15 +182,27 @@ const FilaEspera: React.FC = () => {
         if (sortField === 'prioridade') {
           if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
             return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
-          return a.horaChegada.localeCompare(b.horaChegada);
+          // Then by dataSolicitacaoOriginal if available
+          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
+            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (a.dataSolicitacaoOriginal) return -1;
+          if (b.dataSolicitacaoOriginal) return 1;
+          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         if (sortField === 'tempo') {
           const aMin = getWaitMinutes(a, now);
           const bMin = getWaitMinutes(b, now);
-          return bMin - aMin; // longest wait first
+          return bMin - aMin;
+        }
+        if (sortField === 'solicitacao') {
+          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
+            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (a.dataSolicitacaoOriginal) return -1;
+          if (b.dataSolicitacaoOriginal) return 1;
+          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         // entrada
-        return a.horaChegada.localeCompare(b.horaChegada);
+        return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
   }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
 
@@ -378,6 +403,182 @@ const FilaEspera: React.FC = () => {
     }
   };
 
+  // ---- Import old list handler ----
+  const checkImportDuplicidade = (dados: typeof importForm) => {
+    const cpfClean = dados.cpf.replace(/\D/g, '');
+    const telClean = dados.telefone.replace(/\D/g, '');
+    const emailLower = dados.email.toLowerCase().trim();
+
+    if (cpfClean.length >= 11) {
+      const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
+      if (found) return found;
+    }
+    if (telClean.length >= 8) {
+      const found = pacientes.find(p => p.telefone.replace(/\D/g, '') === telClean);
+      if (found) return found;
+    }
+    if (emailLower && emailLower.includes('@')) {
+      const found = pacientes.find(p => p.email.toLowerCase().trim() === emailLower);
+      if (found) return found;
+    }
+    // name + birthday
+    if (dados.nome.trim() && dados.dataNascimento) {
+      const found = pacientes.find(p =>
+        p.nome.toLowerCase().trim() === dados.nome.toLowerCase().trim() &&
+        p.dataNascimento === dados.dataNascimento
+      );
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const handleImportSave = async (existingPatient?: typeof pacientes[0]) => {
+    if (!importForm.nome.trim() && !existingPatient) {
+      toast.error('Informe o nome do paciente.');
+      return;
+    }
+    if (!importForm.unidadeId) {
+      toast.error('Selecione a unidade.');
+      return;
+    }
+    if (!importForm.dataSolicitacaoOriginal) {
+      toast.error('Informe a data de solicitação original.');
+      return;
+    }
+
+    setImportSaving(true);
+    try {
+      let pacienteId: string;
+      let pacienteNome: string;
+      let telefone: string;
+      let email: string;
+
+      if (existingPatient) {
+        pacienteId = existingPatient.id;
+        pacienteNome = existingPatient.nome;
+        telefone = existingPatient.telefone;
+        email = existingPatient.email;
+      } else {
+        // Check duplicate
+        const dup = checkImportDuplicidade(importForm);
+        if (dup && !importDup) {
+          setImportDup(dup);
+          setImportSaving(false);
+          return;
+        }
+
+        // Validate
+        const err = validatePacienteFields({ nome: importForm.nome, telefone: importForm.telefone, email: importForm.email });
+        if (err) {
+          const newErrors: Record<string, string> = {};
+          if (err.includes('Nome')) newErrors.nome = err;
+          else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
+          else if (err.includes('mail')) newErrors.email = err;
+          setImportErrors(newErrors);
+          toast.error(err);
+          setImportSaving(false);
+          return;
+        }
+
+        // Create patient
+        pacienteId = `p${Date.now()}`;
+        pacienteNome = importForm.nome;
+        telefone = importForm.telefone;
+        email = importForm.email;
+
+        await addPaciente({
+          id: pacienteId,
+          nome: importForm.nome,
+          cpf: importForm.cpf,
+          telefone: importForm.telefone,
+          email: importForm.email,
+          dataNascimento: importForm.dataNascimento,
+          endereco: '',
+          observacoes: importForm.observacoes,
+          descricaoClinica: importForm.descricaoClinica || '',
+          cid: importForm.cid || '',
+          criadoEm: new Date().toISOString(),
+        });
+
+        await logAction({
+          acao: 'criar', entidade: 'paciente', entidadeId: pacienteId,
+          detalhes: { nome: importForm.nome, origem: 'demanda_reprimida', dataSolicitacaoOriginal: importForm.dataSolicitacaoOriginal }, user,
+        });
+      }
+
+      // Convert DD/MM/YYYY to sortable YYYY-MM-DD
+      let sortableDate = importForm.dataSolicitacaoOriginal;
+      const parts = sortableDate.split('/');
+      if (parts.length === 3 && parts[0].length <= 2) {
+        sortableDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+
+      // Add to queue
+      const newId = `f${Date.now()}`;
+      await addToFila({
+        id: newId, pacienteId, pacienteNome,
+        unidadeId: importForm.unidadeId,
+        profissionalId: importForm.profissionalId,
+        setor: '',
+        prioridade: importForm.prioridade as any,
+        status: 'aguardando', posicao: fila.length + 1,
+        horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        criadoPor: user?.id || 'sistema',
+        observacoes: importForm.observacoes,
+        descricaoClinica: importForm.descricaoClinica,
+        cid: importForm.cid,
+        dataSolicitacaoOriginal: sortableDate,
+        origemCadastro: 'demanda_reprimida',
+      });
+
+      const unidade = unidades.find(u => u.id === importForm.unidadeId);
+      const prof = importForm.profissionalId ? funcionarios.find(f => f.id === importForm.profissionalId) : null;
+
+      // Ensure portal access
+      ensurePortalAccess({
+        pacienteId,
+        contexto: 'fila',
+        unidade: unidade?.nome || '',
+        profissional: prof?.nome || '',
+        posicaoFila: fila.length + 1,
+      }).catch(() => {});
+
+      // Notify
+      if (email) {
+        await notify({
+          evento: 'fila_entrada',
+          paciente_nome: pacienteNome, telefone,
+          email, data_consulta: new Date().toISOString().split('T')[0],
+          hora_consulta: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          unidade: unidade?.nome || '', profissional: prof?.nome || '',
+          tipo_atendimento: importForm.tipo === 'retorno' ? 'Retorno' : 'Primeira Consulta',
+          status_agendamento: 'aguardando',
+          id_agendamento: '',
+        });
+      }
+
+      await logAction({
+        acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
+        detalhes: {
+          pacienteNome, unidade: unidade?.nome, profissional: prof?.nome,
+          origemCadastro: 'demanda_reprimida',
+          dataSolicitacaoOriginal: sortableDate,
+          descricaoClinica: importForm.descricaoClinica || undefined,
+          cid: importForm.cid || undefined,
+        }, user, modulo: 'fila_espera',
+      });
+
+      toast.success(`${pacienteNome} importado da lista antiga para a fila!`);
+      setImportDialogOpen(false);
+      setImportDup(null);
+      setImportErrors({});
+    } catch {
+      toast.error('Erro ao importar paciente.');
+    } finally {
+      setImportSaving(false);
+    }
+  };
+
   const getReservaTimeLeft = (filaId: string) => {
     const r = reservas[filaId];
     if (!r) return null;
@@ -416,9 +617,17 @@ const FilaEspera: React.FC = () => {
             {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`} {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {canManage && (
             <>
+              <Button variant="outline" onClick={() => {
+                setImportForm({ nome: '', telefone: '', cpf: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
+                setImportDup(null);
+                setImportErrors({});
+                setImportDialogOpen(true);
+              }}>
+                <FileUp className="w-4 h-4 mr-2" />Importar Lista Antiga
+              </Button>
               <Button variant="outline" onClick={() => {
                 setManualSlot({ data: new Date().toISOString().split('T')[0], hora: '', profissionalId: '', unidadeId: '' });
                 setManualCallDialog(true);
@@ -507,6 +716,7 @@ const FilaEspera: React.FC = () => {
             <SelectItem value="prioridade">Prioridade</SelectItem>
             <SelectItem value="tempo">Tempo de espera</SelectItem>
             <SelectItem value="entrada">Data de entrada</SelectItem>
+            <SelectItem value="solicitacao">Data solicitação original</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -726,7 +936,136 @@ const FilaEspera: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Queue List */}
+      {/* Import Old List Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <FileUp className="w-5 h-5" /> Importar Lista Antiga (Demanda Reprimida)
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Cadastre pacientes da lista em papel anterior ao sistema. Eles entrarão na fila de espera com a etiqueta DEMANDA REPRIMIDA.</p>
+
+          {importDup && (
+            <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
+              <p className="font-medium text-warning flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Paciente já cadastrado:</p>
+              <p><strong>{importDup.nome}</strong> — {importDup.telefone} — {importDup.cpf || 'Sem CPF'}</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => { handleImportSave(importDup); }}>
+                  Usar este e adicionar à fila
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setImportDup(null)}>Corrigir dados</Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label>Nome Completo *</Label>
+                <Input value={importForm.nome} onChange={e => setImportForm(p => ({ ...p, nome: e.target.value }))} />
+                {importErrors.nome && <p className="text-xs text-destructive mt-1">{importErrors.nome}</p>}
+              </div>
+              <div>
+                <Label>Telefone *</Label>
+                <Input value={importForm.telefone} onChange={e => setImportForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
+                {importErrors.telefone && <p className="text-xs text-destructive mt-1">{importErrors.telefone}</p>}
+              </div>
+              <div>
+                <Label>CPF (opcional)</Label>
+                <Input value={importForm.cpf} onChange={e => setImportForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <Label>E-mail (opcional)</Label>
+                <Input type="email" value={importForm.email} onChange={e => setImportForm(p => ({ ...p, email: e.target.value }))} />
+                {importErrors.email && <p className="text-xs text-destructive mt-1">{importErrors.email}</p>}
+              </div>
+              <div>
+                <Label>Data Nasc.</Label>
+                <Input type="date" value={importForm.dataNascimento} onChange={e => setImportForm(p => ({ ...p, dataNascimento: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-semibold text-foreground mb-2">📋 Dados da Fila</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Data de Solicitação Original * <span className="text-xs text-muted-foreground">(da ficha de papel)</span></Label>
+                  <Input type="date" value={importForm.dataSolicitacaoOriginal} onChange={e => setImportForm(p => ({ ...p, dataSolicitacaoOriginal: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Unidade *</Label>
+                  <Select value={importForm.unidadeId} onValueChange={v => setImportForm(p => ({ ...p, unidadeId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Profissional Desejado</Label>
+                  <Select value={importForm.profissionalId || 'none'} onValueChange={v => setImportForm(p => ({ ...p, profissionalId: v === 'none' ? '' : v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Qualquer</SelectItem>
+                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Tipo</Label>
+                    <Select value={importForm.tipo} onValueChange={v => setImportForm(p => ({ ...p, tipo: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="primeira_consulta">Primeira Consulta</SelectItem>
+                        <SelectItem value="retorno">Retorno</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Prioridade</Label>
+                    <Select value={importForm.prioridade} onValueChange={v => setImportForm(p => ({ ...p, prioridade: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="gestante">Gestante</SelectItem>
+                        <SelectItem value="idoso">Idoso 60+</SelectItem>
+                        <SelectItem value="urgente">Urgente</SelectItem>
+                        <SelectItem value="crianca">Criança 0-12</SelectItem>
+                        <SelectItem value="pcd">PNE</SelectItem>
+                        <SelectItem value="alta">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-semibold text-foreground mb-2">🩺 Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica (opcional)</Label>
+                  <Textarea value={importForm.descricaoClinica} onChange={e => setImportForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Motivo de espera / queixa principal..." rows={2} />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={importForm.cid} onChange={e => setImportForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea value={importForm.observacoes} onChange={e => setImportForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações administrativas..." rows={2} />
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={() => handleImportSave()} className="w-full gradient-primary text-primary-foreground" disabled={importSaving}>
+              {importSaving ? 'Importando...' : 'Importar para Fila de Espera'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <div className="space-y-2">
         {filteredFila.length === 0 ? (
           <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent></Card>
@@ -763,6 +1102,11 @@ const FilaEspera: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                    {f.origemCadastro === 'demanda_reprimida' && (
+                      <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0">
+                        <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
+                      </Badge>
+                    )}
                     {isActive && (
                       <span className={cn('inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full', waitColor.bg, waitColor.text)}>
                         <Clock className="w-3 h-3" />
@@ -773,6 +1117,9 @@ const FilaEspera: React.FC = () => {
                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
+                  {f.dataSolicitacaoOriginal && (
+                    <p className="text-xs text-muted-foreground mt-0.5">📅 Solicitação original: {f.dataSolicitacaoOriginal}</p>
+                  )}
                   {f.observacoes && <p className="text-xs text-muted-foreground mt-0.5">📋 {f.observacoes}</p>}
                   {f.descricaoClinica && <p className="text-xs text-muted-foreground mt-0.5">🩺 {f.descricaoClinica}</p>}
                   {f.cid && <p className="text-xs text-muted-foreground mt-0.5">CID: {f.cid}</p>}

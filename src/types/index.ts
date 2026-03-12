@@ -151,6 +151,8 @@ export interface FilaEspera {
   cid?: string;
   criadoPor?: string;
   criadoEm?: string;
+  dataSolicitacaoOriginal?: string;
+  origemCadastro?: 'normal' | 'demanda_reprimida';
 }
 
 export interface Atendimento {

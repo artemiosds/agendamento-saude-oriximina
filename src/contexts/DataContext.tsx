@@ -439,6 +439,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cid: f.cid || '',
           criadoPor: f.criado_por || '',
           criadoEm: f.criado_em || '',
+          dataSolicitacaoOriginal: f.data_solicitacao_original || '',
+          origemCadastro: f.origem_cadastro || 'normal',
         }));
         setFila(mapped);
       }
@@ -596,6 +598,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       descricao_clinica: f.descricaoClinica || '',
       cid: f.cid || '',
       criado_por: f.criadoPor || 'sistema',
+      data_solicitacao_original: f.dataSolicitacaoOriginal || '',
+      origem_cadastro: f.origemCadastro || 'normal',
     } as any);
     if (!error) {
       setFila((prev) => [...prev, f]);

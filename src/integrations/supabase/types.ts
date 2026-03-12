@@ -295,11 +295,13 @@ export type Database = {
           cid: string
           criado_em: string | null
           criado_por: string
+          data_solicitacao_original: string
           descricao_clinica: string
           hora_chamada: string | null
           hora_chegada: string
           id: string
           observacoes: string | null
+          origem_cadastro: string
           paciente_id: string
           paciente_nome: string
           posicao: number
@@ -314,11 +316,13 @@ export type Database = {
           cid?: string
           criado_em?: string | null
           criado_por?: string
+          data_solicitacao_original?: string
           descricao_clinica?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id: string
           observacoes?: string | null
+          origem_cadastro?: string
           paciente_id?: string
           paciente_nome?: string
           posicao?: number
@@ -333,11 +337,13 @@ export type Database = {
           cid?: string
           criado_em?: string | null
           criado_por?: string
+          data_solicitacao_original?: string
           descricao_clinica?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id?: string
           observacoes?: string | null
+          origem_cadastro?: string
           paciente_id?: string
           paciente_nome?: string
           posicao?: number
