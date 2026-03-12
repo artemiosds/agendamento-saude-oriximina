@@ -349,6 +349,7 @@ export type Database = {
           ativo: boolean | null
           auth_user_id: string | null
           cargo: string | null
+          coren: string | null
           cpf: string
           criado_em: string | null
           criado_por: string | null
@@ -371,6 +372,7 @@ export type Database = {
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
+          coren?: string | null
           cpf?: string
           criado_em?: string | null
           criado_por?: string | null
@@ -393,6 +395,7 @@ export type Database = {
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
+          coren?: string | null
           cpf?: string
           criado_em?: string | null
           criado_por?: string | null
@@ -652,6 +655,93 @@ export type Database = {
           configuracoes?: Json
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      triage_records: {
+        Row: {
+          agendamento_id: string
+          alergias: string[] | null
+          altura: number | null
+          confirmado_em: string | null
+          criado_em: string | null
+          frequencia_cardiaca: number | null
+          glicemia: number | null
+          id: string
+          imc: number | null
+          iniciado_em: string | null
+          medicamentos: string[] | null
+          peso: number | null
+          pressao_arterial: string | null
+          queixa: string | null
+          saturacao_oxigenio: number | null
+          tecnico_id: string
+          temperatura: number | null
+        }
+        Insert: {
+          agendamento_id: string
+          alergias?: string[] | null
+          altura?: number | null
+          confirmado_em?: string | null
+          criado_em?: string | null
+          frequencia_cardiaca?: number | null
+          glicemia?: number | null
+          id?: string
+          imc?: number | null
+          iniciado_em?: string | null
+          medicamentos?: string[] | null
+          peso?: number | null
+          pressao_arterial?: string | null
+          queixa?: string | null
+          saturacao_oxigenio?: number | null
+          tecnico_id: string
+          temperatura?: number | null
+        }
+        Update: {
+          agendamento_id?: string
+          alergias?: string[] | null
+          altura?: number | null
+          confirmado_em?: string | null
+          criado_em?: string | null
+          frequencia_cardiaca?: number | null
+          glicemia?: number | null
+          id?: string
+          imc?: number | null
+          iniciado_em?: string | null
+          medicamentos?: string[] | null
+          peso?: number | null
+          pressao_arterial?: string | null
+          queixa?: string | null
+          saturacao_oxigenio?: number | null
+          tecnico_id?: string
+          temperatura?: number | null
+        }
+        Relationships: []
+      }
+      triage_settings: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          profissional_id: string | null
+          unidade_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          profissional_id?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          profissional_id?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
