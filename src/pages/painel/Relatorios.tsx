@@ -55,8 +55,11 @@ const Relatorios: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
+  const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional');
+  const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
+
   const setoresUnicos = useMemo(() => {
     const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
@@ -70,8 +73,9 @@ const Relatorios: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        let qAt = (supabase as any).from('atendimentos').select('*');
-        let qFila = (supabase as any).from('fila_espera').select('*');
+        let qAt = supabase.from('atendimentos').select('*');
+        let qFila = supabase.from('fila_espera').select('*');
+        let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
         if (user?.role === 'coordenador' && user.unidadeId) {
           qAt = qAt.eq('unidade_id', user.unidadeId);
           qFila = qFila.eq('unidade_id', user.unidadeId);
@@ -80,9 +84,13 @@ const Relatorios: React.FC = () => {
           qAt = qAt.eq('profissional_id', user.id);
           qFila = qFila.eq('profissional_id', user.id);
         }
-        const [{ data: atData }, { data: filaData }] = await Promise.all([qAt, qFila]);
+        if (user?.role === 'tecnico' && user.id) {
+          qTriage = qTriage.eq('tecnico_id', user.id);
+        }
+        const [{ data: atData }, { data: filaData }, { data: triageData }] = await Promise.all([qAt, qFila, qTriage]);
         if (atData) setAtendimentosDB(atData);
         if (filaData) setFilaDB(filaData);
+        if (triageData) setTriagensDB(triageData as TriagemDB[]);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
