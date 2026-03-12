@@ -548,7 +548,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
             {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
           </CardContent></Card>
         ) : filtered.map(ag => {
-          const canStart = isProfissional && ag.status === 'confirmado_chegada' && ag.data === new Date().toISOString().split('T')[0];
+          const ehHoje = ag.data === new Date().toISOString().split('T')[0];
+          const canStart = isProfissional && (ag.status === 'confirmado_chegada' || ag.status === 'aguardando_atendimento') && ehHoje;
           const isEmAtendimento = ag.status === 'em_atendimento';
           const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground' };
           const paciente = pacientes.find(p => p.id === ag.pacienteId);
