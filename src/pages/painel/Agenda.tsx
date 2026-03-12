@@ -594,21 +594,67 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                 </div>
 
                 <div className="flex gap-1 flex-wrap">
-                  {canStart && (
-                    <Button size="sm" className="h-8 px-3 text-xs gradient-primary text-primary-foreground" onClick={() => handleIniciarAtendimento(ag)}>
-                      <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
-                    </Button>
-                  )}
-                  {isEmAtendimento && isProfissional && (
-                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
-                      const params = new URLSearchParams({
-                        pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
-                        agendamentoId: ag.id, data: ag.data,
-                      });
-                      navigate(`/painel/prontuario?${params.toString()}`);
-                    }}>
-                      <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
-                    </Button>
+                  {/* Professional status-based action buttons */}
+                  {isProfissional && (
+                    <>
+                      {(ag.status === 'pendente' || ag.status === 'confirmado') && ehHoje && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="ghost" className="h-8 px-3 text-xs cursor-not-allowed opacity-50" disabled>
+                              ⏳ Aguardando chegada
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {ag.status === 'aguardando_triagem' && ehHoje && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning" disabled>
+                              🩺 Em triagem
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {canStart && (
+                        <Button size="sm" className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90" onClick={() => handleIniciarAtendimento(ag)}>
+                          <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
+                        </Button>
+                      )}
+                      {isEmAtendimento && (
+                        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" onClick={() => {
+                          const params = new URLSearchParams({
+                            pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+                            agendamentoId: ag.id, data: ag.data,
+                          });
+                          navigate(`/painel/prontuario?${params.toString()}`);
+                        }}>
+                          <Clock className="w-3.5 h-3.5 mr-1" /> Continuar
+                        </Button>
+                      )}
+                      {ag.status === 'concluido' && (
+                        <Button size="sm" variant="ghost" className="h-8 px-3 text-xs" onClick={() => {
+                          const params = new URLSearchParams({
+                            pacienteId: ag.pacienteId, pacienteNome: ag.pacienteNome,
+                            agendamentoId: ag.id, data: ag.data,
+                          });
+                          navigate(`/painel/prontuario?${params.toString()}`);
+                        }}>
+                          ✅ Ver prontuário
+                        </Button>
+                      )}
+                      {(ag.status === 'falta' || ag.status === 'cancelado') && (
+                        <span className="text-xs text-muted-foreground px-2 py-1">
+                          {ag.status === 'falta' ? 'Faltou' : 'Cancelado'}
+                        </span>
+                      )}
+                      {!ehHoje && !['falta', 'cancelado', 'concluido'].includes(ag.status) && (
+                        <span className="text-xs text-muted-foreground px-2 py-1">
+                          📅 Agendado para {new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                      )}
+                    </>
                   )}
                   {/* Retorno button for authorized professionals */}
                   {canRetorno && ag.status === 'concluido' && (
@@ -618,6 +664,11 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       setRetornoDialogOpen(true);
                     }}>
                       <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
+                    </Button>
+                  )}
+                  {!isProfissional && canStart && (
+                    <Button size="sm" className="h-8 px-3 text-xs gradient-primary text-primary-foreground" onClick={() => handleIniciarAtendimento(ag)}>
+                      <Play className="w-3.5 h-3.5 mr-1" /> Iniciar
                     </Button>
                   )}
                   {!isProfissional && ag.status !== 'cancelado' && ag.status !== 'concluido' && (
