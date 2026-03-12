@@ -45,6 +45,7 @@ const statusBadgeClass: Record<string, string> = {
   remarcado: 'bg-muted text-muted-foreground',
   em_atendimento: 'bg-primary/10 text-primary',
   aguardando_triagem: 'bg-warning/10 text-warning',
+  aguardando_atendimento: 'bg-emerald-500/10 text-emerald-600',
 };
 
 const tipoBadge: Record<string, { label: string; class: string }> = {
