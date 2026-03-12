@@ -31,6 +31,7 @@ const statusLabels: Record<string, string> = {
   pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
   cancelado: 'Cancelado', concluido: 'Concluído', falta: 'Falta', atraso: 'Atraso',
   remarcado: 'Remarcado', em_atendimento: 'Em Atendimento', aguardando_triagem: 'Aguard. Triagem',
+  aguardando_atendimento: 'Aguard. Atendimento',
 };
 
 const statusBadgeClass: Record<string, string> = {
