@@ -485,7 +485,7 @@ const FilaEspera: React.FC = () => {
           <SelectTrigger><SelectValue placeholder="Profissional" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos Profissionais</SelectItem>
-            {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+            {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
