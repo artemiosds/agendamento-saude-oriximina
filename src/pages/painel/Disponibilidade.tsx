@@ -248,6 +248,11 @@ const Disponibilidade: React.FC = () => {
                         <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} — {d.horaFim}</p>
                         <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia</p>
                         <p>Dias: {d.diasSemana.sort((a, b) => a - b).map(i => diasSemanaFull[i]).join(', ')}</p>
+                        {d.diasSemana.some(i => i === 0 || i === 6) && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 mt-1">
+                            🟠 Ativo no fim de semana
+                          </span>
+                        )}
                         {prof?.tempoAtendimento && <p>Duração consulta: {prof.tempoAtendimento}min</p>}
                       </div>
                     </div>
