@@ -54,6 +54,13 @@ const Pacientes: React.FC = () => {
     );
   }, [fila]);
 
+  // Set of patient IDs from demanda reprimida
+  const pacientesDemandaReprimida = useMemo(() => {
+    return new Set(
+      fila.filter(f => f.origemCadastro === 'demanda_reprimida').map(f => f.pacienteId)
+    );
+  }, [fila]);
+
   // Get fila entry for a patient (for sorting)
   const filaEntryMap = useMemo(() => {
     const map = new Map<string, typeof fila[0]>();
