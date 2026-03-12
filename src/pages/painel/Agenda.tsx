@@ -319,6 +319,27 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   };
 
   const handleIniciarAtendimento = async (ag: typeof agendamentos[0]) => {
+    // Backend validation first
+    try {
+      const { error: rpcError } = await supabase.rpc('iniciar_atendimento', {
+        p_agendamento_id: ag.id,
+        p_profissional_id: user?.id || '',
+      });
+      if (rpcError) {
+        if (rpcError.message.includes('arrival_not_confirmed')) {
+          toast.error('A chegada do paciente ainda não foi confirmada pela recepção.');
+        } else if (rpcError.message.includes('not_authorized')) {
+          toast.error('Você não tem permissão para este agendamento.');
+        } else {
+          toast.error('Não foi possível iniciar o atendimento.');
+        }
+        return;
+      }
+    } catch (err) {
+      toast.error('Erro ao validar início do atendimento.');
+      return;
+    }
+
     const now = new Date();
     const horaInicio = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -331,7 +352,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     };
     localStorage.setItem(`timer_${ag.id}`, JSON.stringify(timerState));
 
-    await updateAgendamento(ag.id, { status: 'em_atendimento' });
+    // Status already updated by RPC, refresh local state
+    await refreshAgendamentos();
 
     const pac = pacientes.find(p => p.id === ag.pacienteId);
 
