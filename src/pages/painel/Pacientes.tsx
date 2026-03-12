@@ -413,6 +413,7 @@ const Pacientes: React.FC = () => {
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="fila">Na Fila de Espera</SelectItem>
+            <SelectItem value="demanda_reprimida">Demanda Reprimida</SelectItem>
             <SelectItem value="sem_fila">Sem fila</SelectItem>
           </SelectContent>
         </Select>
