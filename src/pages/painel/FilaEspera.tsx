@@ -203,7 +203,7 @@ const FilaEspera: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '' });
+    setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
     setCriarPaciente(false);
     setNovoPaciente({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
     setDuplicataEncontrada(null);
