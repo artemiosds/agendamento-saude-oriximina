@@ -388,7 +388,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         from += PAGE;
       }
       const data = allData;
-      if (data && !error) {
+      if (data.length > 0) {
         const mapped: Agendamento[] = (data as any[]).map((a: any) => ({
           id: a.id,
           pacienteId: a.paciente_id,
