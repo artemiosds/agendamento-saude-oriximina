@@ -696,8 +696,21 @@ const FilaEspera: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Observações</Label>
-              <Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações..." />
+              <Label>Observação Geral</Label>
+              <Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações administrativas ou complementares..." />
+            </div>
+            <div className="border-t pt-3 mt-1">
+              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
+              <div className="space-y-3">
+                <div>
+                  <Label>Descrição Clínica</Label>
+                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Motivo de espera / queixa principal..." />
+                </div>
+                <div>
+                  <Label>CID (opcional)</Label>
+                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
+                </div>
+              </div>
             </div>
 
             {criarPaciente ? (
