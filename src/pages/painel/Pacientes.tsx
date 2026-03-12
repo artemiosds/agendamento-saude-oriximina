@@ -244,7 +244,7 @@ const Pacientes: React.FC = () => {
 
       await logAction({
         acao: 'criar', entidade: 'fila_espera', entidadeId: newId,
-        detalhes: { pacienteNome: filaPaciente.nome, unidade: unidade?.nome, origem: 'tela_pacientes' }, user,
+        detalhes: { pacienteNome: filaPaciente.nome, unidade: unidade?.nome, origem: 'tela_pacientes', descricaoClinica: filaForm.descricaoClinica || undefined, cid: filaForm.cid || undefined }, user,
         modulo: 'fila_espera',
       });
 
