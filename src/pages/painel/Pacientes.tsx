@@ -466,6 +466,9 @@ const Pacientes: React.FC = () => {
                         <Users className="w-3.5 h-3.5" />
                       </Button>
                     )}
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDetalhePaciente(p); setDetalheOpen(true); }} title="Detalhes">
+                      <Eye className="w-3.5 h-3.5" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
