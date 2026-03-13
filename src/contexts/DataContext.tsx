@@ -1037,8 +1037,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Has availability config but no slots left
         const disp = disps.find(d => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim);
         if (disp) {
-          const dayAppointments = agendamentos.filter(a => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
-          if (dayAppointments.length > 0) {
+          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount > 0) {
             map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
           }
         }
