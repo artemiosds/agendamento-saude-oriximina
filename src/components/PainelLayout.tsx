@@ -13,7 +13,6 @@ import logoSms from '@/assets/logo-sms.jpeg';
 const menuItems = [
   { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/agenda', label: 'Agenda', icon: Calendar, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
-  { to: '/painel/agenda-google', label: 'Agenda Google', icon: CalendarClock, roles: ['master', 'coordenador'] },
   { to: '/painel/fila', label: 'Fila de Espera', icon: ListOrdered, roles: ['master', 'coordenador', 'recepcao'] },
   { to: '/painel/pacientes', label: 'Pacientes', icon: Users, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
   { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },

@@ -17,7 +17,6 @@ const PortalPaciente = React.lazy(() => import("./pages/PortalPaciente"));
 const PainelLayout = React.lazy(() => import("./components/PainelLayout"));
 const Dashboard = React.lazy(() => import("./pages/painel/Dashboard"));
 const Agenda = React.lazy(() => import("./pages/painel/Agenda"));
-const AgendaGoogle = React.lazy(() => import("./pages/painel/AgendaGoogle"));
 const FilaEspera = React.lazy(() => import("./pages/painel/FilaEspera"));
 const Pacientes = React.lazy(() => import("./pages/painel/Pacientes"));
 const Atendimentos = React.lazy(() => import("./pages/painel/Atendimentos"));
@@ -78,7 +77,6 @@ const App = () => (
                 <Route path="/painel" element={<ProtectedRoute><PainelLayout /></ProtectedRoute>}>
                   <Route index element={<Dashboard />} />
                   <Route path="agenda" element={<Agenda />} />
-                  <Route path="agenda-google" element={<AgendaGoogle />} />
                   <Route path="fila" element={<FilaEspera />} />
                   <Route path="pacientes" element={<Pacientes />} />
                   <Route path="atendimentos" element={<Atendimentos />} />
