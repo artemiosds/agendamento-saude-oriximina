@@ -640,7 +640,7 @@ const FilaEspera: React.FC = () => {
                 <FileUp className="w-4 h-4 mr-2" />Importar Lista Antiga
               </Button>
               <Button variant="outline" onClick={() => {
-                setManualSlot({ data: new Date().toISOString().split('T')[0], hora: '', profissionalId: '', unidadeId: '' });
+                setManualSlot({ data: '', hora: '', profissionalId: '', unidadeId: '' });
                 setManualCallDialog(true);
               }}>
                 <ArrowRight className="w-4 h-4 mr-2" />Chamar Próximo da Fila
