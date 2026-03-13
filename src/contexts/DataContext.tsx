@@ -905,6 +905,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return dates.sort();
   }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, statusOcupaVaga]);
 
+  // Pre-compute appointments grouped by date+prof+unit for O(1) lookups
+  const appointmentsByDateProfUnit = useMemo(() => {
+    const map = new Map<string, typeof agendamentos>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        const arr = map.get(key);
+        if (arr) arr.push(a);
+        else map.set(key, [a]);
+      }
+    }
+    return map;
+  }, [agendamentos, statusOcupaVaga]);
+
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
     const dateObj = new Date(`${date}T00:00:00`);
     const dayOfWeek = dateObj.getDay();
@@ -918,8 +932,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const endHour = parseInt(disp.horaFim.split(':')[0]);
     const endMin = parseInt(disp.horaFim.split(':')[1] || '0');
 
-    const dayAppointments = agendamentos.filter((a) => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
+    const key = `${profissionalId}|${unidadeId}|${date}`;
+    const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
     if (dayAppointments.length >= disp.vagasPorDia) return [];
+
+    // Pre-compute hour counts and slot counts for O(1) lookups
+    const hourCounts = new Map<string, number>();
+    const slotCounts = new Map<string, number>();
+    for (const a of dayAppointments) {
+      const hKey = a.hora.substring(0, 3);
+      hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+      slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+    }
 
     const prof = funcionarios.find((f) => f.id === profissionalId);
     const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
@@ -942,24 +966,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         continue;
       }
 
-      const slotAppointments = dayAppointments.filter((a) => a.hora === timeStr);
       const hourStr = `${String(h).padStart(2, '0')}:`;
-      const hourAppointments = dayAppointments.filter((a) => a.hora.startsWith(hourStr));
+      const hourCount = hourCounts.get(hourStr) || 0;
+      const slotCount = slotCounts.get(timeStr) || 0;
       const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
 
-      if (!blocked && hourAppointments.length < disp.vagasPorHora) {
+      if (!blocked && hourCount < disp.vagasPorHora) {
         if (isPublic) {
-          // Public: slot available only if ZERO bookings at this exact time
-          if (slotAppointments.length === 0) {
-            slots.push(timeStr);
-          }
+          if (slotCount === 0) slots.push(timeStr);
         } else {
-          // Internal: slot available if capacity at this exact time not reached
-          // Each slot can hold vagasPorHora appointments (shared across the hour)
-          // But also check that the exact time slot hasn't exceeded a fair share
-          if (slotAppointments.length < disp.vagasPorHora) {
-            slots.push(timeStr);
-          }
+          if (slotCount < disp.vagasPorHora) slots.push(timeStr);
         }
       }
 
@@ -971,7 +987,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return slots;
-  }, [disponibilidades, agendamentos, funcionarios, isSlotBlocked, statusOcupaVaga]);
+  }, [disponibilidades, appointmentsByDateProfUnit, funcionarios, isSlotBlocked, statusOcupaVaga]);
 
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
     const dates = getAvailableDatesInternal(profissionalId, unidadeId);
