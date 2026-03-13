@@ -1278,3 +1278,6 @@ const FilaEspera: React.FC = () => {
 };
 
 export default FilaEspera;
+
+// Detalhe drawer rendered inside the component - need to add before the closing div
+
