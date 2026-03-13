@@ -863,6 +863,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !libera.includes(status);
   }, []);
 
+  // Pre-compute a set of active appointment counts per date+profissional+unidade for fast lookups
+  const appointmentCountsByKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [agendamentos, statusOcupaVaga]);
+
   const getAvailableDatesInternal = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
@@ -880,8 +892,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const dayOfWeek = current.getDay();
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
-          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
-          if (dayAppointments.length < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
+          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
             if (!dates.includes(dateStr)) dates.push(dateStr);
           }
         }
@@ -890,7 +903,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return dates.sort();
-  }, [disponibilidades, agendamentos, isSlotBlocked, statusOcupaVaga]);
+  }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, statusOcupaVaga]);
 
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
     const dateObj = new Date(`${date}T00:00:00`);

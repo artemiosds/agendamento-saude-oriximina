@@ -5,40 +5,58 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
+import React, { Suspense } from "react";
+
+// Eagerly loaded (landing + login)
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import AgendarOnline from "./pages/AgendarOnline";
-import PortalPaciente from "./pages/PortalPaciente";
-import PainelLayout from "./components/PainelLayout";
-import Dashboard from "./pages/painel/Dashboard";
-import Agenda from "./pages/painel/Agenda";
-import AgendaGoogle from "./pages/painel/AgendaGoogle";
-import FilaEspera from "./pages/painel/FilaEspera";
-import Pacientes from "./pages/painel/Pacientes";
-import Atendimentos from "./pages/painel/Atendimentos";
-import Relatorios from "./pages/painel/Relatorios";
-import Funcionarios from "./pages/painel/Funcionarios";
-import UnidadesSalas from "./pages/painel/UnidadesSalas";
-import Disponibilidade from "./pages/painel/Disponibilidade";
-import Configuracoes from "./pages/painel/Configuracoes";
-import Prontuario from "./pages/painel/Prontuario";
-import Auditoria from "./pages/painel/Auditoria";
-import Triagem from "./pages/painel/Triagem";
-import Bloqueios from "./pages/painel/Bloqueios";
-import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Lazy loaded pages (code splitting)
+const AgendarOnline = React.lazy(() => import("./pages/AgendarOnline"));
+const PortalPaciente = React.lazy(() => import("./pages/PortalPaciente"));
+const PainelLayout = React.lazy(() => import("./components/PainelLayout"));
+const Dashboard = React.lazy(() => import("./pages/painel/Dashboard"));
+const Agenda = React.lazy(() => import("./pages/painel/Agenda"));
+const AgendaGoogle = React.lazy(() => import("./pages/painel/AgendaGoogle"));
+const FilaEspera = React.lazy(() => import("./pages/painel/FilaEspera"));
+const Pacientes = React.lazy(() => import("./pages/painel/Pacientes"));
+const Atendimentos = React.lazy(() => import("./pages/painel/Atendimentos"));
+const Relatorios = React.lazy(() => import("./pages/painel/Relatorios"));
+const Funcionarios = React.lazy(() => import("./pages/painel/Funcionarios"));
+const UnidadesSalas = React.lazy(() => import("./pages/painel/UnidadesSalas"));
+const Disponibilidade = React.lazy(() => import("./pages/painel/Disponibilidade"));
+const Configuracoes = React.lazy(() => import("./pages/painel/Configuracoes"));
+const Prontuario = React.lazy(() => import("./pages/painel/Prontuario"));
+const Auditoria = React.lazy(() => import("./pages/painel/Auditoria"));
+const Triagem = React.lazy(() => import("./pages/painel/Triagem"));
+const Bloqueios = React.lazy(() => import("./pages/painel/Bloqueios"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+  </div>
+);
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
+  if (isLoading) return <PageLoader />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 
 const LoginRedirect: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
+  if (isLoading) return <PageLoader />;
   if (isAuthenticated) return <Navigate to="/painel" replace />;
   return <Login />;
 };
@@ -51,30 +69,32 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <DataProvider>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<LoginRedirect />} />
-              <Route path="/agendar" element={<AgendarOnline />} />
-              <Route path="/portal" element={<PortalPaciente />} />
-              <Route path="/painel" element={<ProtectedRoute><PainelLayout /></ProtectedRoute>}>
-                <Route index element={<Dashboard />} />
-                <Route path="agenda" element={<Agenda />} />
-                <Route path="agenda-google" element={<AgendaGoogle />} />
-                <Route path="fila" element={<FilaEspera />} />
-                <Route path="pacientes" element={<Pacientes />} />
-                <Route path="atendimentos" element={<Atendimentos />} />
-                <Route path="relatorios" element={<Relatorios />} />
-                <Route path="funcionarios" element={<Funcionarios />} />
-                <Route path="unidades" element={<UnidadesSalas />} />
-                <Route path="disponibilidade" element={<Disponibilidade />} />
-                <Route path="configuracoes" element={<Configuracoes />} />
-                <Route path="prontuario" element={<Prontuario />} />
-                <Route path="auditoria" element={<Auditoria />} />
-                <Route path="triagem" element={<Triagem />} />
-                <Route path="bloqueios" element={<Bloqueios />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<LoginRedirect />} />
+                <Route path="/agendar" element={<AgendarOnline />} />
+                <Route path="/portal" element={<PortalPaciente />} />
+                <Route path="/painel" element={<ProtectedRoute><PainelLayout /></ProtectedRoute>}>
+                  <Route index element={<Dashboard />} />
+                  <Route path="agenda" element={<Agenda />} />
+                  <Route path="agenda-google" element={<AgendaGoogle />} />
+                  <Route path="fila" element={<FilaEspera />} />
+                  <Route path="pacientes" element={<Pacientes />} />
+                  <Route path="atendimentos" element={<Atendimentos />} />
+                  <Route path="relatorios" element={<Relatorios />} />
+                  <Route path="funcionarios" element={<Funcionarios />} />
+                  <Route path="unidades" element={<UnidadesSalas />} />
+                  <Route path="disponibilidade" element={<Disponibilidade />} />
+                  <Route path="configuracoes" element={<Configuracoes />} />
+                  <Route path="prontuario" element={<Prontuario />} />
+                  <Route path="auditoria" element={<Auditoria />} />
+                  <Route path="triagem" element={<Triagem />} />
+                  <Route path="bloqueios" element={<Bloqueios />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </DataProvider>
         </AuthProvider>
       </BrowserRouter>
