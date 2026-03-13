@@ -521,7 +521,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                   <Label>Sala</Label>
                   <Select value={newAg.salaId} onValueChange={v => setNewAg(p => ({ ...p, salaId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{salas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
+                    <SelectContent>{salasVisiveis.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
