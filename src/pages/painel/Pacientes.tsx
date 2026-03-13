@@ -36,6 +36,8 @@ const Pacientes: React.FC = () => {
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalhePaciente, setDetalhePaciente] = useState<typeof pacientes[0] | null>(null);
 
   // Filter state
   const [filterFila, setFilterFila] = useState('all');

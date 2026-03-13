@@ -72,6 +72,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
   const [retornoForm, setRetornoForm] = useState({ data: '', hora: '' });
   const [newAg, setNewAg] = useState({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalheAg, setDetalheAg] = useState<typeof agendamentos[0] | null>(null);
 
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
