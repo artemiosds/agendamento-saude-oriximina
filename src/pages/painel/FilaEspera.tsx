@@ -724,70 +724,78 @@ const FilaEspera: React.FC = () => {
 
       {/* Manual Call Dialog */}
       <Dialog open={manualCallDialog} onOpenChange={setManualCallDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">Chamar Próximo da Fila</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">Selecione a vaga disponível para chamar o próximo paciente elegível.</p>
           <div className="space-y-4 mt-2">
-            <div>
-              <Label>Unidade *</Label>
-              <Select value={manualSlot.unidadeId} onValueChange={v => setManualSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Unidade *</Label>
+                <Select value={manualSlot.unidadeId} onValueChange={v => setManualSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Profissional *</Label>
+                <Select value={manualSlot.profissionalId} onValueChange={v => setManualSlot(p => ({ ...p, profissionalId: v, data: '', hora: '' }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>{profissionais.filter(p => !manualSlot.unidadeId || p.unidadeId === manualSlot.unidadeId).map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label>Profissional *</Label>
-              <Select value={manualSlot.profissionalId} onValueChange={v => setManualSlot(p => ({ ...p, profissionalId: v, data: '', hora: '' }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{profissionais.filter(p => !manualSlot.unidadeId || p.unidadeId === manualSlot.unidadeId).map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            {manualSlot.profissionalId && manualSlot.unidadeId && (() => {
-              const dates = getAvailableDates(manualSlot.profissionalId, manualSlot.unidadeId, false);
+
+            {manualSlot.profissionalId && manualSlot.unidadeId ? (() => {
+              const dates = manualCallDates;
+              const dayInfo = manualCallDayInfoMap;
               const slots = manualSlot.data ? getAvailableSlots(manualSlot.profissionalId, manualSlot.unidadeId, manualSlot.data, false) : [];
               return (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Data *</Label>
-                    {dates.length === 0 ? (
-                      <p className="text-sm text-warning mt-1">Nenhuma data disponível</p>
-                    ) : (
-                      <Select value={manualSlot.data} onValueChange={v => setManualSlot(p => ({ ...p, data: v, hora: '' }))}>
-                        <SelectTrigger><SelectValue placeholder="Selecione a data" /></SelectTrigger>
-                        <SelectContent>
-                          {dates.slice(0, 30).map(d => {
-                            const dateObj = new Date(d + 'T12:00:00');
-                            const label = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
-                            return <SelectItem key={d} value={d}>{label}</SelectItem>;
-                          })}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                  <div>
-                    <Label>Horário *</Label>
-                    {manualSlot.data && slots.length === 0 ? (
-                      <p className="text-sm text-warning mt-1">Sem horários</p>
-                    ) : !manualSlot.data ? (
-                      <p className="text-sm text-muted-foreground mt-1">Selecione a data</p>
-                    ) : (
-                      <Select value={manualSlot.hora} onValueChange={v => setManualSlot(p => ({ ...p, hora: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Horário" /></SelectTrigger>
-                        <SelectContent>
-                          {slots.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                </div>
+                <>
+                  {dates.length === 0 ? (
+                    <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+                      <p className="text-sm text-warning">Não há datas disponíveis para este profissional nesta unidade.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Label>Selecione a data *</Label>
+                      <div className="mt-2">
+                        <CalendarioDisponibilidade
+                          availableDates={dates.slice(0, 60)}
+                          selectedDate={manualSlot.data}
+                          onSelectDate={(d) => setManualSlot(p => ({ ...p, data: d, hora: '' }))}
+                          dayInfoMap={dayInfo}
+                          blockToday={false}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {manualSlot.data && (
+                    <div>
+                      <Label>Horário Disponível *</Label>
+                      {slots.length === 0 ? (
+                        <p className="text-sm text-warning mt-1">Todos os horários desta data estão ocupados.</p>
+                      ) : (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                          {slots.map(slot => (
+                            <Button key={slot} variant={manualSlot.hora === slot ? 'default' : 'outline'}
+                              className={manualSlot.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                              size="sm" onClick={() => setManualSlot(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               );
-            })()}
-            {!manualSlot.profissionalId || !manualSlot.unidadeId ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div><Label>Data *</Label><p className="text-sm text-muted-foreground mt-1">Selecione profissional</p></div>
-                <div><Label>Horário *</Label><p className="text-sm text-muted-foreground mt-1">Selecione profissional</p></div>
+            })() : (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Selecione a unidade e o profissional para ver as datas disponíveis.</span>
               </div>
-            ) : null}
+            )}
+
             {manualSlot.unidadeId && manualSlot.profissionalId && (
               <div className="p-3 rounded-lg bg-muted/50 text-sm">
                 <p className="font-medium flex items-center gap-1"><Users className="w-4 h-4" /> Próximos na fila:</p>
