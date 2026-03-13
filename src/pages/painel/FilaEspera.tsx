@@ -1249,6 +1249,9 @@ const FilaEspera: React.FC = () => {
                         </Button>
                       </>
                     )}
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => { setDetalheFila(f); setDetalheOpen(true); }} title="Detalhes">
+                      <Eye className="w-4 h-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8" onClick={() => openEdit(f)} title="Editar">
                       <Pencil className="w-4 h-4" />
                     </Button>
