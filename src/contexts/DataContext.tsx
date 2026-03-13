@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Agendamento,
   Paciente,
@@ -863,6 +863,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return !libera.includes(status);
   }, []);
 
+  // Pre-compute a set of active appointment counts per date+profissional+unidade for fast lookups
+  const appointmentCountsByKey = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [agendamentos, statusOcupaVaga]);
+
   const getAvailableDatesInternal = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
     if (disps.length === 0) return [];
@@ -880,8 +892,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const dayOfWeek = current.getDay();
         if (disp.diasSemana.includes(dayOfWeek)) {
           const dateStr = current.toISOString().split('T')[0];
-          const dayAppointments = agendamentos.filter((a) => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
-          if (dayAppointments.length < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
+          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
             if (!dates.includes(dateStr)) dates.push(dateStr);
           }
         }
@@ -890,7 +903,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return dates.sort();
-  }, [disponibilidades, agendamentos, isSlotBlocked, statusOcupaVaga]);
+  }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, statusOcupaVaga]);
+
+  // Pre-compute appointments grouped by date+prof+unit for O(1) lookups
+  const appointmentsByDateProfUnit = useMemo(() => {
+    const map = new Map<string, typeof agendamentos>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissionalId}|${a.unidadeId}|${a.data}`;
+        const arr = map.get(key);
+        if (arr) arr.push(a);
+        else map.set(key, [a]);
+      }
+    }
+    return map;
+  }, [agendamentos, statusOcupaVaga]);
 
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
     const dateObj = new Date(`${date}T00:00:00`);
@@ -905,8 +932,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const endHour = parseInt(disp.horaFim.split(':')[0]);
     const endMin = parseInt(disp.horaFim.split(':')[1] || '0');
 
-    const dayAppointments = agendamentos.filter((a) => a.data === date && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
+    const key = `${profissionalId}|${unidadeId}|${date}`;
+    const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
     if (dayAppointments.length >= disp.vagasPorDia) return [];
+
+    // Pre-compute hour counts and slot counts for O(1) lookups
+    const hourCounts = new Map<string, number>();
+    const slotCounts = new Map<string, number>();
+    for (const a of dayAppointments) {
+      const hKey = a.hora.substring(0, 3);
+      hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+      slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+    }
 
     const prof = funcionarios.find((f) => f.id === profissionalId);
     const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
@@ -929,24 +966,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         continue;
       }
 
-      const slotAppointments = dayAppointments.filter((a) => a.hora === timeStr);
       const hourStr = `${String(h).padStart(2, '0')}:`;
-      const hourAppointments = dayAppointments.filter((a) => a.hora.startsWith(hourStr));
+      const hourCount = hourCounts.get(hourStr) || 0;
+      const slotCount = slotCounts.get(timeStr) || 0;
       const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
 
-      if (!blocked && hourAppointments.length < disp.vagasPorHora) {
+      if (!blocked && hourCount < disp.vagasPorHora) {
         if (isPublic) {
-          // Public: slot available only if ZERO bookings at this exact time
-          if (slotAppointments.length === 0) {
-            slots.push(timeStr);
-          }
+          if (slotCount === 0) slots.push(timeStr);
         } else {
-          // Internal: slot available if capacity at this exact time not reached
-          // Each slot can hold vagasPorHora appointments (shared across the hour)
-          // But also check that the exact time slot hasn't exceeded a fair share
-          if (slotAppointments.length < disp.vagasPorHora) {
-            slots.push(timeStr);
-          }
+          if (slotCount < disp.vagasPorHora) slots.push(timeStr);
         }
       }
 
@@ -958,7 +987,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return slots;
-  }, [disponibilidades, agendamentos, funcionarios, isSlotBlocked, statusOcupaVaga]);
+  }, [disponibilidades, appointmentsByDateProfUnit, funcionarios, isSlotBlocked, statusOcupaVaga]);
 
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, isPublic = false): string[] => {
     const dates = getAvailableDatesInternal(profissionalId, unidadeId);
@@ -1008,8 +1037,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Has availability config but no slots left
         const disp = disps.find(d => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim);
         if (disp) {
-          const dayAppointments = agendamentos.filter(a => a.data === dateStr && a.profissionalId === profissionalId && a.unidadeId === unidadeId && statusOcupaVaga(a.status));
-          if (dayAppointments.length > 0) {
+          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount > 0) {
             map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
           }
         }
@@ -1020,7 +1050,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return map;
-  }, [disponibilidades, agendamentos, getAvailableSlots, getBlockingInfo, statusOcupaVaga]);
+  }, [disponibilidades, appointmentCountsByKey, getAvailableSlots, getBlockingInfo, statusOcupaVaga]);
 
   const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
     const suggestions: string[] = [];
@@ -1037,62 +1067,76 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return suggestions;
   }, [getAvailableDates, getAvailableSlots]);
 
+  // Memoize the context value to prevent unnecessary re-renders of all consumers
+  const contextValue = useMemo<DataContextType>(() => ({
+    agendamentos,
+    pacientes,
+    fila,
+    atendimentos,
+    unidades,
+    salas,
+    setores,
+    funcionarios,
+    disponibilidades,
+    bloqueios,
+    configuracoes,
+    addAgendamento,
+    updateAgendamento,
+    cancelAgendamento,
+    addPaciente,
+    updatePaciente,
+    addToFila,
+    updateFila,
+    removeFromFila,
+    addAtendimento,
+    updateAtendimento,
+    addUnidade,
+    updateUnidade,
+    deleteUnidade,
+    addSala,
+    updateSala,
+    deleteSala,
+    addFuncionario,
+    updateFuncionario,
+    deleteFuncionario,
+    addDisponibilidade,
+    updateDisponibilidade,
+    deleteDisponibilidade,
+    addBloqueio,
+    updateBloqueio,
+    deleteBloqueio,
+    getAvailableSlots,
+    getAvailableDates,
+    getNextAvailableSlots,
+    getBlockingInfo,
+    getDayInfoMap,
+    updateConfiguracoes,
+    checkFilaForSlot,
+    encaixarDaFila,
+    refreshFuncionarios,
+    refreshDisponibilidades,
+    refreshAgendamentos,
+    refreshPacientes,
+    refreshFila,
+    refreshBloqueios,
+    logAction,
+  }), [
+    agendamentos, pacientes, fila, atendimentos, unidades, salas, setores,
+    funcionarios, disponibilidades, bloqueios, configuracoes,
+    addAgendamento, updateAgendamento, cancelAgendamento,
+    addPaciente, updatePaciente, addToFila, updateFila, removeFromFila,
+    addAtendimento, updateAtendimento, addUnidade, updateUnidade, deleteUnidade,
+    addSala, updateSala, deleteSala, addFuncionario, updateFuncionario, deleteFuncionario,
+    addDisponibilidade, updateDisponibilidade, deleteDisponibilidade,
+    addBloqueio, updateBloqueio, deleteBloqueio,
+    getAvailableSlots, getAvailableDates, getNextAvailableSlots, getBlockingInfo, getDayInfoMap,
+    updateConfiguracoes, checkFilaForSlot, encaixarDaFila,
+    refreshFuncionarios, refreshDisponibilidades, refreshAgendamentos,
+    refreshPacientes, refreshFila, refreshBloqueios, logAction,
+  ]);
+
   return (
-    <DataContext.Provider
-      value={{
-        agendamentos,
-        pacientes,
-        fila,
-        atendimentos,
-        unidades,
-        salas,
-        setores,
-        funcionarios,
-        disponibilidades,
-        bloqueios,
-        configuracoes,
-        addAgendamento,
-        updateAgendamento,
-        cancelAgendamento,
-        addPaciente,
-        updatePaciente,
-        addToFila,
-        updateFila,
-        removeFromFila,
-        addAtendimento,
-        updateAtendimento,
-        addUnidade,
-        updateUnidade,
-        deleteUnidade,
-        addSala,
-        updateSala,
-        deleteSala,
-        addFuncionario,
-        updateFuncionario,
-        deleteFuncionario,
-        addDisponibilidade,
-        updateDisponibilidade,
-        deleteDisponibilidade,
-        addBloqueio,
-        updateBloqueio,
-        deleteBloqueio,
-        getAvailableSlots,
-        getAvailableDates,
-        getNextAvailableSlots,
-        getBlockingInfo,
-        getDayInfoMap,
-        updateConfiguracoes,
-        checkFilaForSlot,
-        encaixarDaFila,
-        refreshFuncionarios,
-        refreshDisponibilidades,
-        refreshAgendamentos,
-        refreshPacientes,
-        refreshFila,
-        refreshBloqueios,
-        logAction,
-      }}
-    >
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   );
