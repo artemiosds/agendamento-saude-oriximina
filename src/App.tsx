@@ -77,7 +77,6 @@ const App = () => (
                 <Route path="/painel" element={<ProtectedRoute><PainelLayout /></ProtectedRoute>}>
                   <Route index element={<Dashboard />} />
                   <Route path="agenda" element={<Agenda />} />
-                  <Route path="agenda-google" element={<AgendaGoogle />} />
                   <Route path="fila" element={<FilaEspera />} />
                   <Route path="pacientes" element={<Pacientes />} />
                   <Route path="atendimentos" element={<Atendimentos />} />
