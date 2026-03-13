@@ -51,6 +51,7 @@ interface FuncionarioDB {
 
 const Funcionarios: React.FC = () => {
   const { unidades, salas, refreshFuncionarios, logAction } = useData();
+  const { unidadesVisiveis } = useUnidadeFilter();
   const { hasPermission, user } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
