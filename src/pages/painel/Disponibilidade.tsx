@@ -22,6 +22,7 @@ const Disponibilidade: React.FC = () => {
   
   // Filter: only active professionals with role=profissional
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
