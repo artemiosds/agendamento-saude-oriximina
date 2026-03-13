@@ -219,7 +219,7 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const visibleFuncionarios = user?.role === 'coordenador'
+  const visibleFuncionarios = (user?.role === 'coordenador' || user?.role === 'recepcao')
     ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
     : funcionarios;
 
