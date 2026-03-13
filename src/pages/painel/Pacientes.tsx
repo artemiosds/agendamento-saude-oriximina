@@ -28,7 +28,8 @@ const Pacientes: React.FC = () => {
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
   const canImportCSV = hasPermission(['master', 'coordenador']);
   const canAddToFila = hasPermission(['master', 'coordenador', 'recepcao']);
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
 
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
