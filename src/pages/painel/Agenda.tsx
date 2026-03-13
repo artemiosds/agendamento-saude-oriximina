@@ -76,9 +76,10 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalheAg, setDetalheAg] = useState<typeof agendamentos[0] | null>(null);
 
+  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const profissionais = profissionaisVisiveis;
 
   // Check if selected date is blocked
   const blockedForDate = React.useMemo(() => {
