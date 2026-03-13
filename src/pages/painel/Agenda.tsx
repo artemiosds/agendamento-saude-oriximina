@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const statusActions = [
   { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
