@@ -672,6 +672,10 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                 </div>
 
                 <div className="flex gap-1 flex-wrap">
+                  {/* Detail button */}
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => { setDetalheAg(ag); setDetalheOpen(true); }} title="Detalhes">
+                    <Eye className="w-3.5 h-3.5" />
+                  </Button>
                   {/* Professional status-based action buttons */}
                   {isProfissional && (
                     <>
