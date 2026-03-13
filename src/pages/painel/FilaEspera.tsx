@@ -1057,7 +1057,7 @@ const FilaEspera: React.FC = () => {
                   <Label>Unidade *</Label>
                   <Select value={importForm.unidadeId} onValueChange={v => setImportForm(p => ({ ...p, unidadeId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                    <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
