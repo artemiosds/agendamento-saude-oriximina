@@ -19,6 +19,7 @@ import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidad
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const prioridadeColors: Record<string, string> = {
   normal: 'bg-muted text-muted-foreground',
