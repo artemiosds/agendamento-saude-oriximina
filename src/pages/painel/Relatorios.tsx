@@ -12,6 +12,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -57,7 +58,8 @@ const Relatorios: React.FC = () => {
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
 
-  const profissionais = funcionarios.filter(f => f.role === 'profissional');
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
   const setoresUnicos = useMemo(() => {
@@ -77,6 +79,10 @@ const Relatorios: React.FC = () => {
         let qFila = supabase.from('fila_espera').select('*');
         let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
         if (user?.role === 'coordenador' && user.unidadeId) {
+          qAt = qAt.eq('unidade_id', user.unidadeId);
+          qFila = qFila.eq('unidade_id', user.unidadeId);
+        }
+        if (user?.role === 'recepcao' && user.unidadeId) {
           qAt = qAt.eq('unidade_id', user.unidadeId);
           qFila = qFila.eq('unidade_id', user.unidadeId);
         }
@@ -567,7 +573,7 @@ const Relatorios: React.FC = () => {
               <Label className="text-xs">Unidade</Label>
               <Select value={filterUnit} onValueChange={setFilterUnit}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todas</SelectItem>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>

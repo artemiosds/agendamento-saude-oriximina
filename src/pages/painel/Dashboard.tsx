@@ -42,7 +42,11 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await (supabase as any).from('atendimentos').select('*').order('data', { ascending: false }).limit(1000);
+        let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false }).limit(1000);
+        if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        if (user?.role === 'profissional' && user.id) query = query.eq('profissional_id', user.id);
+        const { data } = await query;
         if (data) setAtendimentosDB(data);
       } catch (err) {
         console.error('Error loading atendimentos for dashboard:', err);

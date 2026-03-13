@@ -14,6 +14,7 @@ import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff } from 'lucid
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const roleLabels: Record<UserRole, string> = {
   master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão', tecnico: 'Técnico de Enfermagem',
@@ -50,6 +51,7 @@ interface FuncionarioDB {
 
 const Funcionarios: React.FC = () => {
   const { unidades, salas, refreshFuncionarios, logAction } = useData();
+  const { unidadesVisiveis } = useUnidadeFilter();
   const { hasPermission, user } = useAuth();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,7 +221,7 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const visibleFuncionarios = user?.role === 'coordenador'
+  const visibleFuncionarios = (user?.role === 'coordenador' || user?.role === 'recepcao')
     ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
     : funcionarios;
 
@@ -276,7 +278,7 @@ const Funcionarios: React.FC = () => {
               <div><Label>Unidade</Label>
                 <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

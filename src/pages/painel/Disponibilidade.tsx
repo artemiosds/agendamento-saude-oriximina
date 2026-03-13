@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -21,6 +22,7 @@ const Disponibilidade: React.FC = () => {
   
   // Filter: only active professionals with role=profissional
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
@@ -156,7 +158,7 @@ const Disponibilidade: React.FC = () => {
               <div><Label>Unidade *</Label>
                 <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v, salaId: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.filter(u => u.ativo).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidadesVisiveis.filter(u => u.ativo).map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

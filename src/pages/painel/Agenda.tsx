@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useFilaAutomatica } from '@/hooks/useFilaAutomatica';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const statusActions = [
   { key: 'confirmado_chegada', label: 'Confirmar Chegada', icon: LogIn, color: 'bg-success text-success-foreground' },
@@ -75,9 +76,10 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalheAg, setDetalheAg] = useState<typeof agendamentos[0] | null>(null);
 
+  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const profissionais = profissionaisVisiveis;
 
   // Check if selected date is blocked
   const blockedForDate = React.useMemo(() => {
@@ -519,7 +521,7 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                   <Label>Sala</Label>
                   <Select value={newAg.salaId} onValueChange={v => setNewAg(p => ({ ...p, salaId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{salas.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
+                    <SelectContent>{salasVisiveis.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -562,12 +564,12 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         <Button variant="outline" size="icon" onClick={() => changeDate(-1)}><ChevronLeft className="w-4 h-4" /></Button>
         <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-auto" />
         <Button variant="outline" size="icon" onClick={() => changeDate(1)}><ChevronRight className="w-4 h-4" /></Button>
-        {!isProfissional && (
+        {!isProfissional && showUnitSelector && (
           <Select value={filterUnit} onValueChange={setFilterUnit}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Unidade" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas Unidades</SelectItem>
-              {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+              {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         )}

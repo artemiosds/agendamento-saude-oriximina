@@ -19,6 +19,7 @@ import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidad
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const prioridadeColors: Record<string, string> = {
   normal: 'bg-muted text-muted-foreground',
@@ -104,7 +105,8 @@ const FilaEspera: React.FC = () => {
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const canManage = hasPermission(['master', 'coordenador', 'recepcao', 'gestao']);
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -701,7 +703,7 @@ const FilaEspera: React.FC = () => {
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Unidades</SelectItem>
-            {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+            {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterProf} onValueChange={setFilterProf}>
@@ -746,7 +748,7 @@ const FilaEspera: React.FC = () => {
                 <Label>Unidade *</Label>
                 <Select value={manualSlot.unidadeId} onValueChange={v => setManualSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -935,7 +937,7 @@ const FilaEspera: React.FC = () => {
               <Label>Unidade *</Label>
               <Select value={form.unidadeId} onValueChange={v => setForm(p => ({ ...p, unidadeId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
@@ -1055,7 +1057,7 @@ const FilaEspera: React.FC = () => {
                   <Label>Unidade *</Label>
                   <Select value={importForm.unidadeId} onValueChange={v => setImportForm(p => ({ ...p, unidadeId: v }))}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                    <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div>

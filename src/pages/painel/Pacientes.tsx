@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
@@ -27,7 +28,8 @@ const Pacientes: React.FC = () => {
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
   const canImportCSV = hasPermission(['master', 'coordenador']);
   const canAddToFila = hasPermission(['master', 'coordenador', 'recepcao']);
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
 
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -352,7 +354,7 @@ const Pacientes: React.FC = () => {
                 <Label>Unidade *</Label>
                 <Select value={filaForm.unidadeId} onValueChange={v => setFilaForm(p => ({ ...p, unidadeId: v }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
