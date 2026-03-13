@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
