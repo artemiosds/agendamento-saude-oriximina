@@ -82,6 +82,10 @@ const Relatorios: React.FC = () => {
           qAt = qAt.eq('unidade_id', user.unidadeId);
           qFila = qFila.eq('unidade_id', user.unidadeId);
         }
+        if (user?.role === 'recepcao' && user.unidadeId) {
+          qAt = qAt.eq('unidade_id', user.unidadeId);
+          qFila = qFila.eq('unidade_id', user.unidadeId);
+        }
         if (user?.role === 'profissional' && user.id) {
           qAt = qAt.eq('profissional_id', user.id);
           qFila = qFila.eq('profissional_id', user.id);
