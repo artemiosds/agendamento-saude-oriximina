@@ -564,12 +564,12 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
         <Button variant="outline" size="icon" onClick={() => changeDate(-1)}><ChevronLeft className="w-4 h-4" /></Button>
         <Input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-auto" />
         <Button variant="outline" size="icon" onClick={() => changeDate(1)}><ChevronRight className="w-4 h-4" /></Button>
-        {!isProfissional && (
+        {!isProfissional && showUnitSelector && (
           <Select value={filterUnit} onValueChange={setFilterUnit}>
             <SelectTrigger className="w-48"><SelectValue placeholder="Unidade" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas Unidades</SelectItem>
-              {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+              {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
