@@ -1050,7 +1050,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return map;
-  }, [disponibilidades, agendamentos, getAvailableSlots, getBlockingInfo, statusOcupaVaga]);
+  }, [disponibilidades, appointmentCountsByKey, getAvailableSlots, getBlockingInfo, statusOcupaVaga]);
 
   const getNextAvailableSlots = useCallback((profissionalId: string, unidadeId: string, fromDate: string, limit = 5, isPublic = false): string[] => {
     const suggestions: string[] = [];
