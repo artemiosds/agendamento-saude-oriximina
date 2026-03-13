@@ -105,7 +105,8 @@ const FilaEspera: React.FC = () => {
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const canManage = hasPermission(['master', 'coordenador', 'recepcao', 'gestao']);
-  const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
+  const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
