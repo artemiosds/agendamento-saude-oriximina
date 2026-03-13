@@ -703,7 +703,7 @@ const FilaEspera: React.FC = () => {
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas Unidades</SelectItem>
-            {unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+            {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterProf} onValueChange={setFilterProf}>
