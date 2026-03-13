@@ -833,6 +833,55 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Detalhe Drawer - Agenda */}
+      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
+        {detalheAg && (() => {
+          const pac = pacientes.find(p => p.id === detalheAg.pacienteId);
+          const prof = funcionarios.find(f => f.id === detalheAg.profissionalId);
+          const unidade = unidades.find(u => u.id === detalheAg.unidadeId);
+          const sala = salas.find(s => s.id === detalheAg.salaId);
+          const tipoInfo = tipoBadge[detalheAg.tipo] || { label: detalheAg.tipo, class: 'bg-muted text-muted-foreground' };
+          return (
+            <>
+              <Secao titulo="Paciente">
+                <Campo label="Nome" valor={pac?.nome || detalheAg.pacienteNome} />
+                <Campo label="CPF" valor={pac?.cpf} />
+                <Campo label="Telefone" valor={pac?.telefone} />
+                <Campo label="Data de Nascimento" valor={pac?.dataNascimento ? formatarData(pac.dataNascimento) : undefined} hide />
+                <Campo label="Idade" valor={pac?.dataNascimento ? calcularIdade(pac.dataNascimento) : undefined} hide />
+              </Secao>
+              <Secao titulo="Agendamento">
+                <Campo label="Data" valor={formatarData(detalheAg.data)} />
+                <Campo label="Horário" valor={detalheAg.hora} />
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  <StatusBadge label={statusLabels[detalheAg.status] || detalheAg.status} className={statusBadgeClass[detalheAg.status]} />
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Tipo</span>
+                  <StatusBadge label={tipoInfo.label} className={tipoInfo.class} />
+                </div>
+                <Campo label="Origem" valor={detalheAg.origem} />
+              </Secao>
+              <Secao titulo="Atendimento">
+                <Campo label="Unidade" valor={unidade?.nome} />
+                <Campo label="Sala" valor={sala?.nome} hide />
+                <Campo label="Profissional" valor={prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : detalheAg.profissionalNome} />
+              </Secao>
+              <Secao titulo="Fluxo">
+                <Campo label="Criado em" valor={detalheAg.criadoEm ? formatarData(detalheAg.criadoEm) : undefined} hide />
+                <Campo label="Criado por" valor={detalheAg.criadoPor} hide />
+              </Secao>
+              {detalheAg.observacoes && (
+                <Secao titulo="Observações">
+                  <p className="text-sm text-foreground">{detalheAg.observacoes}</p>
+                </Secao>
+              )}
+            </>
+          );
+        })()}
+      </DetalheDrawer>
     </div>
   );
 };
