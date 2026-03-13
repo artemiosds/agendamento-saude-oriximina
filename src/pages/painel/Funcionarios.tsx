@@ -14,6 +14,7 @@ import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff } from 'lucid
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const roleLabels: Record<UserRole, string> = {
   master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão', tecnico: 'Técnico de Enfermagem',
