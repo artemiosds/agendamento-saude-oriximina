@@ -748,7 +748,7 @@ const FilaEspera: React.FC = () => {
                 <Label>Unidade *</Label>
                 <Select value={manualSlot.unidadeId} onValueChange={v => setManualSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidades.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
