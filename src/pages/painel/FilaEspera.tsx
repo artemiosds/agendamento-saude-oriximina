@@ -98,6 +98,8 @@ const formatWaitTime = (minutes: number): string => {
 const FilaEspera: React.FC = () => {
   const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades, addPaciente, refreshPacientes, logAction, getAvailableDates, getAvailableSlots, getDayInfoMap } = useData();
   const { user, hasPermission } = useAuth();
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalheFila, setDetalheFila] = useState<typeof fila[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
