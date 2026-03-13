@@ -591,7 +591,17 @@ const FilaEspera: React.FC = () => {
 
   // Manual call for next in queue dialog
   const [manualCallDialog, setManualCallDialog] = useState(false);
-  const [manualSlot, setManualSlot] = useState({ data: new Date().toISOString().split('T')[0], hora: '', profissionalId: '', unidadeId: '' });
+  const [manualSlot, setManualSlot] = useState({ data: '', hora: '', profissionalId: '', unidadeId: '' });
+
+  const manualCallDates = useMemo(() => {
+    if (!manualSlot.profissionalId || !manualSlot.unidadeId) return [];
+    return getAvailableDates(manualSlot.profissionalId, manualSlot.unidadeId, false);
+  }, [manualSlot.profissionalId, manualSlot.unidadeId, getAvailableDates]);
+
+  const manualCallDayInfoMap = useMemo(() => {
+    if (!manualSlot.profissionalId || !manualSlot.unidadeId) return {};
+    return getDayInfoMap(manualSlot.profissionalId, manualSlot.unidadeId, false);
+  }, [manualSlot.profissionalId, manualSlot.unidadeId, getDayInfoMap]);
 
   const handleManualCall = async () => {
     if (!manualSlot.hora || !manualSlot.profissionalId || !manualSlot.unidadeId) {
