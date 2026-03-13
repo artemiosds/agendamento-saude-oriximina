@@ -58,7 +58,8 @@ const Relatorios: React.FC = () => {
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
 
-  const profissionais = funcionarios.filter(f => f.role === 'profissional');
+  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
   const setoresUnicos = useMemo(() => {
