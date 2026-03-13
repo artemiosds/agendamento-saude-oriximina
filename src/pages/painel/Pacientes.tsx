@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye } from 'lucide-react';
+import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +36,8 @@ const Pacientes: React.FC = () => {
   const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalhePaciente, setDetalhePaciente] = useState<typeof pacientes[0] | null>(null);
 
   // Filter state
   const [filterFila, setFilterFila] = useState('all');
@@ -463,6 +466,9 @@ const Pacientes: React.FC = () => {
                         <Users className="w-3.5 h-3.5" />
                       </Button>
                     )}
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDetalhePaciente(p); setDetalheOpen(true); }} title="Detalhes">
+                      <Eye className="w-3.5 h-3.5" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -505,6 +511,52 @@ const Pacientes: React.FC = () => {
         })}
       </div>
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
+
+      {/* Detalhe Drawer - Paciente */}
+      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Paciente">
+        {detalhePaciente && (() => {
+          const naFila = pacientesNaFila.has(detalhePaciente.id);
+          const filaEntry = filaEntryMap.get(detalhePaciente.id);
+          const isDemanda = pacientesDemandaReprimida.has(detalhePaciente.id);
+          const totalAg = agendamentos.filter(a => a.pacienteId === detalhePaciente.id).length;
+          const ultimoAg = agendamentos.filter(a => a.pacienteId === detalhePaciente.id && a.status === 'concluido').sort((a, b) => b.data.localeCompare(a.data))[0];
+          return (
+            <>
+              <Secao titulo="Dados Pessoais">
+                <Campo label="Nome" valor={detalhePaciente.nome} />
+                <Campo label="CPF" valor={detalhePaciente.cpf} />
+                <Campo label="Data de Nascimento" valor={detalhePaciente.dataNascimento ? formatarData(detalhePaciente.dataNascimento) : undefined} hide />
+                <Campo label="Idade" valor={detalhePaciente.dataNascimento ? calcularIdade(detalhePaciente.dataNascimento) : undefined} hide />
+              </Secao>
+              <Secao titulo="Contato">
+                <Campo label="Telefone" valor={detalhePaciente.telefone} />
+                <Campo label="E-mail" valor={detalhePaciente.email} hide />
+                <Campo label="Endereço" valor={detalhePaciente.endereco} hide />
+              </Secao>
+              {(detalhePaciente.descricaoClinica || detalhePaciente.cid || detalhePaciente.observacoes) && (
+                <Secao titulo="Informações Clínicas">
+                  <Campo label="CID" valor={detalhePaciente.cid} hide />
+                  <Campo label="Descrição clínica" valor={detalhePaciente.descricaoClinica} hide />
+                  <Campo label="Observações" valor={detalhePaciente.observacoes} hide />
+                </Secao>
+              )}
+              <Secao titulo="Histórico">
+                <Campo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarData(detalhePaciente.criadoEm) : undefined} hide />
+                <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
+                <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
+              </Secao>
+              {(naFila || isDemanda) && (
+                <Secao titulo="Etiquetas">
+                  <div className="flex gap-2 flex-wrap py-1">
+                    {naFila && <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">Fila de Espera</Badge>}
+                    {isDemanda && <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs">Demanda Reprimida</Badge>}
+                  </div>
+                </Secao>
+              )}
+            </>
+          );
+        })()}
+      </DetalheDrawer>
     </div>
   );
 };

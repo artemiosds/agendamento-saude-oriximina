@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw, CalendarOff, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Check, X, Clock, UserCheck, RotateCcw, Play, LogIn, Trash2, RefreshCw, CalendarOff, Calendar as CalendarIcon, Eye } from 'lucide-react';
+import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -71,6 +72,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
   const [retornoForm, setRetornoForm] = useState({ data: '', hora: '' });
   const [newAg, setNewAg] = useState({ pacienteId: '', profissionalId: '', salaId: '', hora: '', tipo: 'Consulta', obs: '' });
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalheAg, setDetalheAg] = useState<typeof agendamentos[0] | null>(null);
 
   const isProfissional = user?.role === 'profissional';
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
@@ -669,6 +672,10 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                 </div>
 
                 <div className="flex gap-1 flex-wrap">
+                  {/* Detail button */}
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => { setDetalheAg(ag); setDetalheOpen(true); }} title="Detalhes">
+                    <Eye className="w-3.5 h-3.5" />
+                  </Button>
                   {/* Professional status-based action buttons */}
                   {isProfissional && (
                     <>
@@ -826,6 +833,55 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Detalhe Drawer - Agenda */}
+      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
+        {detalheAg && (() => {
+          const pac = pacientes.find(p => p.id === detalheAg.pacienteId);
+          const prof = funcionarios.find(f => f.id === detalheAg.profissionalId);
+          const unidade = unidades.find(u => u.id === detalheAg.unidadeId);
+          const sala = salas.find(s => s.id === detalheAg.salaId);
+          const tipoInfo = tipoBadge[detalheAg.tipo] || { label: detalheAg.tipo, class: 'bg-muted text-muted-foreground' };
+          return (
+            <>
+              <Secao titulo="Paciente">
+                <Campo label="Nome" valor={pac?.nome || detalheAg.pacienteNome} />
+                <Campo label="CPF" valor={pac?.cpf} />
+                <Campo label="Telefone" valor={pac?.telefone} />
+                <Campo label="Data de Nascimento" valor={pac?.dataNascimento ? formatarData(pac.dataNascimento) : undefined} hide />
+                <Campo label="Idade" valor={pac?.dataNascimento ? calcularIdade(pac.dataNascimento) : undefined} hide />
+              </Secao>
+              <Secao titulo="Agendamento">
+                <Campo label="Data" valor={formatarData(detalheAg.data)} />
+                <Campo label="Horário" valor={detalheAg.hora} />
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  <StatusBadge label={statusLabels[detalheAg.status] || detalheAg.status} className={statusBadgeClass[detalheAg.status]} />
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Tipo</span>
+                  <StatusBadge label={tipoInfo.label} className={tipoInfo.class} />
+                </div>
+                <Campo label="Origem" valor={detalheAg.origem} />
+              </Secao>
+              <Secao titulo="Atendimento">
+                <Campo label="Unidade" valor={unidade?.nome} />
+                <Campo label="Sala" valor={sala?.nome} hide />
+                <Campo label="Profissional" valor={prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : detalheAg.profissionalNome} />
+              </Secao>
+              <Secao titulo="Fluxo">
+                <Campo label="Criado em" valor={detalheAg.criadoEm ? formatarData(detalheAg.criadoEm) : undefined} hide />
+                <Campo label="Criado por" valor={detalheAg.criadoPor} hide />
+              </Secao>
+              {detalheAg.observacoes && (
+                <Secao titulo="Observações">
+                  <p className="text-sm text-foreground">{detalheAg.observacoes}</p>
+                </Secao>
+              )}
+            </>
+          );
+        })()}
+      </DetalheDrawer>
     </div>
   );
 };

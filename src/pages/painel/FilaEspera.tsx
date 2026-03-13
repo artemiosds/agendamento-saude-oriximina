@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData, formatarDataHora } from '@/components/DetalheDrawer';
 import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -97,6 +98,8 @@ const formatWaitTime = (minutes: number): string => {
 const FilaEspera: React.FC = () => {
   const { fila, addToFila, updateFila, removeFromFila, pacientes, funcionarios, unidades, addPaciente, refreshPacientes, logAction, getAvailableDates, getAvailableSlots, getDayInfoMap } = useData();
   const { user, hasPermission } = useAuth();
+  const [detalheOpen, setDetalheOpen] = useState(false);
+  const [detalheFila, setDetalheFila] = useState<typeof fila[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
@@ -1246,6 +1249,9 @@ const FilaEspera: React.FC = () => {
                         </Button>
                       </>
                     )}
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => { setDetalheFila(f); setDetalheOpen(true); }} title="Detalhes">
+                      <Eye className="w-4 h-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" className="h-8" onClick={() => openEdit(f)} title="Editar">
                       <Pencil className="w-4 h-4" />
                     </Button>
@@ -1267,6 +1273,53 @@ const FilaEspera: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Detalhe Drawer - Fila */}
+      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
+        {detalheFila && (() => {
+          const pac = pacientes.find(p => p.id === detalheFila.pacienteId);
+          const prof = detalheFila.profissionalId ? funcionarios.find(fn => fn.id === detalheFila.profissionalId) : null;
+          const unidade = unidades.find(u => u.id === detalheFila.unidadeId);
+          return (
+            <>
+              <Secao titulo="Dados do Paciente">
+                <Campo label="Nome" valor={pac?.nome || detalheFila.pacienteNome} />
+                <Campo label="CPF" valor={pac?.cpf} />
+                <Campo label="Telefone" valor={pac?.telefone} />
+                <Campo label="E-mail" valor={pac?.email} hide />
+                <Campo label="Data de Nascimento" valor={pac?.dataNascimento ? formatarData(pac.dataNascimento) : undefined} hide />
+                <Campo label="Idade" valor={pac?.dataNascimento ? calcularIdade(pac.dataNascimento) : undefined} hide />
+              </Secao>
+              <Secao titulo="Dados da Fila">
+                <Campo label="Posição" valor={detalheFila.posicao} />
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Prioridade</span>
+                  <StatusBadge label={prioridadeLabel[detalheFila.prioridade] || detalheFila.prioridade} className={prioridadeColors[detalheFila.prioridade]} />
+                </div>
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-xs text-muted-foreground">Status</span>
+                  <StatusBadge label={statusLabels[detalheFila.status]?.label || detalheFila.status} className={statusLabels[detalheFila.status]?.color} />
+                </div>
+                <Campo label="Entrada na fila" valor={detalheFila.criadoEm ? formatarDataHora(detalheFila.criadoEm) : detalheFila.horaChegada} />
+                <Campo label="Solicitação original" valor={detalheFila.dataSolicitacaoOriginal} hide />
+                <Campo label="Hora chamada" valor={detalheFila.horaChamada} hide />
+                <Campo label="Origem" valor={detalheFila.origemCadastro === 'demanda_reprimida' ? 'Demanda Reprimida' : detalheFila.origemCadastro === 'normal' ? 'Normal' : detalheFila.origemCadastro} hide />
+              </Secao>
+              <Secao titulo="Atendimento">
+                <Campo label="Unidade" valor={unidade?.nome} />
+                <Campo label="Profissional" valor={prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} />
+              </Secao>
+              {(detalheFila.cid || detalheFila.descricaoClinica || detalheFila.observacoes) && (
+                <Secao titulo="Clínico / Observação">
+                  <Campo label="CID" valor={detalheFila.cid} hide />
+                  <Campo label="Descrição clínica" valor={detalheFila.descricaoClinica} hide />
+                  <Campo label="Observações" valor={detalheFila.observacoes} hide />
+                </Secao>
+              )}
+            </>
+          );
+        })()}
+      </DetalheDrawer>
     </div>
   );
 };
