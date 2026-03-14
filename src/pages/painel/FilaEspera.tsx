@@ -497,6 +497,7 @@ const FilaEspera: React.FC = () => {
           id: pacienteId,
           nome: importForm.nome,
           cpf: importForm.cpf,
+          cns: '',
           telefone: importForm.telefone,
           email: importForm.email,
           dataNascimento: importForm.dataNascimento,
