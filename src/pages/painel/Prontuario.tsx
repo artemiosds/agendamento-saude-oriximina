@@ -229,6 +229,10 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || '',
       evolucao: p.evolucao || '',
       observacoes: p.observacoes || '',
+      indicacao_retorno: (p as any).indicacao_retorno || '',
+      motivo_alteracao: '',
+      procedimentos_texto: (p as any).procedimentos_texto || '',
+      outro_procedimento: (p as any).outro_procedimento || '',
     };
     setForm(formData);
     setPreviousForm(formData);
