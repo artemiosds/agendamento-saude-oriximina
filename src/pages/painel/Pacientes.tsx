@@ -35,7 +35,7 @@ const Pacientes: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
+  const [form, setForm] = useState({ nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
@@ -91,7 +91,8 @@ const Pacientes: React.FC = () => {
     let list = visiblePacientes.filter(p =>
       p.nome.toLowerCase().includes(search.toLowerCase()) ||
       p.cpf.includes(search) ||
-      p.telefone.includes(search)
+      p.telefone.includes(search) ||
+      (p.cns && p.cns.includes(search))
     );
 
     // Filter by fila
@@ -131,14 +132,14 @@ const Pacientes: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
+    setForm({ nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
     setErrors({});
     setDialogOpen(true);
   };
 
   const openEdit = (p: typeof pacientes[0]) => {
     setEditId(p.id);
-    setForm({ nome: p.nome, cpf: p.cpf, telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
+    setForm({ nome: p.nome, cpf: p.cpf, cns: p.cns || '', telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
     setErrors({});
     setDialogOpen(true);
   };
@@ -163,7 +164,7 @@ const Pacientes: React.FC = () => {
         toast.success('Paciente atualizado!');
       } else {
         await addPaciente({
-          id: `p${Date.now()}`, ...form, observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
+          id: `p${Date.now()}`, ...form, cns: (form as any).cns || '', observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
           criadoEm: new Date().toISOString(),
         });
         toast.success('Paciente cadastrado com sucesso!');
@@ -287,7 +288,9 @@ const Pacientes: React.FC = () => {
               <FileDown className="w-4 h-4 mr-2" /> Importar CSV
             </Button>
           )}
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+          {!isProfissional && canAddToFila && (
+            <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+          )}
         </div>
       </div>
 
@@ -303,6 +306,9 @@ const Pacientes: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
+              <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Telefone *</Label>
                 <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
@@ -411,7 +417,7 @@ const Pacientes: React.FC = () => {
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar por nome, CPF ou telefone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          <Input placeholder="Buscar por nome, CPF, CNS ou telefone..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={filterFila} onValueChange={setFilterFila}>
           <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Filtrar" /></SelectTrigger>
@@ -527,6 +533,7 @@ const Pacientes: React.FC = () => {
               <Secao titulo="Dados Pessoais">
                 <Campo label="Nome" valor={detalhePaciente.nome} />
                 <Campo label="CPF" valor={detalhePaciente.cpf} />
+                <Campo label="Cartão SUS / CNS" valor={detalhePaciente.cns} hide />
                 <Campo label="Data de Nascimento" valor={detalhePaciente.dataNascimento ? formatarData(detalhePaciente.dataNascimento) : undefined} hide />
                 <Campo label="Idade" valor={detalhePaciente.dataNascimento ? calcularIdade(detalhePaciente.dataNascimento) : undefined} hide />
               </Secao>

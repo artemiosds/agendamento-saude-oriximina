@@ -58,6 +58,10 @@ const emptyForm = {
   solicitacao_exames: '',
   evolucao: '',
   observacoes: '',
+  indicacao_retorno: '',
+  motivo_alteracao: '',
+  procedimentos_texto: '',
+  outro_procedimento: '',
 };
 
 const classificarIMC = (imc: number): string => {
@@ -225,6 +229,10 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || '',
       evolucao: p.evolucao || '',
       observacoes: p.observacoes || '',
+      indicacao_retorno: (p as any).indicacao_retorno || '',
+      motivo_alteracao: '',
+      procedimentos_texto: (p as any).procedimentos_texto || '',
+      outro_procedimento: (p as any).outro_procedimento || '',
     };
     setForm(formData);
     setPreviousForm(formData);
@@ -242,6 +250,11 @@ const ProntuarioPage: React.FC = () => {
   const handleSave = async () => {
     if (!form.paciente_nome || !form.data_atendimento) {
       toast.error('Paciente e data são obrigatórios.');
+      return;
+    }
+    // Require motivo_alteracao for edits
+    if (editId && !form.motivo_alteracao) {
+      toast.error('Informe o motivo da alteração para salvar.');
       return;
     }
 
@@ -267,6 +280,10 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: form.observacoes,
+        indicacao_retorno: form.indicacao_retorno || '',
+        motivo_alteracao: editId ? form.motivo_alteracao : '',
+        procedimentos_texto: form.procedimentos_texto || '',
+        outro_procedimento: form.outro_procedimento || '',
       };
 
       const pac = pacientes.find(px => px.id === (form.paciente_id || record.paciente_id));

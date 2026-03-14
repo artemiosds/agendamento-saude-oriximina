@@ -61,7 +61,7 @@ const AgendarOnline: React.FC = () => {
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
-    nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', obs: '',
+    nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', obs: '',
     data: '', hora: '',
     senha: '', senhaConfirm: '',
   });
@@ -171,6 +171,10 @@ const AgendarOnline: React.FC = () => {
 
       if (existingPatient) {
         pacienteId = existingPatient.id;
+        // Update CNS if provided and not already set
+        if (form.cns) {
+          await supabase.from('pacientes').update({ cns: form.cns } as any).eq('id', pacienteId);
+        }
       } else {
         if (form.tipo === 'Retorno') {
           toast.error('Não foi encontrado cadastro anterior. Para retorno, é necessário ter uma primeira consulta.');
@@ -179,7 +183,7 @@ const AgendarOnline: React.FC = () => {
         }
         pacienteId = `p${Date.now()}`;
         await addPaciente({
-          id: pacienteId, nome: form.nome, cpf: form.cpf, telefone: form.telefone,
+          id: pacienteId, nome: form.nome, cpf: form.cpf, cns: form.cns, telefone: form.telefone,
           dataNascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, endereco: '',
           observacoes: form.obs, descricaoClinica: '', cid: '', criadoEm: new Date().toISOString(),
         });
@@ -354,6 +358,9 @@ const AgendarOnline: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
+                  <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Telefone *</Label>
                     <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />

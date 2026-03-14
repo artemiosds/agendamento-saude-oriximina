@@ -74,6 +74,11 @@ export interface Prontuario {
   solicitacaoExames: string;
   evolucao: string;
   observacoes: string;
+  indicacaoRetorno: string;
+  motivoAlteracao: string;
+  episodioId?: string;
+  procedimentosTexto: string;
+  outroProcedimento: string;
   criadoEm: string;
   atualizadoEm: string;
 }
@@ -103,6 +108,7 @@ export interface Paciente {
   id: string;
   nome: string;
   cpf: string;
+  cns: string;
   telefone: string;
   dataNascimento: string;
   email: string;
@@ -240,4 +246,32 @@ export interface AuditLog {
   entidadeId: string;
   detalhes: string;
   data: string;
+}
+
+export interface Procedimento {
+  id: string;
+  nome: string;
+  descricao: string;
+  profissao: string;
+  especialidade: string;
+  profissionalId?: string;
+  ativo: boolean;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface EpisodioClinico {
+  id: string;
+  pacienteId: string;
+  profissionalId: string;
+  profissionalNome: string;
+  unidadeId: string;
+  titulo: string;
+  descricao: string;
+  tipo: string;
+  status: string;
+  dataInicio: string;
+  dataFim?: string;
+  criadoEm: string;
+  atualizadoEm: string;
 }

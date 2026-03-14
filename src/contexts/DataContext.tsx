@@ -10,6 +10,8 @@ import {
   User,
   Disponibilidade,
   Configuracoes,
+  Procedimento,
+  EpisodioClinico,
 } from '@/types';
 import { mockSetores } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
@@ -387,6 +389,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: p.id,
           nome: p.nome,
           cpf: p.cpf || '',
+          cns: p.cns || '',
           telefone: p.telefone || '',
           dataNascimento: p.data_nascimento || '',
           email: p.email || '',
@@ -500,6 +503,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: p.id,
       nome: p.nome,
       cpf: p.cpf,
+      cns: p.cns || '',
       telefone: p.telefone,
       data_nascimento: p.dataNascimento,
       email: p.email,
@@ -518,6 +522,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const dbData: any = {};
     if (data.nome !== undefined) dbData.nome = data.nome;
     if (data.cpf !== undefined) dbData.cpf = data.cpf;
+    if (data.cns !== undefined) dbData.cns = data.cns;
     if (data.telefone !== undefined) dbData.telefone = data.telefone;
     if (data.dataNascimento !== undefined) dbData.data_nascimento = data.dataNascimento;
     if (data.email !== undefined) dbData.email = data.email;
