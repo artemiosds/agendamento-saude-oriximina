@@ -290,6 +290,54 @@ export type Database = {
         }
         Relationships: []
       }
+      episodios_clinicos: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          data_fim: string | null
+          data_inicio: string
+          descricao: string
+          id: string
+          paciente_id: string
+          profissional_id: string
+          profissional_nome: string
+          status: string
+          tipo: string
+          titulo: string
+          unidade_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          data_fim?: string | null
+          data_inicio?: string
+          descricao?: string
+          id?: string
+          paciente_id: string
+          profissional_id: string
+          profissional_nome?: string
+          status?: string
+          tipo?: string
+          titulo: string
+          unidade_id?: string
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          data_fim?: string | null
+          data_inicio?: string
+          descricao?: string
+          id?: string
+          paciente_id?: string
+          profissional_id?: string
+          profissional_nome?: string
+          status?: string
+          tipo?: string
+          titulo?: string
+          unidade_id?: string
+        }
+        Relationships: []
+      }
       fila_espera: {
         Row: {
           cid: string
@@ -507,6 +555,7 @@ export type Database = {
         Row: {
           auth_user_id: string | null
           cid: string
+          cns: string
           cpf: string
           criado_em: string | null
           data_nascimento: string
@@ -521,6 +570,7 @@ export type Database = {
         Insert: {
           auth_user_id?: string | null
           cid?: string
+          cns?: string
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
@@ -535,6 +585,7 @@ export type Database = {
         Update: {
           auth_user_id?: string | null
           cid?: string
+          cns?: string
           cpf?: string
           criado_em?: string | null
           data_nascimento?: string
@@ -548,6 +599,81 @@ export type Database = {
         }
         Relationships: []
       }
+      procedimentos: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          descricao: string
+          especialidade: string
+          id: string
+          nome: string
+          profissao: string
+          profissional_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string
+          especialidade?: string
+          id?: string
+          nome: string
+          profissao?: string
+          profissional_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          descricao?: string
+          especialidade?: string
+          id?: string
+          nome?: string
+          profissao?: string
+          profissional_id?: string | null
+        }
+        Relationships: []
+      }
+      prontuario_procedimentos: {
+        Row: {
+          criado_em: string
+          id: string
+          observacao: string
+          procedimento_id: string
+          prontuario_id: string
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          observacao?: string
+          procedimento_id: string
+          prontuario_id: string
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          observacao?: string
+          procedimento_id?: string
+          prontuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prontuario_procedimentos_procedimento_id_fkey"
+            columns: ["procedimento_id"]
+            isOneToOne: false
+            referencedRelation: "procedimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prontuario_procedimentos_prontuario_id_fkey"
+            columns: ["prontuario_id"]
+            isOneToOne: false
+            referencedRelation: "prontuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prontuarios: {
         Row: {
           agendamento_id: string | null
@@ -556,15 +682,20 @@ export type Database = {
           conduta: string | null
           criado_em: string | null
           data_atendimento: string
+          episodio_id: string | null
           evolucao: string | null
           exame_fisico: string | null
           hipotese: string | null
           hora_atendimento: string | null
           id: string
+          indicacao_retorno: string
+          motivo_alteracao: string
           observacoes: string | null
+          outro_procedimento: string
           paciente_id: string
           paciente_nome: string
           prescricao: string | null
+          procedimentos_texto: string
           profissional_id: string
           profissional_nome: string
           queixa_principal: string | null
@@ -581,15 +712,20 @@ export type Database = {
           conduta?: string | null
           criado_em?: string | null
           data_atendimento?: string
+          episodio_id?: string | null
           evolucao?: string | null
           exame_fisico?: string | null
           hipotese?: string | null
           hora_atendimento?: string | null
           id?: string
+          indicacao_retorno?: string
+          motivo_alteracao?: string
           observacoes?: string | null
+          outro_procedimento?: string
           paciente_id: string
           paciente_nome: string
           prescricao?: string | null
+          procedimentos_texto?: string
           profissional_id: string
           profissional_nome: string
           queixa_principal?: string | null
@@ -606,15 +742,20 @@ export type Database = {
           conduta?: string | null
           criado_em?: string | null
           data_atendimento?: string
+          episodio_id?: string | null
           evolucao?: string | null
           exame_fisico?: string | null
           hipotese?: string | null
           hora_atendimento?: string | null
           id?: string
+          indicacao_retorno?: string
+          motivo_alteracao?: string
           observacoes?: string | null
+          outro_procedimento?: string
           paciente_id?: string
           paciente_nome?: string
           prescricao?: string | null
+          procedimentos_texto?: string
           profissional_id?: string
           profissional_nome?: string
           queixa_principal?: string | null
