@@ -389,6 +389,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: p.id,
           nome: p.nome,
           cpf: p.cpf || '',
+          cns: p.cns || '',
           telefone: p.telefone || '',
           dataNascimento: p.data_nascimento || '',
           email: p.email || '',
