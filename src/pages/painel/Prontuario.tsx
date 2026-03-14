@@ -276,6 +276,10 @@ const ProntuarioPage: React.FC = () => {
         solicitacao_exames: form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: form.observacoes,
+        indicacao_retorno: form.indicacao_retorno || '',
+        motivo_alteracao: editId ? form.motivo_alteracao : '',
+        procedimentos_texto: form.procedimentos_texto || '',
+        outro_procedimento: form.outro_procedimento || '',
       };
 
       const pac = pacientes.find(px => px.id === (form.paciente_id || record.paciente_id));
