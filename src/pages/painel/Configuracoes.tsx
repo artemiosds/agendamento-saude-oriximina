@@ -318,6 +318,9 @@ const Configuracoes: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Procedimentos Clínicos */}
+      <GerenciarProcedimentos />
+
       {/* Webhook Make.com */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
