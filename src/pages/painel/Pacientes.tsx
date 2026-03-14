@@ -288,7 +288,9 @@ const Pacientes: React.FC = () => {
               <FileDown className="w-4 h-4 mr-2" /> Importar CSV
             </Button>
           )}
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+          {!isProfissional && canAddToFila && (
+            <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
+          )}
         </div>
       </div>
 
