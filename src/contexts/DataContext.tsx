@@ -522,6 +522,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const dbData: any = {};
     if (data.nome !== undefined) dbData.nome = data.nome;
     if (data.cpf !== undefined) dbData.cpf = data.cpf;
+    if (data.cns !== undefined) dbData.cns = data.cns;
     if (data.telefone !== undefined) dbData.telefone = data.telefone;
     if (data.dataNascimento !== undefined) dbData.data_nascimento = data.dataNascimento;
     if (data.email !== undefined) dbData.email = data.email;
