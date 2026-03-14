@@ -139,7 +139,7 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: typeof pacientes[0]) => {
     setEditId(p.id);
-    setForm({ nome: p.nome, cpf: p.cpf, telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
+    setForm({ nome: p.nome, cpf: p.cpf, cns: p.cns || '', telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
     setErrors({});
     setDialogOpen(true);
   };
