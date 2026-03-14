@@ -171,6 +171,10 @@ const AgendarOnline: React.FC = () => {
 
       if (existingPatient) {
         pacienteId = existingPatient.id;
+        // Update CNS if provided and not already set
+        if (form.cns) {
+          await supabase.from('pacientes').update({ cns: form.cns } as any).eq('id', pacienteId);
+        }
       } else {
         if (form.tipo === 'Retorno') {
           toast.error('Não foi encontrado cadastro anterior. Para retorno, é necessário ter uma primeira consulta.');
