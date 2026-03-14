@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '@/contexts/DataContext';
+import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Card, CardContent } from '@/components/ui/card';
