@@ -10,6 +10,8 @@ import {
   User,
   Disponibilidade,
   Configuracoes,
+  Procedimento,
+  EpisodioClinico,
 } from '@/types';
 import { mockSetores } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
