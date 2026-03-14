@@ -61,7 +61,7 @@ const AgendarOnline: React.FC = () => {
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
-    nome: '', cpf: '', telefone: '', dataNascimento: '', email: '', obs: '',
+    nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', obs: '',
     data: '', hora: '',
     senha: '', senhaConfirm: '',
   });
