@@ -91,7 +91,8 @@ const Pacientes: React.FC = () => {
     let list = visiblePacientes.filter(p =>
       p.nome.toLowerCase().includes(search.toLowerCase()) ||
       p.cpf.includes(search) ||
-      p.telefone.includes(search)
+      p.telefone.includes(search) ||
+      (p.cns && p.cns.includes(search))
     );
 
     // Filter by fila
