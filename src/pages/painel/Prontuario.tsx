@@ -58,6 +58,10 @@ const emptyForm = {
   solicitacao_exames: '',
   evolucao: '',
   observacoes: '',
+  indicacao_retorno: '',
+  motivo_alteracao: '',
+  procedimentos_texto: '',
+  outro_procedimento: '',
 };
 
 const classificarIMC = (imc: number): string => {
