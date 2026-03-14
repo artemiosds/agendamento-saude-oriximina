@@ -304,6 +304,7 @@ const FilaEspera: React.FC = () => {
         id: pacienteId,
         nome: novoPaciente.nome,
         cpf: novoPaciente.cpf,
+        cns: '',
         telefone: novoPaciente.telefone,
         email: novoPaciente.email,
         dataNascimento: novoPaciente.dataNascimento,
