@@ -248,6 +248,11 @@ const ProntuarioPage: React.FC = () => {
       toast.error('Paciente e data são obrigatórios.');
       return;
     }
+    // Require motivo_alteracao for edits
+    if (editId && !form.motivo_alteracao) {
+      toast.error('Informe o motivo da alteração para salvar.');
+      return;
+    }
 
     setSaving(true);
     try {
