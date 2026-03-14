@@ -503,6 +503,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: p.id,
       nome: p.nome,
       cpf: p.cpf,
+      cns: p.cns || '',
       telefone: p.telefone,
       data_nascimento: p.dataNascimento,
       email: p.email,
