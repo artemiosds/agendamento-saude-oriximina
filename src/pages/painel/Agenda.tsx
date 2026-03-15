@@ -51,15 +51,18 @@ const statusBadgeClass: Record<string, string> = {
   aguardando_atendimento: 'bg-emerald-500/10 text-emerald-600',
 };
 
-const tipoBadge: Record<string, { label: string; class: string }> = {
-  Consulta: { label: '1ª Consulta', class: 'bg-primary/10 text-primary' },
-  Retorno: { label: 'Retorno', class: 'bg-accent/80 text-accent-foreground' },
-  Exame: { label: 'Exame', class: 'bg-info/10 text-info' },
-  Procedimento: { label: 'Procedimento', class: 'bg-warning/10 text-warning' },
+const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {
+  Consulta: { label: '1ª Consulta', class: 'bg-success/15 text-success border border-success/30', icon: '🟢' },
+  Retorno: { label: 'Retorno', class: 'bg-info/15 text-info border border-info/30', icon: '🔵' },
+  Exame: { label: 'Exame', class: 'bg-warning/15 text-warning border border-warning/30', icon: '🟡' },
+  Procedimento: { label: 'Procedimento', class: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30', icon: '🟣' },
+  Urgência: { label: 'Urgência', class: 'bg-destructive/15 text-destructive border border-destructive/30', icon: '🔴' },
 };
 
 const Agenda: React.FC = () => {
 const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, salas, addAgendamento, configuracoes, addAtendimento, logAction, refreshAgendamentos, fila, disponibilidades, getAvailableSlots, getAvailableDates, bloqueios } = useData();
+  // Last appointment summaries per patient
+  const [lastProntuarios, setLastProntuarios] = React.useState<Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>>({});
   const { user, hasPermission } = useAuth();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -133,6 +136,35 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
     return true;
   }).sort((a, b) => a.hora.localeCompare(b.hora));
+
+  // Load last prontuario for each patient in filtered list
+  React.useEffect(() => {
+    const pacienteIds = [...new Set(filtered.map(a => a.pacienteId))];
+    if (pacienteIds.length === 0) return;
+    const loadLast = async () => {
+      const results: typeof lastProntuarios = {};
+      // Batch query: get latest prontuario per patient
+      const { data } = await (supabase as any).from('prontuarios')
+        .select('paciente_id,data_atendimento,profissional_nome,procedimentos_texto,queixa_principal')
+        .in('paciente_id', pacienteIds)
+        .order('data_atendimento', { ascending: false });
+      if (data) {
+        for (const row of data) {
+          if (!results[row.paciente_id]) {
+            results[row.paciente_id] = {
+              data: row.data_atendimento,
+              profissional: row.profissional_nome,
+              procedimentos: row.procedimentos_texto || '',
+              queixa: row.queixa_principal || '',
+              tipo: '',
+            };
+          }
+        }
+      }
+      setLastProntuarios(results);
+    };
+    loadLast();
+  }, [filtered.map(f => f.pacienteId).join(',')]); // eslint-disable-line
 
   const changeDate = (days: number) => {
     const d = new Date(selectedDate);
@@ -631,27 +663,54 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           const ehHoje = ag.data === new Date().toISOString().split('T')[0];
           const canStart = isProfissional && (ag.status === 'confirmado_chegada' || ag.status === 'aguardando_atendimento') && ehHoje;
           const isEmAtendimento = ag.status === 'em_atendimento';
-          const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground' };
+          const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground', icon: '⚪' };
           const paciente = pacientes.find(p => p.id === ag.pacienteId);
+          const lastAppt = lastProntuarios[ag.pacienteId];
+
+          // Color bar based on type
+          const typeColorBar: Record<string, string> = {
+            Consulta: 'border-l-success',
+            Retorno: 'border-l-info',
+            Procedimento: 'border-l-purple-500',
+            Exame: 'border-l-warning',
+            Urgência: 'border-l-destructive',
+          };
 
           return (
-            <Card key={ag.id} className={cn('shadow-card border-0', isEmAtendimento && 'ring-2 ring-primary/50')}>
+            <Card key={ag.id} className={cn('shadow-card border-0 border-l-4', typeColorBar[ag.tipo] || 'border-l-muted', isEmAtendimento && 'ring-2 ring-primary/50')}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
                 <div className="flex-1 min-w-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <p className="font-semibold text-foreground cursor-default">{ag.pacienteNome}</p>
+                      <p className="font-semibold text-foreground cursor-default">
+                        {tipoInfo.icon} {ag.pacienteNome}
+                      </p>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
                       <p className="text-xs"><strong>Paciente:</strong> {ag.pacienteNome}</p>
                       {paciente?.telefone && <p className="text-xs"><strong>Tel:</strong> {paciente.telefone}</p>}
                       {paciente?.cpf && <p className="text-xs"><strong>CPF:</strong> {paciente.cpf}</p>}
+                      {paciente?.cns && <p className="text-xs"><strong>CNS:</strong> {paciente.cns}</p>}
                       <p className="text-xs"><strong>Tipo:</strong> {tipoInfo.label}</p>
                       <p className="text-xs"><strong>Origem:</strong> {ag.origem}</p>
+                      {lastAppt && (
+                        <>
+                          <hr className="my-1 border-border" />
+                          <p className="text-xs font-semibold">Último atendimento:</p>
+                          <p className="text-xs">{new Date(lastAppt.data + 'T12:00:00').toLocaleDateString('pt-BR')} — {lastAppt.profissional}</p>
+                          {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
+                          {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
+                        </>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                   <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                  {lastAppt && isProfissional && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      📋 Último: {new Date(lastAppt.data + 'T12:00:00').toLocaleDateString('pt-BR')} — {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || 'sem resumo'}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Tipo badge */}

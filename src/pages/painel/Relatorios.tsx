@@ -57,6 +57,7 @@ const Relatorios: React.FC = () => {
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
+  const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -97,6 +98,20 @@ const Relatorios: React.FC = () => {
         if (atData) setAtendimentosDB(atData);
         if (filaData) setFilaDB(filaData);
         if (triageData) setTriagensDB(triageData as TriagemDB[]);
+
+        // Load procedure stats from prontuario_procedimentos joined with prontuarios and procedimentos
+        const { data: procData } = await (supabase as any).from('prontuario_procedimentos')
+          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+        if (procData) {
+          setProcedimentosDB(procData.map((r: any) => ({
+            prontuario_id: r.prontuario_id,
+            procedimento_id: r.procedimento_id,
+            proc_nome: r.procedimentos?.nome || '',
+            prof_nome: r.prontuarios?.profissional_nome || '',
+            unidade_id: r.prontuarios?.unidade_id || '',
+            data: r.prontuarios?.data_atendimento || '',
+          })));
+        }
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
@@ -414,6 +429,31 @@ const Relatorios: React.FC = () => {
     })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
   }, [porProfissional]);
 
+  // === PROCEDURE STATS ===
+  const procedimentoStats = useMemo(() => {
+    const filteredProcs = procedimentosDB.filter(p => {
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
+      if (dateFrom && p.data && p.data < dateFrom) return false;
+      if (dateTo && p.data && p.data > dateTo) return false;
+      return true;
+    });
+    const byProc: Record<string, number> = {};
+    const byProf: Record<string, number> = {};
+    const byUnit: Record<string, number> = {};
+    filteredProcs.forEach(p => {
+      byProc[p.proc_nome || 'Desconhecido'] = (byProc[p.proc_nome || 'Desconhecido'] || 0) + 1;
+      byProf[p.prof_nome || 'Desconhecido'] = (byProf[p.prof_nome || 'Desconhecido'] || 0) + 1;
+      const un = unidades.find(u => u.id === p.unidade_id);
+      byUnit[un?.nome || 'Desconhecida'] = (byUnit[un?.nome || 'Desconhecida'] || 0) + 1;
+    });
+    return {
+      total: filteredProcs.length,
+      byProcedure: Object.entries(byProc).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+      byProfessional: Object.entries(byProf).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+      byUnit: Object.entries(byUnit).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+    };
+  }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -641,6 +681,7 @@ const Relatorios: React.FC = () => {
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
           <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
           <TabsTrigger value="produtividade" className="text-xs">Produtividade</TabsTrigger>
+          <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
           <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
@@ -1233,6 +1274,93 @@ const Relatorios: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* === PROCEDIMENTOS === */}
+        <TabsContent value="procedimentos" className="space-y-5 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-primary">{procedimentoStats.total}</p>
+                <p className="text-xs text-muted-foreground">Total de Procedimentos</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-success">{procedimentoStats.byProcedure.length}</p>
+                <p className="text-xs text-muted-foreground">Tipos Diferentes</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-info">{procedimentoStats.byProfessional.length}</p>
+                <p className="text-xs text-muted-foreground">Profissionais</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Ranking by procedure */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos Mais Realizados</h3>
+              {procedimentoStats.byProcedure.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum procedimento registrado no período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(200, procedimentoStats.byProcedure.length * 35)}>
+                  <BarChart data={procedimentoStats.byProcedure.slice(0, 15)} layout="vertical" margin={{ left: 120 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={110} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* By professional */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Profissional</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b">
+                    <th className="text-left py-2 px-2 text-xs text-muted-foreground">Profissional</th>
+                    <th className="text-center py-2 px-2 text-xs text-muted-foreground">Total</th>
+                  </tr></thead>
+                  <tbody>
+                    {procedimentoStats.byProfessional.map(p => (
+                      <tr key={p.nome} className="border-b border-border/50">
+                        <td className="py-2 px-2">{p.nome}</td>
+                        <td className="py-2 px-2 text-center font-semibold text-primary">{p.total}</td>
+                      </tr>
+                    ))}
+                    {procedimentoStats.byProfessional.length === 0 && (
+                      <tr><td colSpan={2} className="text-center py-4 text-muted-foreground">Sem dados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* By unit */}
+          {procedimentoStats.byUnit.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Unidade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={procedimentoStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {procedimentoStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </div>

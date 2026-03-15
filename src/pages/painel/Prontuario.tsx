@@ -9,12 +9,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AtendimentoTimer from '@/components/AtendimentoTimer';
 import { openPrintDocument } from '@/lib/printLayout';
+import { HistoricoClinico } from '@/components/HistoricoClinico';
 
 interface ProntuarioDB {
   id: string;
@@ -38,8 +41,22 @@ interface ProntuarioDB {
   solicitacao_exames: string;
   evolucao: string;
   observacoes: string;
+  indicacao_retorno: string;
+  motivo_alteracao: string;
+  procedimentos_texto: string;
+  outro_procedimento: string;
+  episodio_id: string | null;
   criado_em: string;
   atualizado_em: string;
+}
+
+interface ProcedimentoDB {
+  id: string;
+  nome: string;
+  profissao: string;
+  especialidade: string;
+  profissional_id: string | null;
+  ativo: boolean;
 }
 
 const emptyForm = {
@@ -62,6 +79,7 @@ const emptyForm = {
   motivo_alteracao: '',
   procedimentos_texto: '',
   outro_procedimento: '',
+  episodio_id: '',
 };
 
 const classificarIMC = (imc: number): string => {
@@ -82,9 +100,20 @@ interface TriagemData {
   tecnico_nome?: string; tecnico_coren?: string;
 }
 
+const retornoOptions = [
+  { value: '', label: 'Sem indicação' },
+  { value: 'sem_retorno', label: 'Sem retorno' },
+  { value: '7_dias', label: 'Retorno em 7 dias' },
+  { value: '15_dias', label: 'Retorno em 15 dias' },
+  { value: '30_dias', label: 'Retorno em 30 dias' },
+  { value: '60_dias', label: 'Retorno em 60 dias' },
+  { value: '90_dias', label: 'Retorno em 90 dias' },
+  { value: 'outro', label: 'Outro prazo' },
+];
+
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
@@ -97,7 +126,13 @@ const ProntuarioPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(null);
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
+  const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // Procedures state
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
+  const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
+  const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
 
   const isProfissional = user?.role === 'profissional';
   const canEdit = hasPermission(['master', 'coordenador', 'profissional']);
@@ -105,54 +140,71 @@ const ProntuarioPage: React.FC = () => {
 
   const tempoLimite = user?.tempoAtendimento || 30;
 
+  // Load procedures compatible with current user
+  useEffect(() => {
+    const loadProcs = async () => {
+      const { data } = await supabase.from('procedimentos').select('*').eq('ativo', true);
+      if (data) setProcedimentos(data as ProcedimentoDB[]);
+    };
+    loadProcs();
+  }, []);
+
+  const filteredProcedimentos = useMemo(() => {
+    if (!user) return [];
+    return procedimentos.filter(p => {
+      // Match by profissão
+      if (p.profissao && user.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
+      // If linked to specific professional, must match
+      if (p.profissional_id && p.profissional_id !== user.id) return false;
+      return true;
+    });
+  }, [procedimentos, user]);
+
   const loadProntuarios = async () => {
     setLoading(true);
     try {
       let query = (supabase as any).from('prontuarios').select('*').order('data_atendimento', { ascending: false });
-
-      if (isProfissional && user) {
-        query = query.eq('profissional_id', user.id);
-      }
-      if (user?.role === 'coordenador' && user.unidadeId) {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
-
+      if (isProfissional && user) query = query.eq('profissional_id', user.id);
+      if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
       const { data, error } = await query;
       if (data) setProntuarios(data);
       if (error) console.error('Error loading prontuarios:', error);
-    } catch (err) {
-      console.error('Error:', err);
-    }
+    } catch (err) { console.error('Error:', err); }
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadProntuarios();
-  }, [user]);
+  useEffect(() => { loadProntuarios(); }, [user]);
 
-  // Load triage data for an agendamento
   const loadTriagem = async (agendamentoId: string) => {
     try {
       const { data } = await (supabase as any)
-        .from('triage_records')
-        .select('*')
+        .from('triage_records').select('*')
         .eq('agendamento_id', agendamentoId)
-        .not('confirmado_em', 'is', null)
-        .maybeSingle();
+        .not('confirmado_em', 'is', null).maybeSingle();
       if (data) {
-        // Fetch tecnico info
         const { data: tecnico } = await supabase.from('funcionarios')
-          .select('nome, coren')
-          .eq('id', data.tecnico_id)
-          .maybeSingle();
+          .select('nome, coren').eq('id', data.tecnico_id).maybeSingle();
         setTriagem({ ...data, tecnico_nome: (tecnico as any)?.nome || '', tecnico_coren: (tecnico as any)?.coren || '' });
-      } else {
-        setTriagem(null);
-      }
+      } else { setTriagem(null); }
     } catch { setTriagem(null); }
   };
 
-  // Auto-open form when coming from "Iniciar Atendimento"
+  // Load existing procedure links when editing
+  const loadProntuarioProcedimentos = async (prontuarioId: string) => {
+    const { data } = await (supabase as any).from('prontuario_procedimentos')
+      .select('procedimento_id').eq('prontuario_id', prontuarioId);
+    if (data) setSelectedProcIds(data.map((d: any) => d.procedimento_id));
+    else setSelectedProcIds([]);
+  };
+
+  // Load episodes for the patient
+  const loadEpisodios = async (pacienteId: string) => {
+    const { data } = await (supabase as any).from('episodios_clinicos')
+      .select('id,titulo,status').eq('paciente_id', pacienteId).eq('status', 'ativo');
+    if (data) setEpisodios(data);
+    else setEpisodios([]);
+  };
+
   useEffect(() => {
     const pacienteId = searchParams.get('pacienteId');
     const pacienteNome = searchParams.get('pacienteNome');
@@ -162,15 +214,16 @@ const ProntuarioPage: React.FC = () => {
 
     if (pacienteId && pacienteNome) {
       if (agendamentoId) loadTriagem(agendamentoId);
+      loadEpisodios(pacienteId);
 
-      const existingForAgendamento = agendamentoId 
-        ? prontuarios.find(p => p.agendamento_id === agendamentoId)
-        : null;
+      const existingForAgendamento = agendamentoId
+        ? prontuarios.find(p => p.agendamento_id === agendamentoId) : null;
 
       if (existingForAgendamento) {
         openEdit(existingForAgendamento);
       } else {
         setEditId(null);
+        setSelectedProcIds([]);
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
@@ -185,13 +238,9 @@ const ProntuarioPage: React.FC = () => {
       if (agendamentoId && horaInicio) {
         setActiveAtendimento({ agendamentoId, horaInicio });
       } else if (agendamentoId) {
-        // Try to restore timer from localStorage
         const stored = localStorage.getItem(`timer_${agendamentoId}`);
         if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            setActiveAtendimento({ agendamentoId, horaInicio: parsed.horaInicio });
-          } catch { /* ignore */ }
+          try { const parsed = JSON.parse(stored); setActiveAtendimento({ agendamentoId, horaInicio: parsed.horaInicio }); } catch { }
         }
       }
     }
@@ -206,6 +255,8 @@ const ProntuarioPage: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     setActiveAtendimento(null);
+    setSelectedProcIds([]);
+    setEpisodios([]);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split('T')[0] });
     setDialogOpen(true);
   };
@@ -213,6 +264,8 @@ const ProntuarioPage: React.FC = () => {
   const openEdit = (p: ProntuarioDB) => {
     setEditId(p.id);
     setActiveAtendimento(null);
+    loadProntuarioProcedimentos(p.id);
+    loadEpisodios(p.paciente_id);
     const formData = {
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
@@ -229,16 +282,16 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || '',
       evolucao: p.evolucao || '',
       observacoes: p.observacoes || '',
-      indicacao_retorno: (p as any).indicacao_retorno || '',
+      indicacao_retorno: p.indicacao_retorno || '',
       motivo_alteracao: '',
-      procedimentos_texto: (p as any).procedimentos_texto || '',
-      outro_procedimento: (p as any).outro_procedimento || '',
+      procedimentos_texto: p.procedimentos_texto || '',
+      outro_procedimento: p.outro_procedimento || '',
+      episodio_id: p.episodio_id || '',
     };
     setForm(formData);
     setPreviousForm(formData);
     setDialogOpen(true);
 
-    // Log PRONTUARIO_VISUALIZADO
     const pac = pacientes.find(px => px.id === p.paciente_id);
     logAction({
       acao: 'prontuario_visualizado', entidade: 'prontuario', entidadeId: p.id,
@@ -252,7 +305,6 @@ const ProntuarioPage: React.FC = () => {
       toast.error('Paciente e data são obrigatórios.');
       return;
     }
-    // Require motivo_alteracao for edits
     if (editId && !form.motivo_alteracao) {
       toast.error('Informe o motivo da alteração para salvar.');
       return;
@@ -260,7 +312,13 @@ const ProntuarioPage: React.FC = () => {
 
     setSaving(true);
     try {
-      const record = {
+      // Build procedimentos_texto from selected
+      const procTexto = selectedProcIds.map(id => {
+        const p = procedimentos.find(pr => pr.id === id);
+        return p?.nome || '';
+      }).filter(Boolean).join(', ');
+
+      const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
         profissional_id: user?.id || '',
@@ -282,27 +340,32 @@ const ProntuarioPage: React.FC = () => {
         observacoes: form.observacoes,
         indicacao_retorno: form.indicacao_retorno || '',
         motivo_alteracao: editId ? form.motivo_alteracao : '',
-        procedimentos_texto: form.procedimentos_texto || '',
+        procedimentos_texto: procTexto || form.procedimentos_texto || '',
         outro_procedimento: form.outro_procedimento || '',
       };
 
+      if (form.episodio_id) record.episodio_id = form.episodio_id;
+
       const pac = pacientes.find(px => px.id === (form.paciente_id || record.paciente_id));
+      let prontuarioId = editId;
 
       if (editId) {
         const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', editId);
         if (error) throw error;
 
-        // Log PRONTUARIO_EDITADO with field-level diffs
+        // Detailed audit diff
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
             queixa_principal: 'Queixa Principal', anamnese: 'Anamnese', sinais_sintomas: 'Sinais/Sintomas',
             exame_fisico: 'Exame Físico', hipotese: 'Hipótese', conduta: 'Conduta',
-            prescricao: 'Prescrição', solicitacao_exames: 'Solicitação Exames', evolucao: 'Evolução', observacoes: 'Observações',
+            prescricao: 'Prescrição', solicitacao_exames: 'Solicitação Exames', evolucao: 'Evolução',
+            observacoes: 'Observações', indicacao_retorno: 'Indicação Retorno',
+            procedimentos_texto: 'Procedimentos', outro_procedimento: 'Outro Procedimento',
           };
           for (const [key, label] of Object.entries(fieldLabels)) {
             const prev = (previousForm as any)[key] || '';
-            const curr = (form as any)[key] || '';
+            const curr = key === 'procedimentos_texto' ? procTexto : (form as any)[key] || '';
             if (prev !== curr) {
               camposAlterados[label] = { anterior: prev.substring(0, 200), novo: curr.substring(0, 200) };
             }
@@ -311,22 +374,35 @@ const ProntuarioPage: React.FC = () => {
         await logAction({
           acao: 'prontuario_editado', entidade: 'prontuario', entidadeId: editId,
           modulo: 'prontuario', user,
-          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '', campos_alterados: camposAlterados },
+          detalhes: {
+            paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '',
+            motivo_alteracao: form.motivo_alteracao,
+            campos_alterados: camposAlterados,
+          },
         });
-
         toast.success('Prontuário atualizado!');
       } else {
         const { data: inserted, error } = await (supabase as any).from('prontuarios').insert(record).select('id').single();
         if (error) throw error;
+        prontuarioId = inserted?.id;
 
-        // Log PRONTUARIO_CRIADO
         await logAction({
           acao: 'prontuario_criado', entidade: 'prontuario', entidadeId: inserted?.id || '',
           modulo: 'prontuario', user,
           detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || '' },
         });
-
         toast.success('Prontuário criado!');
+      }
+
+      // Save procedure links
+      if (prontuarioId) {
+        // Delete existing links
+        await (supabase as any).from('prontuario_procedimentos').delete().eq('prontuario_id', prontuarioId);
+        // Insert new
+        if (selectedProcIds.length > 0) {
+          const links = selectedProcIds.map(pid => ({ prontuario_id: prontuarioId, procedimento_id: pid }));
+          await (supabase as any).from('prontuario_procedimentos').insert(links);
+        }
       }
 
       setDialogOpen(false);
@@ -340,27 +416,21 @@ const ProntuarioPage: React.FC = () => {
 
   const handleFinalizarAtendimento = async () => {
     await handleSave();
-
     if (!activeAtendimento) return;
 
     const now = new Date();
     const horaFim = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
     const [hi, mi] = activeAtendimento.horaInicio.split(':').map(Number);
     const [hf, mf] = horaFim.split(':').map(Number);
     const duracaoMinutos = (hf * 60 + mf) - (hi * 60 + mi);
-
     const pac = pacientes.find(px => px.id === form.paciente_id);
 
     try {
       await (supabase as any).from('atendimentos')
         .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: 'finalizado' })
         .eq('agendamento_id', activeAtendimento.agendamentoId);
-    } catch (err) {
-      console.error('Error finalizing atendimento:', err);
-    }
+    } catch (err) { console.error('Error finalizing atendimento:', err); }
 
-    // Log ATENDIMENTO_FINALIZADO
     await logAction({
       acao: 'atendimento_finalizado', entidade: 'atendimento', entidadeId: activeAtendimento.agendamentoId,
       modulo: 'atendimento', user,
@@ -372,11 +442,8 @@ const ProntuarioPage: React.FC = () => {
       },
     });
 
-    // Clean up localStorage timer
     localStorage.removeItem(`timer_${activeAtendimento.agendamentoId}`);
-
     updateAgendamento(activeAtendimento.agendamentoId, { status: 'concluido' });
-
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado! Duração: ${Math.max(0, duracaoMinutos)} minutos.`);
     navigate('/painel/agenda');
@@ -384,6 +451,7 @@ const ProntuarioPage: React.FC = () => {
 
   const handleDelete = async (p: ProntuarioDB) => {
     try {
+      await (supabase as any).from('prontuario_procedimentos').delete().eq('prontuario_id', p.id);
       await (supabase as any).from('prontuarios').delete().eq('id', p.id);
       await logAction({
         acao: 'excluir', entidade: 'prontuario', entidadeId: p.id,
@@ -406,7 +474,6 @@ const ProntuarioPage: React.FC = () => {
       detalhes: { paciente_nome: p.paciente_nome, paciente_cpf: pac?.cpf || '' },
     });
     const unidadeNome = unidades.find(u => u.id === p.unidade_id)?.nome || p.unidade_id;
-
     const sections = [
       { title: 'Queixa Principal', content: p.queixa_principal },
       { title: 'Anamnese', content: p.anamnese },
@@ -417,7 +484,9 @@ const ProntuarioPage: React.FC = () => {
       { title: 'Prescrição / Orientações', content: p.prescricao },
       { title: 'Solicitação de Exames', content: p.solicitacao_exames },
       { title: 'Evolução', content: p.evolucao },
+      { title: 'Procedimentos', content: p.procedimentos_texto },
       { title: 'Observações Gerais', content: p.observacoes },
+      { title: 'Indicação de Retorno', content: p.indicacao_retorno },
     ].filter(s => s.content).map(s =>
       `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
     ).join('');
@@ -437,16 +506,12 @@ const ProntuarioPage: React.FC = () => {
         <div class="name">${p.profissional_nome}</div>
         <div class="role">${p.setor || ''}</div>
       </div>`;
-
     openPrintDocument('Prontuário de Atendimento', body, { 'Unidade': unidadeNome });
   };
 
   const queryPacienteId = searchParams.get('pacienteId');
-  
   const filtered = prontuarios.filter(p => {
-    if (queryPacienteId) {
-      return p.paciente_id === queryPacienteId;
-    }
+    if (queryPacienteId) return p.paciente_id === queryPacienteId;
     return !search || p.paciente_nome.toLowerCase().includes(search.toLowerCase()) ||
       p.profissional_nome.toLowerCase().includes(search.toLowerCase());
   });
@@ -464,9 +529,14 @@ const ProntuarioPage: React.FC = () => {
         </div>
         <div className="flex gap-2">
           {queryPacienteId && (
-            <Button variant="outline" onClick={() => navigate('/painel/prontuario')}>
-              Ver todos
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
+                <Activity className="w-4 h-4 mr-2" />{showHistorico ? 'Ocultar' : 'Ver'} Histórico
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/painel/prontuario')}>
+                Ver todos
+              </Button>
+            </>
           )}
           {canEdit && (
             <Button onClick={openNew} className="gradient-primary text-primary-foreground">
@@ -476,15 +546,25 @@ const ProntuarioPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Clinical History Timeline */}
+      {queryPacienteId && showHistorico && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <HistoricoClinico
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || ''}
+              currentProfissionalId={user?.id}
+              unidades={unidades}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {!queryPacienteId && (
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por paciente ou profissional..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10"
-          />
+          <Input placeholder="Buscar por paciente ou profissional..." value={search}
+            onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
       )}
 
@@ -498,16 +578,11 @@ const ProntuarioPage: React.FC = () => {
             <DialogTitle className="font-display">{editId ? 'Editar' : 'Novo'} Prontuário</DialogTitle>
           </DialogHeader>
 
-          {/* Timer when active atendimento */}
           {activeAtendimento && (
-            <AtendimentoTimer
-              horaInicio={activeAtendimento.horaInicio}
-              tempoLimite={tempoLimite}
-              agendamentoId={activeAtendimento.agendamentoId}
-            />
+            <AtendimentoTimer horaInicio={activeAtendimento.horaInicio} tempoLimite={tempoLimite} agendamentoId={activeAtendimento.agendamentoId} />
           )}
 
-          {/* Triage Data (read-only) */}
+          {/* Triage Data */}
           {triagem && (
             <div className="space-y-3 pointer-events-none select-text">
               {triagem.alergias && triagem.alergias.length > 0 && (
@@ -533,21 +608,19 @@ const ProntuarioPage: React.FC = () => {
               {triagem.medicamentos && triagem.medicamentos.length > 0 && (
                 <div className="text-sm"><strong>Medicamentos em uso:</strong> {triagem.medicamentos.join(', ')}</div>
               )}
-              {triagem.queixa && (
-                <div className="text-sm"><strong>Queixa (triagem):</strong> {triagem.queixa}</div>
-              )}
+              {triagem.queixa && <div className="text-sm"><strong>Queixa (triagem):</strong> {triagem.queixa}</div>}
             </div>
           )}
           {form.agendamento_id && !triagem && (
             <p className="text-xs text-muted-foreground italic">Triagem não realizada para este atendimento.</p>
           )}
 
-          {/* Patient history section */}
+          {/* Patient history */}
           {patientHistory.length > 0 && (
             <div className="bg-muted/50 rounded-lg p-3 border">
               <div className="flex items-center gap-2 mb-2">
                 <History className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-semibold text-foreground">Histórico do Paciente ({patientHistory.length} registro(s) anterior(es))</span>
+                <span className="text-sm font-semibold text-foreground">Histórico do Paciente ({patientHistory.length} anterior(es))</span>
               </div>
               <div className="space-y-1 max-h-32 overflow-y-auto">
                 {patientHistory.slice(0, 5).map(ph => (
@@ -564,18 +637,14 @@ const ProntuarioPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Paciente *</Label>
-                <Select
-                  value={form.paciente_id}
-                  onValueChange={v => {
-                    const pac = pacientes.find(p => p.id === v);
-                    setForm(prev => ({ ...prev, paciente_id: v, paciente_nome: pac?.nome || '' }));
-                  }}
-                >
+                <Select value={form.paciente_id} onValueChange={v => {
+                  const pac = pacientes.find(p => p.id === v);
+                  setForm(prev => ({ ...prev, paciente_id: v, paciente_nome: pac?.nome || '' }));
+                  if (v) loadEpisodios(v);
+                }}>
                   <SelectTrigger><SelectValue placeholder="Selecione o paciente" /></SelectTrigger>
                   <SelectContent>
-                    {pacientes.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                    ))}
+                    {pacientes.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -584,6 +653,20 @@ const ProntuarioPage: React.FC = () => {
                 <div><Label>Hora</Label><Input type="time" value={form.hora_atendimento} onChange={e => setForm(p => ({ ...p, hora_atendimento: e.target.value }))} /></div>
               </div>
             </div>
+
+            {/* Episode link */}
+            {episodios.length > 0 && (
+              <div>
+                <Label>Episódio Clínico / Tratamento Ativo</Label>
+                <Select value={form.episodio_id} onValueChange={v => setForm(p => ({ ...p, episodio_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Vincular a um tratamento (opcional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhum</SelectItem>
+                    {episodios.map(e => <SelectItem key={e.id} value={e.id}>{e.titulo}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div><Label>Queixa Principal</Label><Textarea rows={2} value={form.queixa_principal} onChange={e => setForm(p => ({ ...p, queixa_principal: e.target.value }))} /></div>
             <div><Label>Anamnese</Label><Textarea rows={3} value={form.anamnese} onChange={e => setForm(p => ({ ...p, anamnese: e.target.value }))} /></div>
@@ -596,16 +679,65 @@ const ProntuarioPage: React.FC = () => {
             <div><Label>Evolução</Label><Textarea rows={2} value={form.evolucao} onChange={e => setForm(p => ({ ...p, evolucao: e.target.value }))} /></div>
             <div><Label>Observações Gerais</Label><Textarea rows={2} value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} /></div>
 
+            {/* Procedure Selection */}
+            {filteredProcedimentos.length > 0 && (
+              <div>
+                <Label className="mb-2 block">Procedimentos Realizados</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/30 rounded-lg p-3 border max-h-40 overflow-y-auto">
+                  {filteredProcedimentos.map(proc => (
+                    <div key={proc.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`proc-${proc.id}`}
+                        checked={selectedProcIds.includes(proc.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedProcIds(prev =>
+                            checked ? [...prev, proc.id] : prev.filter(id => id !== proc.id)
+                          );
+                        }}
+                      />
+                      <label htmlFor={`proc-${proc.id}`} className="text-sm cursor-pointer">
+                        {proc.nome}
+                        {proc.especialidade && <span className="text-xs text-muted-foreground ml-1">({proc.especialidade})</span>}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div><Label>Outro Procedimento</Label><Input value={form.outro_procedimento} onChange={e => setForm(p => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." /></div>
+
+            {/* Indicação de Retorno */}
+            <div>
+              <Label>Indicação de Retorno</Label>
+              <Select value={form.indicacao_retorno} onValueChange={v => setForm(p => ({ ...p, indicacao_retorno: v }))}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {retornoOptions.map(opt => <SelectItem key={opt.value || '_empty'} value={opt.value}>{opt.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Motivo alteração (only for edits) */}
+            {editId && (
+              <div>
+                <Label className="text-warning">Motivo da Alteração *</Label>
+                <Textarea rows={2} value={form.motivo_alteracao}
+                  onChange={e => setForm(p => ({ ...p, motivo_alteracao: e.target.value }))}
+                  placeholder="Ex: Correção de informação, complemento clínico..."
+                  className="border-warning/50"
+                />
+              </div>
+            )}
+
             <div className="flex gap-2">
               {activeAtendimento ? (
                 <>
                   <Button onClick={handleSave} disabled={saving} variant="outline" className="flex-1">
-                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                    Salvar Rascunho
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
                   <Button onClick={handleFinalizarAtendimento} disabled={saving} className="flex-1 bg-success hover:bg-success/90 text-success-foreground">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Finalizar Atendimento
+                    <CheckCircle className="w-4 h-4 mr-2" />Finalizar Atendimento
                   </Button>
                 </>
               ) : (
@@ -631,64 +763,68 @@ const ProntuarioPage: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map(p => (
-            <Card key={p.id} className="shadow-card border-0">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground">{p.paciente_nome}</p>
-                      <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                        {new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                      </span>
-                      {p.hora_atendimento && (
-                        <span className="text-xs text-muted-foreground">{p.hora_atendimento}</span>
+          {filtered.map(p => {
+            const isOwn = p.profissional_id === user?.id;
+            return (
+              <Card key={p.id} className="shadow-card border-0">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground">{p.paciente_nome}</p>
+                        <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                          {new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </span>
+                        {p.hora_atendimento && <span className="text-xs text-muted-foreground">{p.hora_atendimento}</span>}
+                        {p.indicacao_retorno && p.indicacao_retorno !== 'sem_retorno' && (
+                          <Badge variant="outline" className="text-xs text-primary border-primary/30">
+                            ↩ {retornoOptions.find(o => o.value === p.indicacao_retorno)?.label || p.indicacao_retorno}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Prof. {p.profissional_nome}{p.setor ? ` • ${p.setor}` : ''}
+                      </p>
+                      {p.procedimentos_texto && (
+                        <p className="text-xs text-muted-foreground mt-1">📋 {p.procedimentos_texto}</p>
+                      )}
+                      {p.queixa_principal && (
+                        <p className="text-sm text-foreground mt-1 line-clamp-2"><strong>QP:</strong> {p.queixa_principal}</p>
+                      )}
+                      {!isOwn && isProfissional && (
+                        <p className="text-xs text-warning mt-1 italic">Prontuário de outro profissional (somente leitura)</p>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Prof. {p.profissional_nome}{p.setor ? ` • ${p.setor}` : ''}
-                    </p>
-                    {p.queixa_principal && (
-                      <p className="text-sm text-foreground mt-1 line-clamp-2">
-                        <strong>QP:</strong> {p.queixa_principal}
-                      </p>
-                    )}
+                    <div className="flex gap-1 shrink-0">
+                      {canEdit && (isProfissional ? isOwn : true) && (
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></Button>
+                      )}
+                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)}><Printer className="w-4 h-4" /></Button>
+                      {canDelete && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Excluir o prontuário de {p.paciente_nome} ({new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')})?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(p)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    {canEdit && (isProfissional ? p.profissional_id === user?.id : true) && (
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button size="icon" variant="ghost" onClick={() => handlePrint(p)}>
-                      <Printer className="w-4 h-4" />
-                    </Button>
-                    {canDelete && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost" className="text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Excluir o prontuário de {p.paciente_nome} ({new Date(p.data_atendimento + 'T12:00:00').toLocaleDateString('pt-BR')})? Esta ação será registrada em log de auditoria.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(p)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
