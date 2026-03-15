@@ -663,8 +663,18 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           const ehHoje = ag.data === new Date().toISOString().split('T')[0];
           const canStart = isProfissional && (ag.status === 'confirmado_chegada' || ag.status === 'aguardando_atendimento') && ehHoje;
           const isEmAtendimento = ag.status === 'em_atendimento';
-          const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground' };
+          const tipoInfo = tipoBadge[ag.tipo] || { label: ag.tipo, class: 'bg-muted text-muted-foreground', icon: '⚪' };
           const paciente = pacientes.find(p => p.id === ag.pacienteId);
+          const lastAppt = lastProntuarios[ag.pacienteId];
+
+          // Color bar based on type
+          const typeColorBar: Record<string, string> = {
+            Consulta: 'border-l-success',
+            Retorno: 'border-l-info',
+            Procedimento: 'border-l-purple-500',
+            Exame: 'border-l-warning',
+            Urgência: 'border-l-destructive',
+          };
 
           return (
             <Card key={ag.id} className={cn('shadow-card border-0', isEmAtendimento && 'ring-2 ring-primary/50')}>
