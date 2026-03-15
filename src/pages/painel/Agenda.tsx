@@ -677,23 +677,40 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
           };
 
           return (
-            <Card key={ag.id} className={cn('shadow-card border-0', isEmAtendimento && 'ring-2 ring-primary/50')}>
+            <Card key={ag.id} className={cn('shadow-card border-0 border-l-4', typeColorBar[ag.tipo] || 'border-l-muted', isEmAtendimento && 'ring-2 ring-primary/50')}>
               <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
                 <div className="flex-1 min-w-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <p className="font-semibold text-foreground cursor-default">{ag.pacienteNome}</p>
+                      <p className="font-semibold text-foreground cursor-default">
+                        {tipoInfo.icon} {ag.pacienteNome}
+                      </p>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
                       <p className="text-xs"><strong>Paciente:</strong> {ag.pacienteNome}</p>
                       {paciente?.telefone && <p className="text-xs"><strong>Tel:</strong> {paciente.telefone}</p>}
                       {paciente?.cpf && <p className="text-xs"><strong>CPF:</strong> {paciente.cpf}</p>}
+                      {paciente?.cns && <p className="text-xs"><strong>CNS:</strong> {paciente.cns}</p>}
                       <p className="text-xs"><strong>Tipo:</strong> {tipoInfo.label}</p>
                       <p className="text-xs"><strong>Origem:</strong> {ag.origem}</p>
+                      {lastAppt && (
+                        <>
+                          <hr className="my-1 border-border" />
+                          <p className="text-xs font-semibold">Último atendimento:</p>
+                          <p className="text-xs">{new Date(lastAppt.data + 'T12:00:00').toLocaleDateString('pt-BR')} — {lastAppt.profissional}</p>
+                          {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
+                          {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
+                        </>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                   <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                  {lastAppt && isProfissional && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      📋 Último: {new Date(lastAppt.data + 'T12:00:00').toLocaleDateString('pt-BR')} — {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || 'sem resumo'}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Tipo badge */}
