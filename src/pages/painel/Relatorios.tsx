@@ -98,6 +98,20 @@ const Relatorios: React.FC = () => {
         if (atData) setAtendimentosDB(atData);
         if (filaData) setFilaDB(filaData);
         if (triageData) setTriagensDB(triageData as TriagemDB[]);
+
+        // Load procedure stats from prontuario_procedimentos joined with prontuarios and procedimentos
+        const { data: procData } = await (supabase as any).from('prontuario_procedimentos')
+          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+        if (procData) {
+          setProcedimentosDB(procData.map((r: any) => ({
+            prontuario_id: r.prontuario_id,
+            procedimento_id: r.procedimento_id,
+            proc_nome: r.procedimentos?.nome || '',
+            prof_nome: r.prontuarios?.profissional_nome || '',
+            unidade_id: r.prontuarios?.unidade_id || '',
+            data: r.prontuarios?.data_atendimento || '',
+          })));
+        }
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
