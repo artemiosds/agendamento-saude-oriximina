@@ -137,6 +137,35 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
     return true;
   }).sort((a, b) => a.hora.localeCompare(b.hora));
 
+  // Load last prontuario for each patient in filtered list
+  React.useEffect(() => {
+    const pacienteIds = [...new Set(filtered.map(a => a.pacienteId))];
+    if (pacienteIds.length === 0) return;
+    const loadLast = async () => {
+      const results: typeof lastProntuarios = {};
+      // Batch query: get latest prontuario per patient
+      const { data } = await (supabase as any).from('prontuarios')
+        .select('paciente_id,data_atendimento,profissional_nome,procedimentos_texto,queixa_principal')
+        .in('paciente_id', pacienteIds)
+        .order('data_atendimento', { ascending: false });
+      if (data) {
+        for (const row of data) {
+          if (!results[row.paciente_id]) {
+            results[row.paciente_id] = {
+              data: row.data_atendimento,
+              profissional: row.profissional_nome,
+              procedimentos: row.procedimentos_texto || '',
+              queixa: row.queixa_principal || '',
+              tipo: '',
+            };
+          }
+        }
+      }
+      setLastProntuarios(results);
+    };
+    loadLast();
+  }, [filtered.map(f => f.pacienteId).join(',')]); // eslint-disable-line
+
   const changeDate = (days: number) => {
     const d = new Date(selectedDate);
     d.setDate(d.getDate() + days);
