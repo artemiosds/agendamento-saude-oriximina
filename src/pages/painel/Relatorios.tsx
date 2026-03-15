@@ -429,6 +429,31 @@ const Relatorios: React.FC = () => {
     })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
   }, [porProfissional]);
 
+  // === PROCEDURE STATS ===
+  const procedimentoStats = useMemo(() => {
+    const filteredProcs = procedimentosDB.filter(p => {
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
+      if (dateFrom && p.data && p.data < dateFrom) return false;
+      if (dateTo && p.data && p.data > dateTo) return false;
+      return true;
+    });
+    const byProc: Record<string, number> = {};
+    const byProf: Record<string, number> = {};
+    const byUnit: Record<string, number> = {};
+    filteredProcs.forEach(p => {
+      byProc[p.proc_nome || 'Desconhecido'] = (byProc[p.proc_nome || 'Desconhecido'] || 0) + 1;
+      byProf[p.prof_nome || 'Desconhecido'] = (byProf[p.prof_nome || 'Desconhecido'] || 0) + 1;
+      const un = unidades.find(u => u.id === p.unidade_id);
+      byUnit[un?.nome || 'Desconhecida'] = (byUnit[un?.nome || 'Desconhecida'] || 0) + 1;
+    });
+    return {
+      total: filteredProcs.length,
+      byProcedure: Object.entries(byProc).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+      byProfessional: Object.entries(byProf).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+      byUnit: Object.entries(byUnit).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+    };
+  }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
