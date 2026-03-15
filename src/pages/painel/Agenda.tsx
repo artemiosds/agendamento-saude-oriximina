@@ -51,11 +51,12 @@ const statusBadgeClass: Record<string, string> = {
   aguardando_atendimento: 'bg-emerald-500/10 text-emerald-600',
 };
 
-const tipoBadge: Record<string, { label: string; class: string }> = {
-  Consulta: { label: '1ª Consulta', class: 'bg-primary/10 text-primary' },
-  Retorno: { label: 'Retorno', class: 'bg-accent/80 text-accent-foreground' },
-  Exame: { label: 'Exame', class: 'bg-info/10 text-info' },
-  Procedimento: { label: 'Procedimento', class: 'bg-warning/10 text-warning' },
+const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {
+  Consulta: { label: '1ª Consulta', class: 'bg-success/15 text-success border border-success/30', icon: '🟢' },
+  Retorno: { label: 'Retorno', class: 'bg-info/15 text-info border border-info/30', icon: '🔵' },
+  Exame: { label: 'Exame', class: 'bg-warning/15 text-warning border border-warning/30', icon: '🟡' },
+  Procedimento: { label: 'Procedimento', class: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30', icon: '🟣' },
+  Urgência: { label: 'Urgência', class: 'bg-destructive/15 text-destructive border border-destructive/30', icon: '🔴' },
 };
 
 const Agenda: React.FC = () => {
