@@ -681,6 +681,7 @@ const Relatorios: React.FC = () => {
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
           <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
           <TabsTrigger value="produtividade" className="text-xs">Produtividade</TabsTrigger>
+          <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
           <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
