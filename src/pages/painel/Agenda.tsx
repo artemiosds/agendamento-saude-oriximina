@@ -657,8 +657,15 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       {/* Appointments list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
-            {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
+          <Card className="shadow-card border-0"><CardContent className="p-8 text-center">
+            <p className="text-muted-foreground mb-3">
+              {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
+            </p>
+            {!isProfissional && (
+              <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
+              </Button>
+            )}
           </CardContent></Card>
         ) : filtered.map(ag => {
           const ehHoje = ag.data === new Date().toISOString().split('T')[0];
