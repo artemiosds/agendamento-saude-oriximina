@@ -90,6 +90,7 @@ const App = () => (
                   <Route path="auditoria" element={<Auditoria />} />
                   <Route path="triagem" element={<Triagem />} />
                   <Route path="bloqueios" element={<Bloqueios />} />
+                  <Route path="tratamentos" element={<Tratamentos />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
