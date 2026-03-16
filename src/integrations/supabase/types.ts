@@ -599,6 +599,47 @@ export type Database = {
         }
         Relationships: []
       }
+      patient_discharges: {
+        Row: {
+          created_at: string
+          cycle_id: string
+          discharge_date: string
+          final_notes: string
+          id: string
+          patient_id: string
+          professional_id: string
+          reason: string
+        }
+        Insert: {
+          created_at?: string
+          cycle_id: string
+          discharge_date?: string
+          final_notes?: string
+          id?: string
+          patient_id: string
+          professional_id: string
+          reason?: string
+        }
+        Update: {
+          created_at?: string
+          cycle_id?: string
+          discharge_date?: string
+          final_notes?: string
+          id?: string
+          patient_id?: string
+          professional_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_discharges_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       procedimentos: {
         Row: {
           ativo: boolean
@@ -816,6 +857,163 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      treatment_cycles: {
+        Row: {
+          clinical_notes: string
+          created_at: string
+          created_by: string
+          end_date_predicted: string | null
+          frequency: string
+          id: string
+          patient_id: string
+          professional_id: string
+          sessions_done: number
+          specialty: string
+          start_date: string
+          status: string
+          total_sessions: number
+          treatment_type: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          clinical_notes?: string
+          created_at?: string
+          created_by?: string
+          end_date_predicted?: string | null
+          frequency?: string
+          id?: string
+          patient_id: string
+          professional_id: string
+          sessions_done?: number
+          specialty?: string
+          start_date?: string
+          status?: string
+          total_sessions?: number
+          treatment_type?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Update: {
+          clinical_notes?: string
+          created_at?: string
+          created_by?: string
+          end_date_predicted?: string | null
+          frequency?: string
+          id?: string
+          patient_id?: string
+          professional_id?: string
+          sessions_done?: number
+          specialty?: string
+          start_date?: string
+          status?: string
+          total_sessions?: number
+          treatment_type?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      treatment_extensions: {
+        Row: {
+          changed_at: string
+          changed_by: string
+          cycle_id: string
+          id: string
+          new_end_date: string | null
+          new_sessions: number
+          previous_end_date: string | null
+          previous_sessions: number
+          reason: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string
+          cycle_id: string
+          id?: string
+          new_end_date?: string | null
+          new_sessions: number
+          previous_end_date?: string | null
+          previous_sessions: number
+          reason?: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string
+          cycle_id?: string
+          id?: string
+          new_end_date?: string | null
+          new_sessions?: number
+          previous_end_date?: string | null
+          previous_sessions?: number
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_extensions_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treatment_sessions: {
+        Row: {
+          absence_type: string | null
+          appointment_id: string | null
+          clinical_notes: string
+          created_at: string
+          cycle_id: string
+          id: string
+          patient_id: string
+          procedure_done: string
+          professional_id: string
+          scheduled_date: string
+          session_number: number
+          status: string
+          total_sessions: number
+        }
+        Insert: {
+          absence_type?: string | null
+          appointment_id?: string | null
+          clinical_notes?: string
+          created_at?: string
+          cycle_id: string
+          id?: string
+          patient_id: string
+          procedure_done?: string
+          professional_id: string
+          scheduled_date?: string
+          session_number?: number
+          status?: string
+          total_sessions?: number
+        }
+        Update: {
+          absence_type?: string | null
+          appointment_id?: string | null
+          clinical_notes?: string
+          created_at?: string
+          cycle_id?: string
+          id?: string
+          patient_id?: string
+          procedure_done?: string
+          professional_id?: string
+          scheduled_date?: string
+          session_number?: number
+          status?: string
+          total_sessions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_sessions_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       triage_records: {
         Row: {
