@@ -1,22 +1,35 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useData } from '@/contexts/DataContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Progress } from '@/components/ui/progress';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, ArrowLeft, Play, CheckCircle, Clock, AlertTriangle, FileText, RotateCcw, ChevronRight, Loader2, ListOrdered, X } from 'lucide-react';
-import { toast } from 'sonner';
-import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
-import { cn } from '@/lib/utils';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Plus,
+  ArrowLeft,
+  Play,
+  CheckCircle,
+  Clock,
+  AlertTriangle,
+  FileText,
+  RotateCcw,
+  ChevronRight,
+  Loader2,
+  ListOrdered,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
+import { cn } from "@/lib/utils";
 
 interface TreatmentCycle {
   id: string;
@@ -66,24 +79,24 @@ interface TreatmentExtension {
 }
 
 const statusColors: Record<string, string> = {
-  em_andamento: 'bg-success/15 text-success border-success/30',
-  aguardando_vaga: 'bg-warning/15 text-warning border-warning/30',
-  em_fila: 'bg-info/15 text-info border-info/30',
-  finalizado_alta: 'bg-muted text-muted-foreground border-border',
-  suspenso: 'bg-destructive/15 text-destructive border-destructive/30',
-  em_reavaliacao: 'bg-purple-500/15 text-purple-600 border-purple-500/30',
+  em_andamento: "bg-success/15 text-success border-success/30",
+  aguardando_vaga: "bg-warning/15 text-warning border-warning/30",
+  em_fila: "bg-info/15 text-info border-info/30",
+  finalizado_alta: "bg-muted text-muted-foreground border-border",
+  suspenso: "bg-destructive/15 text-destructive border-destructive/30",
+  em_reavaliacao: "bg-purple-500/15 text-purple-600 border-purple-500/30",
 };
 
 const statusLabels: Record<string, string> = {
-  em_andamento: 'Em Andamento',
-  aguardando_vaga: 'Aguardando Vaga',
-  em_fila: 'Em Fila',
-  finalizado_alta: 'Finalizado (Alta)',
-  suspenso: 'Suspenso',
-  em_reavaliacao: 'Em Reavaliação',
+  em_andamento: "Em Andamento",
+  aguardando_vaga: "Aguardando Vaga",
+  em_fila: "Em Fila",
+  finalizado_alta: "Finalizado (Alta)",
+  suspenso: "Suspenso",
+  em_reavaliacao: "Em Reavaliação",
 };
 
-const frequencyOptions = ['semanal', 'quinzenal', 'mensal', 'bisemanal', 'diário'];
+const frequencyOptions = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
 
 const Tratamentos: React.FC = () => {
   const { pacientes, funcionarios, unidades, fila, addToFila, logAction } = useData();
@@ -98,9 +111,9 @@ const Tratamentos: React.FC = () => {
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
 
   // Filters
-  const [filterProf, setFilterProf] = useState('all');
-  const [filterUnit, setFilterUnit] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterProf, setFilterProf] = useState("all");
+  const [filterUnit, setFilterUnit] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   // Dialogs
   const [createOpen, setCreateOpen] = useState(false);
@@ -110,100 +123,111 @@ const Tratamentos: React.FC = () => {
 
   // Forms
   const [newCycle, setNewCycle] = useState({
-    patient_id: '', professional_id: '', unit_id: '', specialty: '',
-    treatment_type: '', total_sessions: 6, frequency: 'semanal',
-    start_date: new Date().toISOString().split('T')[0], clinical_notes: '',
+    patient_id: "",
+    professional_id: "",
+    unit_id: "",
+    specialty: "",
+    treatment_type: "",
+    total_sessions: 6,
+    frequency: "semanal",
+    start_date: new Date().toISOString().split("T")[0],
+    clinical_notes: "",
   });
-  const [newSession, setNewSession] = useState({ clinical_notes: '', procedure_done: '', status: 'realizada' });
-  const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: '' });
-  const [dischargeForm, setDischargeForm] = useState({ reason: '', final_notes: '' });
+  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", status: "realizada" });
+  const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
+  const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
-  const canManageFull = hasPermission(['master', 'coordenador']);
-  const isProfissional = user?.role === 'profissional';
+  const canManageFull = hasPermission(["master", "coordenador"]);
+  const isProfissional = user?.role === "profissional";
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      let qCycles = (supabase as any).from('treatment_cycles').select('*').order('created_at', { ascending: false });
-      if (user?.role === 'profissional') qCycles = qCycles.eq('professional_id', user.id);
-      if (user?.role === 'coordenador' && user.unidadeId) qCycles = qCycles.eq('unit_id', user.unidadeId);
+      let qCycles = (supabase as any).from("treatment_cycles").select("*").order("created_at", { ascending: false });
+      if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
+      if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
       const [{ data: cData }, { data: sData }, { data: eData }] = await Promise.all([
         qCycles,
-        (supabase as any).from('treatment_sessions').select('*').order('session_number', { ascending: true }),
-        (supabase as any).from('treatment_extensions').select('*').order('changed_at', { ascending: false }),
+        (supabase as any).from("treatment_sessions").select("*").order("session_number", { ascending: true }),
+        (supabase as any).from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
       ]);
       if (cData) setCycles(cData);
       if (sData) setSessions(sData);
       if (eData) setExtensions(eData);
     } catch (err) {
-      console.error('Error loading treatments:', err);
+      console.error("Error loading treatments:", err);
     }
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const filteredCycles = useMemo(() => {
-    return cycles.filter(c => {
-      if (filterProf !== 'all' && c.professional_id !== filterProf) return false;
-      if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
-      if (filterStatus !== 'all' && c.status !== filterStatus) return false;
+    return cycles.filter((c) => {
+      if (filterProf !== "all" && c.professional_id !== filterProf) return false;
+      if (filterUnit !== "all" && c.unit_id !== filterUnit) return false;
+      if (filterStatus !== "all" && c.status !== filterStatus) return false;
       return true;
     });
   }, [cycles, filterProf, filterUnit, filterStatus]);
 
   const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
-    const d = new Date(startDate + 'T12:00:00');
-    const weeksMap: Record<string, number> = { diário: 1/7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
+    const d = new Date(startDate + "T12:00:00");
+    const weeksMap: Record<string, number> = { diário: 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
     const weeks = (weeksMap[frequency] || 1) * totalSessions;
     d.setDate(d.getDate() + Math.ceil(weeks * 7));
-    return d.toISOString().split('T')[0];
+    return d.toISOString().split("T")[0];
   };
 
   const handleCreateCycle = async () => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
-      toast.error('Preencha paciente, profissional e tipo de tratamento.');
+      toast.error("Preencha paciente, profissional e tipo de tratamento.");
       return;
     }
-    const prof = profissionais.find(p => p.id === newCycle.professional_id);
-    const pac = pacientes.find(p => p.id === newCycle.patient_id);
+    const prof = profissionais.find((p) => p.id === newCycle.professional_id);
+    const pac = pacientes.find((p) => p.id === newCycle.patient_id);
 
-    // Block if patient has active cycle of same type
-    const existingActive = cycles.find(c =>
-      c.patient_id === newCycle.patient_id &&
-      c.status === 'em_andamento' &&
-      c.treatment_type === newCycle.treatment_type
+    const existingActive = cycles.find(
+      (c) =>
+        c.patient_id === newCycle.patient_id &&
+        c.status === "em_andamento" &&
+        c.treatment_type === newCycle.treatment_type,
     );
     if (existingActive) {
-      toast.error('Paciente já possui tratamento ativo deste tipo.');
+      toast.error("Paciente já possui tratamento ativo deste tipo.");
       return;
     }
 
     const endDate = calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency);
 
     try {
-      const { data: cycleData, error } = await (supabase as any).from('treatment_cycles').insert({
-        patient_id: newCycle.patient_id,
-        professional_id: newCycle.professional_id,
-        unit_id: newCycle.unit_id || prof?.unidadeId || '',
-        specialty: newCycle.specialty || prof?.profissao || '',
-        treatment_type: newCycle.treatment_type,
-        start_date: newCycle.start_date,
-        end_date_predicted: endDate,
-        total_sessions: newCycle.total_sessions,
-        sessions_done: 0,
-        frequency: newCycle.frequency,
-        status: 'em_andamento',
-        clinical_notes: newCycle.clinical_notes,
-        created_by: user?.id || '',
-      }).select().single();
+      const { data: cycleData, error } = await (supabase as any)
+        .from("treatment_cycles")
+        .insert({
+          patient_id: newCycle.patient_id,
+          professional_id: newCycle.professional_id,
+          unit_id: newCycle.unit_id || prof?.unidadeId || "",
+          specialty: newCycle.specialty || prof?.profissao || "",
+          treatment_type: newCycle.treatment_type,
+          start_date: newCycle.start_date,
+          end_date_predicted: endDate,
+          total_sessions: newCycle.total_sessions,
+          sessions_done: 0,
+          frequency: newCycle.frequency,
+          status: "em_andamento",
+          clinical_notes: newCycle.clinical_notes,
+          created_by: user?.id || "",
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      // Create session records
       const sessionsToCreate = [];
-      const startD = new Date(newCycle.start_date + 'T12:00:00');
+      const startD = new Date(newCycle.start_date + "T12:00:00");
       const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
       const delta = weeksDelta[newCycle.frequency] || 7;
 
@@ -216,93 +240,107 @@ const Tratamentos: React.FC = () => {
           professional_id: newCycle.professional_id,
           session_number: i + 1,
           total_sessions: newCycle.total_sessions,
-          scheduled_date: sessionDate.toISOString().split('T')[0],
-          status: 'agendada',
+          scheduled_date: sessionDate.toISOString().split("T")[0],
+          status: "agendada",
         });
       }
 
-      await (supabase as any).from('treatment_sessions').insert(sessionsToCreate);
+      await (supabase as any).from("treatment_sessions").insert(sessionsToCreate);
 
       await logAction({
-        acao: 'criar', entidade: 'treatment_cycle', entidadeId: cycleData.id,
-        modulo: 'tratamentos', user,
-        detalhes: { paciente: pac?.nome, profissional: prof?.nome, tipo: newCycle.treatment_type, sessoes: newCycle.total_sessions },
+        acao: "criar",
+        entidade: "treatment_cycle",
+        entidadeId: cycleData.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          paciente: pac?.nome,
+          profissional: prof?.nome,
+          tipo: newCycle.treatment_type,
+          sessoes: newCycle.total_sessions,
+        },
       });
 
-      toast.success('Ciclo de tratamento criado com sucesso!');
+      toast.success("Ciclo de tratamento criado com sucesso!");
       setCreateOpen(false);
       loadData();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao criar ciclo de tratamento.');
+      toast.error("Erro ao criar ciclo de tratamento.");
     }
   };
 
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
     const nextSession = sessions
-      .filter(s => s.cycle_id === selectedCycle.id && s.status === 'agendada')
+      .filter((s) => s.cycle_id === selectedCycle.id && s.status === "agendada")
       .sort((a, b) => a.session_number - b.session_number)[0];
 
     if (!nextSession) {
-      toast.error('Não há sessões pendentes neste ciclo.');
+      toast.error("Não há sessões pendentes neste ciclo.");
       return;
     }
 
     try {
-      await (supabase as any).from('treatment_sessions').update({
-        status: newSession.status,
-        clinical_notes: newSession.clinical_notes,
-        procedure_done: newSession.procedure_done,
-      }).eq('id', nextSession.id);
+      await (supabase as any)
+        .from("treatment_sessions")
+        .update({
+          status: newSession.status,
+          clinical_notes: newSession.clinical_notes,
+          procedure_done: newSession.procedure_done,
+        })
+        .eq("id", nextSession.id);
 
-      const newDone = newSession.status === 'realizada'
-        ? selectedCycle.sessions_done + 1
-        : selectedCycle.sessions_done;
+      const newDone = newSession.status === "realizada" ? selectedCycle.sessions_done + 1 : selectedCycle.sessions_done;
       const isComplete = newDone >= selectedCycle.total_sessions;
 
-      await (supabase as any).from('treatment_cycles').update({
-        sessions_done: newDone,
-        ...(isComplete ? { status: 'finalizado_alta' } : {}),
-      }).eq('id', selectedCycle.id);
+      await (supabase as any)
+        .from("treatment_cycles")
+        .update({
+          sessions_done: newDone,
+          ...(isComplete ? { status: "finalizado_alta" } : {}),
+        })
+        .eq("id", selectedCycle.id);
 
       await logAction({
-        acao: 'registrar_sessao', entidade: 'treatment_session', entidadeId: nextSession.id,
-        modulo: 'tratamentos', user,
+        acao: "registrar_sessao",
+        entidade: "treatment_session",
+        entidadeId: nextSession.id,
+        modulo: "tratamentos",
+        user,
         detalhes: { ciclo: selectedCycle.id, sessao: nextSession.session_number, status: newSession.status },
       });
 
       toast.success(`Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`);
       setSessionOpen(false);
-      setNewSession({ clinical_notes: '', procedure_done: '', status: 'realizada' });
+      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
       loadData();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao registrar sessão.');
+      toast.error("Erro ao registrar sessão.");
     }
   };
 
   const handleExtension = async () => {
     if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
-      toast.error('Informe a quantidade de sessões e o motivo.');
+      toast.error("Informe a quantidade de sessões e o motivo.");
       return;
     }
     try {
       const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
       const newEndDate = calcEndDate(selectedCycle.start_date, newTotal, selectedCycle.frequency);
 
-      await (supabase as any).from('treatment_extensions').insert({
+      await (supabase as any).from("treatment_extensions").insert({
         cycle_id: selectedCycle.id,
         previous_sessions: selectedCycle.total_sessions,
         new_sessions: newTotal,
         previous_end_date: selectedCycle.end_date_predicted,
         new_end_date: newEndDate,
         reason: extensionForm.reason,
-        changed_by: user?.id || '',
+        changed_by: user?.id || "",
       });
 
-      // Create new session records
-      const startD = new Date(selectedCycle.start_date + 'T12:00:00');
+      const startD = new Date(selectedCycle.start_date + "T12:00:00");
       const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
       const delta = weeksDelta[selectedCycle.frequency] || 7;
       const newSessions = [];
@@ -315,128 +353,148 @@ const Tratamentos: React.FC = () => {
           professional_id: selectedCycle.professional_id,
           session_number: i + 1,
           total_sessions: newTotal,
-          scheduled_date: sessionDate.toISOString().split('T')[0],
-          status: 'agendada',
+          scheduled_date: sessionDate.toISOString().split("T")[0],
+          status: "agendada",
         });
       }
-      await (supabase as any).from('treatment_sessions').insert(newSessions);
+      await (supabase as any).from("treatment_sessions").insert(newSessions);
 
-      await (supabase as any).from('treatment_cycles').update({
-        total_sessions: newTotal,
-        end_date_predicted: newEndDate,
-        status: 'em_andamento',
-      }).eq('id', selectedCycle.id);
+      await (supabase as any)
+        .from("treatment_cycles")
+        .update({
+          total_sessions: newTotal,
+          end_date_predicted: newEndDate,
+          status: "em_andamento",
+        })
+        .eq("id", selectedCycle.id);
 
       await logAction({
-        acao: 'extensao_tratamento', entidade: 'treatment_cycle', entidadeId: selectedCycle.id,
-        modulo: 'tratamentos', user,
+        acao: "extensao_tratamento",
+        entidade: "treatment_cycle",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
         detalhes: { anterior: selectedCycle.total_sessions, novo: newTotal, motivo: extensionForm.reason },
       });
 
-      toast.success('Extensão registrada com sucesso!');
+      toast.success("Extensão registrada com sucesso!");
       setExtensionOpen(false);
-      setExtensionForm({ new_sessions: 0, reason: '' });
+      setExtensionForm({ new_sessions: 0, reason: "" });
       loadData();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao registrar extensão.');
+      toast.error("Erro ao registrar extensão.");
     }
   };
 
   const handleDischarge = async () => {
     if (!selectedCycle || !dischargeForm.reason) {
-      toast.error('Informe o motivo da alta.');
+      toast.error("Informe o motivo da alta.");
       return;
     }
     try {
-      await (supabase as any).from('patient_discharges').insert({
+      await (supabase as any).from("patient_discharges").insert({
         cycle_id: selectedCycle.id,
         patient_id: selectedCycle.patient_id,
-        professional_id: user?.id || '',
-        discharge_date: new Date().toISOString().split('T')[0],
+        professional_id: user?.id || "",
+        discharge_date: new Date().toISOString().split("T")[0],
         reason: dischargeForm.reason,
         final_notes: dischargeForm.final_notes,
       });
 
-      await (supabase as any).from('treatment_cycles').update({
-        status: 'finalizado_alta',
-      }).eq('id', selectedCycle.id);
+      await (supabase as any)
+        .from("treatment_cycles")
+        .update({
+          status: "finalizado_alta",
+        })
+        .eq("id", selectedCycle.id);
 
       await logAction({
-        acao: 'alta_paciente', entidade: 'treatment_cycle', entidadeId: selectedCycle.id,
-        modulo: 'tratamentos', user,
+        acao: "alta_paciente",
+        entidade: "treatment_cycle",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
         detalhes: { paciente: selectedCycle.patient_id, motivo: dischargeForm.reason },
       });
 
-      toast.success('Alta registrada com sucesso!');
+      toast.success("Alta registrada com sucesso!");
       setDischargeOpen(false);
-      setDischargeForm({ reason: '', final_notes: '' });
+      setDischargeForm({ reason: "", final_notes: "" });
       loadData();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao registrar alta.');
+      toast.error("Erro ao registrar alta.");
     }
   };
 
   const handleSendToQueue = async (cycle: TreatmentCycle) => {
-    const alreadyInQueue = fila.find(f => f.pacienteId === cycle.patient_id && ['aguardando', 'chamado'].includes(f.status));
+    const alreadyInQueue = fila.find(
+      (f) => f.pacienteId === cycle.patient_id && ["aguardando", "chamado"].includes(f.status),
+    );
     if (alreadyInQueue) {
-      toast.error('Paciente já está na fila de espera.');
+      toast.error("Paciente já está na fila de espera.");
       return;
     }
-    const activeCycle = cycles.find(c => c.patient_id === cycle.patient_id && c.status === 'em_andamento');
+    const activeCycle = cycles.find((c) => c.patient_id === cycle.patient_id && c.status === "em_andamento");
     if (activeCycle) {
-      toast.error('Paciente já possui tratamento em andamento e não pode entrar na fila.');
+      toast.error("Paciente já possui tratamento em andamento e não pode entrar na fila.");
       return;
     }
-    const pac = pacientes.find(p => p.id === cycle.patient_id);
+    const pac = pacientes.find((p) => p.id === cycle.patient_id);
     const newId = `f${Date.now()}`;
     await addToFila({
       id: newId,
       pacienteId: cycle.patient_id,
-      pacienteNome: pac?.nome || '',
+      pacienteNome: pac?.nome || "",
       unidadeId: cycle.unit_id,
       profissionalId: cycle.professional_id,
       setor: cycle.specialty,
-      prioridade: 'normal',
-      status: 'aguardando',
+      prioridade: "normal",
+      status: "aguardando",
       posicao: fila.length + 1,
-      horaChegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      criadoPor: user?.id || 'sistema',
+      horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      criadoPor: user?.id || "sistema",
       observacoes: `Reencaminhado após alta do tratamento: ${cycle.treatment_type}`,
     });
     await logAction({
-      acao: 'reencaminhar_fila', entidade: 'fila_espera', entidadeId: newId,
-      modulo: 'tratamentos', user,
+      acao: "reencaminhar_fila",
+      entidade: "fila_espera",
+      entidadeId: newId,
+      modulo: "tratamentos",
+      user,
       detalhes: { ciclo: cycle.id, paciente: pac?.nome },
     });
-    toast.success('Paciente encaminhado para a fila de espera!');
+    toast.success("Paciente encaminhado para a fila de espera!");
   };
 
   // Detail view
   const cycleSessions = useMemo(() => {
     if (!selectedCycle) return [];
-    return sessions.filter(s => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
+    return sessions.filter((s) => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
   }, [selectedCycle, sessions]);
 
   const cycleExtensions = useMemo(() => {
     if (!selectedCycle) return [];
-    return extensions.filter(e => e.cycle_id === selectedCycle.id);
+    return extensions.filter((e) => e.cycle_id === selectedCycle.id);
   }, [selectedCycle, extensions]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
+  if (loading)
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
 
   // Detail view
   if (selectedCycle) {
-    const pac = pacientes.find(p => p.id === selectedCycle.patient_id);
-    const prof = funcionarios.find(f => f.id === selectedCycle.professional_id);
-    const unidade = unidades.find(u => u.id === selectedCycle.unit_id);
-    const progressPct = selectedCycle.total_sessions > 0
-      ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100) : 0;
+    const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
+    const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
+    const unidade = unidades.find((u) => u.id === selectedCycle.unit_id);
+    const progressPct =
+      selectedCycle.total_sessions > 0
+        ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
+        : 0;
 
     return (
       <div className="space-y-4 animate-fade-in">
@@ -455,43 +513,94 @@ const Tratamentos: React.FC = () => {
                 <h2 className="text-lg font-bold text-foreground">{selectedCycle.treatment_type}</h2>
                 <p className="text-sm text-muted-foreground">{selectedCycle.specialty}</p>
               </div>
-              <Badge className={cn('border', statusColors[selectedCycle.status])}>{statusLabels[selectedCycle.status]}</Badge>
+              <Badge className={cn("border", statusColors[selectedCycle.status])}>
+                {statusLabels[selectedCycle.status]}
+              </Badge>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div><span className="text-muted-foreground text-xs">Paciente</span><p className="font-medium">{pac?.nome || '—'}</p></div>
-              <div><span className="text-muted-foreground text-xs">Profissional</span><p className="font-medium">{prof?.nome || '—'}</p></div>
-              <div><span className="text-muted-foreground text-xs">Unidade</span><p className="font-medium">{unidade?.nome || '—'}</p></div>
-              <div><span className="text-muted-foreground text-xs">Frequência</span><p className="font-medium capitalize">{selectedCycle.frequency}</p></div>
-              <div><span className="text-muted-foreground text-xs">Início</span><p className="font-medium">{new Date(selectedCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</p></div>
-              <div><span className="text-muted-foreground text-xs">Previsão Término</span><p className="font-medium">{selectedCycle.end_date_predicted ? new Date(selectedCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</p></div>
+              <div>
+                <span className="text-muted-foreground text-xs">Paciente</span>
+                <p className="font-medium">{pac?.nome || "—"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-xs">Profissional</span>
+                <p className="font-medium">{prof?.nome || "—"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-xs">Unidade</span>
+                <p className="font-medium">{unidade?.nome || "—"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-xs">Frequência</span>
+                <p className="font-medium capitalize">{selectedCycle.frequency}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-xs">Início</span>
+                <p className="font-medium">
+                  {new Date(selectedCycle.start_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                </p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-xs">Previsão Término</span>
+                <p className="font-medium">
+                  {selectedCycle.end_date_predicted
+                    ? new Date(selectedCycle.end_date_predicted + "T12:00:00").toLocaleDateString("pt-BR")
+                    : "—"}
+                </p>
+              </div>
             </div>
-            {selectedCycle.clinical_notes && <p className="text-sm text-muted-foreground border-t pt-2">{selectedCycle.clinical_notes}</p>}
+            {selectedCycle.clinical_notes && (
+              <p className="text-sm text-muted-foreground border-t pt-2">{selectedCycle.clinical_notes}</p>
+            )}
 
             {/* Progress bar */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progresso</span>
-                <span>{selectedCycle.sessions_done}/{selectedCycle.total_sessions} sessões ({progressPct}%)</span>
+                <span>
+                  {selectedCycle.sessions_done}/{selectedCycle.total_sessions} sessões ({progressPct}%)
+                </span>
               </div>
               <Progress value={progressPct} className="h-3" />
             </div>
 
             {/* Action buttons */}
             <div className="flex gap-2 flex-wrap pt-2">
-              {selectedCycle.status === 'em_andamento' && (isProfissional || canManageFull) && (
+              {selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) && (
                 <>
-                  <Button size="sm" onClick={() => { setNewSession({ clinical_notes: '', procedure_done: '', status: 'realizada' }); setSessionOpen(true); }}>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+                      setSessionOpen(true);
+                    }}
+                  >
                     <Play className="w-3.5 h-3.5 mr-1" /> Registrar Sessão
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => { setExtensionForm({ new_sessions: 0, reason: '' }); setExtensionOpen(true); }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setExtensionForm({ new_sessions: 0, reason: "" });
+                      setExtensionOpen(true);
+                    }}
+                  >
                     <RotateCcw className="w-3.5 h-3.5 mr-1" /> Solicitar Extensão
                   </Button>
-                  <Button size="sm" variant="outline" className="border-destructive text-destructive" onClick={() => { setDischargeForm({ reason: '', final_notes: '' }); setDischargeOpen(true); }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-destructive text-destructive"
+                    onClick={() => {
+                      setDischargeForm({ reason: "", final_notes: "" });
+                      setDischargeOpen(true);
+                    }}
+                  >
                     <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
                   </Button>
                 </>
               )}
-              {selectedCycle.status === 'finalizado_alta' && canManageFull && (
+              {selectedCycle.status === "finalizado_alta" && canManageFull && (
                 <Button size="sm" variant="outline" onClick={() => handleSendToQueue(selectedCycle)}>
                   <ListOrdered className="w-3.5 h-3.5 mr-1" /> Encaminhar para Fila
                 </Button>
@@ -506,27 +615,38 @@ const Tratamentos: React.FC = () => {
             <h3 className="font-semibold text-foreground mb-3">Sessões</h3>
             <ScrollArea className="max-h-[400px]">
               <div className="space-y-2">
-                {cycleSessions.map(s => {
+                {cycleSessions.map((s) => {
                   const sessionStatusColor: Record<string, string> = {
-                    agendada: 'bg-info/10 text-info',
-                    realizada: 'bg-success/10 text-success',
-                    paciente_faltou: 'bg-destructive/10 text-destructive',
-                    cancelada: 'bg-muted text-muted-foreground',
-                    remarcada: 'bg-warning/10 text-warning',
+                    agendada: "bg-info/10 text-info",
+                    realizada: "bg-success/10 text-success",
+                    paciente_faltou: "bg-destructive/10 text-destructive",
+                    cancelada: "bg-muted text-muted-foreground",
+                    remarcada: "bg-warning/10 text-warning",
                   };
                   const sessionStatusLabel: Record<string, string> = {
-                    agendada: 'Agendada', realizada: 'Realizada', paciente_faltou: 'Faltou',
-                    cancelada: 'Cancelada', remarcada: 'Remarcada',
+                    agendada: "Agendada",
+                    realizada: "Realizada",
+                    paciente_faltou: "Faltou",
+                    cancelada: "Cancelada",
+                    remarcada: "Remarcada",
                   };
                   return (
                     <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                      <span className="text-sm font-mono font-bold text-primary w-10 text-center">{s.session_number}/{s.total_sessions}</span>
+                      <span className="text-sm font-mono font-bold text-primary w-10 text-center">
+                        {s.session_number}/{s.total_sessions}
+                      </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                        <p className="text-sm text-foreground">
+                          {new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                        </p>
                         {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
-                        {s.clinical_notes && <p className="text-xs text-muted-foreground line-clamp-1">{s.clinical_notes}</p>}
+                        {s.clinical_notes && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">{s.clinical_notes}</p>
+                        )}
                       </div>
-                      <Badge className={cn('text-xs', sessionStatusColor[s.status])}>{sessionStatusLabel[s.status] || s.status}</Badge>
+                      <Badge className={cn("text-xs", sessionStatusColor[s.status])}>
+                        {sessionStatusLabel[s.status] || s.status}
+                      </Badge>
                     </div>
                   );
                 })}
@@ -541,13 +661,17 @@ const Tratamentos: React.FC = () => {
             <CardContent className="p-5">
               <h3 className="font-semibold text-foreground mb-3">Histórico de Extensões</h3>
               <div className="space-y-2">
-                {cycleExtensions.map(e => {
-                  const changedByName = funcionarios.find(f => f.id === e.changed_by)?.nome || '';
+                {cycleExtensions.map((e) => {
+                  const changedByName = funcionarios.find((f) => f.id === e.changed_by)?.nome || "";
                   return (
                     <div key={e.id} className="p-3 rounded-lg bg-muted/30 text-sm">
-                      <p className="font-medium">{e.previous_sessions} → {e.new_sessions} sessões</p>
+                      <p className="font-medium">
+                        {e.previous_sessions} → {e.new_sessions} sessões
+                      </p>
                       <p className="text-xs text-muted-foreground">Motivo: {e.reason}</p>
-                      <p className="text-xs text-muted-foreground">{changedByName} • {new Date(e.changed_at).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {changedByName} • {new Date(e.changed_at).toLocaleDateString("pt-BR")}
+                      </p>
                     </div>
                   );
                 })}
@@ -559,11 +683,16 @@ const Tratamentos: React.FC = () => {
         {/* Register Session Dialog */}
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
           <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle>Registrar Sessão</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Registrar Sessão</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
-              <div><Label>Status</Label>
-                <Select value={newSession.status} onValueChange={v => setNewSession(p => ({ ...p, status: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+              <div>
+                <Label>Status</Label>
+                <Select value={newSession.status} onValueChange={(v) => setNewSession((p) => ({ ...p, status: v }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="realizada">Realizada</SelectItem>
                     <SelectItem value="paciente_faltou">Paciente Faltou</SelectItem>
@@ -572,9 +701,24 @@ const Tratamentos: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Procedimento Realizado</Label><Input value={newSession.procedure_done} onChange={e => setNewSession(p => ({ ...p, procedure_done: e.target.value }))} /></div>
-              <div><Label>Observações Clínicas</Label><Textarea value={newSession.clinical_notes} onChange={e => setNewSession(p => ({ ...p, clinical_notes: e.target.value }))} rows={3} /></div>
-              <Button onClick={handleRegisterSession} className="w-full gradient-primary text-primary-foreground">Registrar</Button>
+              <div>
+                <Label>Procedimento Realizado</Label>
+                <Input
+                  value={newSession.procedure_done}
+                  onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Observações Clínicas</Label>
+                <Textarea
+                  value={newSession.clinical_notes}
+                  onChange={(e) => setNewSession((p) => ({ ...p, clinical_notes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <Button onClick={handleRegisterSession} className="w-full gradient-primary text-primary-foreground">
+                Registrar
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -582,12 +726,37 @@ const Tratamentos: React.FC = () => {
         {/* Extension Dialog */}
         <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
           <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle>Solicitar Extensão</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Solicitar Extensão</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">Sessões atuais: <strong>{selectedCycle.total_sessions}</strong></p>
-              <div><Label>Sessões adicionais</Label><Input type="number" min={1} value={extensionForm.new_sessions || ''} onChange={e => setExtensionForm(p => ({ ...p, new_sessions: parseInt(e.target.value) || 0 }))} /></div>
-              <div><Label>Motivo da extensão *</Label><Textarea value={extensionForm.reason} onChange={e => setExtensionForm(p => ({ ...p, reason: e.target.value }))} rows={3} /></div>
-              <Button onClick={handleExtension} className="w-full gradient-primary text-primary-foreground" disabled={!extensionForm.reason || extensionForm.new_sessions <= 0}>Confirmar Extensão</Button>
+              <p className="text-sm text-muted-foreground">
+                Sessões atuais: <strong>{selectedCycle.total_sessions}</strong>
+              </p>
+              <div>
+                <Label>Sessões adicionais</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={extensionForm.new_sessions || ""}
+                  onChange={(e) => setExtensionForm((p) => ({ ...p, new_sessions: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <Label>Motivo da extensão *</Label>
+                <Textarea
+                  value={extensionForm.reason}
+                  onChange={(e) => setExtensionForm((p) => ({ ...p, reason: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <Button
+                onClick={handleExtension}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!extensionForm.reason || extensionForm.new_sessions <= 0}
+              >
+                Confirmar Extensão
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -595,12 +764,36 @@ const Tratamentos: React.FC = () => {
         {/* Discharge Dialog */}
         <Dialog open={dischargeOpen} onOpenChange={setDischargeOpen}>
           <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle>Dar Alta</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Dar Alta</DialogTitle>
+            </DialogHeader>
             <div className="space-y-4">
-              <div><Label>Motivo da alta *</Label><Input value={dischargeForm.reason} onChange={e => setDischargeForm(p => ({ ...p, reason: e.target.value }))} /></div>
-              <div><Label>Observações finais</Label><Textarea value={dischargeForm.final_notes} onChange={e => setDischargeForm(p => ({ ...p, final_notes: e.target.value }))} rows={3} /></div>
-              <Button onClick={handleDischarge} className="w-full" variant="destructive" disabled={!dischargeForm.reason}>Confirmar Alta</Button>
-              <p className="text-xs text-muted-foreground text-center">Após a alta, você poderá encaminhar o paciente para a fila de espera.</p>
+              <div>
+                <Label>Motivo da alta *</Label>
+                <Input
+                  value={dischargeForm.reason}
+                  onChange={(e) => setDischargeForm((p) => ({ ...p, reason: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Observações finais</Label>
+                <Textarea
+                  value={dischargeForm.final_notes}
+                  onChange={(e) => setDischargeForm((p) => ({ ...p, final_notes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <Button
+                onClick={handleDischarge}
+                className="w-full"
+                variant="destructive"
+                disabled={!dischargeForm.reason}
+              >
+                Confirmar Alta
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Após a alta, você poderá encaminhar o paciente para a fila de espera.
+              </p>
             </div>
           </DialogContent>
         </Dialog>
@@ -617,15 +810,23 @@ const Tratamentos: React.FC = () => {
           <p className="text-muted-foreground text-sm">{filteredCycles.length} ciclo(s) de tratamento</p>
         </div>
         {(isProfissional || canManageFull) && (
-          <Button onClick={() => {
-            setNewCycle({
-              patient_id: '', professional_id: isProfissional ? (user?.id || '') : '',
-              unit_id: user?.unidadeId || '', specialty: user?.profissao || '',
-              treatment_type: '', total_sessions: 6, frequency: 'semanal',
-              start_date: new Date().toISOString().split('T')[0], clinical_notes: '',
-            });
-            setCreateOpen(true);
-          }} className="gradient-primary text-primary-foreground">
+          <Button
+            onClick={() => {
+              setNewCycle({
+                patient_id: "",
+                professional_id: isProfissional ? user?.id || "" : "",
+                unit_id: user?.unidadeId || "",
+                specialty: user?.profissao || "",
+                treatment_type: "",
+                total_sessions: 6,
+                frequency: "semanal",
+                start_date: new Date().toISOString().split("T")[0],
+                clinical_notes: "",
+              });
+              setCreateOpen(true);
+            }}
+            className="gradient-primary text-primary-foreground"
+          >
             <Plus className="w-4 h-4 mr-2" /> Novo Ciclo
           </Button>
         )}
@@ -634,18 +835,42 @@ const Tratamentos: React.FC = () => {
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <Select value={filterProf} onValueChange={setFilterProf}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Profissional" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterUnit} onValueChange={setFilterUnit}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Unidade" /></SelectTrigger>
-          <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Profissional" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            {profissionais.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterUnit} onValueChange={setFilterUnit}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Unidade" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas</SelectItem>
+            {unidadesVisiveis.map((u) => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {Object.entries(statusLabels).map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -664,31 +889,72 @@ const Tratamentos: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filteredCycles.map(cycle => {
-            const pac = pacientes.find(p => p.id === cycle.patient_id);
-            const prof = funcionarios.find(f => f.id === cycle.professional_id);
-            const progressPct = cycle.total_sessions > 0 ? Math.round((cycle.sessions_done / cycle.total_sessions) * 100) : 0;
+          {filteredCycles.map((cycle) => {
+            const pac = pacientes.find((p) => p.id === cycle.patient_id);
+            const prof = funcionarios.find((f) => f.id === cycle.professional_id);
+            const progressPct =
+              cycle.total_sessions > 0 ? Math.round((cycle.sessions_done / cycle.total_sessions) * 100) : 0;
             return (
-              <Card key={cycle.id} className="shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
-                onClick={() => setSelectedCycle(cycle)}>
+              <Card
+                key={cycle.id}
+                className="shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+                onClick={() => setSelectedCycle(cycle)}
+              >
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{pac?.nome || '—'}</p>
-                    <p className="text-sm text-muted-foreground">{prof?.nome || '—'} • {cycle.treatment_type}</p>
+                    <p className="font-semibold text-foreground">{pac?.nome || "—"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {prof?.nome || "—"} • {cycle.treatment_type}
+                    </p>
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Sessões</p>
-                      <p className="text-sm font-bold">{cycle.sessions_done}/{cycle.total_sessions}</p>
+                      <p className="text-sm font-bold">
+                        {cycle.sessions_done}/{cycle.total_sessions}
+                      </p>
                     </div>
                     <div className="w-24">
                       <Progress value={progressPct} className="h-2" />
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground">Início</p>
-                      <p className="text-sm">{new Date(cycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</p>
+                      <p className="text-sm">
+                        {new Date(cycle.start_date + "T12:00:00").toLocaleDateString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                        })}
+                      </p>
                     </div>
-                    <Badge className={cn('border text-xs', statusColors[cycle.status])}>{statusLabels[cycle.status]}</Badge>
+                    <Badge className={cn("border text-xs", statusColors[cycle.status])}>
+                      {statusLabels[cycle.status]}
+                    </Badge>
+
+                    {/* Botão Excluir — apenas master */}
+                    {user?.role === "master" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!window.confirm(`Excluir ciclo de "${pac?.nome}"? Ação irreversível.`)) return;
+                          try {
+                            await (supabase as any).from("treatment_sessions").delete().eq("cycle_id", cycle.id);
+                            await (supabase as any).from("treatment_extensions").delete().eq("cycle_id", cycle.id);
+                            await (supabase as any).from("patient_discharges").delete().eq("cycle_id", cycle.id);
+                            await (supabase as any).from("treatment_cycles").delete().eq("id", cycle.id);
+                            toast.success("Ciclo excluído.");
+                            loadData();
+                          } catch (err) {
+                            toast.error("Erro ao excluir ciclo.");
+                          }
+                        }}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </CardContent>
@@ -701,43 +967,122 @@ const Tratamentos: React.FC = () => {
       {/* Create Cycle Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Novo Ciclo de Tratamento</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Novo Ciclo de Tratamento</DialogTitle>
+          </DialogHeader>
           <ScrollArea className="max-h-[70vh]">
             <div className="space-y-4 pr-2">
-              <div><Label>Paciente *</Label>
-                <Select value={newCycle.patient_id} onValueChange={v => setNewCycle(p => ({ ...p, patient_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{pacientes.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.cpf ? ` — ${p.cpf}` : ''}</SelectItem>)}</SelectContent>
+              <div>
+                <Label>Paciente *</Label>
+                <Select
+                  value={newCycle.patient_id}
+                  onValueChange={(v) => setNewCycle((p) => ({ ...p, patient_id: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pacientes.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.nome}
+                        {p.cpf ? ` — ${p.cpf}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               {!isProfissional && (
-                <div><Label>Profissional *</Label>
-                  <Select value={newCycle.professional_id} onValueChange={v => {
-                    const prof = profissionais.find(p => p.id === v);
-                    setNewCycle(p => ({ ...p, professional_id: v, unit_id: prof?.unidadeId || p.unit_id, specialty: prof?.profissao || p.specialty }));
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao}</SelectItem>)}</SelectContent>
+                <div>
+                  <Label>Profissional *</Label>
+                  <Select
+                    value={newCycle.professional_id}
+                    onValueChange={(v) => {
+                      const prof = profissionais.find((p) => p.id === v);
+                      setNewCycle((p) => ({
+                        ...p,
+                        professional_id: v,
+                        unit_id: prof?.unidadeId || p.unit_id,
+                        specialty: prof?.profissao || p.specialty,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {profissionais.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome} — {p.profissao}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               )}
-              <div><Label>Tipo de Tratamento *</Label><Input value={newCycle.treatment_type} onChange={e => setNewCycle(p => ({ ...p, treatment_type: e.target.value }))} placeholder="Ex: Reabilitação Joelho Direito" /></div>
+              <div>
+                <Label>Tipo de Tratamento *</Label>
+                <Input
+                  value={newCycle.treatment_type}
+                  onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                  placeholder="Ex: Reabilitação Joelho Direito"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Sessões Previstas</Label><Input type="number" min={1} value={newCycle.total_sessions} onChange={e => setNewCycle(p => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))} /></div>
-                <div><Label>Frequência</Label>
-                  <Select value={newCycle.frequency} onValueChange={v => setNewCycle(p => ({ ...p, frequency: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{frequencyOptions.map(f => <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>)}</SelectContent>
+                <div>
+                  <Label>Sessões Previstas</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={newCycle.total_sessions}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+                <div>
+                  <Label>Frequência</Label>
+                  <Select
+                    value={newCycle.frequency}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, frequency: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {frequencyOptions.map((f) => (
+                        <SelectItem key={f} value={f} className="capitalize">
+                          {f}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div><Label>Data de Início</Label><Input type="date" value={newCycle.start_date} onChange={e => setNewCycle(p => ({ ...p, start_date: e.target.value }))} /></div>
+              <div>
+                <Label>Data de Início</Label>
+                <Input
+                  type="date"
+                  value={newCycle.start_date}
+                  onChange={(e) => setNewCycle((p) => ({ ...p, start_date: e.target.value }))}
+                />
+              </div>
               <div className="p-3 bg-muted/50 rounded-lg text-sm">
                 <span className="text-muted-foreground">Previsão término: </span>
-                <strong>{new Date(calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency) + 'T12:00:00').toLocaleDateString('pt-BR')}</strong>
+                <strong>
+                  {new Date(
+                    calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency) + "T12:00:00",
+                  ).toLocaleDateString("pt-BR")}
+                </strong>
               </div>
-              <div><Label>Observações Clínicas</Label><Textarea value={newCycle.clinical_notes} onChange={e => setNewCycle(p => ({ ...p, clinical_notes: e.target.value }))} rows={3} /></div>
-              <Button onClick={handleCreateCycle} className="w-full gradient-primary text-primary-foreground">Criar Ciclo</Button>
+              <div>
+                <Label>Observações Clínicas</Label>
+                <Textarea
+                  value={newCycle.clinical_notes}
+                  onChange={(e) => setNewCycle((p) => ({ ...p, clinical_notes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <Button onClick={handleCreateCycle} className="w-full gradient-primary text-primary-foreground">
+                Criar Ciclo
+              </Button>
             </div>
           </ScrollArea>
         </DialogContent>
