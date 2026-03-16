@@ -39,6 +39,8 @@ interface AtendimentoDB {
 const Dashboard: React.FC = () => {
   const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
 
   useEffect(() => {
