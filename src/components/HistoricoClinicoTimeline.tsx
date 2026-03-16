@@ -59,7 +59,7 @@ export const HistoricoClinicoTimeline: React.FC<Props> = ({ pacienteId, unidades
       // Load episodios for titles
       const { data: episodios } = await (supabase as any).from('episodios_clinicos')
         .select('id,titulo').eq('paciente_id', pacienteId);
-      const episodioMap = new Map((episodios || []).map((e: any) => [e.id, e.titulo]));
+      const episodioMap = new Map<string, string>((episodios || []).map((e: any) => [e.id as string, e.titulo as string]));
 
       (prontuarios || []).forEach((p: any) => {
         const unidade = unidades.find(u => u.id === p.unidade_id);
