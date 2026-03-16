@@ -566,6 +566,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       <SelectItem value="Retorno">Retorno</SelectItem>
                       <SelectItem value="Exame">Exame</SelectItem>
                       <SelectItem value="Procedimento">Procedimento</SelectItem>
+                      <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                      <SelectItem value="Urgência">Urgência</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
