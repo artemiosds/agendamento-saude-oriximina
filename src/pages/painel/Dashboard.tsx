@@ -41,7 +41,6 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
-  const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
 
   useEffect(() => {
     const load = async () => {
