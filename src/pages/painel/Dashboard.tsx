@@ -5,18 +5,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, Users, Clock, CheckCircle, TrendingUp, XCircle, AlertTriangle, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string }> = ({ title, value, icon, color, subtitle }) => (
-  <Card className="shadow-card border-0">
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string; onClick?: () => void; critical?: boolean }> = ({ title, value, icon, color, subtitle, onClick, critical }) => (
+  <Card className={cn("shadow-card border-0 transition-all", onClick && "cursor-pointer hover:ring-1 hover:ring-primary/30", critical && "ring-1 ring-destructive/40")} onClick={onClick}>
     <CardContent className="p-5 flex items-center gap-4">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
         {icon}
       </div>
       <div>
         <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-2xl font-bold font-display text-foreground">{value}</p>
+        <p className={cn("text-2xl font-bold font-display", critical ? "text-destructive" : "text-foreground")}>{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </div>
     </CardContent>
@@ -37,6 +39,7 @@ interface AtendimentoDB {
 const Dashboard: React.FC = () => {
   const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
 
   useEffect(() => {
@@ -134,10 +137,10 @@ const Dashboard: React.FC = () => {
 
       {/* Main KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Consultas Hoje" value={todayAg.length} icon={<Calendar className="w-5 h-5 text-primary-foreground" />} color="gradient-primary" />
-        <StatCard title="Confirmados/Chegou" value={confirmados} icon={<CheckCircle className="w-5 h-5 text-success-foreground" />} color="bg-success" />
-        <StatCard title="Na Fila" value={aguardando} icon={<Clock className="w-5 h-5 text-warning-foreground" />} color="bg-warning" />
-        <StatCard title="Atendimentos Totais" value={totalAtendimentos} icon={<TrendingUp className="w-5 h-5 text-info-foreground" />} color="bg-info" />
+        <StatCard title="Consultas Hoje" value={todayAg.length} icon={<Calendar className="w-5 h-5 text-primary-foreground" />} color="gradient-primary" onClick={() => navigate('/painel/agenda')} />
+        <StatCard title="Confirmados/Chegou" value={confirmados} icon={<CheckCircle className="w-5 h-5 text-success-foreground" />} color="bg-success" onClick={() => navigate('/painel/agenda')} />
+        <StatCard title="Na Fila" value={aguardando} icon={<Clock className="w-5 h-5 text-warning-foreground" />} color="bg-warning" onClick={() => navigate('/painel/fila')} />
+        <StatCard title="Atendimentos Totais" value={totalAtendimentos} icon={<TrendingUp className="w-5 h-5 text-info-foreground" />} color="bg-info" onClick={() => navigate('/painel/atendimentos')} />
       </div>
 
       {/* Executive KPIs */}
@@ -148,6 +151,8 @@ const Dashboard: React.FC = () => {
           icon={<XCircle className="w-5 h-5 text-destructive-foreground" />} 
           color="bg-destructive"
           subtitle={`${kpis.faltas} faltas de ${filteredAgendamentos.length}`}
+          onClick={() => navigate('/painel/relatorios')}
+          critical={kpis.noShowRate > 20}
         />
         <StatCard 
           title="Tempo Médio" 
@@ -155,6 +160,7 @@ const Dashboard: React.FC = () => {
           icon={<Clock className="w-5 h-5 text-primary-foreground" />} 
           color="gradient-primary"
           subtitle={`${kpis.totalFinalizados} atendimentos`}
+          onClick={() => navigate('/painel/relatorios')}
         />
         <StatCard 
           title="Ocupação Salas" 
@@ -162,6 +168,7 @@ const Dashboard: React.FC = () => {
           icon={<BarChart3 className="w-5 h-5 text-info-foreground" />} 
           color="bg-info"
           subtitle="Hoje"
+          onClick={() => navigate('/painel/unidades')}
         />
         <StatCard 
           title="Prioritários" 
@@ -169,6 +176,8 @@ const Dashboard: React.FC = () => {
           icon={<AlertTriangle className="w-5 h-5 text-warning-foreground" />} 
           color="bg-warning"
           subtitle={`${kpis.prioAtendidos} atendidos`}
+          onClick={() => navigate('/painel/fila')}
+          critical={kpis.prioAguardando > 5}
         />
       </div>
 

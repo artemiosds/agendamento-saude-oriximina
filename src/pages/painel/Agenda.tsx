@@ -57,6 +57,7 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
   Exame: { label: 'Exame', class: 'bg-warning/15 text-warning border border-warning/30', icon: '🟡' },
   Procedimento: { label: 'Procedimento', class: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30', icon: '🟣' },
   Urgência: { label: 'Urgência', class: 'bg-destructive/15 text-destructive border border-destructive/30', icon: '🔴' },
+  'Sessão de Tratamento': { label: 'Sessão', class: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30', icon: '🟠' },
 };
 
 const Agenda: React.FC = () => {
@@ -565,6 +566,8 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
                       <SelectItem value="Retorno">Retorno</SelectItem>
                       <SelectItem value="Exame">Exame</SelectItem>
                       <SelectItem value="Procedimento">Procedimento</SelectItem>
+                      <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                      <SelectItem value="Urgência">Urgência</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -656,8 +659,15 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
       {/* Appointments list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
-            {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
+          <Card className="shadow-card border-0"><CardContent className="p-8 text-center">
+            <p className="text-muted-foreground mb-3">
+              {isProfissional ? 'Nenhum paciente confirmado pela recepção para esta data.' : 'Nenhum agendamento para esta data.'}
+            </p>
+            {!isProfissional && (
+              <Button variant="outline" onClick={() => setDialogOpen(true)}>
+                <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
+              </Button>
+            )}
           </CardContent></Card>
         ) : filtered.map(ag => {
           const ehHoje = ag.data === new Date().toISOString().split('T')[0];
@@ -669,11 +679,12 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
           // Color bar based on type
           const typeColorBar: Record<string, string> = {
-            Consulta: 'border-l-success',
-            Retorno: 'border-l-info',
-            Procedimento: 'border-l-purple-500',
-            Exame: 'border-l-warning',
-            Urgência: 'border-l-destructive',
+            Consulta: 'border-l-[#3B82F6]',
+            Retorno: 'border-l-[#10B981]',
+            Procedimento: 'border-l-[#8B5CF6]',
+            Exame: 'border-l-[#F59E0B]',
+            Urgência: 'border-l-[#EF4444]',
+            'Sessão de Tratamento': 'border-l-[#F97316]',
           };
 
           return (
