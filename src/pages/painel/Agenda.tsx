@@ -670,11 +670,12 @@ const { agendamentos, updateAgendamento, pacientes, funcionarios, unidades, sala
 
           // Color bar based on type
           const typeColorBar: Record<string, string> = {
-            Consulta: 'border-l-success',
-            Retorno: 'border-l-info',
-            Procedimento: 'border-l-purple-500',
-            Exame: 'border-l-warning',
-            Urgência: 'border-l-destructive',
+            Consulta: 'border-l-[#3B82F6]',
+            Retorno: 'border-l-[#10B981]',
+            Procedimento: 'border-l-[#8B5CF6]',
+            Exame: 'border-l-[#F59E0B]',
+            Urgência: 'border-l-[#EF4444]',
+            'Sessão de Tratamento': 'border-l-[#F97316]',
           };
 
           return (
