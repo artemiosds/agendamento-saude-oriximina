@@ -29,6 +29,7 @@ const Prontuario = React.lazy(() => import("./pages/painel/Prontuario"));
 const Auditoria = React.lazy(() => import("./pages/painel/Auditoria"));
 const Triagem = React.lazy(() => import("./pages/painel/Triagem"));
 const Bloqueios = React.lazy(() => import("./pages/painel/Bloqueios"));
+const Tratamentos = React.lazy(() => import("./pages/painel/Tratamentos"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
