@@ -57,6 +57,7 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
   Exame: { label: 'Exame', class: 'bg-warning/15 text-warning border border-warning/30', icon: '🟡' },
   Procedimento: { label: 'Procedimento', class: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30', icon: '🟣' },
   Urgência: { label: 'Urgência', class: 'bg-destructive/15 text-destructive border border-destructive/30', icon: '🔴' },
+  'Sessão de Tratamento': { label: 'Sessão', class: 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30', icon: '🟠' },
 };
 
 const Agenda: React.FC = () => {
