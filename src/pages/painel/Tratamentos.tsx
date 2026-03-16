@@ -120,6 +120,7 @@ const Tratamentos: React.FC = () => {
   const [sessionOpen, setSessionOpen] = useState(false);
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
 
   // Forms
   const [newCycle, setNewCycle] = useState({
@@ -267,6 +268,32 @@ const Tratamentos: React.FC = () => {
     } catch (err) {
       console.error(err);
       toast.error("Erro ao criar ciclo de tratamento.");
+    }
+  };
+
+  const handleDeleteCycle = async () => {
+    if (!deleteTarget) return;
+    try {
+      await (supabase as any).from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
+      await (supabase as any).from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
+      await (supabase as any).from("patient_discharges").delete().eq("cycle_id", deleteTarget.id);
+      await (supabase as any).from("treatment_cycles").delete().eq("id", deleteTarget.id);
+
+      await logAction({
+        acao: "excluir",
+        entidade: "treatment_cycle",
+        entidadeId: deleteTarget.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { tipo: deleteTarget.treatment_type, paciente: deleteTarget.patient_id },
+      });
+
+      toast.success("Ciclo excluído com sucesso.");
+      setDeleteTarget(null);
+      loadData();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao excluir ciclo.");
     }
   };
 
@@ -936,19 +963,9 @@ const Tratamentos: React.FC = () => {
                         size="sm"
                         variant="ghost"
                         className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          if (!window.confirm(`Excluir ciclo de "${pac?.nome}"? Ação irreversível.`)) return;
-                          try {
-                            await (supabase as any).from("treatment_sessions").delete().eq("cycle_id", cycle.id);
-                            await (supabase as any).from("treatment_extensions").delete().eq("cycle_id", cycle.id);
-                            await (supabase as any).from("patient_discharges").delete().eq("cycle_id", cycle.id);
-                            await (supabase as any).from("treatment_cycles").delete().eq("id", cycle.id);
-                            toast.success("Ciclo excluído.");
-                            loadData();
-                          } catch (err) {
-                            toast.error("Erro ao excluir ciclo.");
-                          }
+                          setDeleteTarget(cycle);
                         }}
                       >
                         <X className="w-4 h-4" />
@@ -1085,6 +1102,40 @@ const Tratamentos: React.FC = () => {
               </Button>
             </div>
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Você está prestes a excluir o ciclo de{" "}
+              <strong className="text-foreground">
+                {pacientes.find((p) => p.id === deleteTarget?.patient_id)?.nome}
+              </strong>
+              {deleteTarget?.treatment_type ? ` — ${deleteTarget.treatment_type}` : ""}.
+            </p>
+            <p className="text-sm text-destructive font-medium">
+              Todas as sessões e extensões vinculadas serão removidas permanentemente.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteCycle}>
+                Confirmar exclusão
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
