@@ -152,6 +152,8 @@ const Dashboard: React.FC = () => {
           icon={<XCircle className="w-5 h-5 text-destructive-foreground" />} 
           color="bg-destructive"
           subtitle={`${kpis.faltas} faltas de ${filteredAgendamentos.length}`}
+          onClick={() => navigate('/painel/relatorios')}
+          critical={kpis.noShowRate > 20}
         />
         <StatCard 
           title="Tempo Médio" 
@@ -159,6 +161,7 @@ const Dashboard: React.FC = () => {
           icon={<Clock className="w-5 h-5 text-primary-foreground" />} 
           color="gradient-primary"
           subtitle={`${kpis.totalFinalizados} atendimentos`}
+          onClick={() => navigate('/painel/relatorios')}
         />
         <StatCard 
           title="Ocupação Salas" 
@@ -166,6 +169,7 @@ const Dashboard: React.FC = () => {
           icon={<BarChart3 className="w-5 h-5 text-info-foreground" />} 
           color="bg-info"
           subtitle="Hoje"
+          onClick={() => navigate('/painel/unidades')}
         />
         <StatCard 
           title="Prioritários" 
@@ -173,6 +177,8 @@ const Dashboard: React.FC = () => {
           icon={<AlertTriangle className="w-5 h-5 text-warning-foreground" />} 
           color="bg-warning"
           subtitle={`${kpis.prioAtendidos} atendidos`}
+          onClick={() => navigate('/painel/fila')}
+          critical={kpis.prioAguardando > 5}
         />
       </div>
 
