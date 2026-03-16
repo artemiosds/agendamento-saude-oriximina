@@ -5,18 +5,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, Users, Clock, CheckCircle, TrendingUp, XCircle, AlertTriangle, BarChart3 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string }> = ({ title, value, icon, color, subtitle }) => (
-  <Card className="shadow-card border-0">
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color: string; subtitle?: string; onClick?: () => void; critical?: boolean }> = ({ title, value, icon, color, subtitle, onClick, critical }) => (
+  <Card className={cn("shadow-card border-0 transition-all", onClick && "cursor-pointer hover:ring-1 hover:ring-primary/30", critical && "ring-1 ring-destructive/40")} onClick={onClick}>
     <CardContent className="p-5 flex items-center gap-4">
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
         {icon}
       </div>
       <div>
         <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-2xl font-bold font-display text-foreground">{value}</p>
+        <p className={cn("text-2xl font-bold font-display", critical ? "text-destructive" : "text-foreground")}>{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </div>
     </CardContent>
