@@ -1,4 +1,4 @@
-export type UserRole = 'master' | 'coordenador' | 'recepcao' | 'profissional' | 'gestao' | 'tecnico';
+export type UserRole = "master" | "coordenador" | "recepcao" | "profissional" | "gestao" | "tecnico";
 
 export interface User {
   id: string;
@@ -130,14 +130,32 @@ export interface Agendamento {
   profissionalNome: string;
   data: string;
   hora: string;
-  status: 'pendente' | 'confirmado' | 'confirmado_chegada' | 'cancelado' | 'concluido' | 'falta' | 'atraso' | 'remarcado' | 'em_atendimento' | 'aguardando_triagem' | 'aguardando_atendimento';
+  status:
+    | "pendente"
+    | "confirmado"
+    | "confirmado_chegada"
+    | "cancelado"
+    | "concluido"
+    | "falta"
+    | "atraso"
+    | "remarcado"
+    | "em_atendimento"
+    | "aguardando_triagem"
+    | "aguardando_atendimento";
   tipo: string;
   observacoes: string;
-  origem: 'online' | 'recepcao';
+  origem: "online" | "recepcao" | "profissional";
   googleEventId?: string;
-  syncStatus?: 'ok' | 'pendente' | 'erro';
+  syncStatus?: "ok" | "pendente" | "erro";
   criadoEm: string;
   criadoPor: string;
+  // Campos para agendamento online com anexo
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  aprovadoPor?: string;
+  aprovadoEm?: string;
+  rejeitadoMotivo?: string;
 }
 
 export interface FilaEspera {
@@ -147,8 +165,8 @@ export interface FilaEspera {
   unidadeId: string;
   setor: string;
   profissionalId?: string;
-  prioridade: 'normal' | 'alta' | 'urgente';
-  status: 'aguardando' | 'encaixado' | 'chamado' | 'em_atendimento' | 'atendido' | 'falta' | 'cancelado';
+  prioridade: "normal" | "alta" | "urgente";
+  status: "aguardando" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
@@ -158,7 +176,7 @@ export interface FilaEspera {
   criadoPor?: string;
   criadoEm?: string;
   dataSolicitacaoOriginal?: string;
-  origemCadastro?: 'normal' | 'demanda_reprimida';
+  origemCadastro?: "normal" | "demanda_reprimida";
 }
 
 export interface Atendimento {
@@ -177,7 +195,7 @@ export interface Atendimento {
   horaInicio: string;
   horaFim: string;
   duracaoMinutos?: number;
-  status: 'em_atendimento' | 'finalizado';
+  status: "em_atendimento" | "finalizado";
 }
 
 export interface Disponibilidade {
@@ -216,7 +234,7 @@ export interface Configuracoes {
     enviarEmail: boolean;
   };
   filaEspera: {
-    modoEncaixe: 'automatico' | 'assistido';
+    modoEncaixe: "automatico" | "assistido";
   };
   templates: {
     confirmacao: string;
@@ -225,7 +243,7 @@ export interface Configuracoes {
   webhook: {
     ativo: boolean;
     url: string;
-    status: 'ativo' | 'inativo' | 'erro';
+    status: "ativo" | "inativo" | "erro";
   };
   gmail?: {
     ativo: boolean;
@@ -234,7 +252,7 @@ export interface Configuracoes {
     smtpHost: string;
     smtpPort: number;
   };
-  canalNotificacao?: 'webhook' | 'gmail' | 'ambos';
+  canalNotificacao?: "webhook" | "gmail" | "ambos";
 }
 
 export interface AuditLog {
