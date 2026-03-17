@@ -214,7 +214,8 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleCreateCycle = async () => {
-    if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
+    const treatmentType = newCycle.treatment_type === "__custom" ? "" : newCycle.treatment_type;
+    if (!newCycle.patient_id || !newCycle.professional_id || !treatmentType) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
       return;
     }
