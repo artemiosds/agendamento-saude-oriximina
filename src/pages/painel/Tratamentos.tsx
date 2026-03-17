@@ -243,7 +243,7 @@ const Tratamentos: React.FC = () => {
           professional_id: newCycle.professional_id,
           unit_id: newCycle.unit_id || prof?.unidadeId || "",
           specialty: newCycle.specialty || prof?.profissao || "",
-          treatment_type: newCycle.treatment_type,
+          treatment_type: treatmentType,
           start_date: newCycle.start_date,
           end_date_predicted: endDate,
           total_sessions: newCycle.total_sessions,
