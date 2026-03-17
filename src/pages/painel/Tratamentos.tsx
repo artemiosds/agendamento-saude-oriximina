@@ -344,7 +344,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success(`Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`);
       setSessionOpen(false);
-      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+      setNewSession({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
       loadData();
     } catch (err) {
       console.error(err);
