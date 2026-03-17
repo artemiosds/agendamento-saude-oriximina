@@ -136,7 +136,7 @@ const Tratamentos: React.FC = () => {
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
   });
-  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", status: "realizada" });
+  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
