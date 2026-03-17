@@ -131,6 +131,7 @@ const Tratamentos: React.FC = () => {
     unit_id: "",
     specialty: "",
     treatment_type: "",
+    treatment_type_custom: "",
     total_sessions: 6,
     frequency: "semanal",
     start_date: new Date().toISOString().split("T")[0],
