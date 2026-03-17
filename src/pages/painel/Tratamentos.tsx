@@ -602,7 +602,7 @@ const Tratamentos: React.FC = () => {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+                      setNewSession({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
                       setSessionOpen(true);
                     }}
                   >
