@@ -1067,12 +1067,39 @@ const Tratamentos: React.FC = () => {
                 </div>
               )}
               <div>
-                <Label>Tipo de Tratamento *</Label>
-                <Input
-                  value={newCycle.treatment_type}
-                  onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
-                  placeholder="Ex: Reabilitação Joelho Direito"
-                />
+                <Label>Tipo de Tratamento / Procedimento *</Label>
+                {filteredProcedimentos.length > 0 ? (
+                  <Select
+                    value={newCycle.treatment_type}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, treatment_type: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}{proc.especialidade ? ` — ${proc.especialidade}` : ''}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__custom">Outro (digitar)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newCycle.treatment_type}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    placeholder="Ex: Reabilitação Joelho Direito"
+                  />
+                )}
+                {newCycle.treatment_type === "__custom" && (
+                  <Input
+                    className="mt-2"
+                    value=""
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    placeholder="Digite o tipo de tratamento"
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
