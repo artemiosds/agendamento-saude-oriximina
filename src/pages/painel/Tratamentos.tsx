@@ -179,6 +179,32 @@ const Tratamentos: React.FC = () => {
     });
   }, [cycles, filterProf, filterUnit, filterStatus]);
 
+  // Filter procedures by the selected professional's profession
+  const filteredProcedimentos = useMemo(() => {
+    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
+    const prof = profissionais.find((p) => p.id === profId);
+    if (!prof?.profissao) return procedimentos;
+    return procedimentos.filter(p => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      const profNorm = prof.profissao.toLowerCase().trim();
+      const match = pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm);
+      return match && (!p.profissional_id || p.profissional_id === profId);
+    });
+  }, [procedimentos, newCycle.professional_id, profissionais, isProfissional, user]);
+
+  // Filter procedures for session registration
+  const sessionProcedimentos = useMemo(() => {
+    if (!selectedCycle) return procedimentos;
+    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
+    if (!prof?.profissao) return procedimentos;
+    return procedimentos.filter(p => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      const profNorm = prof.profissao.toLowerCase().trim();
+      const match = pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm);
+      return match && (!p.profissional_id || p.profissional_id === selectedCycle.professional_id);
+    });
+  }, [procedimentos, selectedCycle, profissionais]);
+
   const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
     const d = new Date(startDate + "T12:00:00");
     const weeksMap: Record<string, number> = { diário: 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
