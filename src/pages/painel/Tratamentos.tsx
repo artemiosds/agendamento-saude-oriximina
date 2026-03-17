@@ -1130,8 +1130,8 @@ const Tratamentos: React.FC = () => {
                 {newCycle.treatment_type === "__custom" && (
                   <Input
                     className="mt-2"
-                    value=""
-                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    value={newCycle.treatment_type_custom}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type_custom: e.target.value }))}
                     placeholder="Digite o tipo de tratamento"
                   />
                 )}
