@@ -95,6 +95,25 @@ const statusLabels: Record<string, string> = {
 
 const frequencyOptions = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
 
+// Mapeamento de status das sessões
+const sessionStatusColors: Record<string, string> = {
+  pendente_agendamento: "bg-warning/10 text-warning",
+  agendada: "bg-info/10 text-info",
+  realizada: "bg-success/10 text-success",
+  paciente_faltou: "bg-destructive/10 text-destructive",
+  cancelada: "bg-muted text-muted-foreground",
+  remarcada: "bg-warning/10 text-warning",
+};
+
+const sessionStatusLabels: Record<string, string> = {
+  pendente_agendamento: "Ag. Agendamento",
+  agendada: "Agendada",
+  realizada: "Realizada",
+  paciente_faltou: "Faltou",
+  cancelada: "Cancelada",
+  remarcada: "Remarcada",
+};
+
 const Tratamentos: React.FC = () => {
   const {
     pacientes,
@@ -129,7 +148,7 @@ const Tratamentos: React.FC = () => {
   const [dischargeOpen, setDischargeOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
 
-  // NOVO: agendamento de sessão pendente
+  // Agendamento de sessão pendente
   const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<TreatmentSession | null>(null);
   const [agendarSessaoData, setAgendarSessaoData] = useState("");
   const [agendarSessaoHora, setAgendarSessaoHora] = useState("");
@@ -154,26 +173,26 @@ const Tratamentos: React.FC = () => {
 
   const canManageFull = hasPermission(["master", "coordenador"]);
   const isProfissional = user?.role === "profissional";
-  // NOVO: recepção e master podem agendar sessões
   const canAgendarSessao = user?.role === "master" || user?.role === "recepcao";
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      let qCycles = (supabase as any).from("treatment_cycles").select("*").order("created_at", { ascending: false });
+      let qCycles = supabase.from("treatment_cycles").select("*").order("created_at", { ascending: false });
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
       const [{ data: cData }, { data: sData }, { data: eData }] = await Promise.all([
         qCycles,
-        (supabase as any).from("treatment_sessions").select("*").order("session_number", { ascending: true }),
-        (supabase as any).from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
+        supabase.from("treatment_sessions").select("*").order("session_number", { ascending: true }),
+        supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
       ]);
-      if (cData) setCycles(cData);
-      if (sData) setSessions(sData);
-      if (eData) setExtensions(eData);
+      if (cData) setCycles(cData as TreatmentCycle[]);
+      if (sData) setSessions(sData as TreatmentSession[]);
+      if (eData) setExtensions(eData as TreatmentExtension[]);
     } catch (err) {
       console.error("Error loading treatments:", err);
+      toast.error("Erro ao carregar dados de tratamento.");
     }
     setLoading(false);
   }, [user]);
@@ -221,7 +240,8 @@ const Tratamentos: React.FC = () => {
     const endDate = calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency);
 
     try {
-      const { data: cycleData, error } = await (supabase as any)
+      // Inserir ciclo
+      const { data: cycleData, error: cycleError } = await supabase
         .from("treatment_cycles")
         .insert({
           patient_id: newCycle.patient_id,
@@ -241,8 +261,9 @@ const Tratamentos: React.FC = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (cycleError) throw cycleError;
 
+      // Preparar sessões
       const sessionsToCreate = [];
       const startD = new Date(newCycle.start_date + "T12:00:00");
       const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
@@ -258,12 +279,23 @@ const Tratamentos: React.FC = () => {
           session_number: i + 1,
           total_sessions: newCycle.total_sessions,
           scheduled_date: sessionDate.toISOString().split("T")[0],
-          // Sessões criadas como pendente — recepção/master agenda cada uma
-          status: "pendente_agendamento",
+          status: "pendente_agendamento", // <--- ESSENCIAL
         });
       }
 
-      await (supabase as any).from("treatment_sessions").insert(sessionsToCreate);
+      // Inserir sessões
+      const { error: sessionsError, data: sessionsData } = await supabase
+        .from("treatment_sessions")
+        .insert(sessionsToCreate)
+        .select();
+
+      if (sessionsError) {
+        console.error("Erro ao criar sessões:", sessionsError);
+        toast.error("Erro ao criar sessões: " + sessionsError.message);
+        // Mesmo com erro nas sessões, o ciclo foi criado, mas precisamos informar
+      } else {
+        console.log("Sessões criadas:", sessionsData);
+      }
 
       await logAction({
         acao: "criar",
@@ -282,20 +314,20 @@ const Tratamentos: React.FC = () => {
       toast.success("Ciclo criado! As sessões aguardam agendamento pela recepção.");
       setCreateOpen(false);
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao criar ciclo de tratamento.");
+      toast.error("Erro ao criar ciclo de tratamento: " + err.message);
     }
   };
 
   const handleDeleteCycle = async () => {
     if (!deleteTarget) return;
     try {
-      await (supabase as any).from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
-      await (supabase as any).from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
-      await (supabase as any).from("patient_discharges").delete().eq("cycle_id", deleteTarget.id);
+      await supabase.from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
+      await supabase.from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
+      await supabase.from("patient_discharges").delete().eq("cycle_id", deleteTarget.id);
 
-      const { error } = await (supabase as any).from("treatment_cycles").delete().eq("id", deleteTarget.id);
+      const { error } = await supabase.from("treatment_cycles").delete().eq("id", deleteTarget.id);
       if (error) throw error;
 
       await logAction({
@@ -310,7 +342,7 @@ const Tratamentos: React.FC = () => {
       toast.success("Ciclo excluído com sucesso.");
       setDeleteTarget(null);
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       toast.error("Erro ao excluir ciclo. Verifique se há registros vinculados.");
     }
@@ -328,7 +360,7 @@ const Tratamentos: React.FC = () => {
     }
 
     try {
-      await (supabase as any)
+      await supabase
         .from("treatment_sessions")
         .update({
           status: newSession.status,
@@ -340,7 +372,7 @@ const Tratamentos: React.FC = () => {
       const newDone = newSession.status === "realizada" ? selectedCycle.sessions_done + 1 : selectedCycle.sessions_done;
       const isComplete = newDone >= selectedCycle.total_sessions;
 
-      await (supabase as any)
+      await supabase
         .from("treatment_cycles")
         .update({
           sessions_done: newDone,
@@ -361,13 +393,13 @@ const Tratamentos: React.FC = () => {
       setSessionOpen(false);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao registrar sessão.");
+      toast.error("Erro ao registrar sessão: " + err.message);
     }
   };
 
-  // NOVO: recepção/master agenda uma sessão pendente
+  // Função para agendar uma sessão pendente (recepção/master)
   const handleAgendarSessao = async () => {
     if (!agendarSessaoTarget || !agendarSessaoData || !agendarSessaoHora || !selectedCycle) {
       toast.error("Selecione data e horário.");
@@ -377,18 +409,19 @@ const Tratamentos: React.FC = () => {
     try {
       const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
       const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
+      if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
 
       // Cria agendamento real na tabela agendamentos
       const agId = `ag${Date.now()}`;
       await addAgendamento({
         id: agId,
         pacienteId: selectedCycle.patient_id,
-        pacienteNome: pac?.nome || "",
+        pacienteNome: pac.nome,
         unidadeId: selectedCycle.unit_id,
         salaId: agendarSessaoSalaId || "",
         setorId: "",
         profissionalId: selectedCycle.professional_id,
-        profissionalNome: prof?.nome || "",
+        profissionalNome: prof.nome,
         data: agendarSessaoData,
         hora: agendarSessaoHora,
         status: "confirmado",
@@ -400,7 +433,7 @@ const Tratamentos: React.FC = () => {
       });
 
       // Vincula o agendamento à sessão e atualiza status
-      await (supabase as any)
+      const { error: updateError } = await supabase
         .from("treatment_sessions")
         .update({
           appointment_id: agId,
@@ -408,6 +441,8 @@ const Tratamentos: React.FC = () => {
           scheduled_date: agendarSessaoData,
         })
         .eq("id", agendarSessaoTarget.id);
+
+      if (updateError) throw updateError;
 
       await logAction({
         acao: "agendar_sessao_tratamento",
@@ -425,7 +460,7 @@ const Tratamentos: React.FC = () => {
       });
 
       toast.success(
-        `Sessão ${agendarSessaoTarget.session_number} agendada para ${agendarSessaoData} às ${agendarSessaoHora}!`,
+        `Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(agendarSessaoData + "T12:00:00").toLocaleDateString("pt-BR")} às ${agendarSessaoHora}!`,
       );
       setAgendarSessaoTarget(null);
       setAgendarSessaoData("");
@@ -449,7 +484,7 @@ const Tratamentos: React.FC = () => {
       const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
       const newEndDate = calcEndDate(selectedCycle.start_date, newTotal, selectedCycle.frequency);
 
-      await (supabase as any).from("treatment_extensions").insert({
+      await supabase.from("treatment_extensions").insert({
         cycle_id: selectedCycle.id,
         previous_sessions: selectedCycle.total_sessions,
         new_sessions: newTotal,
@@ -476,9 +511,9 @@ const Tratamentos: React.FC = () => {
           status: "pendente_agendamento",
         });
       }
-      await (supabase as any).from("treatment_sessions").insert(newSessions);
+      await supabase.from("treatment_sessions").insert(newSessions);
 
-      await (supabase as any)
+      await supabase
         .from("treatment_cycles")
         .update({
           total_sessions: newTotal,
@@ -500,9 +535,9 @@ const Tratamentos: React.FC = () => {
       setExtensionOpen(false);
       setExtensionForm({ new_sessions: 0, reason: "" });
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao registrar extensão.");
+      toast.error("Erro ao registrar extensão: " + err.message);
     }
   };
 
@@ -512,7 +547,7 @@ const Tratamentos: React.FC = () => {
       return;
     }
     try {
-      await (supabase as any).from("patient_discharges").insert({
+      await supabase.from("patient_discharges").insert({
         cycle_id: selectedCycle.id,
         patient_id: selectedCycle.patient_id,
         professional_id: user?.id || "",
@@ -521,7 +556,7 @@ const Tratamentos: React.FC = () => {
         final_notes: dischargeForm.final_notes,
       });
 
-      await (supabase as any).from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
+      await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
 
       await logAction({
         acao: "alta_paciente",
@@ -536,9 +571,9 @@ const Tratamentos: React.FC = () => {
       setDischargeOpen(false);
       setDischargeForm({ reason: "", final_notes: "" });
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao registrar alta.");
+      toast.error("Erro ao registrar alta: " + err.message);
     }
   };
 
@@ -552,7 +587,7 @@ const Tratamentos: React.FC = () => {
     }
 
     try {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("treatment_cycles")
         .select("id, patient_id, status")
         .eq("patient_id", cycle.patient_id)
@@ -610,7 +645,7 @@ const Tratamentos: React.FC = () => {
     return extensions.filter((e) => e.cycle_id === selectedCycle.id);
   }, [selectedCycle, extensions]);
 
-  // NOVO: slots disponíveis para o dialog de agendar sessão
+  // Slots disponíveis para o dialog de agendar sessão
   const agendarSessaoSlots = useMemo(() => {
     if (!agendarSessaoTarget || !selectedCycle || !agendarSessaoData) return [];
     return getAvailableSlots(selectedCycle.professional_id, selectedCycle.unit_id, agendarSessaoData);
@@ -624,7 +659,7 @@ const Tratamentos: React.FC = () => {
   }, [agendarSessaoTarget, selectedCycle, getAvailableDates]);
 
   // Salas da unidade do ciclo
-  const { salas } = useData() as any;
+  const { salas } = useData();
   const salasDisponiveis = useMemo(() => {
     if (!selectedCycle || !salas) return [];
     return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
@@ -783,23 +818,6 @@ const Tratamentos: React.FC = () => {
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
-                  const sessionStatusColor: Record<string, string> = {
-                    pendente_agendamento: "bg-warning/10 text-warning",
-                    agendada: "bg-info/10 text-info",
-                    realizada: "bg-success/10 text-success",
-                    paciente_faltou: "bg-destructive/10 text-destructive",
-                    cancelada: "bg-muted text-muted-foreground",
-                    remarcada: "bg-warning/10 text-warning",
-                  };
-                  const sessionStatusLabel: Record<string, string> = {
-                    pendente_agendamento: "Ag. Agendamento",
-                    agendada: "Agendada",
-                    realizada: "Realizada",
-                    paciente_faltou: "Faltou",
-                    cancelada: "Cancelada",
-                    remarcada: "Remarcada",
-                  };
-
                   const isPendente = s.status === "pendente_agendamento";
 
                   return (
@@ -825,11 +843,11 @@ const Tratamentos: React.FC = () => {
                           <p className="text-xs text-muted-foreground line-clamp-1">{s.clinical_notes}</p>
                         )}
                       </div>
-                      <Badge className={cn("text-xs shrink-0", sessionStatusColor[s.status])}>
-                        {sessionStatusLabel[s.status] || s.status}
+                      <Badge className={cn("text-xs shrink-0", sessionStatusColors[s.status])}>
+                        {sessionStatusLabels[s.status] || s.status}
                       </Badge>
 
-                      {/* NOVO: botão Agendar — apenas para recepção e master, sessão pendente */}
+                      {/* Botão Agendar — apenas para recepção/master e sessão pendente */}
                       {canAgendarSessao && isPendente && selectedCycle.status === "em_andamento" && (
                         <Button
                           size="sm"
@@ -996,7 +1014,7 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* NOVO: Dialog de Agendar Sessão — recepção e master */}
+        {/* Dialog de Agendar Sessão — recepção e master */}
         <Dialog
           open={!!agendarSessaoTarget}
           onOpenChange={(open) => {
