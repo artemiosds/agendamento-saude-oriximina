@@ -339,12 +339,16 @@ const Tratamentos: React.FC = () => {
     }
 
     try {
+      const procedureFinal = newSession.procedure_done === "__custom"
+        ? newSession.procedure_done_custom
+        : newSession.procedure_done;
+
       await (supabase as any)
         .from("treatment_sessions")
         .update({
           status: newSession.status,
           clinical_notes: newSession.clinical_notes,
-          procedure_done: newSession.procedure_done,
+          procedure_done: procedureFinal,
         })
         .eq("id", nextSession.id);
 
