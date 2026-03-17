@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { procedureService, type ProcedimentoDB } from "@/services/procedureService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,6 +108,7 @@ const Tratamentos: React.FC = () => {
   const [cycles, setCycles] = useState<TreatmentCycle[]>([]);
   const [sessions, setSessions] = useState<TreatmentSession[]>([]);
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
 
@@ -129,12 +131,13 @@ const Tratamentos: React.FC = () => {
     unit_id: "",
     specialty: "",
     treatment_type: "",
+    treatment_type_custom: "",
     total_sessions: 6,
     frequency: "semanal",
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
   });
-  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", status: "realizada" });
+  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
@@ -148,14 +151,16 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
-      const [{ data: cData }, { data: sData }, { data: eData }] = await Promise.all([
+      const [{ data: cData }, { data: sData }, { data: eData }, procs] = await Promise.all([
         qCycles,
         (supabase as any).from("treatment_sessions").select("*").order("session_number", { ascending: true }),
         (supabase as any).from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
+        procedureService.getActive(),
       ]);
       if (cData) setCycles(cData);
       if (sData) setSessions(sData);
       if (eData) setExtensions(eData);
+      setProcedimentos(procs);
     } catch (err) {
       console.error("Error loading treatments:", err);
     }
@@ -175,6 +180,32 @@ const Tratamentos: React.FC = () => {
     });
   }, [cycles, filterProf, filterUnit, filterStatus]);
 
+  // Filter procedures by the selected professional's profession
+  const filteredProcedimentos = useMemo(() => {
+    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
+    const prof = profissionais.find((p) => p.id === profId);
+    if (!prof?.profissao) return procedimentos;
+    return procedimentos.filter(p => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      const profNorm = prof.profissao.toLowerCase().trim();
+      const match = pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm);
+      return match && (!p.profissional_id || p.profissional_id === profId);
+    });
+  }, [procedimentos, newCycle.professional_id, profissionais, isProfissional, user]);
+
+  // Filter procedures for session registration
+  const sessionProcedimentos = useMemo(() => {
+    if (!selectedCycle) return procedimentos;
+    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
+    if (!prof?.profissao) return procedimentos;
+    return procedimentos.filter(p => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      const profNorm = prof.profissao.toLowerCase().trim();
+      const match = pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm);
+      return match && (!p.profissional_id || p.profissional_id === selectedCycle.professional_id);
+    });
+  }, [procedimentos, selectedCycle, profissionais]);
+
   const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
     const d = new Date(startDate + "T12:00:00");
     const weeksMap: Record<string, number> = { diário: 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
@@ -184,7 +215,8 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleCreateCycle = async () => {
-    if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
+    const treatmentType = newCycle.treatment_type === "__custom" ? newCycle.treatment_type_custom : newCycle.treatment_type;
+    if (!newCycle.patient_id || !newCycle.professional_id || !treatmentType) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
       return;
     }
@@ -212,7 +244,7 @@ const Tratamentos: React.FC = () => {
           professional_id: newCycle.professional_id,
           unit_id: newCycle.unit_id || prof?.unidadeId || "",
           specialty: newCycle.specialty || prof?.profissao || "",
-          treatment_type: newCycle.treatment_type,
+          treatment_type: treatmentType,
           start_date: newCycle.start_date,
           end_date_predicted: endDate,
           total_sessions: newCycle.total_sessions,
@@ -309,12 +341,16 @@ const Tratamentos: React.FC = () => {
     }
 
     try {
+      const procedureFinal = newSession.procedure_done === "__custom"
+        ? newSession.procedure_done_custom
+        : newSession.procedure_done;
+
       await (supabase as any)
         .from("treatment_sessions")
         .update({
           status: newSession.status,
           clinical_notes: newSession.clinical_notes,
-          procedure_done: newSession.procedure_done,
+          procedure_done: procedureFinal,
         })
         .eq("id", nextSession.id);
 
@@ -340,7 +376,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success(`Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`);
       setSessionOpen(false);
-      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+      setNewSession({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
       loadData();
     } catch (err) {
       console.error(err);
@@ -598,7 +634,7 @@ const Tratamentos: React.FC = () => {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+                      setNewSession({ clinical_notes: "", procedure_done: "", procedure_done_custom: "", status: "realizada" });
                       setSessionOpen(true);
                     }}
                   >
@@ -730,10 +766,38 @@ const Tratamentos: React.FC = () => {
               </div>
               <div>
                 <Label>Procedimento Realizado</Label>
-                <Input
-                  value={newSession.procedure_done}
-                  onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
-                />
+                {sessionProcedimentos.length > 0 ? (
+                  <Select
+                    value={newSession.procedure_done}
+                    onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessionProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__custom">Outro (digitar)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newSession.procedure_done}
+                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                    placeholder="Procedimento realizado"
+                  />
+                )}
+                {newSession.procedure_done === "__custom" && (
+                  <Input
+                    className="mt-2"
+                    value={newSession.procedure_done_custom}
+                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done_custom: e.target.value }))}
+                    placeholder="Digite o procedimento"
+                  />
+                )}
               </div>
               <div>
                 <Label>Observações Clínicas</Label>
@@ -845,6 +909,7 @@ const Tratamentos: React.FC = () => {
                 unit_id: user?.unidadeId || "",
                 specialty: user?.profissao || "",
                 treatment_type: "",
+                treatment_type_custom: "",
                 total_sessions: 6,
                 frequency: "semanal",
                 start_date: new Date().toISOString().split("T")[0],
@@ -1037,12 +1102,39 @@ const Tratamentos: React.FC = () => {
                 </div>
               )}
               <div>
-                <Label>Tipo de Tratamento *</Label>
-                <Input
-                  value={newCycle.treatment_type}
-                  onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
-                  placeholder="Ex: Reabilitação Joelho Direito"
-                />
+                <Label>Tipo de Tratamento / Procedimento *</Label>
+                {filteredProcedimentos.length > 0 ? (
+                  <Select
+                    value={newCycle.treatment_type}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, treatment_type: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}{proc.especialidade ? ` — ${proc.especialidade}` : ''}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__custom">Outro (digitar)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newCycle.treatment_type}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    placeholder="Ex: Reabilitação Joelho Direito"
+                  />
+                )}
+                {newCycle.treatment_type === "__custom" && (
+                  <Input
+                    className="mt-2"
+                    value={newCycle.treatment_type_custom}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type_custom: e.target.value }))}
+                    placeholder="Digite o tipo de tratamento"
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
