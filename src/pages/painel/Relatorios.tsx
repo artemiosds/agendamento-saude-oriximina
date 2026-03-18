@@ -470,6 +470,79 @@ const Relatorios: React.FC = () => {
     };
   }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
 
+  // === TREATMENT STATS ===
+  const treatmentStats = useMemo(() => {
+    const filteredCycles = treatmentCycles.filter(c => {
+      if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
+      if (filterProf !== 'all' && c.professional_id !== filterProf) return false;
+      if (dateFrom && c.start_date < dateFrom) return false;
+      if (dateTo && c.start_date > dateTo) return false;
+      return true;
+    });
+    const filteredSessions = treatmentSessions.filter(s => {
+      if (filterProf !== 'all' && s.professional_id !== filterProf) return false;
+      if (dateFrom && s.scheduled_date < dateFrom) return false;
+      if (dateTo && s.scheduled_date > dateTo) return false;
+      return true;
+    });
+
+    const ativos = filteredCycles.filter(c => c.status === 'em_andamento').length;
+    const finalizados = filteredCycles.filter(c => c.status === 'finalizado_alta').length;
+    const suspensos = filteredCycles.filter(c => c.status === 'suspenso').length;
+    const total = filteredCycles.length;
+
+    const sessRealizadas = filteredSessions.filter(s => s.status === 'realizada').length;
+    const sessFaltas = filteredSessions.filter(s => s.status === 'paciente_faltou').length;
+    const sessCanceladas = filteredSessions.filter(s => s.status === 'cancelada').length;
+    const totalSessions = filteredSessions.length;
+
+    // Average sessions per patient
+    const pacientesMap = new Map<string, number>();
+    filteredCycles.forEach(c => pacientesMap.set(c.patient_id, (pacientesMap.get(c.patient_id) || 0) + c.sessions_done));
+    const avgSessoesPorPaciente = pacientesMap.size > 0
+      ? Math.round(Array.from(pacientesMap.values()).reduce((a, b) => a + b, 0) / pacientesMap.size)
+      : 0;
+
+    // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
+    const taxaAbandono = total > 0 ? Math.round(((suspensos) / total) * 100) : 0;
+
+    // By professional
+    const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
+    filteredCycles.forEach(c => {
+      const prof = funcionarios.find(f => f.id === c.professional_id);
+      const nome = prof?.nome || 'Desconhecido';
+      if (!byProf[c.professional_id]) byProf[c.professional_id] = { nome, ativos: 0, finalizados: 0, sessoes: 0 };
+      if (c.status === 'em_andamento') byProf[c.professional_id].ativos++;
+      if (c.status === 'finalizado_alta') byProf[c.professional_id].finalizados++;
+      byProf[c.professional_id].sessoes += c.sessions_done;
+    });
+
+    // By unit
+    const byUnit: Record<string, { nome: string; total: number; ativos: number }> = {};
+    filteredCycles.forEach(c => {
+      const un = unidades.find(u => u.id === c.unit_id);
+      const nome = un?.nome || 'Desconhecida';
+      if (!byUnit[c.unit_id]) byUnit[c.unit_id] = { nome, total: 0, ativos: 0 };
+      byUnit[c.unit_id].total++;
+      if (c.status === 'em_andamento') byUnit[c.unit_id].ativos++;
+    });
+
+    // By treatment type
+    const byType: Record<string, number> = {};
+    filteredCycles.forEach(c => {
+      byType[c.treatment_type || 'Outros'] = (byType[c.treatment_type || 'Outros'] || 0) + 1;
+    });
+
+    return {
+      total, ativos, finalizados, suspensos,
+      totalSessions, sessRealizadas, sessFaltas, sessCanceladas,
+      avgSessoesPorPaciente, taxaAbandono,
+      byProfessional: Object.values(byProf).sort((a, b) => b.sessoes - a.sessoes),
+      byUnit: Object.values(byUnit).sort((a, b) => b.total - a.total),
+      byType: Object.entries(byType).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+    };
+  }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
