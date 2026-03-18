@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -133,6 +134,7 @@ const Tratamentos: React.FC = () => {
   const [cycles, setCycles] = useState<TreatmentCycle[]>([]);
   const [sessions, setSessions] = useState<TreatmentSession[]>([]);
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
 
@@ -182,14 +184,16 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
-      const [{ data: cData }, { data: sData }, { data: eData }] = await Promise.all([
+      const [{ data: cData }, { data: sData }, { data: eData }, procsData] = await Promise.all([
         qCycles,
         supabase.from("treatment_sessions").select("*").order("session_number", { ascending: true }),
         supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
+        procedureService.getActive(),
       ]);
       if (cData) setCycles(cData as TreatmentCycle[]);
       if (sData) setSessions(sData as TreatmentSession[]);
       if (eData) setExtensions(eData as TreatmentExtension[]);
+      setProcedimentos(procsData);
     } catch (err) {
       console.error("Error loading treatments:", err);
       toast.error("Erro ao carregar dados de tratamento.");
@@ -665,6 +669,32 @@ const Tratamentos: React.FC = () => {
     return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
   }, [selectedCycle, salas]);
 
+  // Procedures filtered by selected professional's profissao
+  const filteredProcedimentos = useMemo(() => {
+    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
+    const prof = profissionais.find((p) => p.id === profId);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === profId);
+    });
+  }, [procedimentos, newCycle.professional_id, profissionais, user, isProfissional]);
+
+  // Procedures for registering sessions (based on selected cycle's professional)
+  const sessionProcedimentos = useMemo(() => {
+    if (!selectedCycle) return procedimentos;
+    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === selectedCycle.professional_id);
+    });
+  }, [procedimentos, selectedCycle, profissionais]);
+
   if (loading)
     return (
       <div className="flex items-center justify-center py-12">
@@ -919,10 +949,28 @@ const Tratamentos: React.FC = () => {
               </div>
               <div>
                 <Label>Procedimento Realizado</Label>
-                <Input
-                  value={newSession.procedure_done}
-                  onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
-                />
+                {sessionProcedimentos.length > 0 ? (
+                  <Select
+                    value={newSession.procedure_done}
+                    onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessionProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newSession.procedure_done}
+                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                  />
+                )}
               </div>
               <div>
                 <Label>Observações Clínicas</Label>
@@ -1353,11 +1401,38 @@ const Tratamentos: React.FC = () => {
               )}
               <div>
                 <Label>Tipo de Tratamento *</Label>
-                <Input
-                  value={newCycle.treatment_type}
-                  onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
-                  placeholder="Ex: Reabilitação Joelho Direito"
-                />
+                {filteredProcedimentos.length > 0 ? (
+                  <Select
+                    value={newCycle.treatment_type}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, treatment_type: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}{proc.especialidade ? ` — ${proc.especialidade}` : ''}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__outro">Outro (digitar)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newCycle.treatment_type}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    placeholder="Ex: Reabilitação Joelho Direito"
+                  />
+                )}
+                {newCycle.treatment_type === "__outro" && (
+                  <Input
+                    className="mt-2"
+                    value=""
+                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                    placeholder="Digite o tipo de tratamento"
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

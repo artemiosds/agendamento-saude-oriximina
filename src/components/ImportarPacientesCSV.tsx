@@ -21,6 +21,7 @@ type Step = 'upload' | 'preview' | 'importing' | 'result';
 interface ParsedRow {
   nome: string;
   cpf: string;
+  cns: string;
   telefone: string;
   data_nascimento: string;
   email: string;
@@ -120,7 +121,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
   };
 
   const downloadTemplate = () => {
-    const content = `nome,cpf,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,(93) 99999-0003,22/07/1990,,`;
+    const content = `nome,cpf,cns,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,898000000000006,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,898000000000007,(93) 99999-0003,22/07/1990,,`;
     const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -154,6 +155,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
 
       const iNome = headers.indexOf('nome');
       const iCpf = headers.indexOf('cpf');
+      const iCns = headers.indexOf('cns');
       const iTel = headers.indexOf('telefone');
       const iDn = headers.indexOf('data_nascimento');
       const iEmail = headers.indexOf('email');
@@ -162,10 +164,11 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const parsed: ParsedRow[] = rows.map(r => ({
         nome: r[iNome] || '',
         cpf: r[iCpf] || '',
+        cns: iCns >= 0 ? (r[iCns] || '') : '',
         telefone: r[iTel] || '',
         data_nascimento: r[iDn] || '',
-        email: r[iEmail] || '',
-        endereco: r[iEnd] || '',
+        email: iEmail >= 0 ? (r[iEmail] || '') : '',
+        endereco: iEnd >= 0 ? (r[iEnd] || '') : '',
       }));
 
       setParsedRows(parsed);
@@ -194,8 +197,9 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
     const errorRows: ImportResult['errorRows'] = [];
 
     // Load existing patients for duplicate check
-    const { data: existingPatients } = await supabase.from('pacientes').select('cpf,telefone,nome,data_nascimento');
+    const { data: existingPatients } = await supabase.from('pacientes').select('cpf,cns,telefone,nome,data_nascimento');
     const existingCpfs = new Set((existingPatients || []).filter(p => p.cpf).map(p => p.cpf.replace(/\D/g, '')));
+    const existingCns = new Set((existingPatients || []).filter(p => p.cns).map(p => p.cns.replace(/\D/g, '')));
     const existingPhones = new Set((existingPatients || []).map(p => p.telefone.replace(/\D/g, '')));
     const existingNameDob = new Set((existingPatients || []).map(p => `${p.nome.toLowerCase().trim()}|${p.data_nascimento || ''}`));
 
@@ -207,6 +211,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       // Clean data
       const nome = capitalizeName(row.nome);
       const cpfClean = cleanCPF(row.cpf);
+      const cnsClean = (row.cns || '').replace(/\D/g, '');
       const phoneClean = cleanPhone(row.telefone);
       const emailClean = (row.email || '').trim().toLowerCase();
       const endereco = (row.endereco || '').trim();
@@ -262,6 +267,12 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         setProgress({ ...state });
         continue;
       }
+      if (cnsClean && existingCns.has(cnsClean)) {
+        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'CNS já cadastrado' });
+        state.skipped++;
+        setProgress({ ...state });
+        continue;
+      }
       if (existingPhones.has(phoneClean)) {
         errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone já cadastrado' });
         state.skipped++;
@@ -282,6 +293,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         id,
         nome,
         cpf: cpfClean,
+        cns: cnsClean,
         telefone: phoneClean,
         data_nascimento: dataNascFormatted,
         email: emailClean,
@@ -295,6 +307,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         state.imported++;
         // Add to dedup sets for subsequent rows
         if (cpfClean) existingCpfs.add(cpfClean);
+        if (cnsClean) existingCns.add(cnsClean);
         existingPhones.add(phoneClean);
         existingNameDob.add(nameKey);
       }
@@ -369,6 +382,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
+                    <TableHead>CNS</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Nasc.</TableHead>
                     <TableHead>E-mail</TableHead>
@@ -379,6 +393,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                     <TableRow key={i}>
                       <TableCell className="text-xs">{r.nome}</TableCell>
                       <TableCell className="text-xs">{r.cpf}</TableCell>
+                      <TableCell className="text-xs">{r.cns}</TableCell>
                       <TableCell className="text-xs">{r.telefone}</TableCell>
                       <TableCell className="text-xs">{r.data_nascimento}</TableCell>
                       <TableCell className="text-xs">{r.email}</TableCell>

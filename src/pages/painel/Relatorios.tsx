@@ -58,6 +58,8 @@ const Relatorios: React.FC = () => {
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
   const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
+  const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
+  const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -112,6 +114,20 @@ const Relatorios: React.FC = () => {
             data: r.prontuarios?.data_atendimento || '',
           })));
         }
+
+        // Load treatment data for treatment reports
+        let qCycles = supabase.from('treatment_cycles').select('*');
+        let qSessions = supabase.from('treatment_sessions').select('*');
+        if (user?.role === 'profissional') {
+          qCycles = qCycles.eq('professional_id', user.id);
+          qSessions = qSessions.eq('professional_id', user.id);
+        }
+        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+          qCycles = qCycles.eq('unit_id', user.unidadeId);
+        }
+        const [{ data: cyclesData }, { data: sessionsData }] = await Promise.all([qCycles, qSessions]);
+        if (cyclesData) setTreatmentCycles(cyclesData);
+        if (sessionsData) setTreatmentSessions(sessionsData);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
@@ -454,6 +470,79 @@ const Relatorios: React.FC = () => {
     };
   }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
 
+  // === TREATMENT STATS ===
+  const treatmentStats = useMemo(() => {
+    const filteredCycles = treatmentCycles.filter(c => {
+      if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
+      if (filterProf !== 'all' && c.professional_id !== filterProf) return false;
+      if (dateFrom && c.start_date < dateFrom) return false;
+      if (dateTo && c.start_date > dateTo) return false;
+      return true;
+    });
+    const filteredSessions = treatmentSessions.filter(s => {
+      if (filterProf !== 'all' && s.professional_id !== filterProf) return false;
+      if (dateFrom && s.scheduled_date < dateFrom) return false;
+      if (dateTo && s.scheduled_date > dateTo) return false;
+      return true;
+    });
+
+    const ativos = filteredCycles.filter(c => c.status === 'em_andamento').length;
+    const finalizados = filteredCycles.filter(c => c.status === 'finalizado_alta').length;
+    const suspensos = filteredCycles.filter(c => c.status === 'suspenso').length;
+    const total = filteredCycles.length;
+
+    const sessRealizadas = filteredSessions.filter(s => s.status === 'realizada').length;
+    const sessFaltas = filteredSessions.filter(s => s.status === 'paciente_faltou').length;
+    const sessCanceladas = filteredSessions.filter(s => s.status === 'cancelada').length;
+    const totalSessions = filteredSessions.length;
+
+    // Average sessions per patient
+    const pacientesMap = new Map<string, number>();
+    filteredCycles.forEach(c => pacientesMap.set(c.patient_id, (pacientesMap.get(c.patient_id) || 0) + c.sessions_done));
+    const avgSessoesPorPaciente = pacientesMap.size > 0
+      ? Math.round(Array.from(pacientesMap.values()).reduce((a, b) => a + b, 0) / pacientesMap.size)
+      : 0;
+
+    // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
+    const taxaAbandono = total > 0 ? Math.round(((suspensos) / total) * 100) : 0;
+
+    // By professional
+    const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
+    filteredCycles.forEach(c => {
+      const prof = funcionarios.find(f => f.id === c.professional_id);
+      const nome = prof?.nome || 'Desconhecido';
+      if (!byProf[c.professional_id]) byProf[c.professional_id] = { nome, ativos: 0, finalizados: 0, sessoes: 0 };
+      if (c.status === 'em_andamento') byProf[c.professional_id].ativos++;
+      if (c.status === 'finalizado_alta') byProf[c.professional_id].finalizados++;
+      byProf[c.professional_id].sessoes += c.sessions_done;
+    });
+
+    // By unit
+    const byUnit: Record<string, { nome: string; total: number; ativos: number }> = {};
+    filteredCycles.forEach(c => {
+      const un = unidades.find(u => u.id === c.unit_id);
+      const nome = un?.nome || 'Desconhecida';
+      if (!byUnit[c.unit_id]) byUnit[c.unit_id] = { nome, total: 0, ativos: 0 };
+      byUnit[c.unit_id].total++;
+      if (c.status === 'em_andamento') byUnit[c.unit_id].ativos++;
+    });
+
+    // By treatment type
+    const byType: Record<string, number> = {};
+    filteredCycles.forEach(c => {
+      byType[c.treatment_type || 'Outros'] = (byType[c.treatment_type || 'Outros'] || 0) + 1;
+    });
+
+    return {
+      total, ativos, finalizados, suspensos,
+      totalSessions, sessRealizadas, sessFaltas, sessCanceladas,
+      avgSessoesPorPaciente, taxaAbandono,
+      byProfessional: Object.values(byProf).sort((a, b) => b.sessoes - a.sessoes),
+      byUnit: Object.values(byUnit).sort((a, b) => b.total - a.total),
+      byType: Object.entries(byType).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total),
+    };
+  }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -686,6 +775,7 @@ const Relatorios: React.FC = () => {
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
           <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
+          <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
         </TabsList>
 
@@ -1354,6 +1444,104 @@ const Relatorios: React.FC = () => {
                   <PieChart>
                     <Pie data={procedimentoStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
                       {procedimentoStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === TRATAMENTOS === */}
+        <TabsContent value="tratamentos" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            {[
+              { label: 'Total Ciclos', value: treatmentStats.total, color: 'text-foreground' },
+              { label: 'Ativos', value: treatmentStats.ativos, color: 'text-success' },
+              { label: 'Finalizados', value: treatmentStats.finalizados, color: 'text-muted-foreground' },
+              { label: 'Suspensos', value: treatmentStats.suspensos, color: 'text-destructive' },
+              { label: 'Méd. Sessões/Pac.', value: treatmentStats.avgSessoesPorPaciente, color: 'text-primary' },
+              { label: 'Taxa Abandono', value: `${treatmentStats.taxaAbandono}%`, color: 'text-warning' },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Total Sessões', value: treatmentStats.totalSessions },
+              { label: 'Realizadas', value: treatmentStats.sessRealizadas },
+              { label: 'Faltas', value: treatmentStats.sessFaltas },
+              { label: 'Canceladas', value: treatmentStats.sessCanceladas },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {treatmentStats.byType.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Tipo</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={treatmentStats.byType} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="nome" width={150} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byProfessional.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Profissional</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b">
+                      <th className="text-left py-2 px-2">Profissional</th>
+                      <th className="text-center py-2 px-2">Ativos</th>
+                      <th className="text-center py-2 px-2">Finalizados</th>
+                      <th className="text-center py-2 px-2">Sessões</th>
+                    </tr></thead>
+                    <tbody>
+                      {treatmentStats.byProfessional.map((p, i) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2 px-2 font-medium">{p.nome}</td>
+                          <td className="py-2 px-2 text-center text-success">{p.ativos}</td>
+                          <td className="py-2 px-2 text-center text-muted-foreground">{p.finalizados}</td>
+                          <td className="py-2 px-2 text-center font-bold">{p.sessoes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byUnit.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Unidade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={treatmentStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {treatmentStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
                     <Tooltip />
                   </PieChart>

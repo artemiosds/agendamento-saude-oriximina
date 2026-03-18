@@ -13,7 +13,16 @@ import {
   Procedimento,
   EpisodioClinico,
 } from "@/types";
-import { mockSetores } from "@/data/mockData";
+// Setores inline — no more mockData dependency
+const inlineSetores = [
+  { id: "st1", nome: "Clínica Geral" },
+  { id: "st2", nome: "Pediatria" },
+  { id: "st3", nome: "Odontologia" },
+  { id: "st4", nome: "Enfermagem" },
+  { id: "st5", nome: "Fisioterapia" },
+  { id: "st6", nome: "Psicologia" },
+  { id: "st7", nome: "Nutrição" },
+];
 import { supabase } from "@/integrations/supabase/client";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 
@@ -199,7 +208,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [salas, setSalas] = useState<Sala[]>([]);
-  const [setores] = useState<Setor[]>(mockSetores);
+  const [setores] = useState<Setor[]>(inlineSetores);
   const [funcionarios, setFuncionarios] = useState<User[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
