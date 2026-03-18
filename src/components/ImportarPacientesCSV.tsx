@@ -293,6 +293,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         id,
         nome,
         cpf: cpfClean,
+        cns: cnsClean,
         telefone: phoneClean,
         data_nascimento: dataNascFormatted,
         email: emailClean,
