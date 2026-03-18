@@ -155,6 +155,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
 
       const iNome = headers.indexOf('nome');
       const iCpf = headers.indexOf('cpf');
+      const iCns = headers.indexOf('cns');
       const iTel = headers.indexOf('telefone');
       const iDn = headers.indexOf('data_nascimento');
       const iEmail = headers.indexOf('email');
@@ -163,10 +164,11 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const parsed: ParsedRow[] = rows.map(r => ({
         nome: r[iNome] || '',
         cpf: r[iCpf] || '',
+        cns: iCns >= 0 ? (r[iCns] || '') : '',
         telefone: r[iTel] || '',
         data_nascimento: r[iDn] || '',
-        email: r[iEmail] || '',
-        endereco: r[iEnd] || '',
+        email: iEmail >= 0 ? (r[iEmail] || '') : '',
+        endereco: iEnd >= 0 ? (r[iEnd] || '') : '',
       }));
 
       setParsedRows(parsed);
