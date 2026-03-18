@@ -949,10 +949,28 @@ const Tratamentos: React.FC = () => {
               </div>
               <div>
                 <Label>Procedimento Realizado</Label>
-                <Input
-                  value={newSession.procedure_done}
-                  onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
-                />
+                {sessionProcedimentos.length > 0 ? (
+                  <Select
+                    value={newSession.procedure_done}
+                    onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessionProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>
+                          {proc.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={newSession.procedure_done}
+                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                  />
+                )}
               </div>
               <div>
                 <Label>Observações Clínicas</Label>
