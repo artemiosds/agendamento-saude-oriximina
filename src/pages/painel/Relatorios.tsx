@@ -114,6 +114,20 @@ const Relatorios: React.FC = () => {
             data: r.prontuarios?.data_atendimento || '',
           })));
         }
+
+        // Load treatment data for treatment reports
+        let qCycles = supabase.from('treatment_cycles').select('*');
+        let qSessions = supabase.from('treatment_sessions').select('*');
+        if (user?.role === 'profissional') {
+          qCycles = qCycles.eq('professional_id', user.id);
+          qSessions = qSessions.eq('professional_id', user.id);
+        }
+        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+          qCycles = qCycles.eq('unit_id', user.unidadeId);
+        }
+        const [{ data: cyclesData }, { data: sessionsData }] = await Promise.all([qCycles, qSessions]);
+        if (cyclesData) setTreatmentCycles(cyclesData);
+        if (sessionsData) setTreatmentSessions(sessionsData);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
