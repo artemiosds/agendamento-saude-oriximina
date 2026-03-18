@@ -94,7 +94,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
               >
                 <p className="text-sm font-medium">{p.nome}</p>
                 <p className="text-xs text-muted-foreground">
-                  {p.cpf ? `CPF: ${p.cpf} · ` : ''}Tel: {p.telefone}
+                  {p.cpf ? `CPF: ${p.cpf} · ` : ''}{(p as any).cns ? `CNS: ${(p as any).cns} · ` : ''}Tel: {p.telefone}
                 </p>
               </button>
             ))
