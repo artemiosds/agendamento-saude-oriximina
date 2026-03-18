@@ -24,6 +24,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       .filter(p =>
         p.nome.toLowerCase().includes(term) ||
         p.cpf?.replace(/[.\-/]/g, '').includes(term) ||
+        (p as any).cns?.replace(/[.\-/]/g, '').includes(term) ||
         p.telefone?.replace(/[^\d]/g, '').includes(term.replace(/[^\d]/g, ''))
       )
       .slice(0, 8);
