@@ -1550,6 +1550,7 @@ const Relatorios: React.FC = () => {
             </Card>
           )}
         </TabsContent>
+      </Tabs>
     </div>
   );
 };
