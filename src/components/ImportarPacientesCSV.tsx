@@ -307,6 +307,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         state.imported++;
         // Add to dedup sets for subsequent rows
         if (cpfClean) existingCpfs.add(cpfClean);
+        if (cnsClean) existingCns.add(cnsClean);
         existingPhones.add(phoneClean);
         existingNameDob.add(nameKey);
       }
