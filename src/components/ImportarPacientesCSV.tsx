@@ -382,6 +382,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
+                    <TableHead>CNS</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Nasc.</TableHead>
                     <TableHead>E-mail</TableHead>
@@ -392,6 +393,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                     <TableRow key={i}>
                       <TableCell className="text-xs">{r.nome}</TableCell>
                       <TableCell className="text-xs">{r.cpf}</TableCell>
+                      <TableCell className="text-xs">{r.cns}</TableCell>
                       <TableCell className="text-xs">{r.telefone}</TableCell>
                       <TableCell className="text-xs">{r.data_nascimento}</TableCell>
                       <TableCell className="text-xs">{r.email}</TableCell>
