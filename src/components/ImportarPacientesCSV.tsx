@@ -267,6 +267,12 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         setProgress({ ...state });
         continue;
       }
+      if (cnsClean && existingCns.has(cnsClean)) {
+        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'CNS já cadastrado' });
+        state.skipped++;
+        setProgress({ ...state });
+        continue;
+      }
       if (existingPhones.has(phoneClean)) {
         errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone já cadastrado' });
         state.skipped++;
