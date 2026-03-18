@@ -669,6 +669,32 @@ const Tratamentos: React.FC = () => {
     return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
   }, [selectedCycle, salas]);
 
+  // Procedures filtered by selected professional's profissao
+  const filteredProcedimentos = useMemo(() => {
+    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
+    const prof = profissionais.find((p) => p.id === profId);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === profId);
+    });
+  }, [procedimentos, newCycle.professional_id, profissionais, user, isProfissional]);
+
+  // Procedures for registering sessions (based on selected cycle's professional)
+  const sessionProcedimentos = useMemo(() => {
+    if (!selectedCycle) return procedimentos;
+    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === selectedCycle.professional_id);
+    });
+  }, [procedimentos, selectedCycle, profissionais]);
+
   if (loading)
     return (
       <div className="flex items-center justify-center py-12">
