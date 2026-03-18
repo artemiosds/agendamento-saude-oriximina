@@ -197,8 +197,9 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
     const errorRows: ImportResult['errorRows'] = [];
 
     // Load existing patients for duplicate check
-    const { data: existingPatients } = await supabase.from('pacientes').select('cpf,telefone,nome,data_nascimento');
+    const { data: existingPatients } = await supabase.from('pacientes').select('cpf,cns,telefone,nome,data_nascimento');
     const existingCpfs = new Set((existingPatients || []).filter(p => p.cpf).map(p => p.cpf.replace(/\D/g, '')));
+    const existingCns = new Set((existingPatients || []).filter(p => p.cns).map(p => p.cns.replace(/\D/g, '')));
     const existingPhones = new Set((existingPatients || []).map(p => p.telefone.replace(/\D/g, '')));
     const existingNameDob = new Set((existingPatients || []).map(p => `${p.nome.toLowerCase().trim()}|${p.data_nascimento || ''}`));
 
