@@ -58,6 +58,8 @@ const Relatorios: React.FC = () => {
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
   const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
+  const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
+  const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
