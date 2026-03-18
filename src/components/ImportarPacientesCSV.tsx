@@ -121,7 +121,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
   };
 
   const downloadTemplate = () => {
-    const content = `nome,cpf,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,(93) 99999-0003,22/07/1990,,`;
+    const content = `nome,cpf,cns,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,898000000000006,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,898000000000007,(93) 99999-0003,22/07/1990,,`;
     const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
