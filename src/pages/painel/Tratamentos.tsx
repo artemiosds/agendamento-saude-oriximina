@@ -184,14 +184,16 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
-      const [{ data: cData }, { data: sData }, { data: eData }] = await Promise.all([
+      const [{ data: cData }, { data: sData }, { data: eData }, procsData] = await Promise.all([
         qCycles,
         supabase.from("treatment_sessions").select("*").order("session_number", { ascending: true }),
         supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
+        procedureService.getActive(),
       ]);
       if (cData) setCycles(cData as TreatmentCycle[]);
       if (sData) setSessions(sData as TreatmentSession[]);
       if (eData) setExtensions(eData as TreatmentExtension[]);
+      setProcedimentos(procsData);
     } catch (err) {
       console.error("Error loading treatments:", err);
       toast.error("Erro ao carregar dados de tratamento.");
