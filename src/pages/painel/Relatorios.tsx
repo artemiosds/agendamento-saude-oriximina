@@ -1452,7 +1452,104 @@ const Relatorios: React.FC = () => {
             </Card>
           )}
         </TabsContent>
-      </Tabs>
+
+        {/* === TRATAMENTOS === */}
+        <TabsContent value="tratamentos" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            {[
+              { label: 'Total Ciclos', value: treatmentStats.total, color: 'text-foreground' },
+              { label: 'Ativos', value: treatmentStats.ativos, color: 'text-success' },
+              { label: 'Finalizados', value: treatmentStats.finalizados, color: 'text-muted-foreground' },
+              { label: 'Suspensos', value: treatmentStats.suspensos, color: 'text-destructive' },
+              { label: 'Méd. Sessões/Pac.', value: treatmentStats.avgSessoesPorPaciente, color: 'text-primary' },
+              { label: 'Taxa Abandono', value: `${treatmentStats.taxaAbandono}%`, color: 'text-warning' },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Total Sessões', value: treatmentStats.totalSessions },
+              { label: 'Realizadas', value: treatmentStats.sessRealizadas },
+              { label: 'Faltas', value: treatmentStats.sessFaltas },
+              { label: 'Canceladas', value: treatmentStats.sessCanceladas },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {treatmentStats.byType.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Tipo</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={treatmentStats.byType} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="nome" width={150} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byProfessional.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Profissional</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b">
+                      <th className="text-left py-2 px-2">Profissional</th>
+                      <th className="text-center py-2 px-2">Ativos</th>
+                      <th className="text-center py-2 px-2">Finalizados</th>
+                      <th className="text-center py-2 px-2">Sessões</th>
+                    </tr></thead>
+                    <tbody>
+                      {treatmentStats.byProfessional.map((p, i) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2 px-2 font-medium">{p.nome}</td>
+                          <td className="py-2 px-2 text-center text-success">{p.ativos}</td>
+                          <td className="py-2 px-2 text-center text-muted-foreground">{p.finalizados}</td>
+                          <td className="py-2 px-2 text-center font-bold">{p.sessoes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byUnit.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Unidade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={treatmentStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {treatmentStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
     </div>
   );
 };
