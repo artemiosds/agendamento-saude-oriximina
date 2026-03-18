@@ -21,6 +21,7 @@ type Step = 'upload' | 'preview' | 'importing' | 'result';
 interface ParsedRow {
   nome: string;
   cpf: string;
+  cns: string;
   telefone: string;
   data_nascimento: string;
   email: string;
