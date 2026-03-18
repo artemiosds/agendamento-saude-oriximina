@@ -211,6 +211,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       // Clean data
       const nome = capitalizeName(row.nome);
       const cpfClean = cleanCPF(row.cpf);
+      const cnsClean = (row.cns || '').replace(/\D/g, '');
       const phoneClean = cleanPhone(row.telefone);
       const emailClean = (row.email || '').trim().toLowerCase();
       const endereco = (row.endereco || '').trim();
