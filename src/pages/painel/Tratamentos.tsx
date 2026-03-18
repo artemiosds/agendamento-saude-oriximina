@@ -134,6 +134,7 @@ const Tratamentos: React.FC = () => {
   const [cycles, setCycles] = useState<TreatmentCycle[]>([]);
   const [sessions, setSessions] = useState<TreatmentSession[]>([]);
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
 
