@@ -1044,6 +1044,10 @@ const FilaEspera: React.FC = () => {
                 <Input value={importForm.cpf} onChange={e => setImportForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
               </div>
               <div>
+                <Label>CNS / Cartão SUS</Label>
+                <Input value={importForm.cns} onChange={e => setImportForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do Cartão SUS" />
+              </div>
+              <div>
                 <Label>E-mail (opcional)</Label>
                 <Input type="email" value={importForm.email} onChange={e => setImportForm(p => ({ ...p, email: e.target.value }))} />
                 {importErrors.email && <p className="text-xs text-destructive mt-1">{importErrors.email}</p>}
