@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData, formatarDataHora } from '@/components/DetalheDrawer';
 import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
 import { cn } from '@/lib/utils';
