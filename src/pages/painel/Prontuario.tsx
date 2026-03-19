@@ -28,6 +28,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
+import { BuscaPaciente } from "@/components/BuscaPaciente";
 
 interface ProntuarioDB {
   id: string;
