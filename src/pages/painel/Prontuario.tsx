@@ -836,27 +836,14 @@ const ProntuarioPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Paciente *</Label>
-                <Select
-                  value={form.paciente_id || "no_patient"}
-                  onValueChange={(v) => {
-                    const actualValue = v === "no_patient" ? "" : v;
-                    const pac = pacientes.find((p) => p.id === actualValue);
-                    setForm((prev) => ({ ...prev, paciente_id: actualValue, paciente_nome: pac?.nome || "" }));
-                    if (actualValue) loadEpisodios(actualValue);
+                <BuscaPaciente
+                  pacientes={pacientes}
+                  value={form.paciente_id}
+                  onChange={(id, nome) => {
+                    setForm((prev) => ({ ...prev, paciente_id: id, paciente_nome: nome }));
+                    if (id) loadEpisodios(id);
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o paciente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="no_patient">Selecione o paciente</SelectItem>
-                    {pacientes.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
