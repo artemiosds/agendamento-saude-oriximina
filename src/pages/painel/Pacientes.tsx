@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText } from 'lucide-react';
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
@@ -19,8 +19,10 @@ import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { useNavigate } from 'react-router-dom';
 
 const Pacientes: React.FC = () => {
+  const navigate = useNavigate();
   const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
@@ -476,9 +478,12 @@ const Pacientes: React.FC = () => {
                         <Users className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDetalhePaciente(p); setDetalheOpen(true); }} title="Detalhes">
-                      <Eye className="w-3.5 h-3.5" />
-                    </Button>
+                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => { setDetalhePaciente(p); setDetalheOpen(true); }} title="Detalhes">
+                       <Eye className="w-3.5 h-3.5" />
+                     </Button>
+                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`)} title="Ver Prontuários">
+                       <FileText className="w-3.5 h-3.5" />
+                     </Button>
                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -555,6 +560,18 @@ const Pacientes: React.FC = () => {
                 <Campo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarData(detalhePaciente.criadoEm) : undefined} hide />
                 <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
                 <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    setDetalheOpen(false);
+                    navigate(`/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`);
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Ver Prontuários Completos
+                </Button>
               </Secao>
               {(naFila || isDemanda) && (
                 <Secao titulo="Etiquetas">
