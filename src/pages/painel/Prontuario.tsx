@@ -578,13 +578,74 @@ const ProntuarioPage: React.FC = () => {
     openPrintDocument("Prontuário de Atendimento", body, { Unidade: unidadeNome });
   };
 
+  const handlePrintFullHistory = (pacienteId: string, pacienteNome: string) => {
+    const patientRecords = prontuarios
+      .filter((p) => p.paciente_id === pacienteId)
+      .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
+    if (patientRecords.length === 0) {
+      toast.info("Nenhum prontuário encontrado para este paciente.");
+      return;
+    }
+    const pac = pacientes.find((px) => px.id === pacienteId);
+    logAction({
+      acao: "historico_completo_exportado_pdf",
+      entidade: "prontuario",
+      entidadeId: pacienteId,
+      modulo: "prontuario",
+      user,
+      detalhes: { paciente_nome: pacienteNome, paciente_cpf: pac?.cpf || "", total_registros: patientRecords.length },
+    });
+
+    const allSections = patientRecords.map((p) => {
+      const unidadeNome = unidades.find((u) => u.id === p.unidade_id)?.nome || p.unidade_id;
+      const fields = [
+        { title: "Queixa Principal", content: p.queixa_principal },
+        { title: "Anamnese", content: p.anamnese },
+        { title: "Sinais e Sintomas", content: p.sinais_sintomas },
+        { title: "Exame Físico", content: p.exame_fisico },
+        { title: "Hipótese / Avaliação", content: p.hipotese },
+        { title: "Conduta", content: p.conduta },
+        { title: "Prescrição", content: p.prescricao },
+        { title: "Evolução", content: p.evolucao },
+        { title: "Procedimentos", content: p.procedimentos_texto },
+        { title: "Observações", content: p.observacoes },
+      ].filter((s) => s.content).map(
+        (s) => `<div class="section"><div class="section-title">${s.title}</div><div class="section-content">${s.content}</div></div>`
+      ).join("");
+      return `
+        <div style="page-break-inside:avoid;margin-bottom:24px;border:1px solid #ddd;border-radius:8px;padding:16px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <strong>${new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} ${p.hora_atendimento || ""}</strong>
+            <span style="color:#666;">Prof. ${p.profissional_nome} • ${unidadeNome}</span>
+          </div>
+          ${fields}
+        </div>`;
+    }).join("");
+
+    const body = `
+      <div class="info-grid">
+        <div><span class="info-label">Paciente:</span><br/><span class="info-value">${pacienteNome}</span></div>
+        <div><span class="info-label">CPF:</span><br/><span class="info-value">${pac?.cpf || "—"}</span></div>
+        <div><span class="info-label">CNS:</span><br/><span class="info-value">${(pac as any)?.cns || "—"}</span></div>
+        <div><span class="info-label">Total de Registros:</span><br/><span class="info-value">${patientRecords.length}</span></div>
+      </div>
+      <h3 style="margin:16px 0 8px;font-size:14px;font-weight:bold;">Histórico Clínico Completo</h3>
+      ${allSections}`;
+    openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
+  };
+
   const queryPacienteId = searchParams.get("pacienteId");
   const filtered = prontuarios.filter((p) => {
     if (queryPacienteId) return p.paciente_id === queryPacienteId;
+    if (!search) return true;
+    const term = search.toLowerCase();
+    // Search by patient name, professional name, CPF or CNS
+    const pac = pacientes.find((px) => px.id === p.paciente_id);
     return (
-      !search ||
-      p.paciente_nome.toLowerCase().includes(search.toLowerCase()) ||
-      p.profissional_nome.toLowerCase().includes(search.toLowerCase())
+      p.paciente_nome.toLowerCase().includes(term) ||
+      p.profissional_nome.toLowerCase().includes(term) ||
+      (pac?.cpf || "").replace(/[.\-/]/g, "").includes(term.replace(/[.\-/]/g, "")) ||
+      ((pac as any)?.cns || "").includes(term)
     );
   });
   const queryPacienteNome = searchParams.get("pacienteNome");
@@ -598,12 +659,19 @@ const ProntuarioPage: React.FC = () => {
           </h1>
           <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {queryPacienteId && (
             <>
               <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
                 <Activity className="w-4 h-4 mr-2" />
                 {showHistorico ? "Ocultar" : "Ver"} Histórico
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handlePrintFullHistory(queryPacienteId, queryPacienteNome || "Paciente")}
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir Histórico Completo
               </Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
@@ -636,7 +704,7 @@ const ProntuarioPage: React.FC = () => {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por paciente ou profissional..."
+            placeholder="Buscar por paciente, profissional, CPF ou CNS..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
