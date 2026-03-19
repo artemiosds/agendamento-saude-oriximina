@@ -422,6 +422,10 @@ const FilaEspera: React.FC = () => {
       const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
       if (found) return found;
     }
+    if (cnsClean.length >= 15) {
+      const found = pacientes.find(p => (p.cns || '').replace(/\D/g, '') === cnsClean);
+      if (found) return found;
+    }
     if (telClean.length >= 8) {
       const found = pacientes.find(p => p.telefone.replace(/\D/g, '') === telClean);
       if (found) return found;
