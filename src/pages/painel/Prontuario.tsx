@@ -179,8 +179,8 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = async () => {
     setLoading(true);
     try {
+      // All professionals can VIEW all prontuários — edit is restricted in the UI
       let query = (supabase as any).from("prontuarios").select("*").order("data_atendimento", { ascending: false });
-      if (isProfissional && user) query = query.eq("profissional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) query = query.eq("unidade_id", user.unidadeId);
       const { data, error } = await query;
       if (data) setProntuarios(data);
