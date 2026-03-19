@@ -319,7 +319,7 @@ const Pacientes: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
               <div>
-                <Label>E-mail *</Label>
+                <Label>E-mail (opcional)</Label>
                 <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
                 {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
               </div>
