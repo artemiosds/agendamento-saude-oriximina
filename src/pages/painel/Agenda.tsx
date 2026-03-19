@@ -44,6 +44,7 @@ import {
   Bell,
 } from "lucide-react";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
+import ContactActionButton from "@/components/ContactActionButton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -1168,6 +1169,7 @@ const Agenda: React.FC = () => {
                         )}
                         {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
                       </div>
+                      <ContactActionButton phone={paciente?.telefone} patientName={ag.pacienteNome} unitName={unidades.find(u => u.id === ag.unidadeId)?.nome} />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}

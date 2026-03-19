@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData, formatarDataHora } from '@/components/DetalheDrawer';
 import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
 import { cn } from '@/lib/utils';
@@ -126,7 +127,7 @@ const FilaEspera: React.FC = () => {
   // Import old list dialog
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importForm, setImportForm] = useState({
-    nome: '', telefone: '', cpf: '', email: '', dataNascimento: '',
+    nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '',
     unidadeId: '', profissionalId: '', tipo: 'primeira_consulta',
     dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '',
     prioridade: 'normal',
@@ -413,11 +414,16 @@ const FilaEspera: React.FC = () => {
   // ---- Import old list handler ----
   const checkImportDuplicidade = (dados: typeof importForm) => {
     const cpfClean = dados.cpf.replace(/\D/g, '');
+    const cnsClean = (dados.cns || '').replace(/\D/g, '');
     const telClean = dados.telefone.replace(/\D/g, '');
     const emailLower = dados.email.toLowerCase().trim();
 
     if (cpfClean.length >= 11) {
       const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
+      if (found) return found;
+    }
+    if (cnsClean.length >= 15) {
+      const found = pacientes.find(p => (p.cns || '').replace(/\D/g, '') === cnsClean);
       if (found) return found;
     }
     if (telClean.length >= 8) {
@@ -497,7 +503,7 @@ const FilaEspera: React.FC = () => {
           id: pacienteId,
           nome: importForm.nome,
           cpf: importForm.cpf,
-          cns: '',
+          cns: importForm.cns || '',
           telefone: importForm.telefone,
           email: importForm.email,
           dataNascimento: importForm.dataNascimento,
@@ -639,7 +645,7 @@ const FilaEspera: React.FC = () => {
           {canManage && (
             <>
               <Button variant="outline" onClick={() => {
-                setImportForm({ nome: '', telefone: '', cpf: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
+                setImportForm({ nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
                 setImportDup(null);
                 setImportErrors({});
                 setImportDialogOpen(true);
@@ -905,7 +911,7 @@ const FilaEspera: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>E-mail *</Label>
+                    <Label>E-mail (opcional)</Label>
                     <Input type="email" value={novoPaciente.email} onChange={e => setNovoPaciente(p => ({ ...p, email: e.target.value }))} />
                     {pacienteErrors.email && <p className="text-xs text-destructive mt-1">{pacienteErrors.email}</p>}
                   </div>
@@ -1036,6 +1042,10 @@ const FilaEspera: React.FC = () => {
               <div>
                 <Label>CPF (opcional)</Label>
                 <Input value={importForm.cpf} onChange={e => setImportForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
+              </div>
+              <div>
+                <Label>CNS / Cartão SUS</Label>
+                <Input value={importForm.cns} onChange={e => setImportForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do Cartão SUS" />
               </div>
               <div>
                 <Label>E-mail (opcional)</Label>
@@ -1199,6 +1209,7 @@ const FilaEspera: React.FC = () => {
                     </div>
                   )}
                 </div>
+                <ContactActionButton phone={pacientes.find(p => p.id === f.pacienteId)?.telefone} patientName={f.pacienteNome} unitName={unidade?.nome} />
                 <Badge className={cn('shrink-0', prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
                   {prioridadeLabel[f.prioridade] || f.prioridade}
                 </Badge>

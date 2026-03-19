@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye } from 'lucide-react';
+import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
@@ -318,7 +319,7 @@ const Pacientes: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
               <div>
-                <Label>E-mail *</Label>
+                <Label>E-mail (opcional)</Label>
                 <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
                 {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
               </div>
@@ -469,6 +470,7 @@ const Pacientes: React.FC = () => {
                     )}
                   </div>
                   <div className="flex gap-1">
+                    <ContactActionButton phone={p.telefone} patientName={p.nome} unitName={unidades.find(u => u.id === (filaEntry?.unidadeId || user?.unidadeId))?.nome} />
                     {canAddToFila && !naFila && (
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-warning" onClick={() => openFilaDialog(p)} title="Adicionar à fila">
                         <Users className="w-3.5 h-3.5" />
