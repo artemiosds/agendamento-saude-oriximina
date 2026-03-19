@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText } from 'lucide-react';
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { useNavigate } from 'react-router-dom';
 
 const Pacientes: React.FC = () => {
   const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
