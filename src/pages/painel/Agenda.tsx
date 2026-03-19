@@ -1169,6 +1169,7 @@ const Agenda: React.FC = () => {
                         )}
                         {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
                       </div>
+                      <ContactActionButton phone={paciente?.telefone} patientName={ag.pacienteNome} unitName={unidades.find(u => u.id === ag.unidadeId)?.nome} />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}
