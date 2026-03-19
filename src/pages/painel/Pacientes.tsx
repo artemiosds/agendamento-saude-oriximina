@@ -560,6 +560,18 @@ const Pacientes: React.FC = () => {
                 <Campo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarData(detalhePaciente.criadoEm) : undefined} hide />
                 <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
                 <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    setDetalheOpen(false);
+                    navigate(`/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`);
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Ver Prontuários Completos
+                </Button>
               </Secao>
               {(naFila || isDemanda) && (
                 <Secao titulo="Etiquetas">
