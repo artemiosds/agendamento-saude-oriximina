@@ -22,6 +22,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useNavigate } from 'react-router-dom';
 
 const Pacientes: React.FC = () => {
+  const navigate = useNavigate();
   const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
