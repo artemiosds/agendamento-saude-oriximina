@@ -1209,6 +1209,7 @@ const FilaEspera: React.FC = () => {
                     </div>
                   )}
                 </div>
+                <ContactActionButton phone={pacientes.find(p => p.id === f.pacienteId)?.telefone} patientName={f.pacienteNome} unitName={unidade?.nome} />
                 <Badge className={cn('shrink-0', prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
                   {prioridadeLabel[f.prioridade] || f.prioridade}
                 </Badge>
