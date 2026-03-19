@@ -414,6 +414,7 @@ const FilaEspera: React.FC = () => {
   // ---- Import old list handler ----
   const checkImportDuplicidade = (dados: typeof importForm) => {
     const cpfClean = dados.cpf.replace(/\D/g, '');
+    const cnsClean = (dados.cns || '').replace(/\D/g, '');
     const telClean = dados.telefone.replace(/\D/g, '');
     const emailLower = dados.email.toLowerCase().trim();
 
