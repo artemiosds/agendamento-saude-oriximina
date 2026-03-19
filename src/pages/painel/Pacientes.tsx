@@ -470,6 +470,7 @@ const Pacientes: React.FC = () => {
                     )}
                   </div>
                   <div className="flex gap-1">
+                    <ContactActionButton phone={p.telefone} patientName={p.nome} unitName={unidades.find(u => u.id === (filaEntry?.unidadeId || user?.unidadeId))?.nome} />
                     {canAddToFila && !naFila && (
                       <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-warning" onClick={() => openFilaDialog(p)} title="Adicionar à fila">
                         <Users className="w-3.5 h-3.5" />
