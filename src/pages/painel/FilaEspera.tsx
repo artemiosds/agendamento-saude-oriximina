@@ -120,14 +120,14 @@ const FilaEspera: React.FC = () => {
 
   // New patient creation mode
   const [criarPaciente, setCriarPaciente] = useState(false);
-  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
+  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
 
   // Import old list dialog
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importForm, setImportForm] = useState({
-    nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '',
+    nome: '', telefone: '', cpf: '', cns: '', nomeMae: '', email: '', dataNascimento: '',
     unidadeId: '', profissionalId: '', tipo: 'primeira_consulta',
     dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '',
     prioridade: 'normal',
@@ -237,7 +237,7 @@ const FilaEspera: React.FC = () => {
     setEditId(null);
     setForm({ pacienteNome: '', pacienteId: '', unidadeId: '', profissionalId: '', setor: '', prioridade: 'normal', observacoes: '', descricaoClinica: '', cid: '' });
     setCriarPaciente(false);
-    setNovoPaciente({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
+    setNovoPaciente({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
     setDuplicataEncontrada(null);
     setPacienteErrors({});
     setDialogOpen(true);
@@ -259,11 +259,16 @@ const FilaEspera: React.FC = () => {
   // Check for duplicate patients
   const checkDuplicidade = (dados: typeof novoPaciente) => {
     const cpfClean = dados.cpf.replace(/\D/g, '');
+    const cnsClean = (dados.cns || '').replace(/\D/g, '');
     const telClean = dados.telefone.replace(/\D/g, '');
     const emailLower = dados.email.toLowerCase().trim();
 
     if (cpfClean.length >= 11) {
       const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === cpfClean);
+      if (found) return found;
+    }
+    if (cnsClean.length >= 15) {
+      const found = pacientes.find(p => (p.cns || '').replace(/\D/g, '') === cnsClean);
       if (found) return found;
     }
     if (telClean.length >= 8) {
@@ -305,8 +310,8 @@ const FilaEspera: React.FC = () => {
         id: pacienteId,
         nome: novoPaciente.nome,
         cpf: novoPaciente.cpf,
-        cns: '',
-        nomeMae: '',
+        cns: novoPaciente.cns || '',
+        nomeMae: novoPaciente.nomeMae || '',
         telefone: novoPaciente.telefone,
         email: novoPaciente.email,
         dataNascimento: novoPaciente.dataNascimento,
@@ -505,7 +510,7 @@ const FilaEspera: React.FC = () => {
           nome: importForm.nome,
           cpf: importForm.cpf,
           cns: importForm.cns || '',
-          nomeMae: '',
+          nomeMae: (importForm as any).nomeMae || '',
           telefone: importForm.telefone,
           email: importForm.email,
           dataNascimento: importForm.dataNascimento,
@@ -647,7 +652,7 @@ const FilaEspera: React.FC = () => {
           {canManage && (
             <>
               <Button variant="outline" onClick={() => {
-                setImportForm({ nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
+                setImportForm({ nome: '', telefone: '', cpf: '', cns: '', nomeMae: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' } as any);
                 setImportDup(null);
                 setImportErrors({});
                 setImportDialogOpen(true);
@@ -868,7 +873,7 @@ const FilaEspera: React.FC = () => {
                 {!editId && (
                   <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-primary" onClick={() => {
                     setCriarPaciente(true);
-                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
+                    setNovoPaciente({ nome: form.pacienteNome || '', cpf: '', cns: '', nomeMae: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
                     setDuplicataEncontrada(null);
                     setPacienteErrors({});
                   }}>
@@ -906,25 +911,35 @@ const FilaEspera: React.FC = () => {
                     <Input value={novoPaciente.cpf} onChange={e => setNovoPaciente(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
                   </div>
                   <div>
+                    <Label>Cartão SUS / CNS</Label>
+                    <Input value={novoPaciente.cns} onChange={e => setNovoPaciente(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Nome da Mãe</Label>
+                  <Input value={novoPaciente.nomeMae} onChange={e => setNovoPaciente(p => ({ ...p, nomeMae: e.target.value }))} placeholder="Nome completo da mãe" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
                     <Label>Telefone *</Label>
                     <Input value={novoPaciente.telefone} onChange={e => setNovoPaciente(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
                     {pacienteErrors.telefone && <p className="text-xs text-destructive mt-1">{pacienteErrors.telefone}</p>}
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>E-mail (opcional)</Label>
                     <Input type="email" value={novoPaciente.email} onChange={e => setNovoPaciente(p => ({ ...p, email: e.target.value }))} />
                     {pacienteErrors.email && <p className="text-xs text-destructive mt-1">{pacienteErrors.email}</p>}
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Data Nasc.</Label>
                     <Input type="date" value={novoPaciente.dataNascimento} onChange={e => setNovoPaciente(p => ({ ...p, dataNascimento: e.target.value }))} />
                   </div>
-                </div>
-                <div>
-                  <Label>Endereço</Label>
-                  <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
+                  <div>
+                    <Label>Endereço</Label>
+                    <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
+                  </div>
                 </div>
                 <div className="border-t pt-3 mt-1">
                   <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
@@ -1048,6 +1063,10 @@ const FilaEspera: React.FC = () => {
               <div>
                 <Label>CNS / Cartão SUS</Label>
                 <Input value={importForm.cns} onChange={e => setImportForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do Cartão SUS" />
+              </div>
+              <div className="col-span-2">
+                <Label>Nome da Mãe</Label>
+                <Input value={(importForm as any).nomeMae || ''} onChange={e => setImportForm(p => ({ ...p, nomeMae: e.target.value } as any))} placeholder="Nome completo da mãe" />
               </div>
               <div>
                 <Label>E-mail (opcional)</Label>
