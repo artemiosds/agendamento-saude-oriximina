@@ -297,6 +297,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         nome,
         cpf: cpfClean,
         cns: cnsClean,
+        nome_mae: (row.nome_mae || '').trim(),
         telefone: phoneClean,
         data_nascimento: dataNascFormatted,
         email: emailClean,
