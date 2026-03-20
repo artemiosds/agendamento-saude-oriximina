@@ -157,6 +157,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const iNome = headers.indexOf('nome');
       const iCpf = headers.indexOf('cpf');
       const iCns = headers.indexOf('cns');
+      const iNomeMae = headers.indexOf('nome_mae');
       const iTel = headers.indexOf('telefone');
       const iDn = headers.indexOf('data_nascimento');
       const iEmail = headers.indexOf('email');
@@ -166,6 +167,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         nome: r[iNome] || '',
         cpf: r[iCpf] || '',
         cns: iCns >= 0 ? (r[iCns] || '') : '',
+        nome_mae: iNomeMae >= 0 ? (r[iNomeMae] || '') : '',
         telefone: r[iTel] || '',
         data_nascimento: r[iDn] || '',
         email: iEmail >= 0 ? (r[iEmail] || '') : '',
