@@ -545,6 +545,7 @@ const Pacientes: React.FC = () => {
                 <Campo label="Nome" valor={detalhePaciente.nome} />
                 <Campo label="CPF" valor={detalhePaciente.cpf} />
                 <Campo label="Cartão SUS / CNS" valor={detalhePaciente.cns} hide />
+                <Campo label="Nome da Mãe" valor={detalhePaciente.nomeMae} hide />
                 <Campo label="Data de Nascimento" valor={detalhePaciente.dataNascimento ? formatarData(detalhePaciente.dataNascimento) : undefined} hide />
                 <Campo label="Idade" valor={detalhePaciente.dataNascimento ? calcularIdade(detalhePaciente.dataNascimento) : undefined} hide />
               </Secao>
