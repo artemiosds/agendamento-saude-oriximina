@@ -906,25 +906,35 @@ const FilaEspera: React.FC = () => {
                     <Input value={novoPaciente.cpf} onChange={e => setNovoPaciente(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" />
                   </div>
                   <div>
+                    <Label>Cartão SUS / CNS</Label>
+                    <Input value={novoPaciente.cns} onChange={e => setNovoPaciente(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Nome da Mãe</Label>
+                  <Input value={novoPaciente.nomeMae} onChange={e => setNovoPaciente(p => ({ ...p, nomeMae: e.target.value }))} placeholder="Nome completo da mãe" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
                     <Label>Telefone *</Label>
                     <Input value={novoPaciente.telefone} onChange={e => setNovoPaciente(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
                     {pacienteErrors.telefone && <p className="text-xs text-destructive mt-1">{pacienteErrors.telefone}</p>}
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>E-mail (opcional)</Label>
                     <Input type="email" value={novoPaciente.email} onChange={e => setNovoPaciente(p => ({ ...p, email: e.target.value }))} />
                     {pacienteErrors.email && <p className="text-xs text-destructive mt-1">{pacienteErrors.email}</p>}
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Data Nasc.</Label>
                     <Input type="date" value={novoPaciente.dataNascimento} onChange={e => setNovoPaciente(p => ({ ...p, dataNascimento: e.target.value }))} />
                   </div>
-                </div>
-                <div>
-                  <Label>Endereço</Label>
-                  <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
+                  <div>
+                    <Label>Endereço</Label>
+                    <Input value={novoPaciente.endereco} onChange={e => setNovoPaciente(p => ({ ...p, endereco: e.target.value }))} />
+                  </div>
                 </div>
                 <div className="border-t pt-3 mt-1">
                   <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
