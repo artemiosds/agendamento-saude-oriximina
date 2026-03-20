@@ -647,7 +647,7 @@ const FilaEspera: React.FC = () => {
           {canManage && (
             <>
               <Button variant="outline" onClick={() => {
-                setImportForm({ nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' });
+                setImportForm({ nome: '', telefone: '', cpf: '', cns: '', nomeMae: '', email: '', dataNascimento: '', unidadeId: '', profissionalId: '', tipo: 'primeira_consulta', dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '', prioridade: 'normal' } as any);
                 setImportDup(null);
                 setImportErrors({});
                 setImportDialogOpen(true);
