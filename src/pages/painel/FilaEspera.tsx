@@ -127,7 +127,7 @@ const FilaEspera: React.FC = () => {
   // Import old list dialog
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importForm, setImportForm] = useState({
-    nome: '', telefone: '', cpf: '', cns: '', email: '', dataNascimento: '',
+    nome: '', telefone: '', cpf: '', cns: '', nomeMae: '', email: '', dataNascimento: '',
     unidadeId: '', profissionalId: '', tipo: 'primeira_consulta',
     dataSolicitacaoOriginal: '', descricaoClinica: '', cid: '', observacoes: '',
     prioridade: 'normal',
