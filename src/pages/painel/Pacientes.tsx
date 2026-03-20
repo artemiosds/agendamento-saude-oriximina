@@ -311,6 +311,10 @@ const Pacientes: React.FC = () => {
               <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
               <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" /></div>
             </div>
+            <div>
+              <Label>Nome da Mãe</Label>
+              <Input value={form.nomeMae} onChange={e => setForm(p => ({ ...p, nomeMae: e.target.value }))} placeholder="Nome completo da mãe" />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Telefone *</Label>
