@@ -505,7 +505,7 @@ const FilaEspera: React.FC = () => {
           nome: importForm.nome,
           cpf: importForm.cpf,
           cns: importForm.cns || '',
-          nomeMae: '',
+          nomeMae: (importForm as any).nomeMae || '',
           telefone: importForm.telefone,
           email: importForm.email,
           dataNascimento: importForm.dataNascimento,
