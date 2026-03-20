@@ -22,6 +22,7 @@ interface ParsedRow {
   nome: string;
   cpf: string;
   cns: string;
+  nome_mae: string;
   telefone: string;
   data_nascimento: string;
   email: string;
