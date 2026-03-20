@@ -109,6 +109,7 @@ export interface Paciente {
   nome: string;
   cpf: string;
   cns: string;
+  nomeMae: string;
   telefone: string;
   dataNascimento: string;
   email: string;

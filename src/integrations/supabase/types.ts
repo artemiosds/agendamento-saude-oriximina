@@ -564,6 +564,7 @@ export type Database = {
           endereco: string
           id: string
           nome: string
+          nome_mae: string
           observacoes: string
           telefone: string
         }
@@ -579,6 +580,7 @@ export type Database = {
           endereco?: string
           id: string
           nome: string
+          nome_mae?: string
           observacoes?: string
           telefone?: string
         }
@@ -594,6 +596,7 @@ export type Database = {
           endereco?: string
           id?: string
           nome?: string
+          nome_mae?: string
           observacoes?: string
           telefone?: string
         }

@@ -22,6 +22,7 @@ interface ParsedRow {
   nome: string;
   cpf: string;
   cns: string;
+  nome_mae: string;
   telefone: string;
   data_nascimento: string;
   email: string;
@@ -121,7 +122,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
   };
 
   const downloadTemplate = () => {
-    const content = `nome,cpf,cns,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,898000000000006,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,898000000000007,(93) 99999-0003,22/07/1990,,`;
+    const content = `nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco\nMaria da Silva Santos,123.456.789-00,898000000000006,Ana Maria Santos,(93) 99999-0001,15/03/1985,maria@email.com,Rua das Flores 123\nJoão Pedro Oliveira,,,Francisca Oliveira,(93) 99999-0002,,,\nFrancisca Costa,987.654.321-00,898000000000007,Joana Costa,(93) 99999-0003,22/07/1990,,`;
     const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -156,6 +157,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const iNome = headers.indexOf('nome');
       const iCpf = headers.indexOf('cpf');
       const iCns = headers.indexOf('cns');
+      const iNomeMae = headers.indexOf('nome_mae');
       const iTel = headers.indexOf('telefone');
       const iDn = headers.indexOf('data_nascimento');
       const iEmail = headers.indexOf('email');
@@ -165,6 +167,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         nome: r[iNome] || '',
         cpf: r[iCpf] || '',
         cns: iCns >= 0 ? (r[iCns] || '') : '',
+        nome_mae: iNomeMae >= 0 ? (r[iNomeMae] || '') : '',
         telefone: r[iTel] || '',
         data_nascimento: r[iDn] || '',
         email: iEmail >= 0 ? (r[iEmail] || '') : '',
@@ -294,6 +297,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         nome,
         cpf: cpfClean,
         cns: cnsClean,
+        nome_mae: (row.nome_mae || '').trim(),
         telefone: phoneClean,
         data_nascimento: dataNascFormatted,
         email: emailClean,
@@ -383,6 +387,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                     <TableHead>Nome</TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>CNS</TableHead>
+                    <TableHead>Nome da Mãe</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Nasc.</TableHead>
                     <TableHead>E-mail</TableHead>
@@ -394,6 +399,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
                       <TableCell className="text-xs">{r.nome}</TableCell>
                       <TableCell className="text-xs">{r.cpf}</TableCell>
                       <TableCell className="text-xs">{r.cns}</TableCell>
+                      <TableCell className="text-xs">{r.nome_mae}</TableCell>
                       <TableCell className="text-xs">{r.telefone}</TableCell>
                       <TableCell className="text-xs">{r.data_nascimento}</TableCell>
                       <TableCell className="text-xs">{r.email}</TableCell>

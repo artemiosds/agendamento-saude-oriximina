@@ -459,6 +459,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nome: p.nome,
           cpf: p.cpf || "",
           cns: p.cns || "",
+          nomeMae: p.nome_mae || "",
           telefone: p.telefone || "",
           dataNascimento: p.data_nascimento || "",
           email: p.email || "",
@@ -592,6 +593,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nome: p.nome,
         cpf: p.cpf,
         cns: p.cns || "",
+        nome_mae: p.nomeMae || "",
         telefone: p.telefone,
         data_nascimento: p.dataNascimento,
         email: p.email,
@@ -614,6 +616,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.nome !== undefined) dbData.nome = data.nome;
       if (data.cpf !== undefined) dbData.cpf = data.cpf;
       if (data.cns !== undefined) dbData.cns = data.cns;
+      if (data.nomeMae !== undefined) dbData.nome_mae = data.nomeMae;
       if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.dataNascimento !== undefined) dbData.data_nascimento = data.dataNascimento;
       if (data.email !== undefined) dbData.email = data.email;
