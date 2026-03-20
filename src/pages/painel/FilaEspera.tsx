@@ -120,7 +120,7 @@ const FilaEspera: React.FC = () => {
 
   // New patient creation mode
   const [criarPaciente, setCriarPaciente] = useState(false);
-  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
+  const [novoPaciente, setNovoPaciente] = useState({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', email: '', dataNascimento: '', endereco: '', descricaoClinica: '', cid: '' });
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<typeof pacientes[0] | null>(null);
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
 
