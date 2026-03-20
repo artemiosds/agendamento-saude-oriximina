@@ -167,7 +167,7 @@ const Pacientes: React.FC = () => {
         toast.success('Paciente atualizado!');
       } else {
         await addPaciente({
-          id: `p${Date.now()}`, ...form, cns: (form as any).cns || '', observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
+          id: `p${Date.now()}`, ...form, cns: (form as any).cns || '', nomeMae: form.nomeMae || '', observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
           criadoEm: new Date().toISOString(),
         });
         toast.success('Paciente cadastrado com sucesso!');
