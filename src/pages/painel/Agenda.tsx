@@ -144,7 +144,7 @@ const Agenda: React.FC = () => {
   const [retornoForm, setRetornoForm] = useState({ data: "", hora: "" });
   const [newAg, setNewAg] = useState({
     pacienteId: "",
-    profissionalId: "",
+    profissionalId: filterProf !== "all" ? filterProf : "",
     salaId: "",
     hora: "",
     tipo: "Consulta",
