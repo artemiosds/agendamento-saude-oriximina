@@ -215,10 +215,16 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
   }, [user, retornoForm.data, getAvailableSlots]);
 
+  const filteredProfissionais = React.useMemo(() => {
+    if (filterUnit === "all") return profissionais;
+    return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
+  }, [profissionais, filterUnit]);
+
   const filtered = agendamentos
     .filter((a) => {
       if (a.data !== selectedDate) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
       if (isProfissional && user) {
         if (a.profissionalId !== user.id) return false;
       }
