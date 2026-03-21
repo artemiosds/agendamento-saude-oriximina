@@ -1001,7 +1001,7 @@ const Agenda: React.FC = () => {
               <ChevronRight className="w-4 h-4" />
             </Button>
             {!isProfissional && showUnitSelector && (
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterProf("all"); }}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
@@ -1015,7 +1015,21 @@ const Agenda: React.FC = () => {
                 </SelectContent>
               </Select>
             )}
-          </div>
+            {!isProfissional && (
+              <Select value={filterProf} onValueChange={setFilterProf}>
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Profissional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Profissionais</SelectItem>
+                  {filteredProfissionais.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
 
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
