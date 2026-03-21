@@ -137,6 +137,7 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterUnit, setFilterUnit] = useState("all");
+  const [filterProf, setFilterProf] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
