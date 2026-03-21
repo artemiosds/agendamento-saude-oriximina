@@ -384,7 +384,7 @@ const Agenda: React.FC = () => {
       observacoes: newAg.obs,
     });
     setDialogOpen(false);
-    setNewAg({ pacienteId: "", profissionalId: "", salaId: "", hora: "", tipo: "Consulta", obs: "" });
+    setNewAg({ pacienteId: "", profissionalId: filterProf !== "all" ? filterProf : "", salaId: "", hora: "", tipo: "Consulta", obs: "" });
   };
 
   // NOVO: aprovar agendamento online
