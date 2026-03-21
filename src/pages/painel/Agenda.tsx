@@ -1029,7 +1029,8 @@ const Agenda: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-            )
+            )}
+          </div>
 
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
