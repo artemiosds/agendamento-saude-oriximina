@@ -137,13 +137,14 @@ const Agenda: React.FC = () => {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterUnit, setFilterUnit] = useState("all");
+  const [filterProf, setFilterProf] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [retornoDialogOpen, setRetornoDialogOpen] = useState(false);
   const [retornoAg, setRetornoAg] = useState<{ pacienteId: string; pacienteNome: string } | null>(null);
   const [retornoForm, setRetornoForm] = useState({ data: "", hora: "" });
   const [newAg, setNewAg] = useState({
     pacienteId: "",
-    profissionalId: "",
+    profissionalId: filterProf !== "all" ? filterProf : "",
     salaId: "",
     hora: "",
     tipo: "Consulta",
@@ -214,10 +215,16 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
   }, [user, retornoForm.data, getAvailableSlots]);
 
+  const filteredProfissionais = React.useMemo(() => {
+    if (filterUnit === "all") return profissionais;
+    return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
+  }, [profissionais, filterUnit]);
+
   const filtered = agendamentos
     .filter((a) => {
       if (a.data !== selectedDate) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
       if (isProfissional && user) {
         if (a.profissionalId !== user.id) return false;
       }
@@ -377,7 +384,7 @@ const Agenda: React.FC = () => {
       observacoes: newAg.obs,
     });
     setDialogOpen(false);
-    setNewAg({ pacienteId: "", profissionalId: "", salaId: "", hora: "", tipo: "Consulta", obs: "" });
+    setNewAg({ pacienteId: "", profissionalId: filterProf !== "all" ? filterProf : "", salaId: "", hora: "", tipo: "Consulta", obs: "" });
   };
 
   // NOVO: aprovar agendamento online
@@ -994,7 +1001,7 @@ const Agenda: React.FC = () => {
               <ChevronRight className="w-4 h-4" />
             </Button>
             {!isProfissional && showUnitSelector && (
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterProf("all"); }}>
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
@@ -1003,6 +1010,21 @@ const Agenda: React.FC = () => {
                   {unidadesVisiveis.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!isProfissional && (
+              <Select value={filterProf} onValueChange={setFilterProf}>
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Profissional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Profissionais</SelectItem>
+                  {filteredProfissionais.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>
