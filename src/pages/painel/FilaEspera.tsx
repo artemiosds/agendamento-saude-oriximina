@@ -237,7 +237,9 @@ const FilaEspera: React.FC = () => {
   const filteredFila = useMemo(() => {
     const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
 
+    const query = searchQuery.toLowerCase().trim();
     return [...fila]
+      .filter(f => !query || f.pacienteNome.toLowerCase().includes(query))
       .filter(f => filterUnidade === 'all' || f.unidadeId === filterUnidade)
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
