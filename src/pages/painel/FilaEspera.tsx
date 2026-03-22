@@ -796,15 +796,8 @@ const FilaEspera: React.FC = () => {
     const prof = funcionarios.find(fn => fn.id === rescheduleSlot.profissionalId);
     const pac = pacientes.find(p => p.id === rescheduleFilaItem.pacienteId);
 
-    // Create the appointment
-    const { addAgendamento } = useData as any; // We get it from context
+    // Create the appointment directly via Supabase
     const agId = `ag${Date.now()}`;
-    const { addAgendamento: addAg } = { addAgendamento: null }; // fallback
-
-    // Use the DataContext addAgendamento via the hook
-    // Actually we already have it in context - let me use it properly
-    // We don't have addAgendamento destructured, let me add it
-    // For now let's insert directly
     const { error } = await supabase.from('agendamentos').insert({
       id: agId,
       paciente_id: rescheduleFilaItem.pacienteId,
