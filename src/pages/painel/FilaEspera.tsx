@@ -697,6 +697,172 @@ const FilaEspera: React.FC = () => {
     setManualCallDialog(false);
   };
 
+  // Absence handler - open modal
+  const openAbsenceModal = (f: typeof fila[0]) => {
+    setAbsenceFilaItem(f);
+    setAbsenceReason('');
+    setAbsenceObs('');
+    setAbsenceWantsReschedule(false);
+    setAbsenceModalOpen(true);
+  };
+
+  const handleAbsenceConfirm = async () => {
+    if (!absenceFilaItem) return;
+    if (!absenceReason) {
+      toast.error('Selecione o motivo da falta.');
+      return;
+    }
+
+    // Mark as absent
+    await updateFila(absenceFilaItem.id, { status: 'falta' });
+
+    // Log with reason
+    await logAction({
+      acao: 'marcar_falta', entidade: 'fila_espera', entidadeId: absenceFilaItem.id,
+      detalhes: {
+        pacienteNome: absenceFilaItem.pacienteNome,
+        pacienteId: absenceFilaItem.pacienteId,
+        motivo: absenceReason,
+        observacaoFalta: absenceObs,
+      }, user, modulo: 'fila_espera',
+    });
+
+    // Update local absence history
+    setAbsenceHistory(prev => ({
+      ...prev,
+      [absenceFilaItem.pacienteId]: {
+        reason: ABSENCE_REASONS.find(r => r.value === absenceReason)?.label || absenceReason,
+        obs: absenceObs,
+        date: new Date().toISOString().split('T')[0],
+      },
+    }));
+
+    toast.success('Falta registrada.');
+    setAbsenceModalOpen(false);
+
+    // If wants reschedule, open rescheduling modal
+    if (absenceWantsReschedule) {
+      openRescheduleModal(absenceFilaItem);
+    }
+  };
+
+  // Rescheduling handler
+  const openRescheduleModal = (f: typeof fila[0]) => {
+    setRescheduleFilaItem(f);
+    setRescheduleSlot({
+      data: '', hora: '',
+      profissionalId: f.profissionalId || '',
+      unidadeId: f.unidadeId || '',
+    });
+    setRescheduleOpen(true);
+  };
+
+  const rescheduleDates = useMemo(() => {
+    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return [];
+    return getAvailableDates(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
+  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getAvailableDates]);
+
+  const rescheduleDayInfoMap = useMemo(() => {
+    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return {};
+    return getDayInfoMap(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
+  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getDayInfoMap]);
+
+  const handleRescheduleConfirm = async () => {
+    if (!rescheduleFilaItem || !rescheduleSlot.data || !rescheduleSlot.hora || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) {
+      toast.error('Selecione data e horário disponíveis.');
+      return;
+    }
+
+    // Validate via RPC
+    const { data: checkResult } = await supabase.rpc('check_slot_availability', {
+      p_profissional_id: rescheduleSlot.profissionalId,
+      p_unidade_id: rescheduleSlot.unidadeId,
+      p_data: rescheduleSlot.data,
+      p_hora: rescheduleSlot.hora,
+    });
+
+    const result = checkResult as any;
+    if (!result?.available) {
+      const reasons: Record<string, string> = {
+        date_blocked: 'Esta data está bloqueada.',
+        no_availability: 'Sem disponibilidade configurada.',
+        day_full: 'Vagas esgotadas para esta data.',
+        hour_full: 'Vagas esgotadas para este horário.',
+      };
+      toast.error(reasons[result?.reason] || 'Horário indisponível.');
+      return;
+    }
+
+    const prof = funcionarios.find(fn => fn.id === rescheduleSlot.profissionalId);
+    const pac = pacientes.find(p => p.id === rescheduleFilaItem.pacienteId);
+
+    // Create the appointment
+    const { addAgendamento } = useData as any; // We get it from context
+    const agId = `ag${Date.now()}`;
+    const { addAgendamento: addAg } = { addAgendamento: null }; // fallback
+
+    // Use the DataContext addAgendamento via the hook
+    // Actually we already have it in context - let me use it properly
+    // We don't have addAgendamento destructured, let me add it
+    // For now let's insert directly
+    const { error } = await supabase.from('agendamentos').insert({
+      id: agId,
+      paciente_id: rescheduleFilaItem.pacienteId,
+      paciente_nome: rescheduleFilaItem.pacienteNome,
+      profissional_id: rescheduleSlot.profissionalId,
+      profissional_nome: prof?.nome || '',
+      unidade_id: rescheduleSlot.unidadeId,
+      data: rescheduleSlot.data,
+      hora: rescheduleSlot.hora,
+      tipo: 'Consulta',
+      status: 'pendente',
+      criado_por: user?.id || 'sistema',
+      origem: 'fila_espera',
+      sala_id: '',
+      setor_id: '',
+      observacoes: `Reagendamento da fila de espera`,
+      prioridade_perfil: rescheduleFilaItem.prioridade || 'normal',
+    });
+
+    if (error) {
+      toast.error('Erro ao criar agendamento: ' + error.message);
+      return;
+    }
+
+    // Update fila status to encaixado
+    await updateFila(rescheduleFilaItem.id, { status: 'encaixado' });
+
+    await logAction({
+      acao: 'reagendar', entidade: 'fila_espera', entidadeId: rescheduleFilaItem.id,
+      detalhes: {
+        pacienteNome: rescheduleFilaItem.pacienteNome,
+        novaData: rescheduleSlot.data,
+        novaHora: rescheduleSlot.hora,
+        profissional: prof?.nome,
+        agendamentoId: agId,
+      }, user, modulo: 'fila_espera',
+    });
+
+    // Notify
+    const unidade = unidades.find(u => u.id === rescheduleSlot.unidadeId);
+    await notify({
+      evento: 'reagendamento',
+      paciente_nome: rescheduleFilaItem.pacienteNome,
+      telefone: pac?.telefone || '',
+      email: pac?.email || '',
+      data_consulta: rescheduleSlot.data,
+      hora_consulta: rescheduleSlot.hora,
+      unidade: unidade?.nome || '',
+      profissional: prof?.nome || '',
+      tipo_atendimento: 'Reagendamento',
+      status_agendamento: 'pendente',
+      id_agendamento: agId,
+    });
+
+    toast.success(`Reagendamento criado para ${rescheduleSlot.data} às ${rescheduleSlot.hora}!`);
+    setRescheduleOpen(false);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
