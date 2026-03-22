@@ -1440,9 +1440,25 @@ const FilaEspera: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
+                  {absenceHistory[f.pacienteId] && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive cursor-help mt-0.5">
+                            <TriangleAlert className="w-3 h-3" /> Falta anterior
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="font-semibold text-sm">Última falta: {absenceHistory[f.pacienteId].date}</p>
+                          <p className="text-sm">Motivo: {absenceHistory[f.pacienteId].reason}</p>
+                          {absenceHistory[f.pacienteId].obs && <p className="text-sm text-muted-foreground">{absenceHistory[f.pacienteId].obs}</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                   {f.dataSolicitacaoOriginal && (
                     <p className="text-xs text-muted-foreground mt-0.5">📅 Solicitação original: {f.dataSolicitacaoOriginal}</p>
                   )}
