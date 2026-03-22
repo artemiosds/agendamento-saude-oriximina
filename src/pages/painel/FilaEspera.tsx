@@ -1562,6 +1562,164 @@ const FilaEspera: React.FC = () => {
         })}
       </div>
 
+      {/* Absence Modal */}
+      <Dialog open={absenceModalOpen} onOpenChange={setAbsenceModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-destructive" /> Registrar Falta
+            </DialogTitle>
+          </DialogHeader>
+          {absenceFilaItem && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Paciente: <strong>{absenceFilaItem.pacienteNome}</strong>
+              </p>
+              <div>
+                <Label>Motivo da Falta *</Label>
+                <Select value={absenceReason} onValueChange={setAbsenceReason}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+                  <SelectContent>
+                    {ABSENCE_REASONS.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={absenceObs}
+                  onChange={e => setAbsenceObs(e.target.value)}
+                  placeholder="Detalhes adicionais sobre a falta..."
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="wantsReschedule"
+                  checked={absenceWantsReschedule}
+                  onChange={e => setAbsenceWantsReschedule(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <Label htmlFor="wantsReschedule" className="cursor-pointer text-sm">
+                  Reagendar este paciente após registrar falta
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setAbsenceModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleAbsenceConfirm}>
+                  Confirmar Falta
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Modal */}
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-primary" /> Reagendar Paciente
+            </DialogTitle>
+          </DialogHeader>
+          {rescheduleFilaItem && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Reagendando <strong>{rescheduleFilaItem.pacienteNome}</strong>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Unidade *</Label>
+                  <Select value={rescheduleSlot.unidadeId} onValueChange={v => setRescheduleSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Profissional *</Label>
+                  <Select value={rescheduleSlot.profissionalId} onValueChange={v => setRescheduleSlot(p => ({ ...p, profissionalId: v, data: '', hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {profissionais
+                        .filter(p => !rescheduleSlot.unidadeId || p.unidadeId === rescheduleSlot.unidadeId)
+                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {rescheduleSlot.profissionalId && rescheduleSlot.unidadeId ? (() => {
+                const dates = rescheduleDates;
+                const dayInfo = rescheduleDayInfoMap;
+                const slots = rescheduleSlot.data ? getAvailableSlots(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, rescheduleSlot.data, false) : [];
+                return (
+                  <>
+                    {dates.length === 0 ? (
+                      <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
+                        <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+                        <p className="text-sm text-warning">Não há datas disponíveis.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Selecione a data *</Label>
+                        <div className="mt-2">
+                          <CalendarioDisponibilidade
+                            availableDates={dates.slice(0, 60)}
+                            selectedDate={rescheduleSlot.data}
+                            onSelectDate={d => setRescheduleSlot(p => ({ ...p, data: d, hora: '' }))}
+                            dayInfoMap={dayInfo}
+                            blockToday={false}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {rescheduleSlot.data && (
+                      <div>
+                        <Label>Horário Disponível *</Label>
+                        {slots.length === 0 ? (
+                          <div className="flex items-center gap-2 p-3 mt-1 bg-destructive/10 rounded-lg">
+                            <AlertCircle className="w-4 h-4 text-destructive" />
+                            <p className="text-sm text-destructive font-medium">Vagas esgotadas para esta data.</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                            {slots.map(slot => (
+                              <Button key={slot} variant={rescheduleSlot.hora === slot ? 'default' : 'outline'}
+                                className={rescheduleSlot.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                                size="sm" onClick={() => setRescheduleSlot(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })() : (
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Selecione a unidade e o profissional para ver as datas disponíveis.</span>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRescheduleConfirm}
+                disabled={!rescheduleSlot.data || !rescheduleSlot.hora || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId}
+                className="w-full gradient-primary text-primary-foreground"
+              >
+                <CalendarClock className="w-4 h-4 mr-2" /> Confirmar Reagendamento
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Detalhe Drawer - Fila */}
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
         {detalheFila && (() => {
