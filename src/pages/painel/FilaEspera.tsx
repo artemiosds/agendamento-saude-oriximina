@@ -936,7 +936,16 @@ const FilaEspera: React.FC = () => {
         </div>
       )}
 
-      {/* Filters + Sort */}
+      {/* Search bar + Filters + Sort */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Pesquisar paciente pelo nome..."
+          className="pl-9"
+        />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
