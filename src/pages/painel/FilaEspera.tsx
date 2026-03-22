@@ -191,6 +191,33 @@ const FilaEspera: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Load absence history from action_logs
+  useEffect(() => {
+    const loadAbsenceHistory = async () => {
+      const { data } = await supabase
+        .from('action_logs')
+        .select('entidade_id, detalhes, created_at')
+        .eq('acao', 'marcar_falta')
+        .eq('entidade', 'fila_espera')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (data) {
+        const history: Record<string, { reason: string; obs: string; date: string }> = {};
+        data.forEach((log) => {
+          const d = log.detalhes as any;
+          const pacienteId = d?.pacienteId;
+          if (pacienteId && !history[pacienteId]) {
+            history[pacienteId] = {
+              reason: d?.motivo || '',
+              obs: d?.observacaoFalta || '',
+              date: log.created_at?.split('T')[0] || '',
+            };
+          }
+        });
+        setAbsenceHistory(history);
+      }
+    };
+    loadAbsenceHistory();
   // Check for expired reservations
   useEffect(() => {
     Object.values(reservas).forEach(async (r) => {
