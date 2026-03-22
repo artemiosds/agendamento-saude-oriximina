@@ -269,7 +269,7 @@ const FilaEspera: React.FC = () => {
         // entrada
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
 
   // Summary stats
   const activeQueue = fila.filter(f => ['aguardando', 'chamado', 'em_atendimento'].includes(f.status));
