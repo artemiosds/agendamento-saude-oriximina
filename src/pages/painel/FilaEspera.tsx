@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye, Search, CalendarClock, TriangleAlert } from 'lucide-react';
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData, formatarDataHora } from '@/components/DetalheDrawer';
 import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
@@ -21,6 +22,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { supabase } from '@/integrations/supabase/client';
+
+const ABSENCE_REASONS = [
+  { value: 'saude', label: 'Problema de Saúde' },
+  { value: 'transporte', label: 'Transporte' },
+  { value: 'sem_contato', label: 'Sem Contato' },
+  { value: 'trabalho', label: 'Compromisso de Trabalho' },
+  { value: 'esquecimento', label: 'Esquecimento' },
+  { value: 'outro', label: 'Outro' },
+];
 
 const prioridadeColors: Record<string, string> = {
   normal: 'bg-muted text-muted-foreground',
