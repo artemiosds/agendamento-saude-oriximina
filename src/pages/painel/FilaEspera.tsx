@@ -13,7 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Bell, Play, CheckCircle, XCircle, Pencil, Trash2, UserPlus, Clock, Users, ArrowRight, Timer, Plus, FileUp, AlertTriangle, AlertCircle, Eye, Search, CalendarClock, TriangleAlert } from 'lucide-react';
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData, formatarDataHora } from '@/components/DetalheDrawer';
 import { CalendarioDisponibilidade } from '@/components/CalendarioDisponibilidade';
@@ -21,6 +22,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { supabase } from '@/integrations/supabase/client';
+
+const ABSENCE_REASONS = [
+  { value: 'saude', label: 'Problema de Saúde' },
+  { value: 'transporte', label: 'Transporte' },
+  { value: 'sem_contato', label: 'Sem Contato' },
+  { value: 'trabalho', label: 'Compromisso de Trabalho' },
+  { value: 'esquecimento', label: 'Esquecimento' },
+  { value: 'outro', label: 'Outro' },
+];
 
 const prioridadeColors: Record<string, string> = {
   normal: 'bg-muted text-muted-foreground',
@@ -116,7 +127,23 @@ const FilaEspera: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada' | 'solicitacao'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [now, setNow] = useState(Date.now());
+
+  // Absence modal state
+  const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
+  const [absenceFilaItem, setAbsenceFilaItem] = useState<typeof fila[0] | null>(null);
+  const [absenceReason, setAbsenceReason] = useState('');
+  const [absenceObs, setAbsenceObs] = useState('');
+  const [absenceWantsReschedule, setAbsenceWantsReschedule] = useState(false);
+
+  // Rescheduling modal state (for Bell/Call or from absence)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleFilaItem, setRescheduleFilaItem] = useState<typeof fila[0] | null>(null);
+  const [rescheduleSlot, setRescheduleSlot] = useState({ data: '', hora: '', profissionalId: '', unidadeId: '' });
+
+  // Absence history cache: pacienteId -> last absence info
+  const [absenceHistory, setAbsenceHistory] = useState<Record<string, { reason: string; obs: string; date: string }>>({});
 
   // New patient creation mode
   const [criarPaciente, setCriarPaciente] = useState(false);
@@ -164,6 +191,35 @@ const FilaEspera: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Load absence history from action_logs
+  useEffect(() => {
+    const loadAbsenceHistory = async () => {
+      const { data } = await supabase
+        .from('action_logs')
+        .select('entidade_id, detalhes, created_at')
+        .eq('acao', 'marcar_falta')
+        .eq('entidade', 'fila_espera')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      if (data) {
+        const history: Record<string, { reason: string; obs: string; date: string }> = {};
+        data.forEach((log) => {
+          const d = log.detalhes as any;
+          const pacienteId = d?.pacienteId;
+          if (pacienteId && !history[pacienteId]) {
+            history[pacienteId] = {
+              reason: d?.motivo || '',
+              obs: d?.observacaoFalta || '',
+              date: log.created_at?.split('T')[0] || '',
+            };
+          }
+        });
+        setAbsenceHistory(history);
+      }
+    };
+    loadAbsenceHistory();
+  }, []);
+
   // Check for expired reservations
   useEffect(() => {
     Object.values(reservas).forEach(async (r) => {
@@ -181,7 +237,9 @@ const FilaEspera: React.FC = () => {
   const filteredFila = useMemo(() => {
     const prioOrder: Record<string, number> = { urgente: 0, gestante: 1, idoso: 2, alta: 3, pcd: 4, crianca: 5, normal: 6 };
 
+    const query = searchQuery.toLowerCase().trim();
     return [...fila]
+      .filter(f => !query || f.pacienteNome.toLowerCase().includes(query))
       .filter(f => filterUnidade === 'all' || f.unidadeId === filterUnidade)
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
@@ -211,7 +269,7 @@ const FilaEspera: React.FC = () => {
         // entrada
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
 
   // Summary stats
   const activeQueue = fila.filter(f => ['aguardando', 'chamado', 'em_atendimento'].includes(f.status));
@@ -639,6 +697,165 @@ const FilaEspera: React.FC = () => {
     setManualCallDialog(false);
   };
 
+  // Absence handler - open modal
+  const openAbsenceModal = (f: typeof fila[0]) => {
+    setAbsenceFilaItem(f);
+    setAbsenceReason('');
+    setAbsenceObs('');
+    setAbsenceWantsReschedule(false);
+    setAbsenceModalOpen(true);
+  };
+
+  const handleAbsenceConfirm = async () => {
+    if (!absenceFilaItem) return;
+    if (!absenceReason) {
+      toast.error('Selecione o motivo da falta.');
+      return;
+    }
+
+    // Mark as absent
+    await updateFila(absenceFilaItem.id, { status: 'falta' });
+
+    // Log with reason
+    await logAction({
+      acao: 'marcar_falta', entidade: 'fila_espera', entidadeId: absenceFilaItem.id,
+      detalhes: {
+        pacienteNome: absenceFilaItem.pacienteNome,
+        pacienteId: absenceFilaItem.pacienteId,
+        motivo: absenceReason,
+        observacaoFalta: absenceObs,
+      }, user, modulo: 'fila_espera',
+    });
+
+    // Update local absence history
+    setAbsenceHistory(prev => ({
+      ...prev,
+      [absenceFilaItem.pacienteId]: {
+        reason: ABSENCE_REASONS.find(r => r.value === absenceReason)?.label || absenceReason,
+        obs: absenceObs,
+        date: new Date().toISOString().split('T')[0],
+      },
+    }));
+
+    toast.success('Falta registrada.');
+    setAbsenceModalOpen(false);
+
+    // If wants reschedule, open rescheduling modal
+    if (absenceWantsReschedule) {
+      openRescheduleModal(absenceFilaItem);
+    }
+  };
+
+  // Rescheduling handler
+  const openRescheduleModal = (f: typeof fila[0]) => {
+    setRescheduleFilaItem(f);
+    setRescheduleSlot({
+      data: '', hora: '',
+      profissionalId: f.profissionalId || '',
+      unidadeId: f.unidadeId || '',
+    });
+    setRescheduleOpen(true);
+  };
+
+  const rescheduleDates = useMemo(() => {
+    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return [];
+    return getAvailableDates(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
+  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getAvailableDates]);
+
+  const rescheduleDayInfoMap = useMemo(() => {
+    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return {};
+    return getDayInfoMap(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
+  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getDayInfoMap]);
+
+  const handleRescheduleConfirm = async () => {
+    if (!rescheduleFilaItem || !rescheduleSlot.data || !rescheduleSlot.hora || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) {
+      toast.error('Selecione data e horário disponíveis.');
+      return;
+    }
+
+    // Validate via RPC
+    const { data: checkResult } = await supabase.rpc('check_slot_availability', {
+      p_profissional_id: rescheduleSlot.profissionalId,
+      p_unidade_id: rescheduleSlot.unidadeId,
+      p_data: rescheduleSlot.data,
+      p_hora: rescheduleSlot.hora,
+    });
+
+    const result = checkResult as any;
+    if (!result?.available) {
+      const reasons: Record<string, string> = {
+        date_blocked: 'Esta data está bloqueada.',
+        no_availability: 'Sem disponibilidade configurada.',
+        day_full: 'Vagas esgotadas para esta data.',
+        hour_full: 'Vagas esgotadas para este horário.',
+      };
+      toast.error(reasons[result?.reason] || 'Horário indisponível.');
+      return;
+    }
+
+    const prof = funcionarios.find(fn => fn.id === rescheduleSlot.profissionalId);
+    const pac = pacientes.find(p => p.id === rescheduleFilaItem.pacienteId);
+
+    // Create the appointment directly via Supabase
+    const agId = `ag${Date.now()}`;
+    const { error } = await supabase.from('agendamentos').insert({
+      id: agId,
+      paciente_id: rescheduleFilaItem.pacienteId,
+      paciente_nome: rescheduleFilaItem.pacienteNome,
+      profissional_id: rescheduleSlot.profissionalId,
+      profissional_nome: prof?.nome || '',
+      unidade_id: rescheduleSlot.unidadeId,
+      data: rescheduleSlot.data,
+      hora: rescheduleSlot.hora,
+      tipo: 'Consulta',
+      status: 'pendente',
+      criado_por: user?.id || 'sistema',
+      origem: 'fila_espera',
+      sala_id: '',
+      setor_id: '',
+      observacoes: `Reagendamento da fila de espera`,
+      prioridade_perfil: rescheduleFilaItem.prioridade || 'normal',
+    });
+
+    if (error) {
+      toast.error('Erro ao criar agendamento: ' + error.message);
+      return;
+    }
+
+    // Update fila status to encaixado
+    await updateFila(rescheduleFilaItem.id, { status: 'encaixado' });
+
+    await logAction({
+      acao: 'reagendar', entidade: 'fila_espera', entidadeId: rescheduleFilaItem.id,
+      detalhes: {
+        pacienteNome: rescheduleFilaItem.pacienteNome,
+        novaData: rescheduleSlot.data,
+        novaHora: rescheduleSlot.hora,
+        profissional: prof?.nome,
+        agendamentoId: agId,
+      }, user, modulo: 'fila_espera',
+    });
+
+    // Notify
+    const unidade = unidades.find(u => u.id === rescheduleSlot.unidadeId);
+    await notify({
+      evento: 'reagendamento',
+      paciente_nome: rescheduleFilaItem.pacienteNome,
+      telefone: pac?.telefone || '',
+      email: pac?.email || '',
+      data_consulta: rescheduleSlot.data,
+      hora_consulta: rescheduleSlot.hora,
+      unidade: unidade?.nome || '',
+      profissional: prof?.nome || '',
+      tipo_atendimento: 'Reagendamento',
+      status_agendamento: 'pendente',
+      id_agendamento: agId,
+    });
+
+    toast.success(`Reagendamento criado para ${rescheduleSlot.data} às ${rescheduleSlot.hora}!`);
+    setRescheduleOpen(false);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -712,7 +929,16 @@ const FilaEspera: React.FC = () => {
         </div>
       )}
 
-      {/* Filters + Sort */}
+      {/* Search bar + Filters + Sort */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Pesquisar paciente pelo nome..."
+          className="pl-9"
+        />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger><SelectValue placeholder="Unidade" /></SelectTrigger>
@@ -1207,9 +1433,25 @@ const FilaEspera: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                   <p className="text-sm text-muted-foreground">
                     {unidade?.nome || f.setor} • {prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ''}` : 'Qualquer profissional'} • Chegou: {f.horaChegada}
                   </p>
+                  {absenceHistory[f.pacienteId] && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive cursor-help mt-0.5">
+                            <TriangleAlert className="w-3 h-3" /> Falta anterior
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="font-semibold text-sm">Última falta: {absenceHistory[f.pacienteId].date}</p>
+                          <p className="text-sm">Motivo: {absenceHistory[f.pacienteId].reason}</p>
+                          {absenceHistory[f.pacienteId].obs && <p className="text-sm text-muted-foreground">{absenceHistory[f.pacienteId].obs}</p>}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                   {f.dataSolicitacaoOriginal && (
                     <p className="text-xs text-muted-foreground mt-0.5">📅 Solicitação original: {f.dataSolicitacaoOriginal}</p>
                   )}
@@ -1280,8 +1522,11 @@ const FilaEspera: React.FC = () => {
                         <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'atendido' })} title="Finalizar">
                           <CheckCircle className="w-4 h-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'falta' })} title="Faltou">
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => openAbsenceModal(f)} title="Marcar Falta">
                           <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => openRescheduleModal(f)} title="Reagendar">
+                          <CalendarClock className="w-4 h-4" />
                         </Button>
                       </>
                     )}
@@ -1309,6 +1554,164 @@ const FilaEspera: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Absence Modal */}
+      <Dialog open={absenceModalOpen} onOpenChange={setAbsenceModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-destructive" /> Registrar Falta
+            </DialogTitle>
+          </DialogHeader>
+          {absenceFilaItem && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Paciente: <strong>{absenceFilaItem.pacienteNome}</strong>
+              </p>
+              <div>
+                <Label>Motivo da Falta *</Label>
+                <Select value={absenceReason} onValueChange={setAbsenceReason}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+                  <SelectContent>
+                    {ABSENCE_REASONS.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={absenceObs}
+                  onChange={e => setAbsenceObs(e.target.value)}
+                  placeholder="Detalhes adicionais sobre a falta..."
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="wantsReschedule"
+                  checked={absenceWantsReschedule}
+                  onChange={e => setAbsenceWantsReschedule(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <Label htmlFor="wantsReschedule" className="cursor-pointer text-sm">
+                  Reagendar este paciente após registrar falta
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setAbsenceModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleAbsenceConfirm}>
+                  Confirmar Falta
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reschedule Modal */}
+      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-primary" /> Reagendar Paciente
+            </DialogTitle>
+          </DialogHeader>
+          {rescheduleFilaItem && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Reagendando <strong>{rescheduleFilaItem.pacienteNome}</strong>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Unidade *</Label>
+                  <Select value={rescheduleSlot.unidadeId} onValueChange={v => setRescheduleSlot(p => ({ ...p, unidadeId: v, profissionalId: '', data: '', hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Profissional *</Label>
+                  <Select value={rescheduleSlot.profissionalId} onValueChange={v => setRescheduleSlot(p => ({ ...p, profissionalId: v, data: '', hora: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {profissionais
+                        .filter(p => !rescheduleSlot.unidadeId || p.unidadeId === rescheduleSlot.unidadeId)
+                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.profissao ? ` — ${p.profissao}` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {rescheduleSlot.profissionalId && rescheduleSlot.unidadeId ? (() => {
+                const dates = rescheduleDates;
+                const dayInfo = rescheduleDayInfoMap;
+                const slots = rescheduleSlot.data ? getAvailableSlots(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, rescheduleSlot.data, false) : [];
+                return (
+                  <>
+                    {dates.length === 0 ? (
+                      <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
+                        <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+                        <p className="text-sm text-warning">Não há datas disponíveis.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label>Selecione a data *</Label>
+                        <div className="mt-2">
+                          <CalendarioDisponibilidade
+                            availableDates={dates.slice(0, 60)}
+                            selectedDate={rescheduleSlot.data}
+                            onSelectDate={d => setRescheduleSlot(p => ({ ...p, data: d, hora: '' }))}
+                            dayInfoMap={dayInfo}
+                            blockToday={false}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {rescheduleSlot.data && (
+                      <div>
+                        <Label>Horário Disponível *</Label>
+                        {slots.length === 0 ? (
+                          <div className="flex items-center gap-2 p-3 mt-1 bg-destructive/10 rounded-lg">
+                            <AlertCircle className="w-4 h-4 text-destructive" />
+                            <p className="text-sm text-destructive font-medium">Vagas esgotadas para esta data.</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-2">
+                            {slots.map(slot => (
+                              <Button key={slot} variant={rescheduleSlot.hora === slot ? 'default' : 'outline'}
+                                className={rescheduleSlot.hora === slot ? 'gradient-primary text-primary-foreground' : ''}
+                                size="sm" onClick={() => setRescheduleSlot(p => ({ ...p, hora: slot }))}>{slot}</Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })() : (
+                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Selecione a unidade e o profissional para ver as datas disponíveis.</span>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRescheduleConfirm}
+                disabled={!rescheduleSlot.data || !rescheduleSlot.hora || !rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId}
+                className="w-full gradient-primary text-primary-foreground"
+              >
+                <CalendarClock className="w-4 h-4 mr-2" /> Confirmar Reagendamento
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Detalhe Drawer - Fila */}
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
