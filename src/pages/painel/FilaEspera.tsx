@@ -218,6 +218,8 @@ const FilaEspera: React.FC = () => {
       }
     };
     loadAbsenceHistory();
+  }, []);
+
   // Check for expired reservations
   useEffect(() => {
     Object.values(reservas).forEach(async (r) => {
