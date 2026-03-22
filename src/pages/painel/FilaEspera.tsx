@@ -127,7 +127,23 @@ const FilaEspera: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada' | 'solicitacao'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [now, setNow] = useState(Date.now());
+
+  // Absence modal state
+  const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
+  const [absenceFilaItem, setAbsenceFilaItem] = useState<typeof fila[0] | null>(null);
+  const [absenceReason, setAbsenceReason] = useState('');
+  const [absenceObs, setAbsenceObs] = useState('');
+  const [absenceWantsReschedule, setAbsenceWantsReschedule] = useState(false);
+
+  // Rescheduling modal state (for Bell/Call or from absence)
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleFilaItem, setRescheduleFilaItem] = useState<typeof fila[0] | null>(null);
+  const [rescheduleSlot, setRescheduleSlot] = useState({ data: '', hora: '', profissionalId: '', unidadeId: '' });
+
+  // Absence history cache: pacienteId -> last absence info
+  const [absenceHistory, setAbsenceHistory] = useState<Record<string, { reason: string; obs: string; date: string }>>({});
 
   // New patient creation mode
   const [criarPaciente, setCriarPaciente] = useState(false);
