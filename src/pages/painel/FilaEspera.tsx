@@ -1529,8 +1529,11 @@ const FilaEspera: React.FC = () => {
                         <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'atendido' })} title="Finalizar">
                           <CheckCircle className="w-4 h-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-8" onClick={() => updateFila(f.id, { status: 'falta' })} title="Faltou">
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => openAbsenceModal(f)} title="Marcar Falta">
                           <XCircle className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => openRescheduleModal(f)} title="Reagendar">
+                          <CalendarClock className="w-4 h-4" />
                         </Button>
                       </>
                     )}
