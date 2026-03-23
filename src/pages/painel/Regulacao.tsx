@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { cn } from '@/lib/utils';
-import BuscaPaciente from '@/components/BuscaPaciente';
+import { BuscaPaciente } from '@/components/BuscaPaciente';
 
 const SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
