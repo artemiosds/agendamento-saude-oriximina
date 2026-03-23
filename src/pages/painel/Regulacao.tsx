@@ -376,8 +376,18 @@ const Regulacao: React.FC = () => {
               <Label>Buscar Paciente Existente</Label>
               <BuscaPaciente
                 pacientes={pacientes}
-                onSelect={handleSelectPatient}
-                placeholder="Buscar por nome, CPF ou CNS..."
+                value={newReg.patient_id}
+                onChange={(id, nome) => {
+                  const p = pacientes.find(px => px.id === id);
+                  setNewReg(prev => ({
+                    ...prev,
+                    patient_id: id,
+                    name: nome,
+                    cpf: p?.cpf || prev.cpf,
+                    cns: p?.cns || prev.cns,
+                    mother_name: p?.nomeMae || prev.mother_name,
+                  }));
+                }}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
