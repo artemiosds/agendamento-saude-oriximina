@@ -30,6 +30,7 @@ const Auditoria = React.lazy(() => import("./pages/painel/Auditoria"));
 const Triagem = React.lazy(() => import("./pages/painel/Triagem"));
 const Bloqueios = React.lazy(() => import("./pages/painel/Bloqueios"));
 const Tratamentos = React.lazy(() => import("./pages/painel/Tratamentos"));
+const Regulacao = React.lazy(() => import("./pages/painel/Regulacao"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -91,6 +92,7 @@ const App = () => (
                   <Route path="triagem" element={<Triagem />} />
                   <Route path="bloqueios" element={<Bloqueios />} />
                   <Route path="tratamentos" element={<Tratamentos />} />
+                  <Route path="regulacao" element={<Regulacao />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

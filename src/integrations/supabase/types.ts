@@ -643,6 +643,116 @@ export type Database = {
           },
         ]
       }
+      patient_evaluations: {
+        Row: {
+          clinical_notes: string
+          created_at: string
+          defined_procedures: string[]
+          evaluation_date: string
+          frequency: string
+          id: string
+          patient_id: string
+          professional_id: string
+          regulation_id: string | null
+          rejection_reason: string
+          sessions_planned: number
+          status: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          clinical_notes?: string
+          created_at?: string
+          defined_procedures?: string[]
+          evaluation_date?: string
+          frequency?: string
+          id?: string
+          patient_id: string
+          professional_id: string
+          regulation_id?: string | null
+          rejection_reason?: string
+          sessions_planned?: number
+          status?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Update: {
+          clinical_notes?: string
+          created_at?: string
+          defined_procedures?: string[]
+          evaluation_date?: string
+          frequency?: string
+          id?: string
+          patient_id?: string
+          professional_id?: string
+          regulation_id?: string | null
+          rejection_reason?: string
+          sessions_planned?: number
+          status?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_evaluations_regulation_id_fkey"
+            columns: ["regulation_id"]
+            isOneToOne: false
+            referencedRelation: "patient_regulation"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patient_regulation: {
+        Row: {
+          cid_code: string
+          cns: string
+          cpf: string
+          created_at: string
+          id: string
+          mother_name: string
+          name: string
+          notes: string
+          patient_id: string
+          priority_level: string
+          referral_source: string
+          requires_specialty: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cid_code?: string
+          cns?: string
+          cpf?: string
+          created_at?: string
+          id?: string
+          mother_name?: string
+          name: string
+          notes?: string
+          patient_id: string
+          priority_level?: string
+          referral_source?: string
+          requires_specialty?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cid_code?: string
+          cns?: string
+          cpf?: string
+          created_at?: string
+          id?: string
+          mother_name?: string
+          name?: string
+          notes?: string
+          patient_id?: string
+          priority_level?: string
+          referral_source?: string
+          requires_specialty?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       procedimentos: {
         Row: {
           ativo: boolean
