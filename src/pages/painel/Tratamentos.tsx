@@ -1293,6 +1293,69 @@ const Tratamentos: React.FC = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Dialog de Remarcar Sessão — profissional e master */}
+        <Dialog
+          open={!!remarcarTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRemarcarTarget(null);
+              setRemarcarData("");
+              setRemarcarBlockedMsg("");
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                Remarcar Sessão {remarcarTarget?.session_number}/{remarcarTarget?.total_sessions}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
+                <p>
+                  <strong>Data atual:</strong>{" "}
+                  {remarcarTarget?.scheduled_date
+                    ? new Date(remarcarTarget.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
+                    : "—"}
+                </p>
+                <p>
+                  <strong>Paciente:</strong> {pacientes.find((p) => p.id === selectedCycle?.patient_id)?.nome}
+                </p>
+                <p>
+                  <strong>Profissional:</strong>{" "}
+                  {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome}
+                </p>
+              </div>
+
+              <div>
+                <Label>Nova Data *</Label>
+                <Input
+                  type="date"
+                  value={remarcarData}
+                  min={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => handleCheckRemarcarDate(e.target.value)}
+                />
+              </div>
+
+              {remarcarBlockedMsg && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{remarcarBlockedMsg}</span>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRemarcarSessao}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!remarcarData || !!remarcarBlockedMsg || remarcarSaving}
+              >
+                <CalendarClock className="w-4 h-4 mr-2" />
+                {remarcarSaving ? "Salvando..." : "Confirmar Remarcação"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
