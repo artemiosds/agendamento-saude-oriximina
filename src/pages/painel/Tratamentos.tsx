@@ -571,8 +571,8 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-
-    const handleExtension = async () => {
+  const handleExtension = async () => {
+    if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
       toast.error("Informe a quantidade de sessões e o motivo.");
       return;
     }
