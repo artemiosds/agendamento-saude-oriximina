@@ -487,7 +487,91 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const handleExtension = async () => {
+  // ---- Remarcar sessão (alterar data) ----
+  const handleCheckRemarcarDate = async (newDate: string) => {
+    setRemarcarData(newDate);
+    setRemarcarBlockedMsg("");
+    if (!newDate || !selectedCycle) return;
+    try {
+      const { data: result } = await supabase.rpc("is_date_blocked", {
+        p_date: newDate,
+        p_profissional_id: selectedCycle.professional_id,
+        p_unidade_id: selectedCycle.unit_id,
+      });
+      if (result === true) {
+        setRemarcarBlockedMsg("Esta data está bloqueada (feriado, férias ou indisponibilidade). Escolha outra data.");
+      }
+    } catch {
+      // ignore rpc errors
+    }
+  };
+
+  const handleRemarcarSessao = async () => {
+    if (!remarcarTarget || !remarcarData || !selectedCycle || remarcarBlockedMsg) return;
+    setRemarcarSaving(true);
+    try {
+      const oldDate = remarcarTarget.scheduled_date;
+
+      // Double-check blocked
+      const { data: blocked } = await supabase.rpc("is_date_blocked", {
+        p_date: remarcarData,
+        p_profissional_id: selectedCycle.professional_id,
+        p_unidade_id: selectedCycle.unit_id,
+      });
+      if (blocked === true) {
+        toast.error("Data bloqueada. Escolha outra data.");
+        setRemarcarSaving(false);
+        return;
+      }
+
+      // Update session date
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({ scheduled_date: remarcarData })
+        .eq("id", remarcarTarget.id);
+      if (error) throw error;
+
+      // If session has linked appointment, update it too
+      if (remarcarTarget.appointment_id) {
+        await supabase
+          .from("agendamentos")
+          .update({ data: remarcarData })
+          .eq("id", remarcarTarget.appointment_id);
+      }
+
+      // Audit log
+      await logAction({
+        acao: "remarcar_sessao",
+        entidade: "treatment_session",
+        entidadeId: remarcarTarget.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          ciclo: selectedCycle.id,
+          sessao: remarcarTarget.session_number,
+          data_anterior: oldDate,
+          data_nova: remarcarData,
+          agendamento_vinculado: remarcarTarget.appointment_id || null,
+        },
+        oldValue: { scheduled_date: oldDate },
+        newValue: { scheduled_date: remarcarData },
+      });
+
+      toast.success(
+        `Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(remarcarData + "T12:00:00").toLocaleDateString("pt-BR")}`,
+      );
+      setRemarcarTarget(null);
+      setRemarcarData("");
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
+    } finally {
+      setRemarcarSaving(false);
+    }
+  };
+
+
     if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
       toast.error("Informe a quantidade de sessões e o motivo.");
       return;
