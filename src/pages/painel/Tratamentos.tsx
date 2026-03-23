@@ -985,6 +985,24 @@ const Tratamentos: React.FC = () => {
                           <Calendar className="w-3 h-3 mr-1" /> Agendar
                         </Button>
                       )}
+
+                      {/* Botão Remarcar — profissional e master em sessões agendadas ou pendentes */}
+                      {(isProfissional || user?.role === "master") &&
+                        ["agendada", "pendente_agendamento"].includes(s.status) &&
+                        selectedCycle.status === "em_andamento" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                            onClick={() => {
+                              setRemarcarTarget(s);
+                              setRemarcarData("");
+                              setRemarcarBlockedMsg("");
+                            }}
+                          >
+                            <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                          </Button>
+                        )}
                     </div>
                   );
                 })}
