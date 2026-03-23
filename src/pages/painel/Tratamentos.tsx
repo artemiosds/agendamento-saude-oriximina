@@ -24,6 +24,8 @@ import {
   ListOrdered,
   X,
   Calendar,
+  CalendarClock,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -156,6 +158,12 @@ const Tratamentos: React.FC = () => {
   const [agendarSessaoHora, setAgendarSessaoHora] = useState("");
   const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
   const [agendandoSessao, setAgendandoSessao] = useState(false);
+
+  // Remarcar sessão (alterar data)
+  const [remarcarTarget, setRemarcarTarget] = useState<TreatmentSession | null>(null);
+  const [remarcarData, setRemarcarData] = useState("");
+  const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
+  const [remarcarSaving, setRemarcarSaving] = useState(false);
 
   // Forms
   const [newCycle, setNewCycle] = useState({
@@ -476,6 +484,90 @@ const Tratamentos: React.FC = () => {
       toast.error(err?.message || "Erro ao agendar sessão.");
     } finally {
       setAgendandoSessao(false);
+    }
+  };
+
+  // ---- Remarcar sessão (alterar data) ----
+  const handleCheckRemarcarDate = async (newDate: string) => {
+    setRemarcarData(newDate);
+    setRemarcarBlockedMsg("");
+    if (!newDate || !selectedCycle) return;
+    try {
+      const { data: result } = await supabase.rpc("is_date_blocked", {
+        p_date: newDate,
+        p_profissional_id: selectedCycle.professional_id,
+        p_unidade_id: selectedCycle.unit_id,
+      });
+      if (result === true) {
+        setRemarcarBlockedMsg("Esta data está bloqueada (feriado, férias ou indisponibilidade). Escolha outra data.");
+      }
+    } catch {
+      // ignore rpc errors
+    }
+  };
+
+  const handleRemarcarSessao = async () => {
+    if (!remarcarTarget || !remarcarData || !selectedCycle || remarcarBlockedMsg) return;
+    setRemarcarSaving(true);
+    try {
+      const oldDate = remarcarTarget.scheduled_date;
+
+      // Double-check blocked
+      const { data: blocked } = await supabase.rpc("is_date_blocked", {
+        p_date: remarcarData,
+        p_profissional_id: selectedCycle.professional_id,
+        p_unidade_id: selectedCycle.unit_id,
+      });
+      if (blocked === true) {
+        toast.error("Data bloqueada. Escolha outra data.");
+        setRemarcarSaving(false);
+        return;
+      }
+
+      // Update session date
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({ scheduled_date: remarcarData })
+        .eq("id", remarcarTarget.id);
+      if (error) throw error;
+
+      // If session has linked appointment, update it too
+      if (remarcarTarget.appointment_id) {
+        await supabase
+          .from("agendamentos")
+          .update({ data: remarcarData })
+          .eq("id", remarcarTarget.appointment_id);
+      }
+
+      // Audit log
+      await logAction({
+        acao: "remarcar_sessao",
+        entidade: "treatment_session",
+        entidadeId: remarcarTarget.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          ciclo: selectedCycle.id,
+          sessao: remarcarTarget.session_number,
+          data_anterior: oldDate,
+          data_nova: remarcarData,
+          agendamento_vinculado: remarcarTarget.appointment_id || null,
+          old_value: { scheduled_date: oldDate },
+          new_value: { scheduled_date: remarcarData },
+        },
+      });
+
+      toast.success(
+        `Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(remarcarData + "T12:00:00").toLocaleDateString("pt-BR")}`,
+      );
+      setRemarcarTarget(null);
+      setRemarcarData("");
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
+    } finally {
+      setRemarcarSaving(false);
     }
   };
 
@@ -893,6 +985,24 @@ const Tratamentos: React.FC = () => {
                           <Calendar className="w-3 h-3 mr-1" /> Agendar
                         </Button>
                       )}
+
+                      {/* Botão Remarcar — profissional e master em sessões agendadas ou pendentes */}
+                      {(isProfissional || user?.role === "master") &&
+                        ["agendada", "pendente_agendamento"].includes(s.status) &&
+                        selectedCycle.status === "em_andamento" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                            onClick={() => {
+                              setRemarcarTarget(s);
+                              setRemarcarData("");
+                              setRemarcarBlockedMsg("");
+                            }}
+                          >
+                            <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                          </Button>
+                        )}
                     </div>
                   );
                 })}
@@ -1179,6 +1289,69 @@ const Tratamentos: React.FC = () => {
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 {agendandoSessao ? "Agendando..." : "Confirmar Agendamento"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Remarcar Sessão — profissional e master */}
+        <Dialog
+          open={!!remarcarTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRemarcarTarget(null);
+              setRemarcarData("");
+              setRemarcarBlockedMsg("");
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                Remarcar Sessão {remarcarTarget?.session_number}/{remarcarTarget?.total_sessions}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
+                <p>
+                  <strong>Data atual:</strong>{" "}
+                  {remarcarTarget?.scheduled_date
+                    ? new Date(remarcarTarget.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
+                    : "—"}
+                </p>
+                <p>
+                  <strong>Paciente:</strong> {pacientes.find((p) => p.id === selectedCycle?.patient_id)?.nome}
+                </p>
+                <p>
+                  <strong>Profissional:</strong>{" "}
+                  {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome}
+                </p>
+              </div>
+
+              <div>
+                <Label>Nova Data *</Label>
+                <Input
+                  type="date"
+                  value={remarcarData}
+                  min={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => handleCheckRemarcarDate(e.target.value)}
+                />
+              </div>
+
+              {remarcarBlockedMsg && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{remarcarBlockedMsg}</span>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRemarcarSessao}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!remarcarData || !!remarcarBlockedMsg || remarcarSaving}
+              >
+                <CalendarClock className="w-4 h-4 mr-2" />
+                {remarcarSaving ? "Salvando..." : "Confirmar Remarcação"}
               </Button>
             </div>
           </DialogContent>
