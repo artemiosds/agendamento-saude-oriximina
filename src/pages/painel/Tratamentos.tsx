@@ -552,9 +552,9 @@ const Tratamentos: React.FC = () => {
           data_anterior: oldDate,
           data_nova: remarcarData,
           agendamento_vinculado: remarcarTarget.appointment_id || null,
+          old_value: { scheduled_date: oldDate },
+          new_value: { scheduled_date: remarcarData },
         },
-        oldValue: { scheduled_date: oldDate },
-        newValue: { scheduled_date: remarcarData },
       });
 
       toast.success(
