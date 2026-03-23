@@ -159,6 +159,12 @@ const Tratamentos: React.FC = () => {
   const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
   const [agendandoSessao, setAgendandoSessao] = useState(false);
 
+  // Remarcar sessão (alterar data)
+  const [remarcarTarget, setRemarcarTarget] = useState<TreatmentSession | null>(null);
+  const [remarcarData, setRemarcarData] = useState("");
+  const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
+  const [remarcarSaving, setRemarcarSaving] = useState(false);
+
   // Forms
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
