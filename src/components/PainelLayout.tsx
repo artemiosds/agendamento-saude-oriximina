@@ -17,6 +17,7 @@ const menuItems = [
   { to: '/painel/pacientes', label: 'Pacientes', icon: Users, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
   { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
   { to: '/painel/tratamentos', label: 'Gestão de Tratamentos', icon: Activity, roles: ['master', 'coordenador', 'profissional'] },
+  { to: '/painel/regulacao', label: 'Regulação CER', icon: ClipboardListIcon, roles: ['master', 'coordenador', 'profissional'] },
   { to: '/painel/prontuario', label: 'Prontuário', icon: Stethoscope, roles: ['master', 'coordenador', 'profissional'] },
   { to: '/painel/relatorios', label: 'Relatórios', icon: FileText, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, roles: ['master', 'coordenador'] },
