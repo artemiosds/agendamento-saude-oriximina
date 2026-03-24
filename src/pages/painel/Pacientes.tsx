@@ -143,7 +143,24 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: typeof pacientes[0]) => {
     setEditId(p.id);
-    setForm({ nome: p.nome, cpf: p.cpf, cns: p.cns || '', nomeMae: p.nomeMae || '', telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
+    setForm({
+      ...emptyPacienteForm,
+      nome: p.nome, cpf: p.cpf, cns: p.cns || '', nomeMae: p.nomeMae || '',
+      telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email,
+      endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '',
+      municipio: (p as any).municipio || '', menorIdade: (p as any).menor_idade || false,
+      nomeResponsavel: (p as any).nome_responsavel || '', cpfResponsavel: (p as any).cpf_responsavel || '',
+      ubsOrigem: (p as any).ubs_origem || '', profissionalSolicitante: (p as any).profissional_solicitante || '',
+      tipoEncaminhamento: (p as any).tipo_encaminhamento || '', diagnosticoResumido: (p as any).diagnostico_resumido || '',
+      justificativa: (p as any).justificativa || '', dataEncaminhamento: (p as any).data_encaminhamento || '',
+      documentoUrl: (p as any).documento_url || '', tipoCondicao: (p as any).tipo_condicao || '',
+      mobilidade: (p as any).mobilidade || '', usaDispositivo: (p as any).usa_dispositivo || false,
+      tipoDispositivo: (p as any).tipo_dispositivo || '', comunicacao: (p as any).comunicacao || '',
+      comportamento: (p as any).comportamento || '', usaEquipamentos: (p as any).usa_equipamentos || false,
+      equipamentos: (p as any).equipamentos || [], observacaoEquipamentos: (p as any).observacao_equipamentos || '',
+      outroServicoSus: (p as any).outro_servico_sus || false, transporte: (p as any).transporte || '',
+      turnoPreferido: (p as any).turno_preferido || '',
+    });
     setErrors({});
     setDialogOpen(true);
   };
