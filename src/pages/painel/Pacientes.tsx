@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useNavigate } from 'react-router-dom';
+import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from '@/components/CadastroPacienteForm';
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
