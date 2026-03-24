@@ -136,7 +136,7 @@ const Pacientes: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
+    setForm(emptyPacienteForm);
     setErrors({});
     setDialogOpen(true);
   };
