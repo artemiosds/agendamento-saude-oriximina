@@ -556,49 +556,118 @@ export type Database = {
           auth_user_id: string | null
           cid: string
           cns: string
+          comportamento: string
+          comunicacao: string
           cpf: string
+          cpf_responsavel: string
           criado_em: string | null
+          data_encaminhamento: string
           data_nascimento: string
           descricao_clinica: string
+          diagnostico_resumido: string
+          documento_url: string
           email: string
           endereco: string
+          equipamentos: string[]
           id: string
+          justificativa: string
+          menor_idade: boolean
+          mobilidade: string
+          municipio: string
           nome: string
           nome_mae: string
+          nome_responsavel: string
+          observacao_equipamentos: string
           observacoes: string
+          outro_servico_sus: boolean
+          profissional_solicitante: string
           telefone: string
+          tipo_condicao: string
+          tipo_dispositivo: string
+          tipo_encaminhamento: string
+          transporte: string
+          turno_preferido: string
+          ubs_origem: string
+          usa_dispositivo: boolean
+          usa_equipamentos: boolean
         }
         Insert: {
           auth_user_id?: string | null
           cid?: string
           cns?: string
+          comportamento?: string
+          comunicacao?: string
           cpf?: string
+          cpf_responsavel?: string
           criado_em?: string | null
+          data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
+          diagnostico_resumido?: string
+          documento_url?: string
           email?: string
           endereco?: string
+          equipamentos?: string[]
           id: string
+          justificativa?: string
+          menor_idade?: boolean
+          mobilidade?: string
+          municipio?: string
           nome: string
           nome_mae?: string
+          nome_responsavel?: string
+          observacao_equipamentos?: string
           observacoes?: string
+          outro_servico_sus?: boolean
+          profissional_solicitante?: string
           telefone?: string
+          tipo_condicao?: string
+          tipo_dispositivo?: string
+          tipo_encaminhamento?: string
+          transporte?: string
+          turno_preferido?: string
+          ubs_origem?: string
+          usa_dispositivo?: boolean
+          usa_equipamentos?: boolean
         }
         Update: {
           auth_user_id?: string | null
           cid?: string
           cns?: string
+          comportamento?: string
+          comunicacao?: string
           cpf?: string
+          cpf_responsavel?: string
           criado_em?: string | null
+          data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
+          diagnostico_resumido?: string
+          documento_url?: string
           email?: string
           endereco?: string
+          equipamentos?: string[]
           id?: string
+          justificativa?: string
+          menor_idade?: boolean
+          mobilidade?: string
+          municipio?: string
           nome?: string
           nome_mae?: string
+          nome_responsavel?: string
+          observacao_equipamentos?: string
           observacoes?: string
+          outro_servico_sus?: boolean
+          profissional_solicitante?: string
           telefone?: string
+          tipo_condicao?: string
+          tipo_dispositivo?: string
+          tipo_encaminhamento?: string
+          transporte?: string
+          turno_preferido?: string
+          ubs_origem?: string
+          usa_dispositivo?: boolean
+          usa_equipamentos?: boolean
         }
         Relationships: []
       }

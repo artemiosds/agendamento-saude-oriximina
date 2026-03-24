@@ -20,6 +20,7 @@ import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { useNavigate } from 'react-router-dom';
+import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from '@/components/CadastroPacienteForm';
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ const Pacientes: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
+  const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
@@ -135,41 +136,82 @@ const Pacientes: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', cpf: '', cns: '', nomeMae: '', telefone: '', dataNascimento: '', email: '', endereco: '', descricaoClinica: '', cid: '' });
+    setForm(emptyPacienteForm);
     setErrors({});
     setDialogOpen(true);
   };
 
   const openEdit = (p: typeof pacientes[0]) => {
     setEditId(p.id);
-    setForm({ nome: p.nome, cpf: p.cpf, cns: p.cns || '', nomeMae: p.nomeMae || '', telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email, endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '' });
+    setForm({
+      ...emptyPacienteForm,
+      nome: p.nome, cpf: p.cpf, cns: p.cns || '', nomeMae: p.nomeMae || '',
+      telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email,
+      endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '',
+      municipio: (p as any).municipio || '', menorIdade: (p as any).menor_idade || false,
+      nomeResponsavel: (p as any).nome_responsavel || '', cpfResponsavel: (p as any).cpf_responsavel || '',
+      ubsOrigem: (p as any).ubs_origem || '', profissionalSolicitante: (p as any).profissional_solicitante || '',
+      tipoEncaminhamento: (p as any).tipo_encaminhamento || '', diagnosticoResumido: (p as any).diagnostico_resumido || '',
+      justificativa: (p as any).justificativa || '', dataEncaminhamento: (p as any).data_encaminhamento || '',
+      documentoUrl: (p as any).documento_url || '', tipoCondicao: (p as any).tipo_condicao || '',
+      mobilidade: (p as any).mobilidade || '', usaDispositivo: (p as any).usa_dispositivo || false,
+      tipoDispositivo: (p as any).tipo_dispositivo || '', comunicacao: (p as any).comunicacao || '',
+      comportamento: (p as any).comportamento || '', usaEquipamentos: (p as any).usa_equipamentos || false,
+      equipamentos: (p as any).equipamentos || [], observacaoEquipamentos: (p as any).observacao_equipamentos || '',
+      outroServicoSus: (p as any).outro_servico_sus || false, transporte: (p as any).transporte || '',
+      turnoPreferido: (p as any).turno_preferido || '',
+    });
     setErrors({});
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
-    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
-    if (err) {
-      const newErrors: Record<string, string> = {};
-      if (err.includes('Nome')) newErrors.nome = err;
-      else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
-      else if (err.includes('mail')) newErrors.email = err;
+    const newErrors: Record<string, string> = {};
+    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
+    if (!form.cpf.trim()) newErrors.cpf = 'CPF é obrigatório';
+    if (!form.telefone.trim()) newErrors.telefone = 'Telefone é obrigatório';
+    if (!form.ubsOrigem) newErrors.ubsOrigem = 'UBS origem é obrigatória';
+    if (!form.cid.trim()) newErrors.cid = 'CID é obrigatório';
+    if (!form.justificativa.trim()) newErrors.justificativa = 'Justificativa é obrigatória';
+    if (!form.documentoUrl && !editId) newErrors.documentoUrl = 'Documento é obrigatório';
+    if (form.menorIdade && !form.nomeResponsavel.trim()) newErrors.nomeResponsavel = 'Nome do responsável é obrigatório';
+    if (form.menorIdade && !form.cpfResponsavel.trim()) newErrors.cpfResponsavel = 'CPF do responsável é obrigatório';
+
+    if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      toast.error(err);
+      toast.error(Object.values(newErrors)[0]);
       return;
     }
     setErrors({});
     setSaving(true);
 
+    const dbFields: any = {
+      nome: form.nome, cpf: form.cpf, cns: form.cns, nome_mae: form.nomeMae,
+      telefone: form.telefone, data_nascimento: form.dataNascimento, email: form.email,
+      endereco: form.endereco, descricao_clinica: form.descricaoClinica || form.diagnosticoResumido, cid: form.cid,
+      municipio: form.municipio, menor_idade: form.menorIdade,
+      nome_responsavel: form.nomeResponsavel, cpf_responsavel: form.cpfResponsavel,
+      ubs_origem: form.ubsOrigem, profissional_solicitante: form.profissionalSolicitante,
+      tipo_encaminhamento: form.tipoEncaminhamento, diagnostico_resumido: form.diagnosticoResumido,
+      justificativa: form.justificativa, data_encaminhamento: form.dataEncaminhamento,
+      documento_url: form.documentoUrl, tipo_condicao: form.tipoCondicao,
+      mobilidade: form.mobilidade, usa_dispositivo: form.usaDispositivo,
+      tipo_dispositivo: form.tipoDispositivo, comunicacao: form.comunicacao,
+      comportamento: form.comportamento, usa_equipamentos: form.usaEquipamentos,
+      equipamentos: form.equipamentos, observacao_equipamentos: form.observacaoEquipamentos,
+      outro_servico_sus: form.outroServicoSus, transporte: form.transporte,
+      turno_preferido: form.turnoPreferido,
+    };
+
     try {
       if (editId) {
-        await updatePaciente(editId, form);
+        await supabase.from('pacientes').update(dbFields).eq('id', editId);
+        await refreshPacientes();
         toast.success('Paciente atualizado!');
       } else {
-        await addPaciente({
-          id: `p${Date.now()}`, ...form, cns: (form as any).cns || '', nomeMae: form.nomeMae || '', observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
-          criadoEm: new Date().toISOString(),
-        });
+        const id = `p${Date.now()}`;
+        await supabase.from('pacientes').insert({ id, ...dbFields });
+        await refreshPacientes();
         toast.success('Paciente cadastrado com sucesso!');
       }
       setDialogOpen(false);
@@ -299,55 +341,16 @@ const Pacientes: React.FC = () => {
 
       {/* Patient create/edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setErrors({}); }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
           <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Paciente</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome *</Label>
-              <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
-              {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-              <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" /></div>
-            </div>
-            <div>
-              <Label>Nome da Mãe</Label>
-              <Input value={form.nomeMae} onChange={e => setForm(p => ({ ...p, nomeMae: e.target.value }))} placeholder="Nome completo da mãe" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Telefone *</Label>
-                <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
-                {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
-              <div>
-                <Label>E-mail (opcional)</Label>
-                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
-                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
-              </div>
-            </div>
-            <div><Label>Endereço</Label><Input value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))} /></div>
-            <div className="border-t pt-3 mt-1">
-              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
-              <div className="space-y-3">
-                <div>
-                  <Label>Descrição Clínica</Label>
-                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
-                </div>
-                <div>
-                  <Label>CID (opcional)</Label>
-                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
-                </div>
-              </div>
-            </div>
-            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={saving}>
-              {saving ? 'Salvando...' : editId ? 'Atualizar' : 'Cadastrar'}
-            </Button>
-          </div>
+          <CadastroPacienteForm
+            form={form}
+            onChange={setForm}
+            onSave={handleSave}
+            saving={saving}
+            isEdit={!!editId}
+            errors={errors}
+          />
         </DialogContent>
       </Dialog>
 
