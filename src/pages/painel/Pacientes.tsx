@@ -341,55 +341,16 @@ const Pacientes: React.FC = () => {
 
       {/* Patient create/edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setErrors({}); }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
           <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Paciente</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome *</Label>
-              <Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} />
-              {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-              <div><Label>Cartão SUS / CNS</Label><Input value={form.cns} onChange={e => setForm(p => ({ ...p, cns: e.target.value }))} placeholder="Nº do cartão SUS" /></div>
-            </div>
-            <div>
-              <Label>Nome da Mãe</Label>
-              <Input value={form.nomeMae} onChange={e => setForm(p => ({ ...p, nomeMae: e.target.value }))} placeholder="Nome completo da mãe" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Telefone *</Label>
-                <Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(93) 99999-0000" />
-                {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Data Nasc.</Label><Input type="date" value={form.dataNascimento} onChange={e => setForm(p => ({ ...p, dataNascimento: e.target.value }))} /></div>
-              <div>
-                <Label>E-mail (opcional)</Label>
-                <Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="paciente@email.com" />
-                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
-              </div>
-            </div>
-            <div><Label>Endereço</Label><Input value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))} /></div>
-            <div className="border-t pt-3 mt-1">
-              <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
-              <div className="space-y-3">
-                <div>
-                  <Label>Descrição Clínica</Label>
-                  <Input value={form.descricaoClinica} onChange={e => setForm(p => ({ ...p, descricaoClinica: e.target.value }))} placeholder="Ex: dor lombar crônica, avaliação psicológica..." />
-                </div>
-                <div>
-                  <Label>CID (opcional)</Label>
-                  <Input value={form.cid} onChange={e => setForm(p => ({ ...p, cid: e.target.value }))} placeholder="Ex: F41.1" />
-                </div>
-              </div>
-            </div>
-            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground" disabled={saving}>
-              {saving ? 'Salvando...' : editId ? 'Atualizar' : 'Cadastrar'}
-            </Button>
-          </div>
+          <CadastroPacienteForm
+            form={form}
+            onChange={setForm}
+            onSave={handleSave}
+            saving={saving}
+            isEdit={!!editId}
+            errors={errors}
+          />
         </DialogContent>
       </Dialog>
 
