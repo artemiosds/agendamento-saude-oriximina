@@ -166,28 +166,52 @@ const Pacientes: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const err = validatePacienteFields({ nome: form.nome, telefone: form.telefone, email: form.email });
-    if (err) {
-      const newErrors: Record<string, string> = {};
-      if (err.includes('Nome')) newErrors.nome = err;
-      else if (err.includes('Telefone') || err.includes('telefone')) newErrors.telefone = err;
-      else if (err.includes('mail')) newErrors.email = err;
+    const newErrors: Record<string, string> = {};
+    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
+    if (!form.cpf.trim()) newErrors.cpf = 'CPF é obrigatório';
+    if (!form.telefone.trim()) newErrors.telefone = 'Telefone é obrigatório';
+    if (!form.ubsOrigem) newErrors.ubsOrigem = 'UBS origem é obrigatória';
+    if (!form.cid.trim()) newErrors.cid = 'CID é obrigatório';
+    if (!form.justificativa.trim()) newErrors.justificativa = 'Justificativa é obrigatória';
+    if (!form.documentoUrl && !editId) newErrors.documentoUrl = 'Documento é obrigatório';
+    if (form.menorIdade && !form.nomeResponsavel.trim()) newErrors.nomeResponsavel = 'Nome do responsável é obrigatório';
+    if (form.menorIdade && !form.cpfResponsavel.trim()) newErrors.cpfResponsavel = 'CPF do responsável é obrigatório';
+
+    if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      toast.error(err);
+      toast.error(Object.values(newErrors)[0]);
       return;
     }
     setErrors({});
     setSaving(true);
 
+    const dbFields: any = {
+      nome: form.nome, cpf: form.cpf, cns: form.cns, nome_mae: form.nomeMae,
+      telefone: form.telefone, data_nascimento: form.dataNascimento, email: form.email,
+      endereco: form.endereco, descricao_clinica: form.descricaoClinica || form.diagnosticoResumido, cid: form.cid,
+      municipio: form.municipio, menor_idade: form.menorIdade,
+      nome_responsavel: form.nomeResponsavel, cpf_responsavel: form.cpfResponsavel,
+      ubs_origem: form.ubsOrigem, profissional_solicitante: form.profissionalSolicitante,
+      tipo_encaminhamento: form.tipoEncaminhamento, diagnostico_resumido: form.diagnosticoResumido,
+      justificativa: form.justificativa, data_encaminhamento: form.dataEncaminhamento,
+      documento_url: form.documentoUrl, tipo_condicao: form.tipoCondicao,
+      mobilidade: form.mobilidade, usa_dispositivo: form.usaDispositivo,
+      tipo_dispositivo: form.tipoDispositivo, comunicacao: form.comunicacao,
+      comportamento: form.comportamento, usa_equipamentos: form.usaEquipamentos,
+      equipamentos: form.equipamentos, observacao_equipamentos: form.observacaoEquipamentos,
+      outro_servico_sus: form.outroServicoSus, transporte: form.transporte,
+      turno_preferido: form.turnoPreferido,
+    };
+
     try {
       if (editId) {
-        await updatePaciente(editId, form);
+        await supabase.from('pacientes').update(dbFields).eq('id', editId);
+        await refreshPacientes();
         toast.success('Paciente atualizado!');
       } else {
-        await addPaciente({
-          id: `p${Date.now()}`, ...form, cns: (form as any).cns || '', nomeMae: form.nomeMae || '', observacoes: '', descricaoClinica: form.descricaoClinica || '', cid: form.cid || '',
-          criadoEm: new Date().toISOString(),
-        });
+        const id = `p${Date.now()}`;
+        await supabase.from('pacientes').insert({ id, ...dbFields });
+        await refreshPacientes();
         toast.success('Paciente cadastrado com sucesso!');
       }
       setDialogOpen(false);
