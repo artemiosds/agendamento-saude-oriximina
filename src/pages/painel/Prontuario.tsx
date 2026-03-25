@@ -1227,7 +1227,27 @@ const ProntuarioPage: React.FC = () => {
               </Select>
             </div>
 
-            {editId && (
+            {/* Decisão Clínica: PTS / Tratamento */}
+            {!editId && form.paciente_id && (
+              <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-primary" />
+                  Decisão Clínica (opcional)
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Após registrar o prontuário, você pode criar um PTS ou iniciar um ciclo de tratamento para este paciente.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                    <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                    <Activity className="w-3.5 h-3.5 mr-1" /> Criar Ciclo de Tratamento
+                  </Button>
+                </div>
+              </div>
+            )}
+
               <div>
                 <Label className="text-warning">Motivo da Alteração *</Label>
                 <Textarea
