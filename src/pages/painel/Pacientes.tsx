@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'; // refreshed
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useWebhookNotify } from '@/hooks/useWebhookNotify';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,10 +29,13 @@ const Pacientes: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
+  const { can } = usePermissions();
   const isProfissional = user?.role === 'profissional';
-  const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
-  const canImportCSV = hasPermission(['master', 'coordenador']);
-  const canAddToFila = hasPermission(['master', 'coordenador', 'recepcao']);
+  const canDelete = can('pacientes', 'can_delete');
+  const canImportCSV = can('pacientes', 'can_create');
+  const canAddToFila = can('fila', 'can_create');
+  const canCreate = can('pacientes', 'can_create');
+  const canEdit = can('pacientes', 'can_edit');
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 
@@ -333,7 +337,7 @@ const Pacientes: React.FC = () => {
               <FileDown className="w-4 h-4 mr-2" /> Importar CSV
             </Button>
           )}
-          {!isProfissional && canAddToFila && (
+          {canCreate && (
             <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Novo Paciente</Button>
           )}
         </div>
