@@ -324,6 +324,7 @@ const ProntuarioPage: React.FC = () => {
       agendamento_id: p.agendamento_id || "",
       data_atendimento: p.data_atendimento,
       hora_atendimento: p.hora_atendimento || "",
+      tipo_registro: (p as any).tipo_registro || "consulta",
       queixa_principal: p.queixa_principal || "",
       anamnese: p.anamnese || "",
       sinais_sintomas: p.sinais_sintomas || "",
@@ -339,6 +340,10 @@ const ProntuarioPage: React.FC = () => {
       procedimentos_texto: p.procedimentos_texto || "",
       outro_procedimento: p.outro_procedimento || "",
       episodio_id: p.episodio_id || "",
+      soap_subjetivo: (p as any).soap_subjetivo || "",
+      soap_objetivo: (p as any).soap_objetivo || "",
+      soap_avaliacao: (p as any).soap_avaliacao || "",
+      soap_plano: (p as any).soap_plano || "",
     };
     setForm(formData);
     setPreviousForm(formData);
