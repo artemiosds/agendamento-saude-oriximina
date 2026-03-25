@@ -580,6 +580,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadBloqueios,
   ]);
 
+  // ── Realtime subscriptions for automatic data sync ──
+  const realtimeDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    const debouncedRefresh = (key: string, fn: () => Promise<void>, ms = 400) => {
+      if (realtimeDebounceRef.current[key]) clearTimeout(realtimeDebounceRef.current[key]);
+      realtimeDebounceRef.current[key] = setTimeout(() => { fn(); }, ms);
+    };
+
+    const channel = supabase
+      .channel('data-context-realtime')
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'agendamentos' }, () => debouncedRefresh('ag', loadAgendamentos))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'fila_espera' }, () => debouncedRefresh('fila', loadFila))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'atendimentos' }, () => debouncedRefresh('at', loadAgendamentos))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'pacientes' }, () => debouncedRefresh('pac', loadPacientes))
+      .subscribe();
+
+    return () => {
+      Object.values(realtimeDebounceRef.current).forEach(clearTimeout);
+      supabase.removeChannel(channel);
+    };
+  }, [loadAgendamentos, loadFila, loadPacientes]);
+
   const refreshFuncionarios = loadFuncionarios;
   const refreshDisponibilidades = loadDisponibilidades;
   const refreshAgendamentos = loadAgendamentos;
