@@ -70,12 +70,24 @@ interface ProcedimentoDB {
   ativo: boolean;
 }
 
+const TIPOS_REGISTRO = [
+  { value: 'consulta', label: 'Consulta' },
+  { value: 'avaliacao_inicial', label: 'Avaliação Inicial' },
+  { value: 'sessao', label: 'Sessão (SOAP)' },
+  { value: 'retorno', label: 'Retorno' },
+  { value: 'reavaliacao', label: 'Reavaliação' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem' },
+  { value: 'pts', label: 'PTS' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial' },
+];
+
 const emptyForm = {
   paciente_id: "",
   paciente_nome: "",
   agendamento_id: "",
   data_atendimento: new Date().toISOString().split("T")[0],
   hora_atendimento: "",
+  tipo_registro: "consulta",
   queixa_principal: "",
   anamnese: "",
   sinais_sintomas: "",
@@ -91,6 +103,10 @@ const emptyForm = {
   procedimentos_texto: "",
   outro_procedimento: "",
   episodio_id: "",
+  soap_subjetivo: "",
+  soap_objetivo: "",
+  soap_avaliacao: "",
+  soap_plano: "",
 };
 
 const classificarIMC = (imc: number): string => {
