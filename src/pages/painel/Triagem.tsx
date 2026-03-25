@@ -186,8 +186,38 @@ const Triagem: React.FC = () => {
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
-      // Update appointment status
-      // After triage, send to nursing evaluation
+      
+      // Register in prontuário as "TRIAGEM INICIAL"
+      await (supabase as any).from('prontuarios').insert({
+        paciente_id: selectedAg.pacienteId,
+        paciente_nome: selectedAg.pacienteNome,
+        profissional_id: user?.id || '',
+        profissional_nome: user?.nome || '',
+        unidade_id: selectedAg.unidadeId || user?.unidadeId || '',
+        agendamento_id: selectedAg.id,
+        data_atendimento: new Date().toISOString().split('T')[0],
+        hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        tipo_registro: 'triagem',
+        queixa_principal: form.queixa || '',
+        sinais_sintomas: [
+          form.pressaoArterial ? `PA: ${form.pressaoArterial}` : '',
+          form.frequenciaCardiaca ? `FC: ${form.frequenciaCardiaca} bpm` : '',
+          form.temperatura ? `Temp: ${form.temperatura}°C` : '',
+          form.saturacaoOxigenio ? `SpO2: ${form.saturacaoOxigenio}%` : '',
+          form.peso ? `Peso: ${form.peso} kg` : '',
+          form.altura ? `Altura: ${form.altura} m` : '',
+          imc ? `IMC: ${imc.value} (${imc.label})` : '',
+          form.glicemia ? `Glicemia: ${form.glicemia} mg/dL` : '',
+        ].filter(Boolean).join(' | '),
+        anamnese: form.queixa || '',
+        observacoes: [
+          form.alergias.length ? `Alergias: ${form.alergias.join(', ')}` : '',
+          form.medicamentos.length ? `Medicamentos: ${form.medicamentos.join(', ')}` : '',
+        ].filter(Boolean).join('\n'),
+        evolucao: 'TRIAGEM INICIAL — Sinais vitais registrados e paciente encaminhado para avaliação de enfermagem.',
+      });
+
+      // Update appointment status to nursing evaluation
       await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
 
       await logAction({
@@ -196,7 +226,7 @@ const Triagem: React.FC = () => {
         detalhes: { paciente_nome: selectedAg.pacienteNome, peso: form.peso, altura: form.altura, imc: imc?.value },
       });
 
-      toast.success('Triagem confirmada! Paciente encaminhado para avaliação de enfermagem.');
+      toast.success('Triagem confirmada! Registrado no prontuário e encaminhado para enfermagem.');
       setDialogOpen(false);
       await loadFila();
       await refreshAgendamentos();

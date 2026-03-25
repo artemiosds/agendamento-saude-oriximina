@@ -32,6 +32,7 @@ const Bloqueios = React.lazy(() => import("./pages/painel/Bloqueios"));
 const Tratamentos = React.lazy(() => import("./pages/painel/Tratamentos"));
 const Regulacao = React.lazy(() => import("./pages/painel/Regulacao"));
 const AvaliacaoEnfermagem = React.lazy(() => import("./pages/painel/AvaliacaoEnfermagem"));
+const AvaliacaoMultiprofissional = React.lazy(() => import("./pages/painel/AvaliacaoMultiprofissional"));
 const PTSPage = React.lazy(() => import("./pages/painel/PTS"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
@@ -97,6 +98,7 @@ const App = () => (
                   <Route path="regulacao" element={<Regulacao />} />
                   <Route path="enfermagem" element={<AvaliacaoEnfermagem />} />
                   <Route path="pts" element={<PTSPage />} />
+                  <Route path="multiprofissional" element={<AvaliacaoMultiprofissional />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
