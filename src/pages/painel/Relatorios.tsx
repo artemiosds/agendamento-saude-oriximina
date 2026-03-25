@@ -747,6 +747,9 @@ ${dataRows}
           <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
+          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+            <Download className="w-4 h-4 mr-1" />Excel
+          </Button>
           <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
