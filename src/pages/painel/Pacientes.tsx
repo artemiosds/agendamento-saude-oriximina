@@ -25,7 +25,7 @@ import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from '@/com
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
+  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes, refreshFila } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
@@ -222,8 +222,40 @@ const Pacientes: React.FC = () => {
       } else {
         const id = `p${Date.now()}`;
         await supabase.from('pacientes').insert({ id, ...dbFields });
+
+        // Auto-insert into fila_espera with status "aguardando" (AGUARDANDO TRIAGEM)
+        const filaId = `f${Date.now()}`;
+        const defaultUnidade = unidades.length === 1 ? unidades[0].id : (user?.unidadeId || unidades[0]?.id || '');
+        await supabase.from('fila_espera').insert({
+          id: filaId,
+          paciente_id: id,
+          paciente_nome: form.nome,
+          unidade_id: defaultUnidade,
+          profissional_id: '',
+          setor: '',
+          prioridade: 'normal',
+          prioridade_perfil: 'normal',
+          status: 'aguardando',
+          posicao: fila.length + 1,
+          hora_chegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          criado_por: user?.id || 'sistema',
+          observacoes: '',
+          descricao_clinica: form.diagnosticoResumido || form.descricaoClinica || '',
+          cid: form.cid,
+          data_solicitacao_original: form.dataEncaminhamento || new Date().toISOString().split('T')[0],
+          origem_cadastro: 'normal',
+          especialidade_destino: form.especialidadeDestino,
+        });
+
+        await logAction({
+          acao: 'criar', entidade: 'fila_espera', entidadeId: filaId,
+          detalhes: { pacienteNome: form.nome, especialidade: form.especialidadeDestino, origem: 'cadastro_automatico' },
+          user, modulo: 'fila_espera',
+        });
+
         await refreshPacientes();
-        toast.success('Paciente cadastrado com sucesso!');
+        await refreshFila();
+        toast.success('Paciente cadastrado e adicionado à fila de espera!');
       }
       setDialogOpen(false);
     } catch {
