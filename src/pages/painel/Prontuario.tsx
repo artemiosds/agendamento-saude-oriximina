@@ -403,6 +403,11 @@ const ProntuarioPage: React.FC = () => {
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
         outro_procedimento: form.outro_procedimento || "",
+        tipo_registro: form.tipo_registro || "consulta",
+        soap_subjetivo: form.soap_subjetivo || "",
+        soap_objetivo: form.soap_objetivo || "",
+        soap_avaliacao: form.soap_avaliacao || "",
+        soap_plano: form.soap_plano || "",
       };
 
       // CORRIGIDO: não salva 'no_episode' no banco
