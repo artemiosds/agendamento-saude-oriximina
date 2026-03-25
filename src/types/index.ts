@@ -178,6 +178,7 @@ export interface FilaEspera {
   criadoEm?: string;
   dataSolicitacaoOriginal?: string;
   origemCadastro?: "normal" | "demanda_reprimida";
+  especialidadeDestino?: string;
 }
 
 export interface Atendimento {
