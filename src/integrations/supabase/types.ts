@@ -345,6 +345,7 @@ export type Database = {
           criado_por: string
           data_solicitacao_original: string
           descricao_clinica: string
+          especialidade_destino: string
           hora_chamada: string | null
           hora_chegada: string
           id: string
@@ -366,6 +367,7 @@ export type Database = {
           criado_por?: string
           data_solicitacao_original?: string
           descricao_clinica?: string
+          especialidade_destino?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id: string
@@ -387,6 +389,7 @@ export type Database = {
           criado_por?: string
           data_solicitacao_original?: string
           descricao_clinica?: string
+          especialidade_destino?: string
           hora_chamada?: string | null
           hora_chegada?: string
           id?: string
@@ -671,6 +674,7 @@ export type Database = {
           email: string
           endereco: string
           equipamentos: string[]
+          especialidade_destino: string
           id: string
           justificativa: string
           menor_idade: boolean
@@ -710,6 +714,7 @@ export type Database = {
           email?: string
           endereco?: string
           equipamentos?: string[]
+          especialidade_destino?: string
           id: string
           justificativa?: string
           menor_idade?: boolean
@@ -749,6 +754,7 @@ export type Database = {
           email?: string
           endereco?: string
           equipamentos?: string[]
+          especialidade_destino?: string
           id?: string
           justificativa?: string
           menor_idade?: boolean
