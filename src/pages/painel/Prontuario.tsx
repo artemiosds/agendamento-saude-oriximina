@@ -913,8 +913,53 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {/* Tipo de Registro */}
             <div>
-              <Label>Queixa Principal</Label>
+              <Label>Tipo de Registro *</Label>
+              <Select value={form.tipo_registro} onValueChange={(v) => setForm((p) => ({ ...p, tipo_registro: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_REGISTRO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* SOAP Section - shown for sessão type */}
+            {form.tipo_registro === 'sessao' && (
+              <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
+                <h3 className="font-semibold text-sm text-primary">Registro SOAP — Sessão</h3>
+                <div>
+                  <Label>S — Subjetivo (Relato do paciente)</Label>
+                  <Textarea rows={2} value={form.soap_subjetivo}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))}
+                    placeholder="O que o paciente relata..." />
+                </div>
+                <div>
+                  <Label>O — Objetivo (Dados observáveis)</Label>
+                  <Textarea rows={2} value={form.soap_objetivo}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))}
+                    placeholder="Achados clínicos, exame físico, sinais vitais..." />
+                </div>
+                <div>
+                  <Label>A — Avaliação (Análise clínica)</Label>
+                  <Textarea rows={2} value={form.soap_avaliacao}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))}
+                    placeholder="Interpretação dos achados, hipóteses, diagnóstico funcional..." />
+                </div>
+                <div>
+                  <Label>P — Plano (Plano da sessão)</Label>
+                  <Textarea rows={2} value={form.soap_plano}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))}
+                    placeholder="Condutas, intervenções realizadas, próximos passos..." />
+                </div>
+              </div>
+            )}
+
+            {/* Standard fields (hidden when SOAP mode is active, but still accessible) */}
+            <div>
+              <Label>{form.tipo_registro === 'avaliacao_inicial' ? 'Queixa Principal *' : 'Queixa Principal'}</Label>
               <Textarea
                 rows={2}
                 value={form.queixa_principal}
