@@ -1402,6 +1402,7 @@ const ProntuarioPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
