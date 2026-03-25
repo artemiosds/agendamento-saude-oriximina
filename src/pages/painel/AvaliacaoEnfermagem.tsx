@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Clock, Eye, CheckCircle, XCircle, AlertTriangle, Stethoscope } from 'lucide-react';
+import { Loader2, Clock, CheckCircle, XCircle, AlertTriangle, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInMinutes } from 'date-fns';
@@ -40,6 +39,23 @@ interface TriagemResumo {
   queixa?: string;
 }
 
+interface PacienteResumo {
+  nome: string;
+  cpf: string;
+  cns: string;
+  data_nascimento: string;
+  telefone: string;
+  nome_mae: string;
+  municipio: string;
+  ubs_origem: string;
+  profissional_solicitante: string;
+  cid: string;
+  justificativa: string;
+  tipo_encaminhamento: string;
+  diagnostico_resumido: string;
+  descricao_clinica: string;
+}
+
 const AvaliacaoEnfermagem: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { logAction, refreshAgendamentos } = useData();
@@ -49,6 +65,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const [selected, setSelected] = useState<FilaEnfermagem | null>(null);
   const [saving, setSaving] = useState(false);
   const [triagem, setTriagem] = useState<TriagemResumo | null>(null);
+  const [paciente, setPaciente] = useState<PacienteResumo | null>(null);
   const [now, setNow] = useState(new Date());
 
   const [form, setForm] = useState({
@@ -112,6 +129,15 @@ const AvaliacaoEnfermagem: React.FC = () => {
       anamnese_resumida: '', condicao_clinica: '', avaliacao_risco: '',
       prioridade: 'media', observacoes_clinicas: '', resultado: 'apto', motivo_inapto: '',
     });
+
+    // Load patient data
+    const { data: pacData } = await (supabase as any)
+      .from('pacientes')
+      .select('nome, cpf, cns, data_nascimento, telefone, nome_mae, municipio, ubs_origem, profissional_solicitante, cid, justificativa, tipo_encaminhamento, diagnostico_resumido, descricao_clinica')
+      .eq('id', ag.pacienteId)
+      .maybeSingle();
+    setPaciente(pacData || null);
+
     // Load triage data
     const { data } = await (supabase as any)
       .from('triage_records')
@@ -125,14 +151,20 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
   const handleSave = async () => {
     if (!selected) return;
-    if (!form.anamnese_resumida || !form.condicao_clinica || !form.avaliacao_risco) {
-      toast.error('Preencha anamnese, condição clínica e avaliação de risco.');
+
+    // Validate mandatory fields
+    const missing: string[] = [];
+    if (!form.anamnese_resumida.trim()) missing.push('Anamnese Resumida');
+    if (!form.condicao_clinica.trim()) missing.push('Condição Clínica Geral');
+    if (!form.avaliacao_risco) missing.push('Avaliação de Risco');
+    if (!form.observacoes_clinicas.trim()) missing.push('Observações Clínicas');
+    if (form.resultado === 'inapto' && !form.motivo_inapto.trim()) missing.push('Motivo da Inaptidão');
+
+    if (missing.length > 0) {
+      toast.error(`Campos obrigatórios: ${missing.join(', ')}`);
       return;
     }
-    if (form.resultado === 'inapto' && !form.motivo_inapto) {
-      toast.error('Informe o motivo da inaptidão.');
-      return;
-    }
+
     setSaving(true);
     try {
       // Save nursing evaluation
@@ -150,7 +182,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
         motivo_inapto: form.motivo_inapto,
       });
 
-      // Save as prontuário entry (TRIAGEM + ENFERMAGEM)
+      // Register in prontuário as "AVALIAÇÃO DE ENFERMAGEM"
       await (supabase as any).from('prontuarios').insert({
         paciente_id: selected.pacienteId,
         paciente_nome: selected.pacienteNome,
@@ -168,6 +200,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
           : form.resultado === 'multiprofissional' ? 'Encaminhado para avaliação multiprofissional'
           : `INAPTO - ${form.motivo_inapto}`,
         observacoes: form.observacoes_clinicas,
+        evolucao: `AVALIAÇÃO DE ENFERMAGEM — Resultado: ${form.resultado.toUpperCase()}. Risco: ${form.avaliacao_risco}. Prioridade: ${form.prioridade}.`,
       });
 
       // Update appointment status based on result
@@ -210,7 +243,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
     setSaving(false);
   };
 
-  if (!hasPermission(['master', 'coordenador', 'profissional'])) {
+  if (!hasPermission(['master', 'coordenador', 'profissional', 'enfermagem'])) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
 
@@ -263,9 +296,46 @@ const AvaliacaoEnfermagem: React.FC = () => {
             <DialogTitle className="font-display">Avaliação de Enfermagem — {selected?.pacienteNome}</DialogTitle>
           </DialogHeader>
 
+          {/* Patient data */}
+          {paciente && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Dados do Paciente</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-muted/50 rounded-lg p-3 border">
+                <span>CPF: <strong>{paciente.cpf || '—'}</strong></span>
+                <span>CNS: <strong>{paciente.cns || '—'}</strong></span>
+                <span>Nasc.: <strong>{paciente.data_nascimento || '—'}</strong></span>
+                <span>Telefone: <strong>{paciente.telefone || '—'}</strong></span>
+                <span>Mãe: <strong>{paciente.nome_mae || '—'}</strong></span>
+                <span>Município: <strong>{paciente.municipio || '—'}</strong></span>
+              </div>
+
+              {(paciente.ubs_origem || paciente.cid || paciente.justificativa) && (
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-foreground">Encaminhamento</h3>
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-accent/30 rounded-lg p-3 border">
+                    {paciente.ubs_origem && <span>UBS Origem: <strong>{paciente.ubs_origem}</strong></span>}
+                    {paciente.profissional_solicitante && <span>Solicitante: <strong>{paciente.profissional_solicitante}</strong></span>}
+                    {paciente.tipo_encaminhamento && <span>Tipo: <strong>{paciente.tipo_encaminhamento}</strong></span>}
+                    {paciente.cid && <span>CID: <strong>{paciente.cid}</strong></span>}
+                  </div>
+                  {paciente.justificativa && (
+                    <p className="text-xs"><strong>Justificativa:</strong> {paciente.justificativa}</p>
+                  )}
+                  {paciente.diagnostico_resumido && (
+                    <p className="text-xs"><strong>Diagnóstico:</strong> {paciente.diagnostico_resumido}</p>
+                  )}
+                  {paciente.descricao_clinica && (
+                    <p className="text-xs"><strong>Descrição Clínica:</strong> {paciente.descricao_clinica}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Triage summary */}
           {triagem && (
             <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Dados da Triagem</h3>
               {triagem.alergias && triagem.alergias.length > 0 && (
                 <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-2 text-sm">
                   <strong className="text-destructive">⚠️ ALERGIAS:</strong> {triagem.alergias.join(', ')}
@@ -274,6 +344,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-muted/50 rounded-lg p-3 border">
                 {triagem.peso && <span>Peso: <strong>{triagem.peso}kg</strong></span>}
                 {triagem.altura && <span>Altura: <strong>{triagem.altura}cm</strong></span>}
+                {triagem.imc && <span>IMC: <strong>{triagem.imc}</strong></span>}
                 {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial}</strong></span>}
                 {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
                 {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca} bpm</strong></span>}
@@ -316,7 +387,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label>Prioridade</Label>
+                <Label>Prioridade *</Label>
                 <Select value={form.prioridade} onValueChange={v => setForm(p => ({ ...p, prioridade: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -329,10 +400,10 @@ const AvaliacaoEnfermagem: React.FC = () => {
             </div>
 
             <div>
-              <Label>Observações Clínicas</Label>
+              <Label>Observações Clínicas *</Label>
               <Textarea rows={2} value={form.observacoes_clinicas}
                 onChange={e => setForm(p => ({ ...p, observacoes_clinicas: e.target.value }))}
-                placeholder="Observações adicionais..." />
+                placeholder="Observações clínicas relevantes..." />
             </div>
 
             <div>
