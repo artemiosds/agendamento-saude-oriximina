@@ -115,8 +115,8 @@ const Funcionarios: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.nome || !form.usuario || !form.email) {
-      toast.error('Nome, usuário e e-mail são obrigatórios.');
+    if (!form.nome || !form.usuario || !form.email || !form.role) {
+      toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
     }
 
@@ -314,12 +314,12 @@ const Funcionarios: React.FC = () => {
                 </div>
               )}
             </div>
-            {(form.role === 'profissional' || form.role === 'tecnico') && (
+            {(form.role === 'profissional' || form.role === 'tecnico' || form.role === 'enfermagem') && (
               <>
                 <div className="border-t pt-3 mt-2">
                   <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
                 </div>
-                {form.role === 'tecnico' && (
+                {(form.role === 'tecnico' || form.role === 'enfermagem') && (
                   <div>
                     <Label>COREN</Label>
                     <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
