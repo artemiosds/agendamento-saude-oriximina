@@ -1062,6 +1062,15 @@ const Agenda: React.FC = () => {
             )}
           </div>
 
+          {/* Slot availability summary for selected professional */}
+          {filterProf !== "all" && (
+            <SlotInfoBadge
+              profissionalId={filterProf}
+              unidadeId={filterUnit !== "all" ? filterUnit : (profissionais.find(p => p.id === filterProf)?.unidadeId || "")}
+              date={selectedDate}
+            />
+          )}
+
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
               <CardContent className="p-4 flex items-center gap-3">
