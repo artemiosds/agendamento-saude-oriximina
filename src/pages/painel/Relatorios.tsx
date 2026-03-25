@@ -583,6 +583,68 @@ const Relatorios: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, filteredAtendimentos]);
 
+  // === EXPORT EXCEL (XML Spreadsheet) ===
+  const exportExcel = useCallback((type: string) => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+
+    if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
+      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
+      rows = filtered.map(a => {
+        const un = unidades.find(u => u.id === a.unidadeId);
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
+      });
+    } else if (type === 'produtividade') {
+      headers = ['Profissional', 'Pacientes', 'Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Tempo Médio (min)', 'Taxa Conclusão (%)'];
+      rows = porProfissional.map(p => [p.nome, p.pacientesAtendidos.toString(), p.total.toString(), p.concluidos.toString(), p.faltas.toString(), p.cancelados.toString(), p.tempoMedio.toString(), p.taxaConclusao.toString()]);
+    } else if (type === 'faltas') {
+      headers = ['Paciente', 'Telefone', 'Profissional', 'Total Faltas', 'Datas'];
+      rows = faltasReport.map(f => [f.nome, f.telefone, f.profissional, f.total.toString(), f.datas.join(', ')]);
+    } else if (type === 'pacientes') {
+      headers = ['Paciente', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Última Consulta'];
+      rows = pacientesReport.map(p => [p.nome, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.ultimaConsulta]);
+    } else if (type === 'fila') {
+      headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada'];
+      rows = filaReport.items.map(f => {
+        const un = unidades.find(u => u.id === f.unidade_id);
+        return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
+      });
+    }
+
+    // Build XML Spreadsheet (Excel-compatible)
+    const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const headerCells = headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
+    const dataRows = rows.map(r =>
+      `<Row>${r.map(c => `<Cell><Data ss:Type="String">${escXml(c)}</Data></Cell>`).join('')}</Row>`
+    ).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+<Style ss:ID="header">
+<Font ss:Bold="1" ss:Size="11"/>
+<Interior ss:Color="#E8F0FE" ss:Pattern="Solid"/>
+</Style>
+</Styles>
+<Worksheet ss:Name="Relatório">
+<Table>
+${headers.map(() => '<Column ss:AutoFitWidth="1" ss:Width="120"/>').join('')}
+<Row>${headerCells}</Row>
+${dataRows}
+</Table>
+</Worksheet>
+</Workbook>`;
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+
   // === EXPORT PDF ===
   const exportPDF = useCallback((type: string) => {
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
