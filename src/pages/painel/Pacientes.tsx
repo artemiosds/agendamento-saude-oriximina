@@ -227,6 +227,7 @@ const Pacientes: React.FC = () => {
   };
 
   const handleDelete = async (p: typeof pacientes[0]) => {
+    if (!can('pacientes', 'can_delete')) { toast.error('Sem permissão para excluir.'); return; }
     const activeLinks = agendamentos.filter(a => a.pacienteId === p.id && !['cancelado', 'concluido', 'falta'].includes(a.status));
     if (activeLinks.length > 0) {
       toast.error(`Não é possível excluir: ${p.nome} possui ${activeLinks.length} agendamento(s) ativo(s).`);
