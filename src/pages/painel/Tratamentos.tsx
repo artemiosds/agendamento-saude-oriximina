@@ -987,7 +987,7 @@ const Tratamentos: React.FC = () => {
                       )}
 
                       {/* Botão Remarcar — profissional e master em sessões agendadas ou pendentes */}
-                      {(isProfissional || user?.role === "master") &&
+                      {canAgendarSessao &&
                         ["agendada", "pendente_agendamento"].includes(s.status) &&
                         selectedCycle.status === "em_andamento" && (
                           <Button
