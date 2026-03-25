@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse, ClipboardList as ClipboardListIcon,
-  BookOpen
+  BookOpen, Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ const menuItems = [
   { to: '/painel/multiprofissional', label: 'Avaliação Multi', icon: BookOpen, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
   { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
+  { to: '/painel/permissoes', label: 'Permissões', icon: Lock, roles: ['master'] },
 ];
 
 const PainelLayout: React.FC = () => {
