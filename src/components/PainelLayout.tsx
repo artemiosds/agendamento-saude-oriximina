@@ -28,6 +28,7 @@ const menuItems = [
   { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, roles: ['master', 'coordenador', 'tecnico'] },
   { to: '/painel/enfermagem', label: 'Avaliação Enfermagem', icon: Stethoscope, roles: ['master', 'coordenador', 'enfermagem'] },
   { to: '/painel/pts', label: 'PTS', icon: FileText, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
+  { to: '/painel/multiprofissional', label: 'Avaliação Multi', icon: BookOpen, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
   { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ];
