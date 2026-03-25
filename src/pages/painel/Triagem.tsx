@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2, Play, Clock, X, Plus, CheckCircle, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,13 +48,13 @@ const Triagem: React.FC = () => {
   const [form, setForm] = useState({
     peso: '', altura: '', pressaoArterial: '', temperatura: '',
     frequenciaCardiaca: '', saturacaoOxigenio: '', glicemia: '',
+    classificacaoRisco: '',
     alergias: [] as string[], medicamentos: [] as string[], queixa: '',
   });
   const [newAlergia, setNewAlergia] = useState('');
   const [newMedicamento, setNewMedicamento] = useState('');
   const [startedAt, setStartedAt] = useState<string>('');
 
-  // Timer for wait time updates
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(interval);
@@ -97,22 +98,13 @@ const Triagem: React.FC = () => {
     setLoading(false);
   }, [user?.unidadeId]);
 
-  useEffect(() => {
-    loadFila();
-  }, [loadFila]);
+  useEffect(() => { loadFila(); }, [loadFila]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!user?.unidadeId) return;
     const channel = supabase
       .channel('triagem-fila')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'agendamentos',
-      }, () => {
-        loadFila();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => loadFila())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId, loadFila]);
@@ -120,7 +112,6 @@ const Triagem: React.FC = () => {
   const openTriagem = async (ag: FilaTriagem) => {
     setSelectedAg(ag);
     setStartedAt(new Date().toISOString());
-    // Check for existing draft
     const { data } = await (supabase as any)
       .from('triage_records')
       .select('*')
@@ -136,6 +127,7 @@ const Triagem: React.FC = () => {
         frequenciaCardiaca: data.frequencia_cardiaca?.toString() || '',
         saturacaoOxigenio: data.saturacao_oxigenio?.toString() || '',
         glicemia: data.glicemia?.toString() || '',
+        classificacaoRisco: '',
         alergias: data.alergias || [],
         medicamentos: data.medicamentos || [],
         queixa: data.queixa || '',
@@ -145,6 +137,7 @@ const Triagem: React.FC = () => {
       setForm({
         peso: '', altura: '', pressaoArterial: '', temperatura: '',
         frequenciaCardiaca: '', saturacaoOxigenio: '', glicemia: '',
+        classificacaoRisco: '',
         alergias: [], medicamentos: [], queixa: '',
       });
     }
@@ -182,11 +175,28 @@ const Triagem: React.FC = () => {
 
   const confirmarTriagem = async () => {
     if (!selectedAg) return;
+
+    // Validate mandatory fields
+    const missing: string[] = [];
+    if (!form.pressaoArterial.trim()) missing.push('Pressão Arterial');
+    if (!form.frequenciaCardiaca.trim()) missing.push('Frequência Cardíaca');
+    if (!form.temperatura.trim()) missing.push('Temperatura');
+    if (!form.saturacaoOxigenio.trim()) missing.push('Saturação O₂');
+    if (!form.peso.trim()) missing.push('Peso');
+    if (!form.altura.trim()) missing.push('Altura');
+    if (!form.classificacaoRisco) missing.push('Classificação de Risco');
+    if (!form.queixa.trim()) missing.push('Observações');
+
+    if (missing.length > 0) {
+      toast.error(`Campos obrigatórios: ${missing.join(', ')}`);
+      return;
+    }
+
     setSaving(true);
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
-      
+
       // Register in prontuário as "TRIAGEM INICIAL"
       await (supabase as any).from('prontuarios').insert({
         paciente_id: selectedAg.pacienteId,
@@ -200,30 +210,30 @@ const Triagem: React.FC = () => {
         tipo_registro: 'triagem',
         queixa_principal: form.queixa || '',
         sinais_sintomas: [
-          form.pressaoArterial ? `PA: ${form.pressaoArterial}` : '',
-          form.frequenciaCardiaca ? `FC: ${form.frequenciaCardiaca} bpm` : '',
-          form.temperatura ? `Temp: ${form.temperatura}°C` : '',
-          form.saturacaoOxigenio ? `SpO2: ${form.saturacaoOxigenio}%` : '',
-          form.peso ? `Peso: ${form.peso} kg` : '',
-          form.altura ? `Altura: ${form.altura} m` : '',
+          `PA: ${form.pressaoArterial}`,
+          `FC: ${form.frequenciaCardiaca} bpm`,
+          `Temp: ${form.temperatura}°C`,
+          `SpO2: ${form.saturacaoOxigenio}%`,
+          `Peso: ${form.peso} kg`,
+          `Altura: ${form.altura} cm`,
           imc ? `IMC: ${imc.value} (${imc.label})` : '',
           form.glicemia ? `Glicemia: ${form.glicemia} mg/dL` : '',
+          `Classificação de Risco: ${form.classificacaoRisco.toUpperCase()}`,
         ].filter(Boolean).join(' | '),
         anamnese: form.queixa || '',
         observacoes: [
           form.alergias.length ? `Alergias: ${form.alergias.join(', ')}` : '',
           form.medicamentos.length ? `Medicamentos: ${form.medicamentos.join(', ')}` : '',
         ].filter(Boolean).join('\n'),
-        evolucao: 'TRIAGEM INICIAL — Sinais vitais registrados e paciente encaminhado para avaliação de enfermagem.',
+        evolucao: `TRIAGEM INICIAL — Classificação de risco: ${form.classificacaoRisco.toUpperCase()}. Sinais vitais registrados e paciente encaminhado para avaliação de enfermagem.`,
       });
 
-      // Update appointment status to nursing evaluation
       await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
 
       await logAction({
         acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedAg.id,
         modulo: 'triagem', user,
-        detalhes: { paciente_nome: selectedAg.pacienteNome, peso: form.peso, altura: form.altura, imc: imc?.value },
+        detalhes: { paciente_nome: selectedAg.pacienteNome, peso: form.peso, altura: form.altura, imc: imc?.value, classificacao_risco: form.classificacaoRisco },
       });
 
       toast.success('Triagem confirmada! Registrado no prontuário e encaminhado para enfermagem.');
@@ -270,7 +280,6 @@ const Triagem: React.FC = () => {
           {fila.map(ag => {
             const waitMinutes = ag.criadoEm ? differenceInMinutes(now, new Date(ag.criadoEm)) : 0;
             const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
-
             return (
               <Card key={ag.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -294,7 +303,6 @@ const Triagem: React.FC = () => {
         </div>
       )}
 
-      {/* Triage Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -305,11 +313,11 @@ const Triagem: React.FC = () => {
             {/* Vital Signs Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <Label>Peso (kg)</Label>
+                <Label>Peso (kg) *</Label>
                 <Input type="number" step="0.01" value={form.peso} onChange={e => setForm(p => ({ ...p, peso: e.target.value }))} placeholder="70.5" />
               </div>
               <div>
-                <Label>Altura (cm)</Label>
+                <Label>Altura (cm) *</Label>
                 <Input type="number" step="0.01" value={form.altura} onChange={e => setForm(p => ({ ...p, altura: e.target.value }))} placeholder="170" />
               </div>
               <div>
@@ -323,25 +331,39 @@ const Triagem: React.FC = () => {
                 </div>
               </div>
               <div>
-                <Label>Pressão Arterial</Label>
+                <Label>Pressão Arterial *</Label>
                 <Input value={form.pressaoArterial} onChange={e => setForm(p => ({ ...p, pressaoArterial: e.target.value }))} placeholder="120/80" />
               </div>
               <div>
-                <Label>Temperatura (°C)</Label>
+                <Label>Temperatura (°C) *</Label>
                 <Input type="number" step="0.1" value={form.temperatura} onChange={e => setForm(p => ({ ...p, temperatura: e.target.value }))} placeholder="36.5" />
               </div>
               <div>
-                <Label>FC (bpm)</Label>
+                <Label>FC (bpm) *</Label>
                 <Input type="number" value={form.frequenciaCardiaca} onChange={e => setForm(p => ({ ...p, frequenciaCardiaca: e.target.value }))} placeholder="72" />
               </div>
               <div>
-                <Label>SatO₂ (%)</Label>
+                <Label>SatO₂ (%) *</Label>
                 <Input type="number" value={form.saturacaoOxigenio} onChange={e => setForm(p => ({ ...p, saturacaoOxigenio: e.target.value }))} placeholder="98" />
               </div>
               <div>
                 <Label>Glicemia (mg/dL)</Label>
                 <Input type="number" step="0.01" value={form.glicemia} onChange={e => setForm(p => ({ ...p, glicemia: e.target.value }))} placeholder="Opcional" />
               </div>
+            </div>
+
+            {/* Risk Classification */}
+            <div>
+              <Label className="text-base font-semibold">Classificação de Risco *</Label>
+              <Select value={form.classificacaoRisco} onValueChange={v => setForm(p => ({ ...p, classificacaoRisco: v }))}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Selecionar classificação..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="verde">🟢 Verde — Não urgente</SelectItem>
+                  <SelectItem value="amarelo">🟡 Amarelo — Pouco urgente</SelectItem>
+                  <SelectItem value="laranja">🟠 Laranja — Urgente</SelectItem>
+                  <SelectItem value="vermelho">🔴 Vermelho — Emergência</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Allergies */}
@@ -382,10 +404,10 @@ const Triagem: React.FC = () => {
               )}
             </div>
 
-            {/* Complaint */}
+            {/* Complaint / Observations */}
             <div>
-              <Label>Queixa / Observações</Label>
-              <Textarea rows={3} value={form.queixa} onChange={e => setForm(p => ({ ...p, queixa: e.target.value }))} placeholder="Queixa livre do paciente..." />
+              <Label>Observações *</Label>
+              <Textarea rows={3} value={form.queixa} onChange={e => setForm(p => ({ ...p, queixa: e.target.value }))} placeholder="Queixa do paciente e observações relevantes..." />
             </div>
 
             {/* Actions */}
