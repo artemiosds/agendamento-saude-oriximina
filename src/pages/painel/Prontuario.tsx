@@ -684,6 +684,115 @@ const ProntuarioPage: React.FC = () => {
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
   };
 
+  // ---- PTS inline creation ----
+  const handleCreatePTS = async () => {
+    if (!form.paciente_id || !ptsForm.diagnostico_funcional || !ptsForm.objetivos_terapeuticos) {
+      toast.error("Preencha diagnóstico funcional e objetivos terapêuticos.");
+      return;
+    }
+    setPtsSaving(true);
+    try {
+      const { data: inserted, error } = await supabase.from("pts").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        diagnostico_funcional: ptsForm.diagnostico_funcional,
+        objetivos_terapeuticos: ptsForm.objetivos_terapeuticos,
+        metas_curto_prazo: ptsForm.metas_curto_prazo,
+        metas_medio_prazo: ptsForm.metas_medio_prazo,
+        metas_longo_prazo: ptsForm.metas_longo_prazo,
+        especialidades_envolvidas: ptsForm.especialidades,
+        status: "ativo",
+      }).select("id").single();
+      if (error) throw error;
+      await logAction({
+        acao: "criar_pts",
+        entidade: "pts",
+        entidadeId: inserted?.id || "",
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome },
+      });
+      toast.success("PTS criado com sucesso!");
+      setPtsOpen(false);
+      setPtsForm({ diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades: [] });
+    } catch (err: any) {
+      toast.error("Erro ao criar PTS: " + (err?.message || ""));
+    }
+    setPtsSaving(false);
+  };
+
+  // ---- Treatment cycle inline creation ----
+  const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
+    const d = new Date(startDate + "T12:00:00");
+    const weeksMap: Record<string, number> = { "diário": 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
+    const weeks = (weeksMap[frequency] || 1) * totalSessions;
+    d.setDate(d.getDate() + Math.ceil(weeks * 7));
+    return d.toISOString().split("T")[0];
+  };
+
+  const handleCreateCycle = async () => {
+    if (!form.paciente_id || !cycleForm.treatment_type) {
+      toast.error("Preencha tipo de tratamento.");
+      return;
+    }
+    setCycleSaving(true);
+    try {
+      const endDate = calcEndDate(cycleForm.start_date, cycleForm.total_sessions, cycleForm.frequency);
+      const { data: cycleData, error: cycleError } = await supabase.from("treatment_cycles").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        specialty: user?.profissao || "",
+        treatment_type: cycleForm.treatment_type,
+        start_date: cycleForm.start_date,
+        end_date_predicted: endDate,
+        total_sessions: cycleForm.total_sessions,
+        sessions_done: 0,
+        frequency: cycleForm.frequency,
+        status: "em_andamento",
+        clinical_notes: cycleForm.clinical_notes,
+        created_by: user?.id || "",
+      }).select().single();
+      if (cycleError) throw cycleError;
+
+      // Generate sessions
+      const sessionsToCreate = [];
+      const startD = new Date(cycleForm.start_date + "T12:00:00");
+      const weeksDelta: Record<string, number> = { "diário": 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
+      const delta = weeksDelta[cycleForm.frequency] || 7;
+      for (let i = 0; i < cycleForm.total_sessions; i++) {
+        const sessionDate = new Date(startD);
+        sessionDate.setDate(startD.getDate() + Math.round(i * delta));
+        sessionsToCreate.push({
+          cycle_id: cycleData.id,
+          patient_id: form.paciente_id,
+          professional_id: user?.id || "",
+          session_number: i + 1,
+          total_sessions: cycleForm.total_sessions,
+          scheduled_date: sessionDate.toISOString().split("T")[0],
+          status: "pendente_agendamento",
+        });
+      }
+      await supabase.from("treatment_sessions").insert(sessionsToCreate);
+
+      await logAction({
+        acao: "criar_ciclo_tratamento",
+        entidade: "treatment_cycle",
+        entidadeId: cycleData.id,
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome, tipo: cycleForm.treatment_type, sessoes: cycleForm.total_sessions },
+      });
+      toast.success("Ciclo de tratamento criado! Sessões aguardam agendamento pela recepção.");
+      setCycleOpen(false);
+      setCycleForm({ treatment_type: '', total_sessions: 6, frequency: 'semanal', start_date: new Date().toISOString().split("T")[0], clinical_notes: '' });
+    } catch (err: any) {
+      toast.error("Erro ao criar ciclo: " + (err?.message || ""));
+    }
+    setCycleSaving(false);
+  };
+
   const queryPacienteId = searchParams.get("pacienteId");
   const filtered = prontuarios.filter((p) => {
     if (queryPacienteId) return p.paciente_id === queryPacienteId;
