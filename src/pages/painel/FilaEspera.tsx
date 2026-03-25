@@ -125,6 +125,7 @@ const FilaEspera: React.FC = () => {
   const [filterUnidade, setFilterUnidade] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterEspecialidade, setFilterEspecialidade] = useState('all');
   const [sortField, setSortField] = useState<'prioridade' | 'tempo' | 'entrada' | 'solicitacao'>('prioridade');
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [searchQuery, setSearchQuery] = useState('');
