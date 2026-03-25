@@ -549,6 +549,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           criadoEm: f.criado_em || "",
           dataSolicitacaoOriginal: f.data_solicitacao_original || "",
           origemCadastro: f.origem_cadastro || "normal",
+          especialidadeDestino: f.especialidade_destino || "",
         }));
         setFila(mapped);
       }
@@ -775,6 +776,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: f.criadoPor || "sistema",
         data_solicitacao_original: f.dataSolicitacaoOriginal || "",
         origem_cadastro: f.origemCadastro || "normal",
+        especialidade_destino: f.especialidadeDestino || "",
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);

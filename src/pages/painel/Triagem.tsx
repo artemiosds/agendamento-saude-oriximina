@@ -8,11 +8,21 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2, Play, Clock, X, Plus, CheckCircle, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInMinutes } from 'date-fns';
+
+const ESPECIALIDADE_LABELS: Record<string, string> = {
+  fisioterapia: 'FISIOTERAPIA',
+  fonoaudiologia: 'FONOAUDIOLOGIA',
+  nutricao: 'NUTRIÇÃO',
+  psicologia: 'PSICOLOGIA',
+  terapia_ocupacional: 'TERAPIA OCUPACIONAL',
+  outros: 'OUTROS',
+};
 
 const classificarIMC = (imc: number): string => {
   if (imc < 18.5) return 'Abaixo do peso';
@@ -35,6 +45,14 @@ interface FilaTriagem {
   tipo: string;
 }
 
+interface PacienteInfo {
+  especialidade_destino?: string;
+  cid?: string;
+  justificativa?: string;
+  descricao_clinica?: string;
+  diagnostico_resumido?: string;
+}
+
 const Triagem: React.FC = () => {
   const { user } = useAuth();
   const { logAction, refreshAgendamentos } = useData();
@@ -42,14 +60,17 @@ const Triagem: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedAg, setSelectedAg] = useState<FilaTriagem | null>(null);
+  const [pacienteInfo, setPacienteInfo] = useState<PacienteInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(new Date());
 
   const [form, setForm] = useState({
     peso: '', altura: '', pressaoArterial: '', temperatura: '',
     frequenciaCardiaca: '', saturacaoOxigenio: '', glicemia: '',
+    dor: 0,
+    queixaPrincipal: '',
     classificacaoRisco: '',
-    alergias: [] as string[], medicamentos: [] as string[], queixa: '',
+    alergias: [] as string[], medicamentos: [] as string[], observacoes: '',
   });
   const [newAlergia, setNewAlergia] = useState('');
   const [newMedicamento, setNewMedicamento] = useState('');
@@ -112,6 +133,15 @@ const Triagem: React.FC = () => {
   const openTriagem = async (ag: FilaTriagem) => {
     setSelectedAg(ag);
     setStartedAt(new Date().toISOString());
+
+    // Load patient info (specialty, CID, justification)
+    const { data: pacData } = await (supabase as any)
+      .from('pacientes')
+      .select('especialidade_destino, cid, justificativa, descricao_clinica, diagnostico_resumido')
+      .eq('id', ag.pacienteId)
+      .maybeSingle();
+    setPacienteInfo(pacData || null);
+
     const { data } = await (supabase as any)
       .from('triage_records')
       .select('*')
@@ -127,18 +157,20 @@ const Triagem: React.FC = () => {
         frequenciaCardiaca: data.frequencia_cardiaca?.toString() || '',
         saturacaoOxigenio: data.saturacao_oxigenio?.toString() || '',
         glicemia: data.glicemia?.toString() || '',
+        dor: 0,
+        queixaPrincipal: data.queixa || '',
         classificacaoRisco: '',
         alergias: data.alergias || [],
         medicamentos: data.medicamentos || [],
-        queixa: data.queixa || '',
+        observacoes: '',
       });
       setStartedAt(data.iniciado_em || new Date().toISOString());
     } else {
       setForm({
         peso: '', altura: '', pressaoArterial: '', temperatura: '',
         frequenciaCardiaca: '', saturacaoOxigenio: '', glicemia: '',
-        classificacaoRisco: '',
-        alergias: [], medicamentos: [], queixa: '',
+        dor: 0, queixaPrincipal: '', classificacaoRisco: '',
+        alergias: [], medicamentos: [], observacoes: '',
       });
     }
     setDialogOpen(true);
@@ -157,7 +189,7 @@ const Triagem: React.FC = () => {
     glicemia: parseFloat(form.glicemia) || null,
     alergias: form.alergias,
     medicamentos: form.medicamentos,
-    queixa: form.queixa || null,
+    queixa: form.queixaPrincipal || null,
     iniciado_em: startedAt,
   });
 
@@ -176,7 +208,6 @@ const Triagem: React.FC = () => {
   const confirmarTriagem = async () => {
     if (!selectedAg) return;
 
-    // Validate mandatory fields
     const missing: string[] = [];
     if (!form.pressaoArterial.trim()) missing.push('Pressão Arterial');
     if (!form.frequenciaCardiaca.trim()) missing.push('Frequência Cardíaca');
@@ -185,7 +216,8 @@ const Triagem: React.FC = () => {
     if (!form.peso.trim()) missing.push('Peso');
     if (!form.altura.trim()) missing.push('Altura');
     if (!form.classificacaoRisco) missing.push('Classificação de Risco');
-    if (!form.queixa.trim()) missing.push('Observações');
+    if (!form.queixaPrincipal.trim()) missing.push('Queixa Principal');
+    if (!form.observacoes.trim()) missing.push('Observações');
 
     if (missing.length > 0) {
       toast.error(`Campos obrigatórios: ${missing.join(', ')}`);
@@ -197,46 +229,23 @@ const Triagem: React.FC = () => {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
 
-      // Register in prontuário as "TRIAGEM INICIAL"
-      await (supabase as any).from('prontuarios').insert({
-        paciente_id: selectedAg.pacienteId,
-        paciente_nome: selectedAg.pacienteNome,
-        profissional_id: user?.id || '',
-        profissional_nome: user?.nome || '',
-        unidade_id: selectedAg.unidadeId || user?.unidadeId || '',
-        agendamento_id: selectedAg.id,
-        data_atendimento: new Date().toISOString().split('T')[0],
-        hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        tipo_registro: 'triagem',
-        queixa_principal: form.queixa || '',
-        sinais_sintomas: [
-          `PA: ${form.pressaoArterial}`,
-          `FC: ${form.frequenciaCardiaca} bpm`,
-          `Temp: ${form.temperatura}°C`,
-          `SpO2: ${form.saturacaoOxigenio}%`,
-          `Peso: ${form.peso} kg`,
-          `Altura: ${form.altura} cm`,
-          imc ? `IMC: ${imc.value} (${imc.label})` : '',
-          form.glicemia ? `Glicemia: ${form.glicemia} mg/dL` : '',
-          `Classificação de Risco: ${form.classificacaoRisco.toUpperCase()}`,
-        ].filter(Boolean).join(' | '),
-        anamnese: form.queixa || '',
-        observacoes: [
-          form.alergias.length ? `Alergias: ${form.alergias.join(', ')}` : '',
-          form.medicamentos.length ? `Medicamentos: ${form.medicamentos.join(', ')}` : '',
-        ].filter(Boolean).join('\n'),
-        evolucao: `TRIAGEM INICIAL — Classificação de risco: ${form.classificacaoRisco.toUpperCase()}. Sinais vitais registrados e paciente encaminhado para avaliação de enfermagem.`,
-      });
+      // NO auto-prontuário — triagem fica salva no histórico clínico via triage_records
 
       await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
 
       await logAction({
         acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedAg.id,
         modulo: 'triagem', user,
-        detalhes: { paciente_nome: selectedAg.pacienteNome, peso: form.peso, altura: form.altura, imc: imc?.value, classificacao_risco: form.classificacaoRisco },
+        detalhes: {
+          paciente_nome: selectedAg.pacienteNome,
+          especialidade_destino: pacienteInfo?.especialidade_destino || '',
+          peso: form.peso, altura: form.altura, imc: imc?.value,
+          classificacao_risco: form.classificacaoRisco,
+          dor: form.dor,
+        },
       });
 
-      toast.success('Triagem confirmada! Registrado no prontuário e encaminhado para enfermagem.');
+      toast.success('Triagem confirmada! Encaminhado para enfermagem.');
       setDialogOpen(false);
       await loadFila();
       await refreshAgendamentos();
@@ -259,6 +268,10 @@ const Triagem: React.FC = () => {
       setNewMedicamento('');
     }
   };
+
+  const espLabel = pacienteInfo?.especialidade_destino
+    ? ESPECIALIDADE_LABELS[pacienteInfo.especialidade_destino] || pacienteInfo.especialidade_destino.toUpperCase()
+    : null;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -309,6 +322,25 @@ const Triagem: React.FC = () => {
             <DialogTitle className="font-display">Triagem — {selectedAg?.pacienteNome}</DialogTitle>
           </DialogHeader>
 
+          {/* Specialty + referral info */}
+          {pacienteInfo && (
+            <div className="space-y-2">
+              {espLabel && (
+                <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                  <p className="text-xs text-muted-foreground">Especialidade Destino</p>
+                  <p className="text-lg font-bold text-primary">{espLabel}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 text-xs bg-muted/50 rounded-lg p-3 border">
+                {pacienteInfo.cid && <span>CID: <strong>{pacienteInfo.cid}</strong></span>}
+                {pacienteInfo.diagnostico_resumido && <span>Diagnóstico: <strong>{pacienteInfo.diagnostico_resumido}</strong></span>}
+              </div>
+              {pacienteInfo.justificativa && (
+                <p className="text-xs"><strong>Justificativa:</strong> {pacienteInfo.justificativa}</p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-4">
             {/* Vital Signs Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -352,18 +384,38 @@ const Triagem: React.FC = () => {
               </div>
             </div>
 
+            {/* Pain Scale */}
+            <div>
+              <Label className="text-base font-semibold">Escala de Dor (0–10): {form.dor}</Label>
+              <Slider
+                value={[form.dor]}
+                onValueChange={v => setForm(p => ({ ...p, dor: v[0] }))}
+                max={10} min={0} step={1}
+                className="mt-2"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>Sem dor</span>
+                <span>Dor máxima</span>
+              </div>
+            </div>
+
             {/* Risk Classification */}
             <div>
               <Label className="text-base font-semibold">Classificação de Risco *</Label>
               <Select value={form.classificacaoRisco} onValueChange={v => setForm(p => ({ ...p, classificacaoRisco: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecionar classificação..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="verde">🟢 Verde — Não urgente</SelectItem>
-                  <SelectItem value="amarelo">🟡 Amarelo — Pouco urgente</SelectItem>
-                  <SelectItem value="laranja">🟠 Laranja — Urgente</SelectItem>
-                  <SelectItem value="vermelho">🔴 Vermelho — Emergência</SelectItem>
+                  <SelectItem value="baixo">🟢 BAIXO</SelectItem>
+                  <SelectItem value="medio">🟡 MÉDIO</SelectItem>
+                  <SelectItem value="alto">🔴 ALTO</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Main complaint */}
+            <div>
+              <Label>Queixa Principal *</Label>
+              <Textarea rows={2} value={form.queixaPrincipal} onChange={e => setForm(p => ({ ...p, queixaPrincipal: e.target.value }))} placeholder="Queixa principal do paciente..." />
             </div>
 
             {/* Allergies */}
@@ -404,10 +456,10 @@ const Triagem: React.FC = () => {
               )}
             </div>
 
-            {/* Complaint / Observations */}
+            {/* Observations */}
             <div>
               <Label>Observações *</Label>
-              <Textarea rows={3} value={form.queixa} onChange={e => setForm(p => ({ ...p, queixa: e.target.value }))} placeholder="Queixa do paciente e observações relevantes..." />
+              <Textarea rows={3} value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} placeholder="Observações relevantes da triagem..." />
             </div>
 
             {/* Actions */}
