@@ -32,16 +32,14 @@ const MULTI_ESPECIALIDADES = [
   { value: 'servico_social', label: 'Serviço Social' },
 ];
 
-interface FilaEnfermagem {
+interface FilaItem {
   id: string;
   pacienteNome: string;
   pacienteId: string;
-  profissionalNome: string;
-  hora: string;
-  data: string;
   unidadeId: string;
   criadoEm: string;
-  tipo: string;
+  especialidadeDestino: string;
+  horaChegada: string;
 }
 
 interface TriagemResumo {
@@ -78,18 +76,17 @@ interface PacienteResumo {
 
 const AvaliacaoEnfermagem: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { logAction, refreshAgendamentos } = useData();
-  const [fila, setFila] = useState<FilaEnfermagem[]>([]);
+  const { logAction, refreshFila } = useData();
+  const [fila, setFila] = useState<FilaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selected, setSelected] = useState<FilaEnfermagem | null>(null);
+  const [selected, setSelected] = useState<FilaItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [triagem, setTriagem] = useState<TriagemResumo | null>(null);
   const [paciente, setPaciente] = useState<PacienteResumo | null>(null);
   const [now, setNow] = useState(new Date());
 
   const [form, setForm] = useState({
-    // Clinical data
     confirmacaoQueixa: '',
     historicoDoenca: '',
     comorbidades: '',
@@ -97,20 +94,16 @@ const AvaliacaoEnfermagem: React.FC = () => {
     alergias: '',
     limitacoesFuncionais: '',
     estadoGeral: '',
-    // Functional assessment
     mobilidade: '',
     comunicacao: '',
     alimentacao: '',
     autonomia: '',
-    // Referral analysis
     validarEspecialidade: true,
     especialidadeAjustada: '',
     justificativaAlteracao: '',
-    // Risk & priority
     avaliacao_risco: '',
     prioridade: 'media',
     observacoes_clinicas: '',
-    // Decision
     resultado: 'apto' as 'apto' | 'inapto' | 'multiprofissional',
     motivo_inapto: '',
     multiEspecialidades: [] as string[],
@@ -121,28 +114,27 @@ const AvaliacaoEnfermagem: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Load from fila_espera where status = 'aguardando_enfermagem'
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
       const { data, error } = await (supabase as any)
-        .from('agendamentos')
+        .from('fila_espera')
         .select('*')
         .eq('status', 'aguardando_enfermagem')
         .eq('unidade_id', user.unidadeId)
         .order('criado_em', { ascending: true });
 
       if (data && !error) {
-        setFila(data.map((a: any) => ({
-          id: a.id,
-          pacienteNome: a.paciente_nome,
-          pacienteId: a.paciente_id,
-          profissionalNome: a.profissional_nome,
-          hora: a.hora,
-          data: a.data,
-          unidadeId: a.unidade_id,
-          criadoEm: a.criado_em || '',
-          tipo: a.tipo,
+        setFila(data.map((f: any) => ({
+          id: f.id,
+          pacienteNome: f.paciente_nome,
+          pacienteId: f.paciente_id,
+          unidadeId: f.unidade_id,
+          criadoEm: f.criado_em || '',
+          especialidadeDestino: f.especialidade_destino || '',
+          horaChegada: f.hora_chegada || '',
         })));
       }
     } catch (err) {
@@ -153,16 +145,17 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
   useEffect(() => { loadFila(); }, [loadFila]);
 
+  // Realtime on fila_espera
   useEffect(() => {
     if (!user?.unidadeId) return;
-    const channel = supabase.channel('enfermagem-fila')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => loadFila())
+    const channel = supabase.channel('enfermagem-fila-espera')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId, loadFila]);
 
-  const openAvaliacao = async (ag: FilaEnfermagem) => {
-    setSelected(ag);
+  const openAvaliacao = async (item: FilaItem) => {
+    setSelected(item);
     setForm({
       confirmacaoQueixa: '', historicoDoenca: '', comorbidades: '',
       usoMedicamentos: '', alergias: '', limitacoesFuncionais: '',
@@ -176,14 +169,15 @@ const AvaliacaoEnfermagem: React.FC = () => {
     const { data: pacData } = await (supabase as any)
       .from('pacientes')
       .select('nome, cpf, cns, data_nascimento, telefone, nome_mae, municipio, ubs_origem, profissional_solicitante, cid, justificativa, tipo_encaminhamento, diagnostico_resumido, descricao_clinica, especialidade_destino')
-      .eq('id', ag.pacienteId)
+      .eq('id', item.pacienteId)
       .maybeSingle();
     setPaciente(pacData || null);
 
+    // Load triage data using fila_espera id
     const { data } = await (supabase as any)
       .from('triage_records')
       .select('*')
-      .eq('agendamento_id', ag.id)
+      .eq('agendamento_id', item.id)
       .not('confirmado_em', 'is', null)
       .maybeSingle();
     setTriagem(data || null);
@@ -210,7 +204,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
     setSaving(true);
     try {
-      // Save nursing evaluation
+      // Save nursing evaluation (clinical history)
       await (supabase as any).from('nursing_evaluations').insert({
         patient_id: selected.pacienteId,
         agendamento_id: selected.id,
@@ -230,30 +224,14 @@ const AvaliacaoEnfermagem: React.FC = () => {
         await (supabase as any).from('pacientes')
           .update({ especialidade_destino: form.especialidadeAjustada })
           .eq('id', selected.pacienteId);
+
+        // Also update fila_espera
+        await (supabase as any).from('fila_espera')
+          .update({ especialidade_destino: form.especialidadeAjustada })
+          .eq('id', selected.id);
       }
 
-      // Register prontuário entry as "AVALIAÇÃO DE ENFERMAGEM"
-      const profNome = user?.nome || 'Enfermeiro(a)';
-      await (supabase as any).from('prontuarios').insert({
-        paciente_id: selected.pacienteId,
-        paciente_nome: selected.pacienteNome,
-        profissional_id: user?.id || '',
-        profissional_nome: profNome,
-        unidade_id: user?.unidadeId || '',
-        agendamento_id: selected.id,
-        tipo_registro: 'avaliacao_enfermagem',
-        data_atendimento: new Date().toISOString().split('T')[0],
-        hora_atendimento: new Date().toTimeString().slice(0, 5),
-        queixa_principal: form.confirmacaoQueixa,
-        anamnese: form.historicoDoenca,
-        sinais_sintomas: `Comorbidades: ${form.comorbidades || 'N/A'}\nMedicamentos: ${form.usoMedicamentos || 'N/A'}\nAlergias: ${form.alergias || 'N/A'}\nLimitações: ${form.limitacoesFuncionais || 'N/A'}`,
-        exame_fisico: `Estado Geral: ${form.estadoGeral}\nMobilidade: ${form.mobilidade || 'N/A'}\nComunicação: ${form.comunicacao || 'N/A'}\nAlimentação: ${form.alimentacao || 'N/A'}\nAutonomia: ${form.autonomia || 'N/A'}`,
-        hipotese: `Avaliação de Risco: ${form.avaliacao_risco}\nPrioridade: ${form.prioridade}`,
-        conduta: `Resultado: ${form.resultado === 'apto' ? 'APTO PARA AVALIAÇÃO' : form.resultado === 'multiprofissional' ? 'NECESSITA AVALIAÇÃO MULTIPROFISSIONAL' : 'INAPTO'}${form.motivo_inapto ? '\nMotivo: ' + form.motivo_inapto : ''}`,
-        observacoes: form.observacoes_clinicas,
-      });
-
-      // Update appointment status based on result
+      // Determine new status
       let newStatus = '';
       let toastMsg = '';
       if (form.resultado === 'apto') {
@@ -267,7 +245,10 @@ const AvaliacaoEnfermagem: React.FC = () => {
         toastMsg = 'Paciente INDEFERIDO — fluxo encerrado.';
       }
 
-      await (supabase as any).from('agendamentos').update({ status: newStatus }).eq('id', selected.id);
+      // Update fila_espera status
+      await (supabase as any).from('fila_espera')
+        .update({ status: newStatus })
+        .eq('id', selected.id);
 
       await logAction({
         acao: 'avaliacao_enfermagem',
@@ -289,7 +270,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
       toast.success(toastMsg);
       setDialogOpen(false);
       await loadFila();
-      await refreshAgendamentos();
+      await refreshFila();
     } catch (err: any) {
       toast.error('Erro ao salvar avaliação: ' + (err?.message || 'erro'));
     }
@@ -321,22 +302,23 @@ const AvaliacaoEnfermagem: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-2">
-          {fila.map(ag => {
-            const waitMinutes = ag.criadoEm ? differenceInMinutes(now, new Date(ag.criadoEm)) : 0;
+          {fila.map(item => {
+            const waitMinutes = item.criadoEm ? differenceInMinutes(now, new Date(item.criadoEm)) : 0;
             const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+            const espBadge = item.especialidadeDestino ? ESPECIALIDADE_LABELS[item.especialidadeDestino] || item.especialidadeDestino.toUpperCase() : null;
             return (
-              <Card key={ag.id} className="shadow-card border-0">
+              <Card key={item.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
+                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{item.horaChegada}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{ag.pacienteNome}</p>
-                    <p className="text-sm text-muted-foreground">{ag.profissionalNome} • {ag.tipo}</p>
+                    <p className="font-semibold text-foreground">{item.pacienteNome}</p>
+                    {espBadge && <Badge variant="outline" className="text-[10px] border-primary/30 text-primary mt-0.5">{espBadge}</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" /> {waitLabel}
                     </Badge>
-                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openAvaliacao(ag)}>
+                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openAvaliacao(item)}>
                       <Stethoscope className="w-3.5 h-3.5 mr-1" /> Avaliar
                     </Button>
                   </div>
