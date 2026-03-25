@@ -509,6 +509,54 @@ export type Database = {
         }
         Relationships: []
       }
+      multiprofessional_evaluations: {
+        Row: {
+          agendamento_id: string | null
+          clinical_evaluation: string
+          created_at: string
+          evaluation_date: string
+          id: string
+          observations: string
+          parecer: string
+          patient_id: string
+          professional_id: string
+          professional_nome: string
+          specialty: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          agendamento_id?: string | null
+          clinical_evaluation?: string
+          created_at?: string
+          evaluation_date?: string
+          id?: string
+          observations?: string
+          parecer?: string
+          patient_id: string
+          professional_id: string
+          professional_nome?: string
+          specialty?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Update: {
+          agendamento_id?: string | null
+          clinical_evaluation?: string
+          created_at?: string
+          evaluation_date?: string
+          id?: string
+          observations?: string
+          parecer?: string
+          patient_id?: string
+          professional_id?: string
+          professional_nome?: string
+          specialty?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notification_logs: {
         Row: {
           agendamento_id: string | null
