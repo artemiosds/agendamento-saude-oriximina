@@ -228,6 +228,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           <div>
             <Label>Profissional solicitante *</Label>
             <Input value={form.profissionalSolicitante} onChange={e => set('profissionalSolicitante', e.target.value)} placeholder="Nome do profissional" />
+            {errors.profissionalSolicitante && <p className="text-xs text-destructive mt-1">{errors.profissionalSolicitante}</p>}
           </div>
           <div>
             <Label>Tipo encaminhamento</Label>
