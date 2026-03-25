@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
 import { Card, CardContent } from "@/components/ui/card";
@@ -130,6 +131,7 @@ const Agenda: React.FC = () => {
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
   const { user, hasPermission } = useAuth();
+  const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
   const { handleVagaLiberada } = useFilaAutomatica();
