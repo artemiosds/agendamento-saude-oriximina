@@ -1248,6 +1248,7 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {editId && (
               <div>
                 <Label className="text-warning">Motivo da Alteração *</Label>
                 <Textarea
