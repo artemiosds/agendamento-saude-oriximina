@@ -487,6 +487,24 @@ const Agenda: React.FC = () => {
   const handleStatusChange = async (agId: string, newStatus: string) => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
+
+    // Block closing atendimento without prontuário
+    if (newStatus === "concluido") {
+      try {
+        const { count } = await supabase
+          .from("prontuarios")
+          .select("*", { count: "exact", head: true })
+          .eq("agendamento_id", agId)
+          .not("tipo_registro", "in", '("triagem","avaliacao_enfermagem","avaliacao_multiprofissional")');
+        if (!count || count === 0) {
+          toast.error("⚠️ Não é possível concluir sem registro no prontuário. Preencha o prontuário primeiro.");
+          return;
+        }
+      } catch (err) {
+        console.error("Error checking prontuário:", err);
+      }
+    }
+
     if (newStatus === "confirmado_chegada") {
       try {
         const { data: setting } = await (supabase as any)
