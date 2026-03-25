@@ -212,6 +212,7 @@ export interface Disponibilidade {
   vagasPorHora: number;
   vagasPorDia: number;
   diasSemana: number[];
+  duracaoConsulta?: number;
 }
 
 export interface Configuracoes {

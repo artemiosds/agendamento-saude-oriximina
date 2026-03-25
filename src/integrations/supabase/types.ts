@@ -251,6 +251,7 @@ export type Database = {
           data_fim: string
           data_inicio: string
           dias_semana: number[]
+          duracao_consulta: number
           hora_fim: string
           hora_inicio: string
           id: string
@@ -265,6 +266,7 @@ export type Database = {
           data_fim: string
           data_inicio: string
           dias_semana?: number[]
+          duracao_consulta?: number
           hora_fim?: string
           hora_inicio?: string
           id?: string
@@ -279,6 +281,7 @@ export type Database = {
           data_fim?: string
           data_inicio?: string
           dias_semana?: number[]
+          duracao_consulta?: number
           hora_fim?: string
           hora_inicio?: string
           id?: string

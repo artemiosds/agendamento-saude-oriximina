@@ -54,6 +54,7 @@ import { useFilaAutomatica } from "@/hooks/useFilaAutomatica";
 import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
+import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -874,6 +875,15 @@ const Agenda: React.FC = () => {
                   </div>
                   <div>
                     <Label>Horário Disponível</Label>
+                    {newAg.profissionalId && (
+                      <SlotInfoBadge
+                        profissionalId={newAg.profissionalId}
+                        unidadeId={profissionais.find(p => p.id === newAg.profissionalId)?.unidadeId || ""}
+                        date={selectedDate}
+                        hora={newAg.hora}
+                        className="mt-1 mb-2"
+                      />
+                    )}
                     {newAgSlots.length === 0 ? (
                       <p className="text-sm text-warning mt-1">
                         {!newAg.profissionalId
@@ -1060,6 +1070,15 @@ const Agenda: React.FC = () => {
               </Select>
             )}
           </div>
+
+          {/* Slot availability summary for selected professional */}
+          {filterProf !== "all" && (
+            <SlotInfoBadge
+              profissionalId={filterProf}
+              unidadeId={filterUnit !== "all" ? filterUnit : (profissionais.find(p => p.id === filterProf)?.unidadeId || "")}
+              date={selectedDate}
+            />
+          )}
 
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">

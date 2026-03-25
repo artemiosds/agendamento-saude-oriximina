@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { SlotInfoBadge } from '@/components/SlotInfoBadge';
 
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -20,16 +21,17 @@ const Disponibilidade: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   
-  // Filter: only active professionals with role=profissional
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
-  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
+  const { unidadesVisiveis } = useUnidadeFilter();
   
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
-    horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5] as number[],
+    horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25,
+    diasSemana: [1, 2, 3, 4, 5] as number[], duracaoConsulta: 30,
   });
 
-  // Refresh data on mount to ensure latest professionals appear
+  const todayStr = new Date().toISOString().split('T')[0];
+
   useEffect(() => {
     refreshFuncionarios();
     refreshDisponibilidades();
@@ -37,7 +39,7 @@ const Disponibilidade: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '', horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5] });
+    setForm({ profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '', horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5], duracaoConsulta: 30 });
     setDialogOpen(true);
   };
 
@@ -47,6 +49,7 @@ const Disponibilidade: React.FC = () => {
       profissionalId: d.profissionalId, unidadeId: d.unidadeId, salaId: d.salaId || '',
       dataInicio: d.dataInicio, dataFim: d.dataFim, horaInicio: d.horaInicio, horaFim: d.horaFim,
       vagasPorHora: d.vagasPorHora, vagasPorDia: d.vagasPorDia, diasSemana: [...d.diasSemana],
+      duracaoConsulta: d.duracaoConsulta || 30,
     });
     setDialogOpen(true);
   };
@@ -60,7 +63,6 @@ const Disponibilidade: React.FC = () => {
       toast.error('Selecione pelo menos um dia da semana.');
       return;
     }
-
     const startH = parseInt(form.horaInicio.split(':')[0]);
     const endH = parseInt(form.horaFim.split(':')[0]);
     const hoursCount = endH - startH;
@@ -74,15 +76,15 @@ const Disponibilidade: React.FC = () => {
       return;
     }
 
+    const dispData = { ...form, duracaoConsulta: form.duracaoConsulta };
     if (editId) {
-      await updateDisponibilidade(editId, { ...form });
+      await updateDisponibilidade(editId, dispData);
       toast.success('Disponibilidade atualizada!');
     } else {
-      await addDisponibilidade({ id: `d${Date.now()}`, ...form });
+      await addDisponibilidade({ id: `d${Date.now()}`, ...dispData });
       toast.success('Disponibilidade configurada!');
     }
     setDialogOpen(false);
-    // Refresh to ensure we have latest from DB
     await refreshDisponibilidades();
   };
 
@@ -94,7 +96,6 @@ const Disponibilidade: React.FC = () => {
 
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
 
-  // When selecting a professional, auto-fill their unit
   const handleProfissionalChange = (profId: string) => {
     const prof = profissionais.find(p => p.id === profId);
     setForm(p => ({
@@ -181,9 +182,10 @@ const Disponibilidade: React.FC = () => {
               <div><Label>Hora Início</Label><Input type="time" value={form.horaInicio} onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))} /></div>
               <div><Label>Hora Fim</Label><Input type="time" value={form.horaFim} onChange={e => setForm(p => ({ ...p, horaFim: e.target.value }))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Vagas por Hora</Label><Input type="number" min={1} value={form.vagasPorHora} onChange={e => setForm(p => ({ ...p, vagasPorHora: parseInt(e.target.value) || 1 }))} /></div>
-              <div><Label>Total Vagas por Dia</Label><Input type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div><Label>Vagas/Hora</Label><Input type="number" min={1} value={form.vagasPorHora} onChange={e => setForm(p => ({ ...p, vagasPorHora: parseInt(e.target.value) || 1 }))} /></div>
+              <div><Label>Vagas/Dia</Label><Input type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} /></div>
+              <div><Label>Duração (min)</Label><Input type="number" min={10} step={5} value={form.duracaoConsulta} onChange={e => setForm(p => ({ ...p, duracaoConsulta: parseInt(e.target.value) || 30 }))} /></div>
             </div>
             <div>
               <Label className="mb-2 block">Dias da Semana</Label>
@@ -248,15 +250,24 @@ const Disponibilidade: React.FC = () => {
                       <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                         <p><Calendar className="w-3.5 h-3.5 inline mr-1" />{d.dataInicio} a {d.dataFim}</p>
                         <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} — {d.horaFim}</p>
-                        <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia</p>
+                        <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia • Consulta: {d.duracaoConsulta || 30}min</p>
                         <p>Dias: {d.diasSemana.sort((a, b) => a - b).map(i => diasSemanaFull[i]).join(', ')}</p>
                         {d.diasSemana.some(i => i === 0 || i === 6) && (
                           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 mt-1">
                             🟠 Ativo no fim de semana
                           </span>
                         )}
-                        {prof?.tempoAtendimento && <p>Duração consulta: {prof.tempoAtendimento}min</p>}
                       </div>
+                      {/* Slot info for today */}
+                      {todayStr >= d.dataInicio && todayStr <= d.dataFim && (
+                        <div className="mt-2">
+                          <SlotInfoBadge
+                            profissionalId={d.profissionalId}
+                            unidadeId={d.unidadeId}
+                            date={todayStr}
+                          />
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-4 h-4" /></Button>

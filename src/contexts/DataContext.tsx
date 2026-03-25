@@ -429,6 +429,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           vagasPorHora: d.vagas_por_hora,
           vagasPorDia: d.vagas_por_dia,
           diasSemana: d.dias_semana || [],
+          duracaoConsulta: d.duracao_consulta || 30,
         }));
         setDisponibilidades(mapped);
       }
@@ -989,6 +990,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       vagas_por_hora: d.vagasPorHora,
       vagas_por_dia: d.vagasPorDia,
       dias_semana: d.diasSemana,
+      duracao_consulta: d.duracaoConsulta || 30,
     } as any);
     if (!error) setDisponibilidades((prev) => [...prev, d]);
     else console.error("Error adding disponibilidade:", error);
@@ -1006,6 +1008,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data.vagasPorHora !== undefined) dbData.vagas_por_hora = data.vagasPorHora;
     if (data.vagasPorDia !== undefined) dbData.vagas_por_dia = data.vagasPorDia;
     if (data.diasSemana !== undefined) dbData.dias_semana = data.diasSemana;
+    if (data.duracaoConsulta !== undefined) dbData.duracao_consulta = data.duracaoConsulta;
     const { error } = await supabase
       .from("disponibilidades" as any)
       .update(dbData)
