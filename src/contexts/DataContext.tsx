@@ -776,6 +776,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: f.criadoPor || "sistema",
         data_solicitacao_original: f.dataSolicitacaoOriginal || "",
         origem_cadastro: f.origemCadastro || "normal",
+        especialidade_destino: f.especialidadeDestino || "",
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);
