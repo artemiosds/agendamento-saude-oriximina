@@ -429,6 +429,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           vagasPorHora: d.vagas_por_hora,
           vagasPorDia: d.vagas_por_dia,
           diasSemana: d.dias_semana || [],
+          duracaoConsulta: d.duracao_consulta || 30,
         }));
         setDisponibilidades(mapped);
       }
