@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
 import { Card, CardContent } from "@/components/ui/card";
@@ -130,6 +131,7 @@ const Agenda: React.FC = () => {
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
   const { user, hasPermission } = useAuth();
+  const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
   const { handleVagaLiberada } = useFilaAutomatica();
@@ -592,6 +594,7 @@ const Agenda: React.FC = () => {
   };
 
   const handleDeleteAgendamento = async (agId: string) => {
+    if (!can('agenda', 'can_delete')) { toast.error('Sem permissão para excluir.'); return; }
     try {
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
@@ -1402,7 +1405,7 @@ const Agenda: React.FC = () => {
                               <sa.icon className="w-3.5 h-3.5" />
                             </Button>
                           ))}
-                        {!isProfissional && user && ["master", "coordenador", "recepcao"].includes(user.role) && (
+                        {can('agenda', 'can_delete') && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button

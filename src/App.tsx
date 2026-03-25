@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
+import { PermissionsProvider } from "@/contexts/PermissionsContext";
 import React, { Suspense } from "react";
 
 // Eagerly loaded (landing + login)
@@ -34,6 +35,7 @@ const Regulacao = React.lazy(() => import("./pages/painel/Regulacao"));
 const AvaliacaoEnfermagem = React.lazy(() => import("./pages/painel/AvaliacaoEnfermagem"));
 const AvaliacaoMultiprofissional = React.lazy(() => import("./pages/painel/AvaliacaoMultiprofissional"));
 const PTSPage = React.lazy(() => import("./pages/painel/PTS"));
+const Permissoes = React.lazy(() => import("./pages/painel/Permissoes"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -72,6 +74,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <PermissionsProvider>
           <DataProvider>
             <Suspense fallback={<PageLoader />}>
               <Routes>
@@ -99,11 +102,13 @@ const App = () => (
                   <Route path="enfermagem" element={<AvaliacaoEnfermagem />} />
                   <Route path="pts" element={<PTSPage />} />
                   <Route path="multiprofissional" element={<AvaliacaoMultiprofissional />} />
+                  <Route path="permissoes" element={<Permissoes />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </DataProvider>
+          </PermissionsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
