@@ -33,16 +33,17 @@ const classificarIMC = (imc: number): string => {
   return 'Obesidade grau III';
 };
 
-interface FilaTriagem {
+interface FilaItem {
   id: string;
   pacienteNome: string;
   pacienteId: string;
-  profissionalNome: string;
-  hora: string;
-  data: string;
   unidadeId: string;
   criadoEm: string;
-  tipo: string;
+  especialidadeDestino: string;
+  cid: string;
+  descricaoClinica: string;
+  prioridade: string;
+  horaChegada: string;
 }
 
 interface PacienteInfo {
@@ -55,11 +56,11 @@ interface PacienteInfo {
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
-  const { logAction, refreshAgendamentos } = useData();
-  const [fila, setFila] = useState<FilaTriagem[]>([]);
+  const { logAction, refreshFila } = useData();
+  const [fila, setFila] = useState<FilaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedAg, setSelectedAg] = useState<FilaTriagem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FilaItem | null>(null);
   const [pacienteInfo, setPacienteInfo] = useState<PacienteInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(new Date());
@@ -89,28 +90,30 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
 
+  // Load from fila_espera where status = 'aguardando' (AGUARDANDO TRIAGEM)
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
       const { data, error } = await (supabase as any)
-        .from('agendamentos')
+        .from('fila_espera')
         .select('*')
-        .eq('status', 'aguardando_triagem')
+        .eq('status', 'aguardando')
         .eq('unidade_id', user.unidadeId)
         .order('criado_em', { ascending: true });
 
       if (data && !error) {
-        setFila(data.map((a: any) => ({
-          id: a.id,
-          pacienteNome: a.paciente_nome,
-          pacienteId: a.paciente_id,
-          profissionalNome: a.profissional_nome,
-          hora: a.hora,
-          data: a.data,
-          unidadeId: a.unidade_id,
-          criadoEm: a.criado_em || '',
-          tipo: a.tipo,
+        setFila(data.map((f: any) => ({
+          id: f.id,
+          pacienteNome: f.paciente_nome,
+          pacienteId: f.paciente_id,
+          unidadeId: f.unidade_id,
+          criadoEm: f.criado_em || '',
+          especialidadeDestino: f.especialidade_destino || '',
+          cid: f.cid || '',
+          descricaoClinica: f.descricao_clinica || '',
+          prioridade: f.prioridade || 'normal',
+          horaChegada: f.hora_chegada || '',
         })));
       }
     } catch (err) {
@@ -121,31 +124,33 @@ const Triagem: React.FC = () => {
 
   useEffect(() => { loadFila(); }, [loadFila]);
 
+  // Realtime on fila_espera
   useEffect(() => {
     if (!user?.unidadeId) return;
     const channel = supabase
-      .channel('triagem-fila')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => loadFila())
+      .channel('triagem-fila-espera')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.unidadeId, loadFila]);
 
-  const openTriagem = async (ag: FilaTriagem) => {
-    setSelectedAg(ag);
+  const openTriagem = async (item: FilaItem) => {
+    setSelectedItem(item);
     setStartedAt(new Date().toISOString());
 
-    // Load patient info (specialty, CID, justification)
+    // Load patient info
     const { data: pacData } = await (supabase as any)
       .from('pacientes')
       .select('especialidade_destino, cid, justificativa, descricao_clinica, diagnostico_resumido')
-      .eq('id', ag.pacienteId)
+      .eq('id', item.pacienteId)
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
+    // Check existing triage record
     const { data } = await (supabase as any)
       .from('triage_records')
       .select('*')
-      .eq('agendamento_id', ag.id)
+      .eq('agendamento_id', item.id)
       .maybeSingle();
 
     if (data) {
@@ -177,7 +182,7 @@ const Triagem: React.FC = () => {
   };
 
   const buildRecord = () => ({
-    agendamento_id: selectedAg!.id,
+    agendamento_id: selectedItem!.id,
     tecnico_id: user?.id || '',
     peso: parseFloat(form.peso) || null,
     altura: parseFloat(form.altura) || null,
@@ -194,7 +199,7 @@ const Triagem: React.FC = () => {
   });
 
   const salvarRascunho = async () => {
-    if (!selectedAg) return;
+    if (!selectedItem) return;
     setSaving(true);
     try {
       await (supabase as any).from('triage_records').upsert(buildRecord(), { onConflict: 'agendamento_id' });
@@ -206,7 +211,7 @@ const Triagem: React.FC = () => {
   };
 
   const confirmarTriagem = async () => {
-    if (!selectedAg) return;
+    if (!selectedItem) return;
 
     const missing: string[] = [];
     if (!form.pressaoArterial.trim()) missing.push('Pressão Arterial');
@@ -226,46 +231,21 @@ const Triagem: React.FC = () => {
 
     setSaving(true);
     try {
+      // Save triage record (clinical history)
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
 
-      // Register prontuário entry as "TRIAGEM INICIAL"
-      const profissional = user?.nome || 'Técnico';
-      await (supabase as any).from('prontuarios').insert({
-        paciente_id: selectedAg.pacienteId,
-        paciente_nome: selectedAg.pacienteNome,
-        profissional_id: user?.id || '',
-        profissional_nome: profissional,
-        unidade_id: selectedAg.unidadeId,
-        agendamento_id: selectedAg.id,
-        tipo_registro: 'triagem',
-        data_atendimento: new Date().toISOString().split('T')[0],
-        hora_atendimento: new Date().toTimeString().slice(0, 5),
-        queixa_principal: form.queixaPrincipal || '',
-        sinais_sintomas: [
-          `PA: ${form.pressaoArterial}`,
-          `FC: ${form.frequenciaCardiaca} bpm`,
-          `Temp: ${form.temperatura} °C`,
-          `SpO₂: ${form.saturacaoOxigenio}%`,
-          `Peso: ${form.peso} kg`,
-          `Altura: ${form.altura} m`,
-          imc ? `IMC: ${imc.value} (${imc.label})` : '',
-          `Glicemia: ${form.glicemia || 'N/A'}`,
-          `Dor: ${form.dor}/10`,
-        ].filter(Boolean).join(' | '),
-        observacoes: form.observacoes,
-        conduta: `Classificação de Risco: ${form.classificacaoRisco.toUpperCase()}`,
-        evolucao: `Alergias: ${form.alergias.join(', ') || 'Nenhuma'}\nMedicamentos: ${form.medicamentos.join(', ') || 'Nenhum'}`,
-      });
-
-      await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
+      // Update fila_espera status to aguardando_enfermagem
+      await (supabase as any).from('fila_espera')
+        .update({ status: 'aguardando_enfermagem' })
+        .eq('id', selectedItem.id);
 
       await logAction({
-        acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedAg.id,
+        acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedItem.id,
         modulo: 'triagem', user,
         detalhes: {
-          paciente_nome: selectedAg.pacienteNome,
-          especialidade_destino: pacienteInfo?.especialidade_destino || '',
+          paciente_nome: selectedItem.pacienteNome,
+          especialidade_destino: selectedItem.especialidadeDestino,
           peso: form.peso, altura: form.altura, imc: imc?.value,
           classificacao_risco: form.classificacaoRisco,
           dor: form.dor,
@@ -275,7 +255,7 @@ const Triagem: React.FC = () => {
       toast.success('Triagem confirmada! Encaminhado para enfermagem.');
       setDialogOpen(false);
       await loadFila();
-      await refreshAgendamentos();
+      await refreshFila();
     } catch (err) {
       toast.error('Erro ao confirmar triagem.');
     }
@@ -296,8 +276,8 @@ const Triagem: React.FC = () => {
     }
   };
 
-  const espLabel = pacienteInfo?.especialidade_destino
-    ? ESPECIALIDADE_LABELS[pacienteInfo.especialidade_destino] || pacienteInfo.especialidade_destino.toUpperCase()
+  const espLabel = (pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino)
+    ? ESPECIALIDADE_LABELS[pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino || ''] || (pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino || '').toUpperCase()
     : null;
 
   return (
@@ -317,22 +297,26 @@ const Triagem: React.FC = () => {
         </Card>
       ) : (
         <div className="space-y-2">
-          {fila.map(ag => {
-            const waitMinutes = ag.criadoEm ? differenceInMinutes(now, new Date(ag.criadoEm)) : 0;
+          {fila.map(item => {
+            const waitMinutes = item.criadoEm ? differenceInMinutes(now, new Date(item.criadoEm)) : 0;
             const waitLabel = waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+            const espBadge = item.especialidadeDestino ? ESPECIALIDADE_LABELS[item.especialidadeDestino] || item.especialidadeDestino.toUpperCase() : null;
             return (
-              <Card key={ag.id} className="shadow-card border-0">
+              <Card key={item.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
+                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{item.horaChegada}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{ag.pacienteNome}</p>
-                    <p className="text-sm text-muted-foreground">{ag.profissionalNome} • {ag.tipo}</p>
+                    <p className="font-semibold text-foreground">{item.pacienteNome}</p>
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {espBadge && <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">{espBadge}</Badge>}
+                      {item.cid && <Badge variant="outline" className="text-[10px]">CID: {item.cid}</Badge>}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" /> {waitLabel}
                     </Badge>
-                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(ag)}>
+                    <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(item)}>
                       <Play className="w-3.5 h-3.5 mr-1" /> Iniciar triagem
                     </Button>
                   </div>
@@ -346,11 +330,11 @@ const Triagem: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display">Triagem — {selectedAg?.pacienteNome}</DialogTitle>
+            <DialogTitle className="font-display">Triagem — {selectedItem?.pacienteNome}</DialogTitle>
           </DialogHeader>
 
           {/* Specialty + referral info */}
-          {pacienteInfo && (
+          {(pacienteInfo || selectedItem) && (
             <div className="space-y-2">
               {espLabel && (
                 <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
@@ -359,10 +343,10 @@ const Triagem: React.FC = () => {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-2 text-xs bg-muted/50 rounded-lg p-3 border">
-                {pacienteInfo.cid && <span>CID: <strong>{pacienteInfo.cid}</strong></span>}
-                {pacienteInfo.diagnostico_resumido && <span>Diagnóstico: <strong>{pacienteInfo.diagnostico_resumido}</strong></span>}
+                {(pacienteInfo?.cid || selectedItem?.cid) && <span>CID: <strong>{pacienteInfo?.cid || selectedItem?.cid}</strong></span>}
+                {pacienteInfo?.diagnostico_resumido && <span>Diagnóstico: <strong>{pacienteInfo.diagnostico_resumido}</strong></span>}
               </div>
-              {pacienteInfo.justificativa && (
+              {pacienteInfo?.justificativa && (
                 <p className="text-xs"><strong>Justificativa:</strong> {pacienteInfo.justificativa}</p>
               )}
             </div>
