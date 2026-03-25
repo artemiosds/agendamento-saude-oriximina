@@ -21,7 +21,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -29,6 +29,13 @@ import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
+
+const PTS_SPECIALTIES = [
+  'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
+  'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
+];
+
+const FREQUENCY_OPTIONS = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
 
 interface ProntuarioDB {
   id: string;
@@ -148,7 +155,7 @@ const retornoOptions = [
 
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
@@ -165,6 +172,23 @@ const ProntuarioPage: React.FC = () => {
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // PTS inline creation
+  const [ptsOpen, setPtsOpen] = useState(false);
+  const [ptsSaving, setPtsSaving] = useState(false);
+  const [ptsForm, setPtsForm] = useState({
+    diagnostico_funcional: '', objetivos_terapeuticos: '',
+    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
+    especialidades: [] as string[],
+  });
+
+  // Treatment cycle inline creation
+  const [cycleOpen, setCycleOpen] = useState(false);
+  const [cycleSaving, setCycleSaving] = useState(false);
+  const [cycleForm, setCycleForm] = useState({
+    treatment_type: '', total_sessions: 6, frequency: 'semanal',
+    start_date: new Date().toISOString().split("T")[0], clinical_notes: '',
+  });
 
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
@@ -660,6 +684,115 @@ const ProntuarioPage: React.FC = () => {
     openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, { Paciente: pacienteNome });
   };
 
+  // ---- PTS inline creation ----
+  const handleCreatePTS = async () => {
+    if (!form.paciente_id || !ptsForm.diagnostico_funcional || !ptsForm.objetivos_terapeuticos) {
+      toast.error("Preencha diagnóstico funcional e objetivos terapêuticos.");
+      return;
+    }
+    setPtsSaving(true);
+    try {
+      const { data: inserted, error } = await supabase.from("pts").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        diagnostico_funcional: ptsForm.diagnostico_funcional,
+        objetivos_terapeuticos: ptsForm.objetivos_terapeuticos,
+        metas_curto_prazo: ptsForm.metas_curto_prazo,
+        metas_medio_prazo: ptsForm.metas_medio_prazo,
+        metas_longo_prazo: ptsForm.metas_longo_prazo,
+        especialidades_envolvidas: ptsForm.especialidades,
+        status: "ativo",
+      }).select("id").single();
+      if (error) throw error;
+      await logAction({
+        acao: "criar_pts",
+        entidade: "pts",
+        entidadeId: inserted?.id || "",
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome },
+      });
+      toast.success("PTS criado com sucesso!");
+      setPtsOpen(false);
+      setPtsForm({ diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades: [] });
+    } catch (err: any) {
+      toast.error("Erro ao criar PTS: " + (err?.message || ""));
+    }
+    setPtsSaving(false);
+  };
+
+  // ---- Treatment cycle inline creation ----
+  const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
+    const d = new Date(startDate + "T12:00:00");
+    const weeksMap: Record<string, number> = { "diário": 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
+    const weeks = (weeksMap[frequency] || 1) * totalSessions;
+    d.setDate(d.getDate() + Math.ceil(weeks * 7));
+    return d.toISOString().split("T")[0];
+  };
+
+  const handleCreateCycle = async () => {
+    if (!form.paciente_id || !cycleForm.treatment_type) {
+      toast.error("Preencha tipo de tratamento.");
+      return;
+    }
+    setCycleSaving(true);
+    try {
+      const endDate = calcEndDate(cycleForm.start_date, cycleForm.total_sessions, cycleForm.frequency);
+      const { data: cycleData, error: cycleError } = await supabase.from("treatment_cycles").insert({
+        patient_id: form.paciente_id,
+        professional_id: user?.id || "",
+        unit_id: user?.unidadeId || "",
+        specialty: user?.profissao || "",
+        treatment_type: cycleForm.treatment_type,
+        start_date: cycleForm.start_date,
+        end_date_predicted: endDate,
+        total_sessions: cycleForm.total_sessions,
+        sessions_done: 0,
+        frequency: cycleForm.frequency,
+        status: "em_andamento",
+        clinical_notes: cycleForm.clinical_notes,
+        created_by: user?.id || "",
+      }).select().single();
+      if (cycleError) throw cycleError;
+
+      // Generate sessions
+      const sessionsToCreate = [];
+      const startD = new Date(cycleForm.start_date + "T12:00:00");
+      const weeksDelta: Record<string, number> = { "diário": 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
+      const delta = weeksDelta[cycleForm.frequency] || 7;
+      for (let i = 0; i < cycleForm.total_sessions; i++) {
+        const sessionDate = new Date(startD);
+        sessionDate.setDate(startD.getDate() + Math.round(i * delta));
+        sessionsToCreate.push({
+          cycle_id: cycleData.id,
+          patient_id: form.paciente_id,
+          professional_id: user?.id || "",
+          session_number: i + 1,
+          total_sessions: cycleForm.total_sessions,
+          scheduled_date: sessionDate.toISOString().split("T")[0],
+          status: "pendente_agendamento",
+        });
+      }
+      await supabase.from("treatment_sessions").insert(sessionsToCreate);
+
+      await logAction({
+        acao: "criar_ciclo_tratamento",
+        entidade: "treatment_cycle",
+        entidadeId: cycleData.id,
+        modulo: "prontuario",
+        user,
+        detalhes: { paciente: form.paciente_nome, tipo: cycleForm.treatment_type, sessoes: cycleForm.total_sessions },
+      });
+      toast.success("Ciclo de tratamento criado! Sessões aguardam agendamento pela recepção.");
+      setCycleOpen(false);
+      setCycleForm({ treatment_type: '', total_sessions: 6, frequency: 'semanal', start_date: new Date().toISOString().split("T")[0], clinical_notes: '' });
+    } catch (err: any) {
+      toast.error("Erro ao criar ciclo: " + (err?.message || ""));
+    }
+    setCycleSaving(false);
+  };
+
   const queryPacienteId = searchParams.get("pacienteId");
   const filtered = prontuarios.filter((p) => {
     if (queryPacienteId) return p.paciente_id === queryPacienteId;
@@ -1094,6 +1227,27 @@ const ProntuarioPage: React.FC = () => {
               </Select>
             </div>
 
+            {/* Decisão Clínica: PTS / Tratamento */}
+            {!editId && form.paciente_id && (
+              <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-primary" />
+                  Decisão Clínica (opcional)
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Após registrar o prontuário, você pode criar um PTS ou iniciar um ciclo de tratamento para este paciente.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                    <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                    <Activity className="w-3.5 h-3.5 mr-1" /> Criar Ciclo de Tratamento
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {editId && (
               <div>
                 <Label className="text-warning">Motivo da Alteração *</Label>
@@ -1133,6 +1287,117 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PTS Dialog */}
+      <Dialog open={ptsOpen} onOpenChange={setPtsOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar PTS — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Diagnóstico Funcional *</Label>
+              <Textarea rows={3} value={ptsForm.diagnostico_funcional}
+                onChange={(e) => setPtsForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+                placeholder="Descrição funcional global do paciente..." />
+            </div>
+            <div>
+              <Label>Objetivos Terapêuticos *</Label>
+              <Textarea rows={2} value={ptsForm.objetivos_terapeuticos}
+                onChange={(e) => setPtsForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Curto Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_curto_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_curto_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Médio Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_medio_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_medio_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Longo Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_longo_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_longo_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="mb-2 block">Especialidades Envolvidas</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PTS_SPECIALTIES.map(spec => (
+                  <div key={spec} className="flex items-center gap-2">
+                    <Checkbox id={`pts-spec-${spec}`}
+                      checked={ptsForm.especialidades.includes(spec)}
+                      onCheckedChange={(checked) => {
+                        setPtsForm(p => ({
+                          ...p,
+                          especialidades: checked
+                            ? [...p.especialidades, spec]
+                            : p.especialidades.filter(s => s !== spec)
+                        }));
+                      }} />
+                    <label htmlFor={`pts-spec-${spec}`} className="text-sm cursor-pointer">{spec}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleCreatePTS} disabled={ptsSaving} className="w-full gradient-primary text-primary-foreground">
+              {ptsSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar PTS
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Treatment Cycle Dialog */}
+      <Dialog open={cycleOpen} onOpenChange={setCycleOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar Ciclo de Tratamento — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Tipo de Tratamento *</Label>
+              <Input value={cycleForm.treatment_type}
+                onChange={(e) => setCycleForm(p => ({ ...p, treatment_type: e.target.value }))}
+                placeholder="Ex: Fisioterapia motora, Fonoterapia..." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Sessões Previstas</Label>
+                <Input type="number" min={1} value={cycleForm.total_sessions}
+                  onChange={(e) => setCycleForm(p => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))} />
+              </div>
+              <div>
+                <Label>Frequência</Label>
+                <Select value={cycleForm.frequency} onValueChange={(v) => setCycleForm(p => ({ ...p, frequency: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Data de Início</Label>
+              <Input type="date" value={cycleForm.start_date}
+                onChange={(e) => setCycleForm(p => ({ ...p, start_date: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Notas Clínicas</Label>
+              <Textarea rows={2} value={cycleForm.clinical_notes}
+                onChange={(e) => setCycleForm(p => ({ ...p, clinical_notes: e.target.value }))} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              As sessões serão criadas automaticamente com status "Aguardando Agendamento". A recepção agendará cada sessão individualmente.
+            </p>
+            <Button onClick={handleCreateCycle} disabled={cycleSaving} className="w-full gradient-primary text-primary-foreground">
+              {cycleSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar Ciclo de Tratamento
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

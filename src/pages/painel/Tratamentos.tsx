@@ -183,7 +183,7 @@ const Tratamentos: React.FC = () => {
 
   const canManageFull = hasPermission(["master", "coordenador"]);
   const isProfissional = user?.role === "profissional";
-  const canAgendarSessao = user?.role === "master" || user?.role === "recepcao";
+  const canAgendarSessao = user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -987,7 +987,7 @@ const Tratamentos: React.FC = () => {
                       )}
 
                       {/* Botão Remarcar — profissional e master em sessões agendadas ou pendentes */}
-                      {(isProfissional || user?.role === "master") &&
+                      {canAgendarSessao &&
                         ["agendada", "pendente_agendamento"].includes(s.status) &&
                         selectedCycle.status === "em_andamento" && (
                           <Button
