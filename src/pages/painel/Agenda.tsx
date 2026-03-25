@@ -594,6 +594,7 @@ const Agenda: React.FC = () => {
   };
 
   const handleDeleteAgendamento = async (agId: string) => {
+    if (!can('agenda', 'can_delete')) { toast.error('Sem permissão para excluir.'); return; }
     try {
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
@@ -1404,7 +1405,7 @@ const Agenda: React.FC = () => {
                               <sa.icon className="w-3.5 h-3.5" />
                             </Button>
                           ))}
-                        {!isProfissional && user && ["master", "coordenador", "recepcao"].includes(user.role) && (
+                        {can('agenda', 'can_delete') && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
