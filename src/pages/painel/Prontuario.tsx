@@ -155,7 +155,7 @@ const retornoOptions = [
 
 const ProntuarioPage: React.FC = () => {
   const { user, hasPermission } = useAuth();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
@@ -172,6 +172,23 @@ const ProntuarioPage: React.FC = () => {
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  // PTS inline creation
+  const [ptsOpen, setPtsOpen] = useState(false);
+  const [ptsSaving, setPtsSaving] = useState(false);
+  const [ptsForm, setPtsForm] = useState({
+    diagnostico_funcional: '', objetivos_terapeuticos: '',
+    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
+    especialidades: [] as string[],
+  });
+
+  // Treatment cycle inline creation
+  const [cycleOpen, setCycleOpen] = useState(false);
+  const [cycleSaving, setCycleSaving] = useState(false);
+  const [cycleForm, setCycleForm] = useState({
+    treatment_type: '', total_sessions: 6, frequency: 'semanal',
+    start_date: new Date().toISOString().split("T")[0], clinical_notes: '',
+  });
 
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
