@@ -875,6 +875,15 @@ const Agenda: React.FC = () => {
                   </div>
                   <div>
                     <Label>Horário Disponível</Label>
+                    {newAg.profissionalId && (
+                      <SlotInfoBadge
+                        profissionalId={newAg.profissionalId}
+                        unidadeId={profissionais.find(p => p.id === newAg.profissionalId)?.unidadeId || ""}
+                        date={selectedDate}
+                        hora={newAg.hora}
+                        className="mt-1 mb-2"
+                      />
+                    )}
                     {newAgSlots.length === 0 ? (
                       <p className="text-sm text-warning mt-1">
                         {!newAg.profissionalId
