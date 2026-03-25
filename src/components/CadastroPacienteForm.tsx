@@ -150,6 +150,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           <div>
             <Label>CNS</Label>
             <Input value={form.cns} onChange={e => set('cns', e.target.value)} placeholder="Nº Cartão SUS" />
+            {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
           </div>
           <div>
             <Label>Telefone *</Label>
@@ -157,17 +158,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
           </div>
           <div>
-            <Label>Nome da Mãe</Label>
+            <Label>Nome da Mãe *</Label>
             <Input value={form.nomeMae} onChange={e => set('nomeMae', e.target.value)} placeholder="Nome da mãe" />
+            {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
           </div>
           <div>
-            <Label>Município</Label>
+            <Label>Município *</Label>
             <Select value={form.municipio || ''} onValueChange={v => set('municipio', v)}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 {MUNICIPIOS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
+            {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
           </div>
         </div>
 
