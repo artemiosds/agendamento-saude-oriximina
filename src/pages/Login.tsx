@@ -45,7 +45,20 @@ const Login: React.FC = () => {
     const result = await login(usuario.trim(), senha);
     setLoading(false);
     if (result.success) {
-      navigate("/painel");
+      // Role-based redirect after login
+      const roleRoutes: Record<string, string> = {
+        master: '/painel',
+        gestao: '/painel',
+        coordenador: '/painel',
+        recepcao: '/painel/agenda',
+        profissional: '/painel/agenda',
+        tecnico: '/painel/triagem',
+        enfermagem: '/painel/enfermagem',
+      };
+      // We need to get the user from auth context after login succeeds
+      // The user state is set during login, so we read it from the result
+      const userRole = result.role || 'recepcao';
+      navigate(roleRoutes[userRole] || '/painel');
     } else {
       setErro(result.error || "Erro ao fazer login.");
     }
