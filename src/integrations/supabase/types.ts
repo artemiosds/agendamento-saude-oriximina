@@ -924,6 +924,45 @@ export type Database = {
         }
         Relationships: []
       }
+      permissoes: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_execute: boolean
+          can_view: boolean
+          created_at: string
+          id: string
+          modulo: string
+          perfil: string
+          updated_at: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo: string
+          perfil: string
+          updated_at?: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo?: string
+          perfil?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       procedimentos: {
         Row: {
           ativo: boolean
