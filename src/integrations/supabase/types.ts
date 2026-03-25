@@ -551,6 +551,60 @@ export type Database = {
         }
         Relationships: []
       }
+      nursing_evaluations: {
+        Row: {
+          agendamento_id: string | null
+          anamnese_resumida: string
+          avaliacao_risco: string
+          condicao_clinica: string
+          created_at: string
+          evaluation_date: string
+          id: string
+          motivo_inapto: string
+          observacoes_clinicas: string
+          patient_id: string
+          prioridade: string
+          professional_id: string
+          resultado: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          agendamento_id?: string | null
+          anamnese_resumida?: string
+          avaliacao_risco?: string
+          condicao_clinica?: string
+          created_at?: string
+          evaluation_date?: string
+          id?: string
+          motivo_inapto?: string
+          observacoes_clinicas?: string
+          patient_id: string
+          prioridade?: string
+          professional_id: string
+          resultado?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Update: {
+          agendamento_id?: string | null
+          anamnese_resumida?: string
+          avaliacao_risco?: string
+          condicao_clinica?: string
+          created_at?: string
+          evaluation_date?: string
+          id?: string
+          motivo_inapto?: string
+          observacoes_clinicas?: string
+          patient_id?: string
+          prioridade?: string
+          professional_id?: string
+          resultado?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pacientes: {
         Row: {
           auth_user_id: string | null
@@ -925,7 +979,12 @@ export type Database = {
           sala_id: string | null
           setor: string | null
           sinais_sintomas: string | null
+          soap_avaliacao: string | null
+          soap_objetivo: string | null
+          soap_plano: string | null
+          soap_subjetivo: string | null
           solicitacao_exames: string | null
+          tipo_registro: string
           unidade_id: string
         }
         Insert: {
@@ -955,7 +1014,12 @@ export type Database = {
           sala_id?: string | null
           setor?: string | null
           sinais_sintomas?: string | null
+          soap_avaliacao?: string | null
+          soap_objetivo?: string | null
+          soap_plano?: string | null
+          soap_subjetivo?: string | null
           solicitacao_exames?: string | null
+          tipo_registro?: string
           unidade_id: string
         }
         Update: {
@@ -985,8 +1049,61 @@ export type Database = {
           sala_id?: string | null
           setor?: string | null
           sinais_sintomas?: string | null
+          soap_avaliacao?: string | null
+          soap_objetivo?: string | null
+          soap_plano?: string | null
+          soap_subjetivo?: string | null
           solicitacao_exames?: string | null
+          tipo_registro?: string
           unidade_id?: string
+        }
+        Relationships: []
+      }
+      pts: {
+        Row: {
+          created_at: string
+          diagnostico_funcional: string
+          especialidades_envolvidas: string[]
+          id: string
+          metas_curto_prazo: string
+          metas_longo_prazo: string
+          metas_medio_prazo: string
+          objetivos_terapeuticos: string
+          patient_id: string
+          professional_id: string
+          status: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          diagnostico_funcional?: string
+          especialidades_envolvidas?: string[]
+          id?: string
+          metas_curto_prazo?: string
+          metas_longo_prazo?: string
+          metas_medio_prazo?: string
+          objetivos_terapeuticos?: string
+          patient_id: string
+          professional_id: string
+          status?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          diagnostico_funcional?: string
+          especialidades_envolvidas?: string[]
+          id?: string
+          metas_curto_prazo?: string
+          metas_longo_prazo?: string
+          metas_medio_prazo?: string
+          objetivos_terapeuticos?: string
+          patient_id?: string
+          professional_id?: string
+          status?: string
+          unit_id?: string
+          updated_at?: string
         }
         Relationships: []
       }

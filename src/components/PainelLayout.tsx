@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
-  Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse, ClipboardList as ClipboardListIcon
+  Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse, ClipboardList as ClipboardListIcon,
+  BookOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,8 @@ const menuItems = [
   { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: CalendarClock, roles: ['master', 'coordenador'] },
   { to: '/painel/bloqueios', label: 'Feriados/Bloqueios', icon: CalendarClock, roles: ['master', 'coordenador', 'recepcao'] },
   { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, roles: ['master', 'coordenador', 'tecnico'] },
+  { to: '/painel/enfermagem', label: 'Avaliação Enfermagem', icon: Stethoscope, roles: ['master', 'coordenador', 'profissional'] },
+  { to: '/painel/pts', label: 'PTS', icon: FileText, roles: ['master', 'coordenador', 'profissional'] },
   { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ];

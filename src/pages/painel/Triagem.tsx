@@ -187,7 +187,8 @@ const Triagem: React.FC = () => {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
       // Update appointment status
-      await (supabase as any).from('agendamentos').update({ status: 'confirmado_chegada' }).eq('id', selectedAg.id);
+      // After triage, send to nursing evaluation
+      await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
 
       await logAction({
         acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedAg.id,
@@ -195,7 +196,7 @@ const Triagem: React.FC = () => {
         detalhes: { paciente_nome: selectedAg.pacienteNome, peso: form.peso, altura: form.altura, imc: imc?.value },
       });
 
-      toast.success('Triagem confirmada! Paciente encaminhado para atendimento.');
+      toast.success('Triagem confirmada! Paciente encaminhado para avaliação de enfermagem.');
       setDialogOpen(false);
       await loadFila();
       await refreshAgendamentos();

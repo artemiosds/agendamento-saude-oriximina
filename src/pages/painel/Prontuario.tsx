@@ -70,12 +70,24 @@ interface ProcedimentoDB {
   ativo: boolean;
 }
 
+const TIPOS_REGISTRO = [
+  { value: 'consulta', label: 'Consulta' },
+  { value: 'avaliacao_inicial', label: 'Avaliação Inicial' },
+  { value: 'sessao', label: 'Sessão (SOAP)' },
+  { value: 'retorno', label: 'Retorno' },
+  { value: 'reavaliacao', label: 'Reavaliação' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem' },
+  { value: 'pts', label: 'PTS' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial' },
+];
+
 const emptyForm = {
   paciente_id: "",
   paciente_nome: "",
   agendamento_id: "",
   data_atendimento: new Date().toISOString().split("T")[0],
   hora_atendimento: "",
+  tipo_registro: "consulta",
   queixa_principal: "",
   anamnese: "",
   sinais_sintomas: "",
@@ -91,6 +103,10 @@ const emptyForm = {
   procedimentos_texto: "",
   outro_procedimento: "",
   episodio_id: "",
+  soap_subjetivo: "",
+  soap_objetivo: "",
+  soap_avaliacao: "",
+  soap_plano: "",
 };
 
 const classificarIMC = (imc: number): string => {
@@ -308,6 +324,7 @@ const ProntuarioPage: React.FC = () => {
       agendamento_id: p.agendamento_id || "",
       data_atendimento: p.data_atendimento,
       hora_atendimento: p.hora_atendimento || "",
+      tipo_registro: (p as any).tipo_registro || "consulta",
       queixa_principal: p.queixa_principal || "",
       anamnese: p.anamnese || "",
       sinais_sintomas: p.sinais_sintomas || "",
@@ -323,6 +340,10 @@ const ProntuarioPage: React.FC = () => {
       procedimentos_texto: p.procedimentos_texto || "",
       outro_procedimento: p.outro_procedimento || "",
       episodio_id: p.episodio_id || "",
+      soap_subjetivo: (p as any).soap_subjetivo || "",
+      soap_objetivo: (p as any).soap_objetivo || "",
+      soap_avaliacao: (p as any).soap_avaliacao || "",
+      soap_plano: (p as any).soap_plano || "",
     };
     setForm(formData);
     setPreviousForm(formData);
@@ -382,6 +403,11 @@ const ProntuarioPage: React.FC = () => {
         motivo_alteracao: editId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
         outro_procedimento: form.outro_procedimento || "",
+        tipo_registro: form.tipo_registro || "consulta",
+        soap_subjetivo: form.soap_subjetivo || "",
+        soap_objetivo: form.soap_objetivo || "",
+        soap_avaliacao: form.soap_avaliacao || "",
+        soap_plano: form.soap_plano || "",
       };
 
       // CORRIGIDO: não salva 'no_episode' no banco
@@ -887,8 +913,53 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {/* Tipo de Registro */}
             <div>
-              <Label>Queixa Principal</Label>
+              <Label>Tipo de Registro *</Label>
+              <Select value={form.tipo_registro} onValueChange={(v) => setForm((p) => ({ ...p, tipo_registro: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIPOS_REGISTRO.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* SOAP Section - shown for sessão type */}
+            {form.tipo_registro === 'sessao' && (
+              <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
+                <h3 className="font-semibold text-sm text-primary">Registro SOAP — Sessão</h3>
+                <div>
+                  <Label>S — Subjetivo (Relato do paciente)</Label>
+                  <Textarea rows={2} value={form.soap_subjetivo}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))}
+                    placeholder="O que o paciente relata..." />
+                </div>
+                <div>
+                  <Label>O — Objetivo (Dados observáveis)</Label>
+                  <Textarea rows={2} value={form.soap_objetivo}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))}
+                    placeholder="Achados clínicos, exame físico, sinais vitais..." />
+                </div>
+                <div>
+                  <Label>A — Avaliação (Análise clínica)</Label>
+                  <Textarea rows={2} value={form.soap_avaliacao}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))}
+                    placeholder="Interpretação dos achados, hipóteses, diagnóstico funcional..." />
+                </div>
+                <div>
+                  <Label>P — Plano (Plano da sessão)</Label>
+                  <Textarea rows={2} value={form.soap_plano}
+                    onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))}
+                    placeholder="Condutas, intervenções realizadas, próximos passos..." />
+                </div>
+              </div>
+            )}
+
+            {/* Standard fields (hidden when SOAP mode is active, but still accessible) */}
+            <div>
+              <Label>{form.tipo_registro === 'avaliacao_inicial' ? 'Queixa Principal *' : 'Queixa Principal'}</Label>
               <Textarea
                 rows={2}
                 value={form.queixa_principal}
