@@ -46,18 +46,20 @@ const Login: React.FC = () => {
     setLoading(false);
     if (result.success) {
       // Role-based redirect after login
+      const userRole = result.role || '';
+      if (!userRole) {
+        setErro('Usuário sem perfil definido. Contate o administrador.');
+        return;
+      }
       const roleRoutes: Record<string, string> = {
         master: '/painel',
-        gestao: '/painel',
+        gestao: '/painel/dashboard',
         coordenador: '/painel',
         recepcao: '/painel/agenda',
         profissional: '/painel/agenda',
         tecnico: '/painel/triagem',
         enfermagem: '/painel/enfermagem',
       };
-      // We need to get the user from auth context after login succeeds
-      // The user state is set during login, so we read it from the result
-      const userRole = result.role || 'recepcao';
       navigate(roleRoutes[userRole] || '/painel');
     } else {
       setErro(result.error || "Erro ao fazer login.");

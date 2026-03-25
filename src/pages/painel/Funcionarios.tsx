@@ -16,8 +16,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
-const roleLabels: Record<UserRole, string> = {
-  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional de Saúde', gestao: 'Gestão', tecnico: 'Triagem', enfermagem: 'Enfermagem',
+const roleLabels: Record<string, string> = {
+  master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
 const roleColors: Record<UserRole, string> = {
   master: 'bg-destructive/10 text-destructive', coordenador: 'bg-warning/10 text-warning',
@@ -60,7 +60,7 @@ const Funcionarios: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [showSenha, setShowSenha] = useState(false);
   const [form, setForm] = useState({
-    nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao' as UserRole, tempo_atendimento: 30,
+    nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
 
@@ -110,7 +110,7 @@ const Funcionarios: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: 'recepcao', tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
     setDialogOpen(true);
   };
 
@@ -264,13 +264,12 @@ const Funcionarios: React.FC = () => {
                 <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as UserRole }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione o perfil" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="master">Master</SelectItem>
-                    <SelectItem value="gestao">Gestão</SelectItem>
-                    <SelectItem value="coordenador">Coordenador</SelectItem>
-                    <SelectItem value="recepcao">Recepção</SelectItem>
-                    <SelectItem value="tecnico">Triagem</SelectItem>
-                    <SelectItem value="enfermagem">Enfermagem</SelectItem>
-                    <SelectItem value="profissional">Profissional de Saúde</SelectItem>
+                    <SelectItem value="master">MASTER</SelectItem>
+                    <SelectItem value="gestao">GESTÃO</SelectItem>
+                    <SelectItem value="recepcao">RECEPÇÃO</SelectItem>
+                    <SelectItem value="tecnico">TRIAGEM</SelectItem>
+                    <SelectItem value="enfermagem">ENFERMAGEM</SelectItem>
+                    <SelectItem value="profissional">PROFISSIONAL</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
