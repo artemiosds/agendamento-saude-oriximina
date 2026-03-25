@@ -1291,7 +1291,117 @@ const ProntuarioPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {loading ? (
+      {/* PTS Dialog */}
+      <Dialog open={ptsOpen} onOpenChange={setPtsOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar PTS — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Diagnóstico Funcional *</Label>
+              <Textarea rows={3} value={ptsForm.diagnostico_funcional}
+                onChange={(e) => setPtsForm(p => ({ ...p, diagnostico_funcional: e.target.value }))}
+                placeholder="Descrição funcional global do paciente..." />
+            </div>
+            <div>
+              <Label>Objetivos Terapêuticos *</Label>
+              <Textarea rows={2} value={ptsForm.objetivos_terapeuticos}
+                onChange={(e) => setPtsForm(p => ({ ...p, objetivos_terapeuticos: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Curto Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_curto_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_curto_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Médio Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_medio_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_medio_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Metas de Longo Prazo</Label>
+              <Textarea rows={2} value={ptsForm.metas_longo_prazo}
+                onChange={(e) => setPtsForm(p => ({ ...p, metas_longo_prazo: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="mb-2 block">Especialidades Envolvidas</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PTS_SPECIALTIES.map(spec => (
+                  <div key={spec} className="flex items-center gap-2">
+                    <Checkbox id={`pts-spec-${spec}`}
+                      checked={ptsForm.especialidades.includes(spec)}
+                      onCheckedChange={(checked) => {
+                        setPtsForm(p => ({
+                          ...p,
+                          especialidades: checked
+                            ? [...p.especialidades, spec]
+                            : p.especialidades.filter(s => s !== spec)
+                        }));
+                      }} />
+                    <label htmlFor={`pts-spec-${spec}`} className="text-sm cursor-pointer">{spec}</label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <Button onClick={handleCreatePTS} disabled={ptsSaving} className="w-full gradient-primary text-primary-foreground">
+              {ptsSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar PTS
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Treatment Cycle Dialog */}
+      <Dialog open={cycleOpen} onOpenChange={setCycleOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Criar Ciclo de Tratamento — {form.paciente_nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Tipo de Tratamento *</Label>
+              <Input value={cycleForm.treatment_type}
+                onChange={(e) => setCycleForm(p => ({ ...p, treatment_type: e.target.value }))}
+                placeholder="Ex: Fisioterapia motora, Fonoterapia..." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Sessões Previstas</Label>
+                <Input type="number" min={1} value={cycleForm.total_sessions}
+                  onChange={(e) => setCycleForm(p => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))} />
+              </div>
+              <div>
+                <Label>Frequência</Label>
+                <Select value={cycleForm.frequency} onValueChange={(v) => setCycleForm(p => ({ ...p, frequency: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Data de Início</Label>
+              <Input type="date" value={cycleForm.start_date}
+                onChange={(e) => setCycleForm(p => ({ ...p, start_date: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Notas Clínicas</Label>
+              <Textarea rows={2} value={cycleForm.clinical_notes}
+                onChange={(e) => setCycleForm(p => ({ ...p, clinical_notes: e.target.value }))} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              As sessões serão criadas automaticamente com status "Aguardando Agendamento". A recepção agendará cada sessão individualmente.
+            </p>
+            <Button onClick={handleCreateCycle} disabled={cycleSaving} className="w-full gradient-primary text-primary-foreground">
+              {cycleSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Criar Ciclo de Tratamento
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
