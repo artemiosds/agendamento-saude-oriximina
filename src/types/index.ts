@@ -1,4 +1,4 @@
-export type UserRole = "master" | "coordenador" | "recepcao" | "profissional" | "gestao" | "tecnico";
+export type UserRole = "master" | "coordenador" | "recepcao" | "profissional" | "gestao" | "tecnico" | "enfermagem";
 
 export interface User {
   id: string;
