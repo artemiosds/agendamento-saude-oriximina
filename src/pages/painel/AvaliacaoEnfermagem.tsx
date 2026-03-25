@@ -3,15 +3,34 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2, Clock, CheckCircle, XCircle, AlertTriangle, Stethoscope } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { differenceInMinutes } from 'date-fns';
+
+const ESPECIALIDADE_LABELS: Record<string, string> = {
+  fisioterapia: 'FISIOTERAPIA',
+  fonoaudiologia: 'FONOAUDIOLOGIA',
+  nutricao: 'NUTRIÇÃO',
+  psicologia: 'PSICOLOGIA',
+  terapia_ocupacional: 'TERAPIA OCUPACIONAL',
+  outros: 'OUTROS',
+};
+
+const MULTI_ESPECIALIDADES = [
+  { value: 'fisioterapia', label: 'Fisioterapia' },
+  { value: 'fonoaudiologia', label: 'Fonoaudiologia' },
+  { value: 'nutricao', label: 'Nutrição' },
+  { value: 'psicologia', label: 'Psicologia' },
+  { value: 'servico_social', label: 'Serviço Social' },
+];
 
 interface FilaEnfermagem {
   id: string;
@@ -54,6 +73,7 @@ interface PacienteResumo {
   tipo_encaminhamento: string;
   diagnostico_resumido: string;
   descricao_clinica: string;
+  especialidade_destino: string;
 }
 
 const AvaliacaoEnfermagem: React.FC = () => {
@@ -69,13 +89,31 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
 
   const [form, setForm] = useState({
-    anamnese_resumida: '',
-    condicao_clinica: '',
+    // Clinical data
+    confirmacaoQueixa: '',
+    historicoDoenca: '',
+    comorbidades: '',
+    usoMedicamentos: '',
+    alergias: '',
+    limitacoesFuncionais: '',
+    estadoGeral: '',
+    // Functional assessment
+    mobilidade: '',
+    comunicacao: '',
+    alimentacao: '',
+    autonomia: '',
+    // Referral analysis
+    validarEspecialidade: true,
+    especialidadeAjustada: '',
+    justificativaAlteracao: '',
+    // Risk & priority
     avaliacao_risco: '',
     prioridade: 'media',
     observacoes_clinicas: '',
+    // Decision
     resultado: 'apto' as 'apto' | 'inapto' | 'multiprofissional',
     motivo_inapto: '',
+    multiEspecialidades: [] as string[],
   });
 
   useEffect(() => {
@@ -126,19 +164,22 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const openAvaliacao = async (ag: FilaEnfermagem) => {
     setSelected(ag);
     setForm({
-      anamnese_resumida: '', condicao_clinica: '', avaliacao_risco: '',
-      prioridade: 'media', observacoes_clinicas: '', resultado: 'apto', motivo_inapto: '',
+      confirmacaoQueixa: '', historicoDoenca: '', comorbidades: '',
+      usoMedicamentos: '', alergias: '', limitacoesFuncionais: '',
+      estadoGeral: '', mobilidade: '', comunicacao: '', alimentacao: '',
+      autonomia: '', validarEspecialidade: true, especialidadeAjustada: '',
+      justificativaAlteracao: '', avaliacao_risco: '', prioridade: 'media',
+      observacoes_clinicas: '', resultado: 'apto', motivo_inapto: '',
+      multiEspecialidades: [],
     });
 
-    // Load patient data
     const { data: pacData } = await (supabase as any)
       .from('pacientes')
-      .select('nome, cpf, cns, data_nascimento, telefone, nome_mae, municipio, ubs_origem, profissional_solicitante, cid, justificativa, tipo_encaminhamento, diagnostico_resumido, descricao_clinica')
+      .select('nome, cpf, cns, data_nascimento, telefone, nome_mae, municipio, ubs_origem, profissional_solicitante, cid, justificativa, tipo_encaminhamento, diagnostico_resumido, descricao_clinica, especialidade_destino')
       .eq('id', ag.pacienteId)
       .maybeSingle();
     setPaciente(pacData || null);
 
-    // Load triage data
     const { data } = await (supabase as any)
       .from('triage_records')
       .select('*')
@@ -152,13 +193,15 @@ const AvaliacaoEnfermagem: React.FC = () => {
   const handleSave = async () => {
     if (!selected) return;
 
-    // Validate mandatory fields
     const missing: string[] = [];
-    if (!form.anamnese_resumida.trim()) missing.push('Anamnese Resumida');
-    if (!form.condicao_clinica.trim()) missing.push('Condição Clínica Geral');
+    if (!form.confirmacaoQueixa.trim()) missing.push('Confirmação da Queixa');
+    if (!form.historicoDoenca.trim()) missing.push('Histórico da Doença Atual');
+    if (!form.estadoGeral.trim()) missing.push('Avaliação Geral do Estado');
     if (!form.avaliacao_risco) missing.push('Avaliação de Risco');
     if (!form.observacoes_clinicas.trim()) missing.push('Observações Clínicas');
-    if (form.resultado === 'inapto' && !form.motivo_inapto.trim()) missing.push('Motivo da Inaptidão');
+    if (form.resultado === 'inapto' && !form.motivo_inapto.trim()) missing.push('Justificativa da Inaptidão');
+    if (!form.validarEspecialidade && !form.justificativaAlteracao.trim()) missing.push('Justificativa da Alteração de Especialidade');
+    if (form.resultado === 'multiprofissional' && form.multiEspecialidades.length === 0) missing.push('Especialidades para Avaliação Multiprofissional');
 
     if (missing.length > 0) {
       toast.error(`Campos obrigatórios: ${missing.join(', ')}`);
@@ -173,8 +216,8 @@ const AvaliacaoEnfermagem: React.FC = () => {
         agendamento_id: selected.id,
         professional_id: user?.id || '',
         unit_id: user?.unidadeId || '',
-        anamnese_resumida: form.anamnese_resumida,
-        condicao_clinica: form.condicao_clinica,
+        anamnese_resumida: [form.confirmacaoQueixa, form.historicoDoenca].filter(Boolean).join('\n'),
+        condicao_clinica: form.estadoGeral,
         avaliacao_risco: form.avaliacao_risco,
         prioridade: form.prioridade,
         observacoes_clinicas: form.observacoes_clinicas,
@@ -182,39 +225,27 @@ const AvaliacaoEnfermagem: React.FC = () => {
         motivo_inapto: form.motivo_inapto,
       });
 
-      // Register in prontuário as "AVALIAÇÃO DE ENFERMAGEM"
-      await (supabase as any).from('prontuarios').insert({
-        paciente_id: selected.pacienteId,
-        paciente_nome: selected.pacienteNome,
-        profissional_id: user?.id || '',
-        profissional_nome: user?.nome || '',
-        unidade_id: user?.unidadeId || '',
-        agendamento_id: selected.id,
-        data_atendimento: new Date().toISOString().split('T')[0],
-        hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        tipo_registro: 'avaliacao_enfermagem',
-        queixa_principal: form.anamnese_resumida,
-        anamnese: form.condicao_clinica,
-        hipotese: `Risco: ${form.avaliacao_risco} | Prioridade: ${form.prioridade}`,
-        conduta: form.resultado === 'apto' ? 'APTO para avaliação profissional'
-          : form.resultado === 'multiprofissional' ? 'Encaminhado para avaliação multiprofissional'
-          : `INAPTO - ${form.motivo_inapto}`,
-        observacoes: form.observacoes_clinicas,
-        evolucao: `AVALIAÇÃO DE ENFERMAGEM — Resultado: ${form.resultado.toUpperCase()}. Risco: ${form.avaliacao_risco}. Prioridade: ${form.prioridade}.`,
-      });
+      // If specialty was adjusted, update patient record
+      if (!form.validarEspecialidade && form.especialidadeAjustada) {
+        await (supabase as any).from('pacientes')
+          .update({ especialidade_destino: form.especialidadeAjustada })
+          .eq('id', selected.pacienteId);
+      }
+
+      // NO auto-prontuário — nursing evaluation saved in nursing_evaluations table
 
       // Update appointment status based on result
       let newStatus = '';
       let toastMsg = '';
       if (form.resultado === 'apto') {
-        newStatus = 'aguardando_atendimento';
-        toastMsg = 'Paciente APTO — encaminhado para atendimento.';
+        newStatus = 'apto_agendamento';
+        toastMsg = 'Paciente APTO PARA AGENDAMENTO — disponível para a recepção.';
       } else if (form.resultado === 'multiprofissional') {
         newStatus = 'aguardando_multiprofissional';
         toastMsg = 'Paciente encaminhado para avaliação multiprofissional.';
       } else {
-        newStatus = 'cancelado';
-        toastMsg = 'Paciente considerado INAPTO — fluxo encerrado.';
+        newStatus = 'indeferido';
+        toastMsg = 'Paciente INDEFERIDO — fluxo encerrado.';
       }
 
       await (supabase as any).from('agendamentos').update({ status: newStatus }).eq('id', selected.id);
@@ -230,6 +261,9 @@ const AvaliacaoEnfermagem: React.FC = () => {
           resultado: form.resultado,
           prioridade: form.prioridade,
           avaliacao_risco: form.avaliacao_risco,
+          especialidade_validada: form.validarEspecialidade,
+          especialidade_ajustada: form.especialidadeAjustada || '',
+          multi_especialidades: form.multiEspecialidades,
         },
       });
 
@@ -246,6 +280,10 @@ const AvaliacaoEnfermagem: React.FC = () => {
   if (!hasPermission(['master', 'coordenador', 'profissional', 'enfermagem'])) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
+
+  const espLabel = paciente?.especialidade_destino
+    ? ESPECIALIDADE_LABELS[paciente.especialidade_destino] || paciente.especialidade_destino.toUpperCase()
+    : null;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -296,6 +334,14 @@ const AvaliacaoEnfermagem: React.FC = () => {
             <DialogTitle className="font-display">Avaliação de Enfermagem — {selected?.pacienteNome}</DialogTitle>
           </DialogHeader>
 
+          {/* Specialty destination banner */}
+          {espLabel && (
+            <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+              <p className="text-xs text-muted-foreground">Especialidade Destino</p>
+              <p className="text-lg font-bold text-primary">{espLabel}</p>
+            </div>
+          )}
+
           {/* Patient data */}
           {paciente && (
             <div className="space-y-2">
@@ -318,15 +364,9 @@ const AvaliacaoEnfermagem: React.FC = () => {
                     {paciente.tipo_encaminhamento && <span>Tipo: <strong>{paciente.tipo_encaminhamento}</strong></span>}
                     {paciente.cid && <span>CID: <strong>{paciente.cid}</strong></span>}
                   </div>
-                  {paciente.justificativa && (
-                    <p className="text-xs"><strong>Justificativa:</strong> {paciente.justificativa}</p>
-                  )}
-                  {paciente.diagnostico_resumido && (
-                    <p className="text-xs"><strong>Diagnóstico:</strong> {paciente.diagnostico_resumido}</p>
-                  )}
-                  {paciente.descricao_clinica && (
-                    <p className="text-xs"><strong>Descrição Clínica:</strong> {paciente.descricao_clinica}</p>
-                  )}
+                  {paciente.justificativa && <p className="text-xs"><strong>Justificativa:</strong> {paciente.justificativa}</p>}
+                  {paciente.diagnostico_resumido && <p className="text-xs"><strong>Diagnóstico:</strong> {paciente.diagnostico_resumido}</p>}
+                  {paciente.descricao_clinica && <p className="text-xs"><strong>Descrição Clínica:</strong> {paciente.descricao_clinica}</p>}
                 </div>
               )}
             </div>
@@ -359,20 +399,153 @@ const AvaliacaoEnfermagem: React.FC = () => {
           )}
 
           <div className="space-y-4">
+            {/* ══ DADOS CLÍNICOS ══ */}
+            <h3 className="text-sm font-semibold text-primary border-b pb-1">Dados Clínicos</h3>
+
             <div>
-              <Label>Anamnese Resumida *</Label>
-              <Textarea rows={3} value={form.anamnese_resumida}
-                onChange={e => setForm(p => ({ ...p, anamnese_resumida: e.target.value }))}
-                placeholder="Resumo da história clínica do paciente..." />
+              <Label>Confirmação da Queixa *</Label>
+              <Textarea rows={2} value={form.confirmacaoQueixa}
+                onChange={e => setForm(p => ({ ...p, confirmacaoQueixa: e.target.value }))}
+                placeholder="Confirme e detalhe a queixa do paciente..." />
             </div>
 
             <div>
-              <Label>Condição Clínica Geral *</Label>
-              <Textarea rows={2} value={form.condicao_clinica}
-                onChange={e => setForm(p => ({ ...p, condicao_clinica: e.target.value }))}
+              <Label>Histórico da Doença Atual *</Label>
+              <Textarea rows={2} value={form.historicoDoenca}
+                onChange={e => setForm(p => ({ ...p, historicoDoenca: e.target.value }))}
+                placeholder="Histórico e evolução da doença..." />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Comorbidades</Label>
+                <Textarea rows={2} value={form.comorbidades}
+                  onChange={e => setForm(p => ({ ...p, comorbidades: e.target.value }))}
+                  placeholder="Comorbidades conhecidas..." />
+              </div>
+              <div>
+                <Label>Uso de Medicamentos</Label>
+                <Textarea rows={2} value={form.usoMedicamentos}
+                  onChange={e => setForm(p => ({ ...p, usoMedicamentos: e.target.value }))}
+                  placeholder="Medicamentos em uso..." />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Alergias</Label>
+                <Input value={form.alergias}
+                  onChange={e => setForm(p => ({ ...p, alergias: e.target.value }))}
+                  placeholder="Alergias conhecidas" />
+              </div>
+              <div>
+                <Label>Limitações Funcionais</Label>
+                <Input value={form.limitacoesFuncionais}
+                  onChange={e => setForm(p => ({ ...p, limitacoesFuncionais: e.target.value }))}
+                  placeholder="Limitações funcionais" />
+              </div>
+            </div>
+
+            <div>
+              <Label>Avaliação Geral do Estado *</Label>
+              <Textarea rows={2} value={form.estadoGeral}
+                onChange={e => setForm(p => ({ ...p, estadoGeral: e.target.value }))}
                 placeholder="Estado geral do paciente..." />
             </div>
 
+            {/* ══ AVALIAÇÃO FUNCIONAL ══ */}
+            <h3 className="text-sm font-semibold text-primary border-b pb-1">Avaliação Funcional</h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Mobilidade</Label>
+                <Select value={form.mobilidade} onValueChange={v => setForm(p => ({ ...p, mobilidade: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="independente">Independente</SelectItem>
+                    <SelectItem value="semi_dependente">Semi-dependente</SelectItem>
+                    <SelectItem value="dependente">Dependente</SelectItem>
+                    <SelectItem value="acamado">Acamado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Comunicação</Label>
+                <Select value={form.comunicacao} onValueChange={v => setForm(p => ({ ...p, comunicacao: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="verbal">Verbal adequada</SelectItem>
+                    <SelectItem value="verbal_limitada">Verbal limitada</SelectItem>
+                    <SelectItem value="nao_verbal">Não verbal</SelectItem>
+                    <SelectItem value="caa">Usa CAA</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Alimentação</Label>
+                <Select value={form.alimentacao} onValueChange={v => setForm(p => ({ ...p, alimentacao: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="independente">Independente</SelectItem>
+                    <SelectItem value="assistida">Assistida</SelectItem>
+                    <SelectItem value="sonda">Sonda</SelectItem>
+                    <SelectItem value="parenteral">Parenteral</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Autonomia</Label>
+                <Select value={form.autonomia} onValueChange={v => setForm(p => ({ ...p, autonomia: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="total">Total</SelectItem>
+                    <SelectItem value="parcial">Parcial</SelectItem>
+                    <SelectItem value="dependente">Dependente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* ══ ANÁLISE DO ENCAMINHAMENTO ══ */}
+            <h3 className="text-sm font-semibold text-primary border-b pb-1">Análise do Encaminhamento</h3>
+
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+              <Checkbox
+                checked={form.validarEspecialidade}
+                onCheckedChange={(v) => setForm(p => ({ ...p, validarEspecialidade: !!v, especialidadeAjustada: '', justificativaAlteracao: '' }))}
+                id="validar-esp"
+              />
+              <Label htmlFor="validar-esp" className="cursor-pointer">
+                Validar especialidade do encaminhamento ({espLabel || 'não definida'})
+              </Label>
+            </div>
+
+            {!form.validarEspecialidade && (
+              <div className="space-y-3 pl-3 border-l-2 border-warning/50">
+                <div>
+                  <Label>Nova Especialidade *</Label>
+                  <Select value={form.especialidadeAjustada} onValueChange={v => setForm(p => ({ ...p, especialidadeAjustada: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fisioterapia">Fisioterapia</SelectItem>
+                      <SelectItem value="fonoaudiologia">Fonoaudiologia</SelectItem>
+                      <SelectItem value="nutricao">Nutrição</SelectItem>
+                      <SelectItem value="psicologia">Psicologia</SelectItem>
+                      <SelectItem value="terapia_ocupacional">Terapia Ocupacional</SelectItem>
+                      <SelectItem value="outros">Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Justificativa da Alteração *</Label>
+                  <Textarea rows={2} value={form.justificativaAlteracao}
+                    onChange={e => setForm(p => ({ ...p, justificativaAlteracao: e.target.value }))}
+                    placeholder="Justifique a alteração da especialidade..." />
+                </div>
+              </div>
+            )}
+
+            {/* Risk + Priority */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Avaliação de Risco *</Label>
@@ -406,18 +579,19 @@ const AvaliacaoEnfermagem: React.FC = () => {
                 placeholder="Observações clínicas relevantes..." />
             </div>
 
+            {/* ══ CONDUTA ══ */}
             <div>
-              <Label className="text-base font-semibold">Resultado da Avaliação *</Label>
+              <Label className="text-base font-semibold">Conduta *</Label>
               <div className="grid grid-cols-3 gap-2 mt-2">
                 <Button type="button" variant={form.resultado === 'apto' ? 'default' : 'outline'}
                   className={form.resultado === 'apto' ? 'bg-success hover:bg-success/90 text-success-foreground' : ''}
-                  onClick={() => setForm(p => ({ ...p, resultado: 'apto', motivo_inapto: '' }))}>
+                  onClick={() => setForm(p => ({ ...p, resultado: 'apto', motivo_inapto: '', multiEspecialidades: [] }))}>
                   <CheckCircle className="w-4 h-4 mr-1" /> APTO
                 </Button>
                 <Button type="button" variant={form.resultado === 'inapto' ? 'default' : 'outline'}
                   className={form.resultado === 'inapto' ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground' : ''}
-                  onClick={() => setForm(p => ({ ...p, resultado: 'inapto' }))}>
-                  <XCircle className="w-4 h-4 mr-1" /> INAPTO
+                  onClick={() => setForm(p => ({ ...p, resultado: 'inapto', multiEspecialidades: [] }))}>
+                  <XCircle className="w-4 h-4 mr-1" /> NÃO APTO
                 </Button>
                 <Button type="button" variant={form.resultado === 'multiprofissional' ? 'default' : 'outline'}
                   className={form.resultado === 'multiprofissional' ? 'bg-warning hover:bg-warning/90 text-warning-foreground' : ''}
@@ -429,10 +603,34 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
             {form.resultado === 'inapto' && (
               <div>
-                <Label>Motivo da Inaptidão *</Label>
+                <Label>Justificativa da Inaptidão *</Label>
                 <Textarea rows={2} value={form.motivo_inapto}
                   onChange={e => setForm(p => ({ ...p, motivo_inapto: e.target.value }))}
                   placeholder="Justifique a inaptidão do paciente..." />
+              </div>
+            )}
+
+            {form.resultado === 'multiprofissional' && (
+              <div className="space-y-2">
+                <Label>Especialidades para Avaliação Multiprofissional *</Label>
+                <div className="space-y-2">
+                  {MULTI_ESPECIALIDADES.map(esp => (
+                    <div key={esp.value} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={form.multiEspecialidades.includes(esp.value)}
+                        onCheckedChange={(checked) => {
+                          setForm(p => ({
+                            ...p,
+                            multiEspecialidades: checked
+                              ? [...p.multiEspecialidades, esp.value]
+                              : p.multiEspecialidades.filter(e => e !== esp.value),
+                          }));
+                        }}
+                      />
+                      <Label className="text-sm cursor-pointer">{esp.label}</Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

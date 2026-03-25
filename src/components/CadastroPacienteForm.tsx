@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { supabase } from '@/integrations/supabase/client';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { User, Building2, Stethoscope, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Upload, User, Building2, Stethoscope } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+const ESPECIALIDADES_DESTINO = [
+  { value: 'fisioterapia', label: 'Fisioterapia' },
+  { value: 'fonoaudiologia', label: 'Fonoaudiologia' },
+  { value: 'nutricao', label: 'Nutrição' },
+  { value: 'psicologia', label: 'Psicologia' },
+  { value: 'terapia_ocupacional', label: 'Terapia Ocupacional' },
+  { value: 'outros', label: 'Outros' },
+];
 
 const MUNICIPIOS = [
   'Oriximiná', 'Óbidos', 'Terra Santa', 'Faro', 'Juruti',
@@ -38,6 +46,7 @@ export interface PacienteFormData {
   nomeResponsavel: string;
   cpfResponsavel: string;
   // Bloco 2 - Encaminhamento
+  especialidadeDestino: string;
   ubsOrigem: string;
   profissionalSolicitante: string;
   tipoEncaminhamento: string;
@@ -69,6 +78,7 @@ export interface PacienteFormData {
 export const emptyPacienteForm: PacienteFormData = {
   nome: '', dataNascimento: '', cpf: '', cns: '', telefone: '', municipio: '',
   menorIdade: false, nomeResponsavel: '', cpfResponsavel: '',
+  especialidadeDestino: '',
   ubsOrigem: '', profissionalSolicitante: '', tipoEncaminhamento: '', cid: '',
   diagnosticoResumido: '', justificativa: '', dataEncaminhamento: '', documentoUrl: '',
   tipoCondicao: '', mobilidade: '', usaDispositivo: false, tipoDispositivo: '',
@@ -188,6 +198,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           <Building2 className="w-4 h-4" /> Encaminhamento (UBS)
         </div>
 
+        {/* ESPECIALIDADE DESTINO — OBRIGATÓRIO */}
+        <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+          <Label className="text-base font-semibold text-primary">Especialidade Destino *</Label>
+          <p className="text-xs text-muted-foreground mb-2">Define todo o fluxo do paciente no sistema</p>
+          <Select value={form.especialidadeDestino || ''} onValueChange={v => set('especialidadeDestino', v)}>
+            <SelectTrigger className="border-primary/30"><SelectValue placeholder="Selecione a especialidade" /></SelectTrigger>
+            <SelectContent>
+              {ESPECIALIDADES_DESTINO.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {errors.especialidadeDestino && <p className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label>UBS origem *</Label>
@@ -204,14 +227,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             <Input value={form.profissionalSolicitante} onChange={e => set('profissionalSolicitante', e.target.value)} placeholder="Nome do profissional" />
           </div>
           <div>
-            <Label>Tipo *</Label>
+            <Label>Tipo encaminhamento</Label>
             <Select value={form.tipoEncaminhamento || ''} onValueChange={v => set('tipoEncaminhamento', v)}>
               <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="fisioterapia">Fisioterapia</SelectItem>
-                <SelectItem value="fonoaudiologia">Fonoaudiologia</SelectItem>
-                <SelectItem value="terapia_ocupacional">Terapia Ocupacional</SelectItem>
-                <SelectItem value="psicologia">Psicologia</SelectItem>
+                <SelectItem value="ubs">UBS</SelectItem>
+                <SelectItem value="hospital">Hospital</SelectItem>
+                <SelectItem value="caps">CAPS</SelectItem>
+                <SelectItem value="espontaneo">Espontâneo</SelectItem>
                 <SelectItem value="outro">Outro</SelectItem>
               </SelectContent>
             </Select>
@@ -280,22 +303,23 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               <Select value={form.mobilidade || ''} onValueChange={v => set('mobilidade', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="independente">Independente</SelectItem>
-                  <SelectItem value="apoio">Apoio</SelectItem>
-                  <SelectItem value="cadeirante">Cadeirante</SelectItem>
+                  <SelectItem value="deambula">Deambula</SelectItem>
+                  <SelectItem value="cadeira_rodas">Cadeira de rodas</SelectItem>
                   <SelectItem value="acamado">Acamado</SelectItem>
+                  <SelectItem value="muleta_andador">Muleta/Andador</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <Switch checked={form.usaDispositivo} onCheckedChange={v => set('usaDispositivo', v)} id="dispositivo" />
-                <Label htmlFor="dispositivo" className="text-sm cursor-pointer">Usa dispositivo?</Label>
-              </div>
-              {form.usaDispositivo && (
-                <Input value={form.tipoDispositivo} onChange={e => set('tipoDispositivo', e.target.value)} placeholder="Cadeira de rodas, muleta, órtese..." />
-              )}
+            <div className="flex items-center gap-3">
+              <Switch checked={form.usaDispositivo} onCheckedChange={v => set('usaDispositivo', v)} id="dispositivo" />
+              <Label htmlFor="dispositivo" className="text-sm cursor-pointer">Usa dispositivo?</Label>
             </div>
+            {form.usaDispositivo && (
+              <div>
+                <Label>Tipo de dispositivo</Label>
+                <Input value={form.tipoDispositivo} onChange={e => set('tipoDispositivo', e.target.value)} placeholder="Descreva" />
+              </div>
+            )}
           </div>
         )}
 
@@ -307,9 +331,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               <Select value={form.comunicacao || ''} onValueChange={v => set('comunicacao', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="parcial">Parcial</SelectItem>
+                  <SelectItem value="verbal">Verbal</SelectItem>
                   <SelectItem value="nao_verbal">Não verbal</SelectItem>
+                  <SelectItem value="verbal_limitada">Verbal limitada</SelectItem>
+                  <SelectItem value="caa">Usa CAA</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -318,9 +343,11 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               <Select value={form.comportamento || ''} onValueChange={v => set('comportamento', v)}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="calmo">Calmo</SelectItem>
-                  <SelectItem value="agitado">Agitado</SelectItem>
-                  <SelectItem value="agressivo">Agressivo</SelectItem>
+                  <SelectItem value="adequado">Adequado</SelectItem>
+                  <SelectItem value="agitacao">Agitação</SelectItem>
+                  <SelectItem value="autolesao">Autolesão</SelectItem>
+                  <SelectItem value="fuga">Fuga</SelectItem>
+                  <SelectItem value="agressividade">Agressividade</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -328,78 +355,82 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         )}
       </div>
 
-      {/* ═══ ACCORDION — CAMPOS EXTRAS ═══ */}
-      <Accordion type="single" collapsible className="border-t pt-1">
-        <AccordionItem value="equipamentos" className="border-b-0">
-          <AccordionTrigger className="py-2 text-sm hover:no-underline">Equipamentos e informações adicionais</AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-4">
-              {/* Equipamentos */}
-              <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
-                <Switch checked={form.usaEquipamentos} onCheckedChange={v => set('usaEquipamentos', v)} id="equip" />
-                <Label htmlFor="equip" className="text-sm cursor-pointer">Usa equipamentos?</Label>
-              </div>
-              {form.usaEquipamentos && (
-                <div className="space-y-2 pl-2 border-l-2 border-primary/20">
-                  <div className="flex flex-wrap gap-3">
-                    {EQUIPAMENTOS_OPTIONS.map(eq => (
-                      <label key={eq} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                        <Checkbox checked={form.equipamentos.includes(eq)} onCheckedChange={() => toggleEquipamento(eq)} />
-                        {eq}
-                      </label>
-                    ))}
-                  </div>
-                  <Input value={form.observacaoEquipamentos} onChange={e => set('observacaoEquipamentos', e.target.value)} placeholder="Observação sobre equipamentos" />
+      {/* ═══ BLOCO EXTRA (Accordion) ═══ */}
+      <Accordion type="single" collapsible>
+        <AccordionItem value="extra">
+          <AccordionTrigger className="text-sm font-semibold text-primary">Dados adicionais</AccordionTrigger>
+          <AccordionContent className="space-y-3">
+            {/* Equipamentos */}
+            <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
+              <Switch checked={form.usaEquipamentos} onCheckedChange={v => set('usaEquipamentos', v)} id="equip" />
+              <Label htmlFor="equip" className="text-sm cursor-pointer">Usa equipamentos?</Label>
+            </div>
+            {form.usaEquipamentos && (
+              <div className="space-y-2 pl-2 border-l-2 border-primary/20">
+                <div className="flex flex-wrap gap-2">
+                  {EQUIPAMENTOS_OPTIONS.map(eq => (
+                    <Button key={eq} size="sm" variant={form.equipamentos.includes(eq) ? 'default' : 'outline'}
+                      onClick={() => toggleEquipamento(eq)} className="text-xs">{eq}</Button>
+                  ))}
                 </div>
-              )}
+                <Textarea value={form.observacaoEquipamentos} onChange={e => set('observacaoEquipamentos', e.target.value)}
+                  placeholder="Observações sobre equipamentos" className="min-h-[40px]" />
+              </div>
+            )}
 
-              {/* Info rápidas */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
-                  <Switch checked={form.outroServicoSus} onCheckedChange={v => set('outroServicoSus', v)} id="sus" />
-                  <Label htmlFor="sus" className="text-sm cursor-pointer">Outro serviço SUS?</Label>
-                </div>
-                <div>
-                  <Label>Transporte</Label>
-                  <Select value={form.transporte || ''} onValueChange={v => set('transporte', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="proprio">Próprio</SelectItem>
-                      <SelectItem value="ambulancia">Ambulância</SelectItem>
-                      <SelectItem value="onibus">Ônibus</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Turno preferido</Label>
-                  <Select value={form.turnoPreferido || ''} onValueChange={v => set('turnoPreferido', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manha">Manhã</SelectItem>
-                      <SelectItem value="tarde">Tarde</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* Transporte + Turno */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Transporte</Label>
+                <Select value={form.transporte || ''} onValueChange={v => set('transporte', v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="proprio">Próprio</SelectItem>
+                    <SelectItem value="familiar">Familiar</SelectItem>
+                    <SelectItem value="transporte_municipal">Municipal</SelectItem>
+                    <SelectItem value="samu">SAMU</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              <div>
+                <Label>Turno preferido</Label>
+                <Select value={form.turnoPreferido || ''} onValueChange={v => set('turnoPreferido', v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manha">Manhã</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="indiferente">Indiferente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-              {/* Contato extras */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <Label>E-mail (opcional)</Label>
-                  <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="paciente@email.com" />
-                </div>
-                <div>
-                  <Label>Endereço</Label>
-                  <Input value={form.endereco} onChange={e => set('endereco', e.target.value)} placeholder="Endereço completo" />
-                </div>
+            {/* Email + Endereço */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>E-mail</Label>
+                <Input value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@exemplo.com" />
               </div>
+              <div>
+                <Label>Endereço</Label>
+                <Input value={form.endereco} onChange={e => set('endereco', e.target.value)} placeholder="Rua, nº, bairro" />
+              </div>
+            </div>
+
+            {/* Outro serviço SUS */}
+            <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
+              <Switch checked={form.outroServicoSus} onCheckedChange={v => set('outroServicoSus', v)} id="outro-sus" />
+              <Label htmlFor="outro-sus" className="text-sm cursor-pointer">Paciente em outro serviço SUS?</Label>
             </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
 
-      <Button onClick={onSave} className="w-full gradient-primary text-primary-foreground" disabled={saving}>
-        {saving ? 'Salvando...' : isEdit ? 'Atualizar' : 'Cadastrar'}
+      {/* Save button */}
+      <Button className="w-full" onClick={onSave} disabled={saving}>
+        {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+        {isEdit ? 'Atualizar Paciente' : 'Cadastrar Paciente'}
       </Button>
     </div>
   );
