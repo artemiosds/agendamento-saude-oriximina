@@ -244,6 +244,7 @@ const FilaEspera: React.FC = () => {
       .filter(f => filterUnidade === 'all' || f.unidadeId === filterUnidade)
       .filter(f => filterProf === 'all' || f.profissionalId === filterProf)
       .filter(f => filterStatus === 'all' || f.status === filterStatus)
+      .filter(f => filterEspecialidade === 'all' || (f as any).especialidadeDestino === filterEspecialidade)
       .sort((a, b) => {
         if (sortField === 'prioridade') {
           if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
