@@ -25,6 +25,8 @@ const menuItems = [
   { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: CalendarClock, roles: ['master', 'coordenador'] },
   { to: '/painel/bloqueios', label: 'Feriados/Bloqueios', icon: CalendarClock, roles: ['master', 'coordenador', 'recepcao'] },
   { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, roles: ['master', 'coordenador', 'tecnico'] },
+  { to: '/painel/enfermagem', label: 'Avaliação Enfermagem', icon: Stethoscope, roles: ['master', 'coordenador', 'profissional'] },
+  { to: '/painel/pts', label: 'PTS', icon: FileText, roles: ['master', 'coordenador', 'profissional'] },
   { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
   { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ];
