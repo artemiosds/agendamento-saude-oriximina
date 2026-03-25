@@ -254,6 +254,7 @@ const Pacientes: React.FC = () => {
         });
 
         await refreshPacientes();
+        await refreshFila();
         toast.success('Paciente cadastrado e adicionado à fila de espera!');
       }
       setDialogOpen(false);
