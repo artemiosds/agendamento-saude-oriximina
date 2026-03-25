@@ -25,7 +25,7 @@ import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from '@/com
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes } = useData();
+  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes, refreshFila } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
