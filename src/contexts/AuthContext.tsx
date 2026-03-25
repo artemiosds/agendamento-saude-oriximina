@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (usuario: string, senha: string) => Promise<{ success: boolean; error?: string }>;
+  login: (usuario: string, senha: string) => Promise<{ success: boolean; error?: string; role?: string }>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
 }
@@ -159,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await logAuthAction('login_sucesso', loggedUser);
       }
 
-      return { success: true };
+      return { success: true, role: data?.user?.role || 'recepcao' };
     } catch (err) {
       console.error('Login error:', err);
       await logAuthAction('login_falha', null, { usuario_tentado: usuario.trim(), erro: 'Erro ao conectar ao servidor.' });

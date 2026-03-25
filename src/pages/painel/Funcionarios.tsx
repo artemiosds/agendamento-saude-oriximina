@@ -17,12 +17,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 
 const roleLabels: Record<UserRole, string> = {
-  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional', gestao: 'Gestão', tecnico: 'Técnico de Enfermagem',
+  master: 'Master', coordenador: 'Coordenador', recepcao: 'Recepção', profissional: 'Profissional de Saúde', gestao: 'Gestão', tecnico: 'Triagem', enfermagem: 'Enfermagem',
 };
 const roleColors: Record<UserRole, string> = {
   master: 'bg-destructive/10 text-destructive', coordenador: 'bg-warning/10 text-warning',
   recepcao: 'bg-info/10 text-info', profissional: 'bg-success/10 text-success', gestao: 'bg-accent text-accent-foreground',
-  tecnico: 'bg-primary/10 text-primary',
+  tecnico: 'bg-primary/10 text-primary', enfermagem: 'bg-purple-100 text-purple-700',
 };
 
 interface FuncionarioDB {
@@ -260,15 +260,17 @@ const Funcionarios: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Cargo</Label><Input value={form.cargo} onChange={e => setForm(p => ({ ...p, cargo: e.target.value }))} /></div>
-              <div><Label>Perfil</Label>
+              <div><Label>Perfil do Usuário *</Label>
                 <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as UserRole }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione o perfil" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="master">Master</SelectItem>
+                    <SelectItem value="gestao">Gestão</SelectItem>
                     <SelectItem value="coordenador">Coordenador</SelectItem>
                     <SelectItem value="recepcao">Recepção</SelectItem>
-                    <SelectItem value="profissional">Profissional</SelectItem>
-                    <SelectItem value="tecnico">Técnico de Enfermagem</SelectItem>
-                    <SelectItem value="gestao">Gestão</SelectItem>
+                    <SelectItem value="tecnico">Triagem</SelectItem>
+                    <SelectItem value="enfermagem">Enfermagem</SelectItem>
+                    <SelectItem value="profissional">Profissional de Saúde</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
