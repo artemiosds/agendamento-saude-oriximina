@@ -232,7 +232,26 @@ const AvaliacaoEnfermagem: React.FC = () => {
           .eq('id', selected.pacienteId);
       }
 
-      // NO auto-prontuário — nursing evaluation saved in nursing_evaluations table
+      // Register prontuário entry as "AVALIAÇÃO DE ENFERMAGEM"
+      const profNome = user?.nome || 'Enfermeiro(a)';
+      await (supabase as any).from('prontuarios').insert({
+        paciente_id: selected.pacienteId,
+        paciente_nome: selected.pacienteNome,
+        profissional_id: user?.id || '',
+        profissional_nome: profNome,
+        unidade_id: user?.unidadeId || '',
+        agendamento_id: selected.id,
+        tipo_registro: 'avaliacao_enfermagem',
+        data_atendimento: new Date().toISOString().split('T')[0],
+        hora_atendimento: new Date().toTimeString().slice(0, 5),
+        queixa_principal: form.confirmacaoQueixa,
+        anamnese: form.historicoDoenca,
+        sinais_sintomas: `Comorbidades: ${form.comorbidades || 'N/A'}\nMedicamentos: ${form.usoMedicamentos || 'N/A'}\nAlergias: ${form.alergias || 'N/A'}\nLimitações: ${form.limitacoesFuncionais || 'N/A'}`,
+        exame_fisico: `Estado Geral: ${form.estadoGeral}\nMobilidade: ${form.mobilidade || 'N/A'}\nComunicação: ${form.comunicacao || 'N/A'}\nAlimentação: ${form.alimentacao || 'N/A'}\nAutonomia: ${form.autonomia || 'N/A'}`,
+        hipotese: `Avaliação de Risco: ${form.avaliacao_risco}\nPrioridade: ${form.prioridade}`,
+        conduta: `Resultado: ${form.resultado === 'apto' ? 'APTO PARA AVALIAÇÃO' : form.resultado === 'multiprofissional' ? 'NECESSITA AVALIAÇÃO MULTIPROFISSIONAL' : 'INAPTO'}${form.motivo_inapto ? '\nMotivo: ' + form.motivo_inapto : ''}`,
+        observacoes: form.observacoes_clinicas,
+      });
 
       // Update appointment status based on result
       let newStatus = '';

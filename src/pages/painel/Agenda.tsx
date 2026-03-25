@@ -75,6 +75,10 @@ const statusLabels: Record<string, string> = {
   em_atendimento: "Em Atendimento",
   aguardando_triagem: "Aguard. Triagem",
   aguardando_atendimento: "Aguard. Atendimento",
+  aguardando_enfermagem: "Aguard. Enfermagem",
+  apto_agendamento: "Apto p/ Agendamento",
+  aguardando_multiprofissional: "Aguard. Multiprofissional",
+  indeferido: "Indeferido",
 };
 
 const statusBadgeClass: Record<string, string> = {
@@ -89,6 +93,10 @@ const statusBadgeClass: Record<string, string> = {
   em_atendimento: "bg-primary/10 text-primary",
   aguardando_triagem: "bg-warning/10 text-warning",
   aguardando_atendimento: "bg-emerald-500/10 text-emerald-600",
+  aguardando_enfermagem: "bg-orange-500/10 text-orange-600",
+  apto_agendamento: "bg-success/10 text-success",
+  aguardando_multiprofissional: "bg-purple-500/10 text-purple-600",
+  indeferido: "bg-destructive/10 text-destructive",
 };
 
 const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {

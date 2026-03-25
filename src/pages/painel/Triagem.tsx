@@ -229,7 +229,34 @@ const Triagem: React.FC = () => {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
 
-      // NO auto-prontuário — triagem fica salva no histórico clínico via triage_records
+      // Register prontuário entry as "TRIAGEM INICIAL"
+      const profissional = user?.nome || 'Técnico';
+      await (supabase as any).from('prontuarios').insert({
+        paciente_id: selectedAg.pacienteId,
+        paciente_nome: selectedAg.pacienteNome,
+        profissional_id: user?.id || '',
+        profissional_nome: profissional,
+        unidade_id: selectedAg.unidadeId,
+        agendamento_id: selectedAg.id,
+        tipo_registro: 'triagem',
+        data_atendimento: new Date().toISOString().split('T')[0],
+        hora_atendimento: new Date().toTimeString().slice(0, 5),
+        queixa_principal: form.queixaPrincipal || '',
+        sinais_sintomas: [
+          `PA: ${form.pressaoArterial}`,
+          `FC: ${form.frequenciaCardiaca} bpm`,
+          `Temp: ${form.temperatura} °C`,
+          `SpO₂: ${form.saturacaoOxigenio}%`,
+          `Peso: ${form.peso} kg`,
+          `Altura: ${form.altura} m`,
+          imc ? `IMC: ${imc.value} (${imc.label})` : '',
+          `Glicemia: ${form.glicemia || 'N/A'}`,
+          `Dor: ${form.dor}/10`,
+        ].filter(Boolean).join(' | '),
+        observacoes: form.observacoes,
+        conduta: `Classificação de Risco: ${form.classificacaoRisco.toUpperCase()}`,
+        evolucao: `Alergias: ${form.alergias.join(', ') || 'Nenhuma'}\nMedicamentos: ${form.medicamentos.join(', ') || 'Nenhum'}`,
+      });
 
       await (supabase as any).from('agendamentos').update({ status: 'aguardando_enfermagem' }).eq('id', selectedAg.id);
 
