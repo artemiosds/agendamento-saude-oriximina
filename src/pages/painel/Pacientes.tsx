@@ -152,6 +152,7 @@ const Pacientes: React.FC = () => {
       nome: p.nome, cpf: p.cpf, cns: p.cns || '', nomeMae: p.nomeMae || '',
       telefone: p.telefone, dataNascimento: p.dataNascimento, email: p.email,
       endereco: p.endereco || '', descricaoClinica: p.descricaoClinica || '', cid: p.cid || '',
+      especialidadeDestino: (p as any).especialidade_destino || '',
       municipio: (p as any).municipio || '', menorIdade: (p as any).menor_idade || false,
       nomeResponsavel: (p as any).nome_responsavel || '', cpfResponsavel: (p as any).cpf_responsavel || '',
       ubsOrigem: (p as any).ubs_origem || '', profissionalSolicitante: (p as any).profissional_solicitante || '',
@@ -174,6 +175,7 @@ const Pacientes: React.FC = () => {
     if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
     if (!form.cpf.trim()) newErrors.cpf = 'CPF é obrigatório';
     if (!form.telefone.trim()) newErrors.telefone = 'Telefone é obrigatório';
+    if (!form.especialidadeDestino) newErrors.especialidadeDestino = 'Especialidade destino é obrigatória';
     if (!form.ubsOrigem) newErrors.ubsOrigem = 'UBS origem é obrigatória';
     if (!form.cid.trim()) newErrors.cid = 'CID é obrigatório';
     if (!form.justificativa.trim()) newErrors.justificativa = 'Justificativa é obrigatória';
@@ -193,6 +195,7 @@ const Pacientes: React.FC = () => {
       nome: form.nome, cpf: form.cpf, cns: form.cns, nome_mae: form.nomeMae,
       telefone: form.telefone, data_nascimento: form.dataNascimento, email: form.email,
       endereco: form.endereco, descricao_clinica: form.descricaoClinica || form.diagnosticoResumido, cid: form.cid,
+      especialidade_destino: form.especialidadeDestino,
       municipio: form.municipio, menor_idade: form.menorIdade,
       nome_responsavel: form.nomeResponsavel, cpf_responsavel: form.cpfResponsavel,
       ubs_origem: form.ubsOrigem, profissional_solicitante: form.profissionalSolicitante,
