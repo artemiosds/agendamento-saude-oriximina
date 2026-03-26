@@ -899,6 +899,9 @@ ${dataRows}
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
           <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
+          <TabsTrigger value="enfermagem" className="text-xs">Enfermagem</TabsTrigger>
+          <TabsTrigger value="multiprofissional" className="text-xs">Multiprofissional</TabsTrigger>
+          <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
           <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
         </TabsList>
