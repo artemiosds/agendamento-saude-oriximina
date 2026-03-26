@@ -556,6 +556,51 @@ const Relatorios: React.FC = () => {
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
 
+  // === NURSING EVALUATIONS REPORT ===
+  const nursingReport = useMemo(() => {
+    const filteredNursing = nursingEvals.filter((n: any) => {
+      if (filterUnit !== 'all' && n.unit_id !== filterUnit) return false;
+      if (dateFrom && n.evaluation_date < dateFrom) return false;
+      if (dateTo && n.evaluation_date > dateTo) return false;
+      return true;
+    });
+    const total = filteredNursing.length;
+    const aptos = filteredNursing.filter((n: any) => n.resultado === 'apto').length;
+    const inaptos = filteredNursing.filter((n: any) => n.resultado === 'inapto').length;
+    const multiprof = filteredNursing.filter((n: any) => n.resultado === 'multiprofissional').length;
+    const byPriority: Record<string, number> = {};
+    filteredNursing.forEach((n: any) => { byPriority[n.prioridade || 'media'] = (byPriority[n.prioridade || 'media'] || 0) + 1; });
+    return { total, aptos, inaptos, multiprof, byPriority: Object.entries(byPriority).map(([k, v]) => ({ nome: k === 'alta' ? 'Alta' : k === 'media' ? 'Média' : 'Baixa', total: v })) };
+  }, [nursingEvals, filterUnit, dateFrom, dateTo]);
+
+  // === MULTIPROFESSIONAL EVALUATIONS REPORT ===
+  const multiReport = useMemo(() => {
+    const filteredMulti = multiEvals.filter((m: any) => {
+      if (filterUnit !== 'all' && m.unit_id !== filterUnit) return false;
+      if (dateFrom && m.evaluation_date < dateFrom) return false;
+      if (dateTo && m.evaluation_date > dateTo) return false;
+      return true;
+    });
+    const total = filteredMulti.length;
+    const bySpecialty: Record<string, number> = {};
+    filteredMulti.forEach((m: any) => { bySpecialty[m.specialty || 'Outros'] = (bySpecialty[m.specialty || 'Outros'] || 0) + 1; });
+    const byParecer: Record<string, number> = {};
+    filteredMulti.forEach((m: any) => { byParecer[m.parecer || 'favoravel'] = (byParecer[m.parecer || 'favoravel'] || 0) + 1; });
+    return { total, bySpecialty: Object.entries(bySpecialty).map(([k, v]) => ({ nome: k, total: v })), byParecer: Object.entries(byParecer).map(([k, v]) => ({ nome: k === 'favoravel' ? 'Favorável' : 'Desfavorável', total: v })) };
+  }, [multiEvals, filterUnit, dateFrom, dateTo]);
+
+  // === PTS REPORT ===
+  const ptsReport = useMemo(() => {
+    const filteredPts = ptsData.filter((p: any) => {
+      if (filterUnit !== 'all' && p.unit_id !== filterUnit) return false;
+      return true;
+    });
+    const total = filteredPts.length;
+    const ativos = filteredPts.filter((p: any) => p.status === 'ativo').length;
+    const concluidos = filteredPts.filter((p: any) => p.status !== 'ativo').length;
+    return { total, ativos, concluidos };
+  }, [ptsData, filterUnit]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
