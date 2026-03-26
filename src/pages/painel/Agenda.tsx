@@ -55,6 +55,7 @@ import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
+import { CalendarioAgenda } from "@/components/Agenda/CalendarioAgenda"; // ← NOVO
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -395,7 +396,14 @@ const Agenda: React.FC = () => {
       observacoes: newAg.obs,
     });
     setDialogOpen(false);
-    setNewAg({ pacienteId: "", profissionalId: filterProf !== "all" ? filterProf : "", salaId: "", hora: "", tipo: "Consulta", obs: "" });
+    setNewAg({
+      pacienteId: "",
+      profissionalId: filterProf !== "all" ? filterProf : "",
+      salaId: "",
+      hora: "",
+      tipo: "Consulta",
+      obs: "",
+    });
   };
 
   // NOVO: aprovar agendamento online
@@ -603,7 +611,10 @@ const Agenda: React.FC = () => {
   };
 
   const handleDeleteAgendamento = async (agId: string) => {
-    if (!can('agenda', 'can_delete')) { toast.error('Sem permissão para excluir.'); return; }
+    if (!can("agenda", "can_delete")) {
+      toast.error("Sem permissão para excluir.");
+      return;
+    }
     try {
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
@@ -878,7 +889,7 @@ const Agenda: React.FC = () => {
                     {newAg.profissionalId && (
                       <SlotInfoBadge
                         profissionalId={newAg.profissionalId}
-                        unidadeId={profissionais.find(p => p.id === newAg.profissionalId)?.unidadeId || ""}
+                        unidadeId={profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || ""}
                         date={selectedDate}
                         hora={newAg.hora}
                         className="mt-1 mb-2"
@@ -1027,20 +1038,29 @@ const Agenda: React.FC = () => {
       {abaAtiva === "agenda" && (
         <>
           <div className="flex items-center gap-3 flex-wrap">
-            <Button variant="outline" size="icon" onClick={() => changeDate(-1)}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-auto"
+            {/* NOVO: componente de calendário no lugar dos botões e input de data */}
+            <CalendarioAgenda
+              selectedDate={selectedDate}
+              onDateChange={(date) => setSelectedDate(date)}
+              agendamentos={agendamentos}
+              bloqueios={bloqueios}
+              disponibilidades={disponibilidades}
+              filterProf={filterProf}
+              filterUnit={filterUnit}
+              profissionais={profissionais}
+              getAvailableSlots={getAvailableSlots}
+              getAvailableDates={getAvailableDates}
+              unidades={unidades}
             />
-            <Button variant="outline" size="icon" onClick={() => changeDate(1)}>
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+
             {!isProfissional && showUnitSelector && (
-              <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterProf("all"); }}>
+              <Select
+                value={filterUnit}
+                onValueChange={(v) => {
+                  setFilterUnit(v);
+                  setFilterProf("all");
+                }}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
@@ -1075,7 +1095,9 @@ const Agenda: React.FC = () => {
           {filterProf !== "all" && (
             <SlotInfoBadge
               profissionalId={filterProf}
-              unidadeId={filterUnit !== "all" ? filterUnit : (profissionais.find(p => p.id === filterProf)?.unidadeId || "")}
+              unidadeId={
+                filterUnit !== "all" ? filterUnit : profissionais.find((p) => p.id === filterProf)?.unidadeId || ""
+              }
               date={selectedDate}
             />
           )}
@@ -1239,7 +1261,11 @@ const Agenda: React.FC = () => {
                         )}
                         {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
                       </div>
-                      <ContactActionButton phone={paciente?.telefone} patientName={ag.pacienteNome} unitName={unidades.find(u => u.id === ag.unidadeId)?.nome} />
+                      <ContactActionButton
+                        phone={paciente?.telefone}
+                        patientName={ag.pacienteNome}
+                        unitName={unidades.find((u) => u.id === ag.unidadeId)?.nome}
+                      />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}
@@ -1432,7 +1458,7 @@ const Agenda: React.FC = () => {
                               <sa.icon className="w-3.5 h-3.5" />
                             </Button>
                           ))}
-                        {can('agenda', 'can_delete') && (
+                        {can("agenda", "can_delete") && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
