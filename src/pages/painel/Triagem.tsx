@@ -105,7 +105,7 @@ const Triagem: React.FC = () => {
       const { data, error } = await (supabase as any)
         .from("fila_espera")
         .select("*")
-        .in("status", ["aguardando", "aguardando_triagem"])
+        .in("status", ["aguardando", "aguard. triagem"])
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
 
