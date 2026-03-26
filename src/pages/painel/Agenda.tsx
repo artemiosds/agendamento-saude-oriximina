@@ -55,7 +55,7 @@ import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
-import { CalendarioAgenda } from "@/components/Agenda/CalendarioAgenda"; // ← NOVO
+import { CalendarioAgenda } from "@/components/Painel/CalendarioAgenda"; // ← NOVO
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
