@@ -112,8 +112,6 @@ const Triagem: React.FC = () => {
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
 
-      console.log("Fila carregada:", data?.length, "itens");
-
       if (data && !error) {
         const mappedData: FilaItem[] = data.map((f: any) => ({
           id: f.id,
@@ -126,7 +124,7 @@ const Triagem: React.FC = () => {
           descricaoClinica: f.descricao_clinica || "",
           prioridade: f.prioridade || "normal",
           horaChegada: f.hora_chegada || "",
-          agendamento_id: f.agendamento_id || undefined,
+          agendamento_id: f.agendamento_id,
         }));
         setFila(mappedData);
       } else if (error) {
@@ -169,7 +167,6 @@ const Triagem: React.FC = () => {
     const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
 
     if (data) {
-      // Usando type assertion para acessar propriedades que podem não estar no tipo
       const triageData = data as any;
       setForm({
         peso: triageData.peso?.toString() || "",
@@ -272,7 +269,6 @@ const Triagem: React.FC = () => {
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
-      // Verificar se agendamento_id existe antes de tentar atualizar
       if (selectedItem.agendamento_id) {
         await supabase
           .from("agendamentos")
