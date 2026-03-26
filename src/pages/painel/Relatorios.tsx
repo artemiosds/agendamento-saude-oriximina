@@ -1677,6 +1677,110 @@ ${dataRows}
             </Card>
           )}
         </TabsContent>
+
+        {/* === ENFERMAGEM === */}
+        <TabsContent value="enfermagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Avaliações', value: nursingReport.total },
+              { label: 'Aptos', value: nursingReport.aptos },
+              { label: 'Inaptos', value: nursingReport.inaptos },
+              { label: 'Multiprofissional', value: nursingReport.multiprof },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {nursingReport.byPriority.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Avaliações por Prioridade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={nursingReport.byPriority} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {nursingReport.byPriority.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === MULTIPROFISSIONAL === */}
+        <TabsContent value="multiprofissional" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-lg font-bold text-foreground">{multiReport.total}</p>
+                <p className="text-[10px] text-muted-foreground">Total Avaliações</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {multiReport.bySpecialty.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Especialidade</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={multiReport.bySpecialty}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" fill="hsl(262, 83%, 58%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+            {multiReport.byParecer.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Parecer</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={multiReport.byParecer} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                        {multiReport.byParecer.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* === PTS === */}
+        <TabsContent value="pts_report" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Total PTS', value: ptsReport.total },
+              { label: 'Ativos', value: ptsReport.ativos },
+              { label: 'Concluídos', value: ptsReport.concluidos },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {ptsReport.total === 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Nenhum PTS registrado no período selecionado.
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
       </Tabs>
     </div>
   );
