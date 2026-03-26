@@ -55,13 +55,7 @@ interface PacienteInfo {
 }
 
 // Status que indicam que o paciente está aguardando triagem
-const STATUS_AGUARDANDO_TRIAGEM = [
-  "aguardando",
-  "aguard. triagem",
-  "aguardando_triagem",
-  "aguardando_triagem",
-  "chegada_confirmada", // Incluir status de chegada confirmada que pode precisar de triagem
-];
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada"];
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
@@ -112,7 +106,7 @@ const Triagem: React.FC = () => {
     setLoading(true);
     try {
       // Buscar todos os status que indicam necessidade de triagem
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("fila_espera")
         .select("*")
         .in("status", STATUS_AGUARDANDO_TRIAGEM)
@@ -138,7 +132,7 @@ const Triagem: React.FC = () => {
             cid: f.cid || "",
             descricaoClinica: f.descricao_clinica || "",
             prioridade: f.prioridade || "normal",
-            horaChegada: f.hora_chegada || f.hora_chegada || "",
+            horaChegada: f.hora_chegada || "",
           })),
         );
       } else if (error) {
@@ -173,7 +167,7 @@ const Triagem: React.FC = () => {
     setStartedAt(new Date().toISOString());
 
     // Load patient info
-    const { data: pacData } = await (supabase as any)
+    const { data: pacData } = await supabase
       .from("pacientes")
       .select("especialidade_destino, cid, justificativa, descricao_clinica, diagnostico_resumido")
       .eq("id", item.pacienteId)
@@ -181,11 +175,7 @@ const Triagem: React.FC = () => {
     setPacienteInfo(pacData || null);
 
     // Check existing triage record
-    const { data } = await (supabase as any)
-      .from("triage_records")
-      .select("*")
-      .eq("agendamento_id", item.id)
-      .maybeSingle();
+    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
 
     if (data) {
       setForm({
@@ -196,12 +186,12 @@ const Triagem: React.FC = () => {
         frequenciaCardiaca: data.frequencia_cardiaca?.toString() || "",
         saturacaoOxigenio: data.saturacao_oxigenio?.toString() || "",
         glicemia: data.glicemia?.toString() || "",
-        dor: 0,
+        dor: data.dor || 0,
         queixaPrincipal: data.queixa || "",
-        classificacaoRisco: "",
+        classificacaoRisco: data.classificacao_risco || "",
         alergias: data.alergias || [],
         medicamentos: data.medicamentos || [],
-        observacoes: "",
+        observacoes: data.observacoes || "",
       });
       setStartedAt(data.iniciado_em || new Date().toISOString());
     } else {
@@ -235,9 +225,12 @@ const Triagem: React.FC = () => {
     frequencia_cardiaca: parseInt(form.frequenciaCardiaca) || null,
     saturacao_oxigenio: parseInt(form.saturacaoOxigenio) || null,
     glicemia: parseFloat(form.glicemia) || null,
+    dor: form.dor,
     alergias: form.alergias,
     medicamentos: form.medicamentos,
     queixa: form.queixaPrincipal || null,
+    classificacao_risco: form.classificacaoRisco,
+    observacoes: form.observacoes,
     iniciado_em: startedAt,
   });
 
@@ -245,9 +238,10 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await (supabase as any).from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
+      await supabase.from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
       toast.success("Rascunho salvo!");
     } catch (err) {
+      console.error("Erro ao salvar rascunho:", err);
       toast.error("Erro ao salvar rascunho.");
     }
     setSaving(false);
@@ -280,16 +274,25 @@ const Triagem: React.FC = () => {
     try {
       // Save triage record (clinical history)
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      await (supabase as any).from("triage_records").upsert(record, { onConflict: "agendamento_id" });
+      await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
 
       // Determine next status based on choice
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
 
-      await (supabase as any).from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
+      // Update fila_espera status
+      await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
+
+      // Also update the agendamento status if linked
+      if (selectedItem.agendamento_id) {
+        await supabase
+          .from("agendamentos")
+          .update({ status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "apto_agendamento" })
+          .eq("id", selectedItem.agendamento_id);
+      }
 
       // If skipping nursing, auto-log that fact
       if (!encaminharEnfermagem) {
-        await (supabase as any).from("nursing_evaluations").insert({
+        await supabase.from("nursing_evaluations").insert({
           patient_id: selectedItem.pacienteId,
           agendamento_id: selectedItem.id,
           professional_id: user?.id || "",
