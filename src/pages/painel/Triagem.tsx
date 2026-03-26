@@ -112,29 +112,23 @@ const Triagem: React.FC = () => {
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
 
-      console.log(
-        "Fila carregada:",
-        data?.length,
-        "itens com status:",
-        data?.map((d) => d.status),
-      );
+      console.log("Fila carregada:", data?.length, "itens");
 
       if (data && !error) {
-        setFila(
-          data.map((f: any) => ({
-            id: f.id,
-            pacienteNome: f.paciente_nome,
-            pacienteId: f.paciente_id,
-            unidadeId: f.unidade_id,
-            criadoEm: f.criado_em || "",
-            especialidadeDestino: f.especialidade_destino || "",
-            cid: f.cid || "",
-            descricaoClinica: f.descricao_clinica || "",
-            prioridade: f.prioridade || "normal",
-            horaChegada: f.hora_chegada || "",
-            agendamento_id: f.agendamento_id,
-          })),
-        );
+        const mappedData: FilaItem[] = data.map((f: any) => ({
+          id: f.id,
+          pacienteNome: f.paciente_nome,
+          pacienteId: f.paciente_id,
+          unidadeId: f.unidade_id,
+          criadoEm: f.criado_em || "",
+          especialidadeDestino: f.especialidade_destino || "",
+          cid: f.cid || "",
+          descricaoClinica: f.descricao_clinica || "",
+          prioridade: f.prioridade || "normal",
+          horaChegada: f.hora_chegada || "",
+          agendamento_id: f.agendamento_id || undefined,
+        }));
+        setFila(mappedData);
       } else if (error) {
         console.error("Erro ao carregar fila:", error);
         toast.error("Erro ao carregar lista de triagem");
@@ -175,22 +169,24 @@ const Triagem: React.FC = () => {
     const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
 
     if (data) {
+      // Usando type assertion para acessar propriedades que podem não estar no tipo
+      const triageData = data as any;
       setForm({
-        peso: data.peso?.toString() || "",
-        altura: data.altura?.toString() || "",
-        pressaoArterial: data.pressao_arterial || "",
-        temperatura: data.temperatura?.toString() || "",
-        frequenciaCardiaca: data.frequencia_cardiaca?.toString() || "",
-        saturacaoOxigenio: data.saturacao_oxigenio?.toString() || "",
-        glicemia: data.glicemia?.toString() || "",
-        dor: (data as any).dor || 0,
-        queixaPrincipal: data.queixa || "",
-        classificacaoRisco: (data as any).classificacao_risco || "",
-        alergias: data.alergias || [],
-        medicamentos: data.medicamentos || [],
-        observacoes: (data as any).observacoes || "",
+        peso: triageData.peso?.toString() || "",
+        altura: triageData.altura?.toString() || "",
+        pressaoArterial: triageData.pressao_arterial || "",
+        temperatura: triageData.temperatura?.toString() || "",
+        frequenciaCardiaca: triageData.frequencia_cardiaca?.toString() || "",
+        saturacaoOxigenio: triageData.saturacao_oxigenio?.toString() || "",
+        glicemia: triageData.glicemia?.toString() || "",
+        dor: triageData.dor || 0,
+        queixaPrincipal: triageData.queixa || "",
+        classificacaoRisco: triageData.classificacao_risco || "",
+        alergias: triageData.alergias || [],
+        medicamentos: triageData.medicamentos || [],
+        observacoes: triageData.observacoes || "",
       });
-      setStartedAt(data.iniciado_em || new Date().toISOString());
+      setStartedAt(triageData.iniciado_em || new Date().toISOString());
     } else {
       setForm({
         peso: "",
@@ -276,6 +272,7 @@ const Triagem: React.FC = () => {
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
+      // Verificar se agendamento_id existe antes de tentar atualizar
       if (selectedItem.agendamento_id) {
         await supabase
           .from("agendamentos")
