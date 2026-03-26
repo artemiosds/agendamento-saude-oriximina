@@ -60,6 +60,9 @@ const Relatorios: React.FC = () => {
   const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
   const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
   const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
+  const [nursingEvals, setNursingEvals] = useState<any[]>([]);
+  const [multiEvals, setMultiEvals] = useState<any[]>([]);
+  const [ptsData, setPtsData] = useState<any[]>([]);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -128,6 +131,16 @@ const Relatorios: React.FC = () => {
         const [{ data: cyclesData }, { data: sessionsData }] = await Promise.all([qCycles, qSessions]);
         if (cyclesData) setTreatmentCycles(cyclesData);
         if (sessionsData) setTreatmentSessions(sessionsData);
+
+        // Load nursing evaluations, multiprofessional evaluations, PTS
+        const [{ data: nursingData }, { data: multiData }, { data: ptsDataResult }] = await Promise.all([
+          supabase.from('nursing_evaluations').select('*'),
+          supabase.from('multiprofessional_evaluations').select('*'),
+          supabase.from('pts').select('*'),
+        ]);
+        if (nursingData) setNursingEvals(nursingData);
+        if (multiData) setMultiEvals(multiData);
+        if (ptsDataResult) setPtsData(ptsDataResult);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
