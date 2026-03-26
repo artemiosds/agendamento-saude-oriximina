@@ -26,6 +26,9 @@ import {
   Calendar,
   CalendarClock,
   AlertTriangle,
+  FileText,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -48,6 +51,7 @@ interface TreatmentCycle {
   created_by: string;
   created_at: string;
   updated_at: string;
+  pts_id: string | null;
 }
 
 interface TreatmentSession {
@@ -78,6 +82,22 @@ interface TreatmentExtension {
   changed_at: string;
 }
 
+interface PTSRecord {
+  id: string;
+  patient_id: string;
+  professional_id: string;
+  unit_id: string;
+  diagnostico_funcional: string;
+  objetivos_terapeuticos: string;
+  metas_curto_prazo: string;
+  metas_medio_prazo: string;
+  metas_longo_prazo: string;
+  especialidades_envolvidas: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const statusColors: Record<string, string> = {
   em_andamento: "bg-success/15 text-success border-success/30",
   aguardando_vaga: "bg-warning/15 text-warning border-warning/30",
@@ -98,7 +118,6 @@ const statusLabels: Record<string, string> = {
 
 const frequencyOptions = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
 
-// Mapeamento de status das sessões
 const sessionStatusColors: Record<string, string> = {
   pendente_agendamento: "bg-warning/10 text-warning",
   agendada: "bg-info/10 text-info",
@@ -123,6 +142,7 @@ const Tratamentos: React.FC = () => {
     funcionarios,
     unidades,
     fila,
+    salas,
     addToFila,
     logAction,
     getAvailableSlots,
@@ -137,35 +157,35 @@ const Tratamentos: React.FC = () => {
   const [sessions, setSessions] = useState<TreatmentSession[]>([]);
   const [extensions, setExtensions] = useState<TreatmentExtension[]>([]);
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
+  const [ptsList, setPtsList] = useState<PTSRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
+  const [ptsVinculado, setPtsVinculado] = useState<PTSRecord | null>(null);
+  const [vincularPtsOpen, setVincularPtsOpen] = useState(false);
+  const [selectedPtsId, setSelectedPtsId] = useState("");
+  const [vinculandoPts, setVinculandoPts] = useState(false);
 
-  // Filters
   const [filterProf, setFilterProf] = useState("all");
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  // Dialogs
   const [createOpen, setCreateOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [dischargeOpen, setDischargeOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TreatmentCycle | null>(null);
 
-  // Agendamento de sessão pendente
   const [agendarSessaoTarget, setAgendarSessaoTarget] = useState<TreatmentSession | null>(null);
   const [agendarSessaoData, setAgendarSessaoData] = useState("");
   const [agendarSessaoHora, setAgendarSessaoHora] = useState("");
   const [agendarSessaoSalaId, setAgendarSessaoSalaId] = useState("");
   const [agendandoSessao, setAgendandoSessao] = useState(false);
 
-  // Remarcar sessão (alterar data)
   const [remarcarTarget, setRemarcarTarget] = useState<TreatmentSession | null>(null);
   const [remarcarData, setRemarcarData] = useState("");
   const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
   const [remarcarSaving, setRemarcarSaving] = useState(false);
 
-  // Forms
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
     professional_id: "",
@@ -176,14 +196,30 @@ const Tratamentos: React.FC = () => {
     frequency: "semanal",
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
+    pts_id: "",
   });
-  const [newSession, setNewSession] = useState({ clinical_notes: "", procedure_done: "", status: "realizada" });
+
+  const [newSession, setNewSession] = useState({
+    clinical_notes: "",
+    procedure_done: "",
+    status: "realizada",
+    absence_type: "",
+  });
+
+  const [soapNotes, setSoapNotes] = useState({
+    subjetivo: "",
+    objetivo: "",
+    avaliacao: "",
+    plano: "",
+  });
+
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
   const canManageFull = hasPermission(["master", "coordenador"]);
   const isProfissional = user?.role === "profissional";
-  const canAgendarSessao = user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
+  const canAgendarSessao =
+    user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -192,16 +228,19 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
-      const [{ data: cData }, { data: sData }, { data: eData }, procsData] = await Promise.all([
+      const [{ data: cData }, { data: sData }, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
         qCycles,
         supabase.from("treatment_sessions").select("*").order("session_number", { ascending: true }),
         supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
         procedureService.getActive(),
+        supabase.from("pts").select("*").order("created_at", { ascending: false }),
       ]);
+
       if (cData) setCycles(cData as TreatmentCycle[]);
       if (sData) setSessions(sData as TreatmentSession[]);
       if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
+      if (ptsData) setPtsList(ptsData as PTSRecord[]);
     } catch (err) {
       console.error("Error loading treatments:", err);
       toast.error("Erro ao carregar dados de tratamento.");
@@ -221,6 +260,107 @@ const Tratamentos: React.FC = () => {
       return true;
     });
   }, [cycles, filterProf, filterUnit, filterStatus]);
+
+  useEffect(() => {
+    if (selectedCycle?.pts_id) {
+      const pts = ptsList.find((p) => p.id === selectedCycle.pts_id);
+      setPtsVinculado(pts || null);
+    } else {
+      setPtsVinculado(null);
+    }
+  }, [selectedCycle, ptsList]);
+
+  const ptsDosPacienteCiclo = useMemo(() => {
+    if (!selectedCycle) return [];
+    return ptsList.filter((pts) => pts.patient_id === selectedCycle.patient_id && pts.status === "ativo");
+  }, [selectedCycle, ptsList]);
+
+  const ptsDisponiveis = useMemo(() => {
+    if (!newCycle.patient_id) return [];
+    return ptsList.filter((pts) => pts.patient_id === newCycle.patient_id && pts.status === "ativo");
+  }, [newCycle.patient_id, ptsList]);
+
+  const faltaStats = useMemo(() => {
+    if (!selectedCycle) return null;
+    const cycleSess = sessions
+      .filter((s) => s.cycle_id === selectedCycle.id)
+      .sort((a, b) => a.session_number - b.session_number);
+    const faltas = cycleSess.filter((s) => s.status === "paciente_faltou");
+    const faltasTotal = faltas.length;
+
+    let maxConsecutivas = 0;
+    let currentStreak = 0;
+    for (const s of cycleSess) {
+      if (s.status === "paciente_faltou") {
+        currentStreak++;
+        maxConsecutivas = Math.max(maxConsecutivas, currentStreak);
+      } else if (s.status === "realizada") {
+        currentStreak = 0;
+      }
+    }
+
+    return {
+      total: faltasTotal,
+      consecutivas: maxConsecutivas,
+      alerta: maxConsecutivas >= 2 ? "consecutivas" : faltasTotal >= 3 ? "alternadas" : null,
+      critico: faltasTotal >= 5,
+    };
+  }, [selectedCycle, sessions]);
+
+  const cycleSessions = useMemo(() => {
+    if (!selectedCycle) return [];
+    return sessions.filter((s) => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
+  }, [selectedCycle, sessions]);
+
+  const cycleExtensions = useMemo(() => {
+    if (!selectedCycle) return [];
+    return extensions.filter((e) => e.cycle_id === selectedCycle.id);
+  }, [selectedCycle, extensions]);
+
+  const agendarSessaoSlots = useMemo(() => {
+    if (!agendarSessaoTarget || !selectedCycle || !agendarSessaoData) return [];
+    return getAvailableSlots(selectedCycle.professional_id, selectedCycle.unit_id, agendarSessaoData);
+  }, [agendarSessaoTarget, selectedCycle, agendarSessaoData, getAvailableSlots]);
+
+  const agendarSessaoDatesDisponiveis = useMemo(() => {
+    if (!agendarSessaoTarget || !selectedCycle) return [];
+    return getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id).filter(
+      (d) => d >= new Date().toISOString().split("T")[0],
+    );
+  }, [agendarSessaoTarget, selectedCycle, getAvailableDates]);
+
+  const salasDisponiveis = useMemo(() => {
+    if (!selectedCycle || !salas) return [];
+    return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
+  }, [selectedCycle, salas]);
+
+  const filteredProcedimentos = useMemo(() => {
+    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
+    const prof = profissionais.find((p) => p.id === profId);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (
+        (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === profId)
+      );
+    });
+  }, [procedimentos, newCycle.professional_id, profissionais, user, isProfissional]);
+
+  const sessionProcedimentos = useMemo(() => {
+    if (!selectedCycle) return procedimentos;
+    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
+    if (!prof?.profissao) return procedimentos;
+    const profNorm = prof.profissao.toLowerCase().trim();
+    return procedimentos.filter((p) => {
+      const pNorm = p.profissao.toLowerCase().trim();
+      return (
+        (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
+        (!p.profissional_id || p.profissional_id === selectedCycle.professional_id)
+      );
+    });
+  }, [procedimentos, selectedCycle, profissionais]);
 
   const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
     const d = new Date(startDate + "T12:00:00");
@@ -252,7 +392,6 @@ const Tratamentos: React.FC = () => {
     const endDate = calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency);
 
     try {
-      // Inserir ciclo
       const { data: cycleData, error: cycleError } = await supabase
         .from("treatment_cycles")
         .insert({
@@ -269,13 +408,13 @@ const Tratamentos: React.FC = () => {
           status: "em_andamento",
           clinical_notes: newCycle.clinical_notes,
           created_by: user?.id || "",
+          pts_id: newCycle.pts_id || null,
         })
         .select()
         .single();
 
       if (cycleError) throw cycleError;
 
-      // Preparar sessões
       const sessionsToCreate = [];
       const startD = new Date(newCycle.start_date + "T12:00:00");
       const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
@@ -291,22 +430,14 @@ const Tratamentos: React.FC = () => {
           session_number: i + 1,
           total_sessions: newCycle.total_sessions,
           scheduled_date: sessionDate.toISOString().split("T")[0],
-          status: "pendente_agendamento", // <--- ESSENCIAL
+          status: "pendente_agendamento",
         });
       }
 
-      // Inserir sessões
-      const { error: sessionsError, data: sessionsData } = await supabase
-        .from("treatment_sessions")
-        .insert(sessionsToCreate)
-        .select();
-
+      const { error: sessionsError } = await supabase.from("treatment_sessions").insert(sessionsToCreate).select();
       if (sessionsError) {
         console.error("Erro ao criar sessões:", sessionsError);
         toast.error("Erro ao criar sessões: " + sessionsError.message);
-        // Mesmo com erro nas sessões, o ciclo foi criado, mas precisamos informar
-      } else {
-        console.log("Sessões criadas:", sessionsData);
       }
 
       await logAction({
@@ -320,6 +451,7 @@ const Tratamentos: React.FC = () => {
           profissional: prof?.nome,
           tipo: newCycle.treatment_type,
           sessoes: newCycle.total_sessions,
+          pts_vinculado: newCycle.pts_id || null,
         },
       });
 
@@ -338,7 +470,6 @@ const Tratamentos: React.FC = () => {
       await supabase.from("treatment_sessions").delete().eq("cycle_id", deleteTarget.id);
       await supabase.from("treatment_extensions").delete().eq("cycle_id", deleteTarget.id);
       await supabase.from("patient_discharges").delete().eq("cycle_id", deleteTarget.id);
-
       const { error } = await supabase.from("treatment_cycles").delete().eq("id", deleteTarget.id);
       if (error) throw error;
 
@@ -356,12 +487,34 @@ const Tratamentos: React.FC = () => {
       loadData();
     } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao excluir ciclo. Verifique se há registros vinculados.");
+      toast.error("Erro ao excluir ciclo.");
     }
   };
 
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
+
+    if (newSession.status === "realizada") {
+      if (
+        !soapNotes.subjetivo?.trim() ||
+        !soapNotes.objetivo?.trim() ||
+        !soapNotes.avaliacao?.trim() ||
+        !soapNotes.plano?.trim()
+      ) {
+        toast.error("Sessão realizada exige preenchimento completo do SOAP (Subjetivo, Objetivo, Avaliação, Plano).");
+        return;
+      }
+      if (!newSession.procedure_done) {
+        toast.error("Selecione o procedimento realizado.");
+        return;
+      }
+    }
+
+    if (newSession.status === "paciente_faltou" && !newSession.absence_type) {
+      toast.error("Informe o tipo de falta (justificada ou injustificada).");
+      return;
+    }
+
     const nextSession = sessions
       .filter((s) => s.cycle_id === selectedCycle.id && ["agendada", "pendente_agendamento"].includes(s.status))
       .sort((a, b) => a.session_number - b.session_number)[0];
@@ -371,13 +524,27 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
+    const clinicalNotesJson =
+      newSession.status === "realizada"
+        ? JSON.stringify({
+            tipo: "soap",
+            subjetivo: soapNotes.subjetivo,
+            objetivo: soapNotes.objetivo,
+            avaliacao: soapNotes.avaliacao,
+            plano: soapNotes.plano,
+            registrado_em: new Date().toISOString(),
+            registrado_por: user?.id,
+          })
+        : newSession.clinical_notes;
+
     try {
       await supabase
         .from("treatment_sessions")
         .update({
           status: newSession.status,
-          clinical_notes: newSession.clinical_notes,
+          clinical_notes: clinicalNotesJson,
           procedure_done: newSession.procedure_done,
+          absence_type: newSession.status === "paciente_faltou" ? newSession.absence_type : null,
         })
         .eq("id", nextSession.id);
 
@@ -398,12 +565,17 @@ const Tratamentos: React.FC = () => {
         entidadeId: nextSession.id,
         modulo: "tratamentos",
         user,
-        detalhes: { ciclo: selectedCycle.id, sessao: nextSession.session_number, status: newSession.status },
+        detalhes: {
+          ciclo: selectedCycle.id,
+          sessao: nextSession.session_number,
+          status: newSession.status,
+        },
       });
 
       toast.success(`Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`);
       setSessionOpen(false);
-      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
+      setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
       loadData();
     } catch (err: any) {
       console.error(err);
@@ -411,7 +583,6 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  // Função para agendar uma sessão pendente (recepção/master)
   const handleAgendarSessao = async () => {
     if (!agendarSessaoTarget || !agendarSessaoData || !agendarSessaoHora || !selectedCycle) {
       toast.error("Selecione data e horário.");
@@ -423,7 +594,6 @@ const Tratamentos: React.FC = () => {
       const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
       if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
 
-      // Cria agendamento real na tabela agendamentos
       const agId = `ag${Date.now()}`;
       await addAgendamento({
         id: agId,
@@ -444,7 +614,6 @@ const Tratamentos: React.FC = () => {
         criadoPor: user?.id || "",
       });
 
-      // Vincula o agendamento à sessão e atualiza status
       const { error: updateError } = await supabase
         .from("treatment_sessions")
         .update({
@@ -487,7 +656,6 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  // ---- Remarcar sessão (alterar data) ----
   const handleCheckRemarcarDate = async (newDate: string) => {
     setRemarcarData(newDate);
     setRemarcarBlockedMsg("");
@@ -502,7 +670,7 @@ const Tratamentos: React.FC = () => {
         setRemarcarBlockedMsg("Esta data está bloqueada (feriado, férias ou indisponibilidade). Escolha outra data.");
       }
     } catch {
-      // ignore rpc errors
+      /* ignore */
     }
   };
 
@@ -511,35 +679,27 @@ const Tratamentos: React.FC = () => {
     setRemarcarSaving(true);
     try {
       const oldDate = remarcarTarget.scheduled_date;
-
-      // Double-check blocked
       const { data: blocked } = await supabase.rpc("is_date_blocked", {
         p_date: remarcarData,
         p_profissional_id: selectedCycle.professional_id,
         p_unidade_id: selectedCycle.unit_id,
       });
       if (blocked === true) {
-        toast.error("Data bloqueada. Escolha outra data.");
+        toast.error("Data bloqueada.");
         setRemarcarSaving(false);
         return;
       }
 
-      // Update session date
       const { error } = await supabase
         .from("treatment_sessions")
         .update({ scheduled_date: remarcarData })
         .eq("id", remarcarTarget.id);
       if (error) throw error;
 
-      // If session has linked appointment, update it too
       if (remarcarTarget.appointment_id) {
-        await supabase
-          .from("agendamentos")
-          .update({ data: remarcarData })
-          .eq("id", remarcarTarget.appointment_id);
+        await supabase.from("agendamentos").update({ data: remarcarData }).eq("id", remarcarTarget.appointment_id);
       }
 
-      // Audit log
       await logAction({
         acao: "remarcar_sessao",
         entidade: "treatment_session",
@@ -682,27 +842,6 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    try {
-      const { data } = await supabase
-        .from("treatment_cycles")
-        .select("id, patient_id, status")
-        .eq("patient_id", cycle.patient_id)
-        .eq("status", "em_andamento");
-      const activeOthers = (data || []).filter((c: any) => c.id !== cycle.id);
-      if (activeOthers.length > 0) {
-        toast.error("Paciente já possui outro tratamento em andamento.");
-        return;
-      }
-    } catch {
-      const activeCycle = cycles.find(
-        (c) => c.patient_id === cycle.patient_id && c.status === "em_andamento" && c.id !== cycle.id,
-      );
-      if (activeCycle) {
-        toast.error("Paciente já possui tratamento em andamento.");
-        return;
-      }
-    }
-
     const pac = pacientes.find((p) => p.id === cycle.patient_id);
     const newId = `f${Date.now()}`;
     await addToFila({
@@ -731,70 +870,102 @@ const Tratamentos: React.FC = () => {
     toast.success("Paciente encaminhado para a fila de espera!");
   };
 
-  const cycleSessions = useMemo(() => {
-    if (!selectedCycle) return [];
-    return sessions.filter((s) => s.cycle_id === selectedCycle.id).sort((a, b) => a.session_number - b.session_number);
-  }, [selectedCycle, sessions]);
+  const handleVincularPts = async () => {
+    if (!selectedCycle || !selectedPtsId) {
+      toast.error("Selecione um PTS.");
+      return;
+    }
+    setVinculandoPts(true);
+    try {
+      const { error } = await supabase
+        .from("treatment_cycles")
+        .update({ pts_id: selectedPtsId })
+        .eq("id", selectedCycle.id);
+      if (error) throw error;
 
-  const cycleExtensions = useMemo(() => {
-    if (!selectedCycle) return [];
-    return extensions.filter((e) => e.cycle_id === selectedCycle.id);
-  }, [selectedCycle, extensions]);
+      await logAction({
+        acao: "vincular_pts",
+        entidade: "treatment_cycle",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { pts_id: selectedPtsId, paciente: selectedCycle.patient_id },
+      });
 
-  // Slots disponíveis para o dialog de agendar sessão
-  const agendarSessaoSlots = useMemo(() => {
-    if (!agendarSessaoTarget || !selectedCycle || !agendarSessaoData) return [];
-    return getAvailableSlots(selectedCycle.professional_id, selectedCycle.unit_id, agendarSessaoData);
-  }, [agendarSessaoTarget, selectedCycle, agendarSessaoData, getAvailableSlots]);
+      toast.success("PTS vinculado ao ciclo de tratamento!");
+      setVincularPtsOpen(false);
+      setSelectedPtsId("");
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao vincular PTS: " + (err?.message || ""));
+    } finally {
+      setVinculandoPts(false);
+    }
+  };
 
-  const agendarSessaoDatesDisponiveis = useMemo(() => {
-    if (!agendarSessaoTarget || !selectedCycle) return [];
-    return getAvailableDates(selectedCycle.professional_id, selectedCycle.unit_id).filter(
-      (d) => d >= new Date().toISOString().split("T")[0],
-    );
-  }, [agendarSessaoTarget, selectedCycle, getAvailableDates]);
+  const handleDesvincularPts = async () => {
+    if (!selectedCycle) return;
+    try {
+      const { error } = await supabase.from("treatment_cycles").update({ pts_id: null }).eq("id", selectedCycle.id);
+      if (error) throw error;
 
-  // Salas da unidade do ciclo
-  const { salas } = useData();
-  const salasDisponiveis = useMemo(() => {
-    if (!selectedCycle || !salas) return [];
-    return salas.filter((s: any) => s.unidadeId === selectedCycle.unit_id && s.ativo);
-  }, [selectedCycle, salas]);
+      await logAction({
+        acao: "desvincular_pts",
+        entidade: "treatment_cycle",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { pts_id_anterior: selectedCycle.pts_id, paciente: selectedCycle.patient_id },
+      });
 
-  // Procedures filtered by selected professional's profissao
-  const filteredProcedimentos = useMemo(() => {
-    const profId = newCycle.professional_id || (isProfissional ? user?.id : "");
-    const prof = profissionais.find((p) => p.id === profId);
-    if (!prof?.profissao) return procedimentos;
-    const profNorm = prof.profissao.toLowerCase().trim();
-    return procedimentos.filter((p) => {
-      const pNorm = p.profissao.toLowerCase().trim();
-      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
-        (!p.profissional_id || p.profissional_id === profId);
-    });
-  }, [procedimentos, newCycle.professional_id, profissionais, user, isProfissional]);
+      toast.success("PTS desvinculado do ciclo.");
+      loadData();
+    } catch (err: any) {
+      toast.error("Erro ao desvincular: " + (err?.message || ""));
+    }
+  };
 
-  // Procedures for registering sessions (based on selected cycle's professional)
-  const sessionProcedimentos = useMemo(() => {
-    if (!selectedCycle) return procedimentos;
-    const prof = profissionais.find((p) => p.id === selectedCycle.professional_id);
-    if (!prof?.profissao) return procedimentos;
-    const profNorm = prof.profissao.toLowerCase().trim();
-    return procedimentos.filter((p) => {
-      const pNorm = p.profissao.toLowerCase().trim();
-      return (pNorm === profNorm || pNorm.includes(profNorm) || profNorm.includes(pNorm)) &&
-        (!p.profissional_id || p.profissional_id === selectedCycle.professional_id);
-    });
-  }, [procedimentos, selectedCycle, profissionais]);
+  const renderSessionNotes = (notes: string) => {
+    if (!notes) return null;
+    try {
+      const parsed = JSON.parse(notes);
+      if (parsed.tipo === "soap") {
+        return (
+          <div className="text-xs space-y-0.5 mt-1">
+            <p>
+              <span className="font-semibold text-blue-600">S:</span>{" "}
+              <span className="text-muted-foreground">{parsed.subjetivo}</span>
+            </p>
+            <p>
+              <span className="font-semibold text-green-600">O:</span>{" "}
+              <span className="text-muted-foreground">{parsed.objetivo}</span>
+            </p>
+            <p>
+              <span className="font-semibold text-orange-600">A:</span>{" "}
+              <span className="text-muted-foreground">{parsed.avaliacao}</span>
+            </p>
+            <p>
+              <span className="font-semibold text-purple-600">P:</span>{" "}
+              <span className="text-muted-foreground">{parsed.plano}</span>
+            </p>
+          </div>
+        );
+      }
+    } catch {
+      /* not JSON, render as text */
+    }
+    return <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{notes}</p>;
+  };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
+  }
 
-  // ---- DETAIL VIEW ----
   if (selectedCycle) {
     const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
     const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
@@ -803,7 +974,6 @@ const Tratamentos: React.FC = () => {
       selectedCycle.total_sessions > 0
         ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
         : 0;
-
     const pendingCount = cycleSessions.filter((s) => s.status === "pendente_agendamento").length;
     const scheduledCount = cycleSessions.filter((s) => s.status === "agendada").length;
 
@@ -816,7 +986,6 @@ const Tratamentos: React.FC = () => {
           <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
         </div>
 
-        {/* Cycle info */}
         <Card className="shadow-card border-0">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-start justify-between">
@@ -864,7 +1033,35 @@ const Tratamentos: React.FC = () => {
               <p className="text-sm text-muted-foreground border-t pt-2">{selectedCycle.clinical_notes}</p>
             )}
 
-            {/* Alerta de sessões pendentes */}
+            {faltaStats?.alerta && (
+              <div
+                className={cn(
+                  "p-3 rounded-lg border text-sm flex items-start gap-2",
+                  faltaStats.critico
+                    ? "bg-destructive/10 border-destructive/30 text-destructive"
+                    : "bg-warning/10 border-warning/30 text-warning",
+                )}
+              >
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  {faltaStats.critico ? (
+                    <p>
+                      <strong>⚠️ ATENÇÃO:</strong> {faltaStats.total} faltas — considerar desligamento do tratamento.
+                    </p>
+                  ) : faltaStats.alerta === "consecutivas" ? (
+                    <p>
+                      <strong>Alerta:</strong> {faltaStats.consecutivas} faltas consecutivas — entrar em contato com
+                      paciente.
+                    </p>
+                  ) : (
+                    <p>
+                      <strong>Alerta:</strong> {faltaStats.total} faltas alternadas — revisar adesão ao tratamento.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {pendingCount > 0 && (
               <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning">
                 ⏳ <strong>{pendingCount} sessão(ões)</strong> aguardando agendamento pela recepção.
@@ -877,7 +1074,6 @@ const Tratamentos: React.FC = () => {
               </div>
             )}
 
-            {/* Progress bar */}
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progresso</span>
@@ -888,14 +1084,14 @@ const Tratamentos: React.FC = () => {
               <Progress value={progressPct} className="h-3" />
             </div>
 
-            {/* Action buttons */}
             <div className="flex gap-2 flex-wrap pt-2">
               {selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) && (
                 <>
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada" });
+                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
+                      setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
                       setSessionOpen(true);
                     }}
                   >
@@ -933,7 +1129,125 @@ const Tratamentos: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Sessions list */}
+        {ptsVinculado ? (
+          <Card className="shadow-card border-0 border-l-4 border-l-purple-500">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground text-sm">PTS Vinculado</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Criado em {new Date(ptsVinculado.created_at).toLocaleDateString("pt-BR")}
+                      {" • "}
+                      {funcionarios.find((f) => f.id === ptsVinculado.professional_id)?.nome || "—"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    className={cn(
+                      "border text-xs",
+                      ptsVinculado.status === "ativo"
+                        ? "bg-success/15 text-success border-success/30"
+                        : "bg-muted text-muted-foreground border-border",
+                    )}
+                  >
+                    {ptsVinculado.status === "ativo" ? "Ativo" : "Encerrado"}
+                  </Badge>
+                  {(isProfissional || canManageFull) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={handleDesvincularPts}
+                      title="Desvincular PTS"
+                    >
+                      <Unlink className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <p className="text-xs text-muted-foreground font-semibold mb-1">Diagnóstico Funcional</p>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.diagnostico_funcional}</p>
+              </div>
+
+              <div className="mb-3">
+                <p className="text-xs text-muted-foreground font-semibold mb-1">Objetivos Terapêuticos</p>
+                <p className="text-sm text-foreground bg-muted/30 p-2 rounded">{ptsVinculado.objetivos_terapeuticos}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                {ptsVinculado.metas_curto_prazo && (
+                  <div className="p-2 rounded bg-blue-500/5 border border-blue-500/20">
+                    <p className="text-xs font-semibold text-blue-600 mb-1">📌 Curto Prazo</p>
+                    <p className="text-xs text-foreground">{ptsVinculado.metas_curto_prazo}</p>
+                  </div>
+                )}
+                {ptsVinculado.metas_medio_prazo && (
+                  <div className="p-2 rounded bg-orange-500/5 border border-orange-500/20">
+                    <p className="text-xs font-semibold text-orange-600 mb-1">📋 Médio Prazo</p>
+                    <p className="text-xs text-foreground">{ptsVinculado.metas_medio_prazo}</p>
+                  </div>
+                )}
+                {ptsVinculado.metas_longo_prazo && (
+                  <div className="p-2 rounded bg-green-500/5 border border-green-500/20">
+                    <p className="text-xs font-semibold text-green-600 mb-1">🎯 Longo Prazo</p>
+                    <p className="text-xs text-foreground">{ptsVinculado.metas_longo_prazo}</p>
+                  </div>
+                )}
+              </div>
+
+              {ptsVinculado.especialidades_envolvidas && ptsVinculado.especialidades_envolvidas.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold mb-1">Especialidades Envolvidas</p>
+                  <div className="flex flex-wrap gap-1">
+                    {ptsVinculado.especialidades_envolvidas.map((spec, idx) => (
+                      <Badge key={idx} variant="outline" className="text-xs">
+                        {spec}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : selectedCycle.status === "em_andamento" && (isProfissional || canManageFull) ? (
+          <Card className="shadow-card border-0 border-dashed border">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Nenhum PTS vinculado</p>
+                  <p className="text-xs text-muted-foreground">
+                    Vincule um Projeto Terapêutico Singular para acompanhar objetivos e metas.
+                  </p>
+                </div>
+                {ptsDosPacienteCiclo.length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedPtsId("");
+                      setVincularPtsOpen(true);
+                    }}
+                  >
+                    <Link2 className="w-3 h-3 mr-1" /> Vincular PTS
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nenhum PTS ativo para este paciente.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="shadow-card border-0">
           <CardContent className="p-5">
             <h3 className="font-semibold text-foreground mb-3">Sessões</h3>
@@ -941,68 +1255,65 @@ const Tratamentos: React.FC = () => {
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
-
                   return (
                     <div
                       key={s.id}
                       className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg",
+                        "flex flex-col gap-1 p-3 rounded-lg",
                         isPendente ? "bg-warning/5 border border-warning/20" : "bg-muted/30",
                       )}
                     >
-                      <span className="text-sm font-mono font-bold text-primary w-10 text-center shrink-0">
-                        {s.session_number}/{s.total_sessions}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground">
-                          {s.scheduled_date
-                            ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
-                            : "—"}
-                          {isPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
-                        </p>
-                        {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
-                        {s.clinical_notes && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">{s.clinical_notes}</p>
-                        )}
-                      </div>
-                      <Badge className={cn("text-xs shrink-0", sessionStatusColors[s.status])}>
-                        {sessionStatusLabels[s.status] || s.status}
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-mono font-bold text-primary w-10 text-center shrink-0">
+                          {s.session_number}/{s.total_sessions}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground">
+                            {s.scheduled_date
+                              ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
+                              : "—"}
+                            {isPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
+                          </p>
+                          {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
+                        </div>
+                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[s.status])}>
+                          {sessionStatusLabels[s.status] || s.status}
+                        </Badge>
 
-                      {/* Botão Agendar — apenas para recepção/master e sessão pendente */}
-                      {canAgendarSessao && isPendente && selectedCycle.status === "em_andamento" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-primary text-primary hover:bg-primary/10 shrink-0"
-                          onClick={() => {
-                            setAgendarSessaoTarget(s);
-                            setAgendarSessaoData("");
-                            setAgendarSessaoHora("");
-                            setAgendarSessaoSalaId("");
-                          }}
-                        >
-                          <Calendar className="w-3 h-3 mr-1" /> Agendar
-                        </Button>
-                      )}
-
-                      {/* Botão Remarcar — profissional e master em sessões agendadas ou pendentes */}
-                      {canAgendarSessao &&
-                        ["agendada", "pendente_agendamento"].includes(s.status) &&
-                        selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && isPendente && selectedCycle.status === "em_andamento" && (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                            className="h-7 text-xs border-primary text-primary hover:bg-primary/10 shrink-0"
                             onClick={() => {
-                              setRemarcarTarget(s);
-                              setRemarcarData("");
-                              setRemarcarBlockedMsg("");
+                              setAgendarSessaoTarget(s);
+                              setAgendarSessaoData("");
+                              setAgendarSessaoHora("");
+                              setAgendarSessaoSalaId("");
                             }}
                           >
-                            <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                            <Calendar className="w-3 h-3 mr-1" /> Agendar
                           </Button>
                         )}
+
+                        {canAgendarSessao &&
+                          ["agendada", "pendente_agendamento"].includes(s.status) &&
+                          selectedCycle.status === "em_andamento" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                              onClick={() => {
+                                setRemarcarTarget(s);
+                                setRemarcarData("");
+                                setRemarcarBlockedMsg("");
+                              }}
+                            >
+                              <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                            </Button>
+                          )}
+                      </div>
+                      {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
                     </div>
                   );
                 })}
@@ -1011,7 +1322,6 @@ const Tratamentos: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Extensions history */}
         {cycleExtensions.length > 0 && (
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
@@ -1036,9 +1346,8 @@ const Tratamentos: React.FC = () => {
           </Card>
         )}
 
-        {/* Register Session Dialog */}
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Registrar Sessão</DialogTitle>
             </DialogHeader>
@@ -1057,39 +1366,126 @@ const Tratamentos: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Procedimento Realizado</Label>
-                {sessionProcedimentos.length > 0 ? (
+
+              {newSession.status === "paciente_faltou" && (
+                <div>
+                  <Label>Tipo de Falta *</Label>
                   <Select
-                    value={newSession.procedure_done}
-                    onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
+                    value={newSession.absence_type}
+                    onValueChange={(v) => setNewSession((p) => ({ ...p, absence_type: v }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione o procedimento" />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sessionProcedimentos.map((proc) => (
-                        <SelectItem key={proc.id} value={proc.nome}>
-                          {proc.nome}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="justificada">Justificada</SelectItem>
+                      <SelectItem value="injustificada">Injustificada</SelectItem>
                     </SelectContent>
                   </Select>
-                ) : (
-                  <Input
-                    value={newSession.procedure_done}
-                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                </div>
+              )}
+
+              {newSession.status === "realizada" && (
+                <div>
+                  <Label>Procedimento Realizado *</Label>
+                  {sessionProcedimentos.length > 0 ? (
+                    <Select
+                      value={newSession.procedure_done}
+                      onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o procedimento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sessionProcedimentos.map((proc) => (
+                          <SelectItem key={proc.id} value={proc.nome}>
+                            {proc.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={newSession.procedure_done}
+                      onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                      placeholder="Nome do procedimento"
+                    />
+                  )}
+                </div>
+              )}
+
+              {newSession.status === "realizada" && (
+                <div className="space-y-3 border-t pt-3">
+                  <p className="text-sm font-semibold text-foreground">
+                    Prontuário SOAP <span className="text-destructive">*</span>
+                  </p>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      S — Subjetivo <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Relato do paciente, queixas, sintomas referidos
+                    </p>
+                    <Textarea
+                      value={soapNotes.subjetivo}
+                      onChange={(e) => setSoapNotes((p) => ({ ...p, subjetivo: e.target.value }))}
+                      rows={2}
+                      placeholder="Ex: Paciente relata melhora da dor no joelho direito..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      O — Objetivo <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-1">Achados do exame, medições, testes realizados</p>
+                    <Textarea
+                      value={soapNotes.objetivo}
+                      onChange={(e) => setSoapNotes((p) => ({ ...p, objetivo: e.target.value }))}
+                      rows={2}
+                      placeholder="Ex: ADM flexão joelho D: 95° (anterior: 80°)..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      A — Avaliação <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-1">Análise clínica, evolução do quadro</p>
+                    <Textarea
+                      value={soapNotes.avaliacao}
+                      onChange={(e) => setSoapNotes((p) => ({ ...p, avaliacao: e.target.value }))}
+                      rows={2}
+                      placeholder="Ex: Evolução favorável, ganho funcional progressivo..."
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      P — Plano <span className="text-destructive">*</span>
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Conduta terapêutica, orientações, próximos passos
+                    </p>
+                    <Textarea
+                      value={soapNotes.plano}
+                      onChange={(e) => setSoapNotes((p) => ({ ...p, plano: e.target.value }))}
+                      rows={2}
+                      placeholder="Ex: Manter protocolo atual, progredir carga na próxima sessão..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              {newSession.status !== "realizada" && (
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea
+                    value={newSession.clinical_notes}
+                    onChange={(e) => setNewSession((p) => ({ ...p, clinical_notes: e.target.value }))}
+                    rows={3}
+                    placeholder="Motivo da falta, cancelamento ou remarcação..."
                   />
-                )}
-              </div>
-              <div>
-                <Label>Observações Clínicas</Label>
-                <Textarea
-                  value={newSession.clinical_notes}
-                  onChange={(e) => setNewSession((p) => ({ ...p, clinical_notes: e.target.value }))}
-                  rows={3}
-                />
-              </div>
+                </div>
+              )}
+
               <Button onClick={handleRegisterSession} className="w-full gradient-primary text-primary-foreground">
                 Registrar
               </Button>
@@ -1097,7 +1493,6 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Extension Dialog */}
         <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -1135,7 +1530,6 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Discharge Dialog */}
         <Dialog open={dischargeOpen} onOpenChange={setDischargeOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -1172,7 +1566,6 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de Agendar Sessão — recepção e master */}
         <Dialog
           open={!!agendarSessaoTarget}
           onOpenChange={(open) => {
@@ -1202,7 +1595,6 @@ const Tratamentos: React.FC = () => {
                   <strong>Tratamento:</strong> {selectedCycle.treatment_type}
                 </p>
               </div>
-
               <div>
                 <Label>Data *</Label>
                 {agendarSessaoDatesDisponiveis.length === 0 ? (
@@ -1236,7 +1628,6 @@ const Tratamentos: React.FC = () => {
                   </Select>
                 )}
               </div>
-
               {agendarSessaoData && (
                 <div>
                   <Label>Horário *</Label>
@@ -1259,7 +1650,6 @@ const Tratamentos: React.FC = () => {
                   )}
                 </div>
               )}
-
               {salasDisponiveis.length > 0 && (
                 <div>
                   <Label>Sala (opcional)</Label>
@@ -1281,7 +1671,6 @@ const Tratamentos: React.FC = () => {
                   </Select>
                 </div>
               )}
-
               <Button
                 onClick={handleAgendarSessao}
                 className="w-full gradient-primary text-primary-foreground"
@@ -1294,7 +1683,6 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de Remarcar Sessão — profissional e master */}
         <Dialog
           open={!!remarcarTarget}
           onOpenChange={(open) => {
@@ -1327,7 +1715,6 @@ const Tratamentos: React.FC = () => {
                   {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome}
                 </p>
               </div>
-
               <div>
                 <Label>Nova Data *</Label>
                 <Input
@@ -1337,14 +1724,12 @@ const Tratamentos: React.FC = () => {
                   onChange={(e) => handleCheckRemarcarDate(e.target.value)}
                 />
               </div>
-
               {remarcarBlockedMsg && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{remarcarBlockedMsg}</span>
                 </div>
               )}
-
               <Button
                 onClick={handleRemarcarSessao}
                 className="w-full gradient-primary text-primary-foreground"
@@ -1356,11 +1741,86 @@ const Tratamentos: React.FC = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Vincular PTS ao Ciclo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Selecione um PTS ativo do paciente <strong>{pac?.nome}</strong> para vincular a este ciclo de
+                tratamento.
+              </p>
+              {ptsDosPacienteCiclo.length === 0 ? (
+                <div className="p-4 bg-muted/30 rounded-lg text-center">
+                  <p className="text-sm text-muted-foreground">Nenhum PTS ativo encontrado para este paciente.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Crie um PTS no módulo PTS primeiro.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {ptsDosPacienteCiclo.map((pts) => {
+                    const ptsProfName = funcionarios.find((f) => f.id === pts.professional_id)?.nome || "—";
+                    return (
+                      <div
+                        key={pts.id}
+                        className={cn(
+                          "p-3 rounded-lg border cursor-pointer transition-all",
+                          selectedPtsId === pts.id
+                            ? "border-purple-500 bg-purple-500/5 ring-1 ring-purple-500/30"
+                            : "border-border hover:border-purple-500/30",
+                        )}
+                        onClick={() => setSelectedPtsId(pts.id)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground line-clamp-1">
+                              {pts.diagnostico_funcional}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Prof. {ptsProfName} • {new Date(pts.created_at).toLocaleDateString("pt-BR")}
+                            </p>
+                            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                              {pts.objetivos_terapeuticos}
+                            </p>
+                            {pts.especialidades_envolvidas.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {pts.especialidades_envolvidas.map((spec, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-[10px] h-4">
+                                    {spec}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className={cn(
+                              "w-5 h-5 rounded-full border flex items-center justify-center",
+                              selectedPtsId === pts.id ? "border-purple-500 bg-purple-500" : "border-muted-foreground",
+                            )}
+                          >
+                            {selectedPtsId === pts.id && <div className="w-2 h-2 rounded-full bg-white" />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <Button
+                onClick={handleVincularPts}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!selectedPtsId || vinculandoPts}
+              >
+                {vinculandoPts ? "Vinculando..." : "Vincular PTS"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
-  // ---- LIST VIEW ----
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -1381,6 +1841,7 @@ const Tratamentos: React.FC = () => {
                 frequency: "semanal",
                 start_date: new Date().toISOString().split("T")[0],
                 clinical_notes: "",
+                pts_id: "",
               });
               setCreateOpen(true);
             }}
@@ -1391,7 +1852,6 @@ const Tratamentos: React.FC = () => {
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <Select value={filterProf} onValueChange={setFilterProf}>
           <SelectTrigger className="w-44">
@@ -1434,7 +1894,6 @@ const Tratamentos: React.FC = () => {
         </Select>
       </div>
 
-      {/* Cycles list */}
       {filteredCycles.length === 0 ? (
         <Card className="shadow-card border-0">
           <CardContent className="p-8 text-center">
@@ -1455,11 +1914,16 @@ const Tratamentos: React.FC = () => {
               cycle.total_sessions > 0 ? Math.round((cycle.sessions_done / cycle.total_sessions) * 100) : 0;
             const cycleSess = sessions.filter((s) => s.cycle_id === cycle.id);
             const pendingAg = cycleSess.filter((s) => s.status === "pendente_agendamento").length;
+            const cycleFaltasCount = cycleSess.filter((s) => s.status === "paciente_faltou").length;
 
             return (
               <Card
                 key={cycle.id}
-                className="shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+                className={cn(
+                  "shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all",
+                  cycleFaltasCount >= 3 && "border-l-4 border-l-warning",
+                  cycleFaltasCount >= 5 && "border-l-4 border-l-destructive",
+                )}
                 onClick={() => setSelectedCycle(cycle)}
               >
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -1471,6 +1935,10 @@ const Tratamentos: React.FC = () => {
                     {pendingAg > 0 && (
                       <p className="text-xs text-warning mt-0.5">⏳ {pendingAg} sessão(ões) aguardando agendamento</p>
                     )}
+                    {cycleFaltasCount > 0 && (
+                      <p className="text-xs text-destructive mt-0.5">⚠️ {cycleFaltasCount} falta(s) registrada(s)</p>
+                    )}
+                    {cycle.pts_id && <p className="text-xs text-purple-500 mt-0.5">📋 PTS vinculado</p>}
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="text-center">
@@ -1494,7 +1962,6 @@ const Tratamentos: React.FC = () => {
                     <Badge className={cn("border text-xs", statusColors[cycle.status])}>
                       {statusLabels[cycle.status]}
                     </Badge>
-
                     {user?.role === "master" && (
                       <Button
                         size="sm"
@@ -1517,7 +1984,6 @@ const Tratamentos: React.FC = () => {
         </div>
       )}
 
-      {/* Create Cycle Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1574,38 +2040,11 @@ const Tratamentos: React.FC = () => {
               )}
               <div>
                 <Label>Tipo de Tratamento *</Label>
-                {filteredProcedimentos.length > 0 ? (
-                  <Select
-                    value={newCycle.treatment_type}
-                    onValueChange={(v) => setNewCycle((p) => ({ ...p, treatment_type: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o procedimento" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredProcedimentos.map((proc) => (
-                        <SelectItem key={proc.id} value={proc.nome}>
-                          {proc.nome}{proc.especialidade ? ` — ${proc.especialidade}` : ''}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__outro">Outro (digitar)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={newCycle.treatment_type}
-                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
-                    placeholder="Ex: Reabilitação Joelho Direito"
-                  />
-                )}
-                {newCycle.treatment_type === "__outro" && (
-                  <Input
-                    className="mt-2"
-                    value=""
-                    onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
-                    placeholder="Digite o tipo de tratamento"
-                  />
-                )}
+                <Input
+                  value={newCycle.treatment_type}
+                  onChange={(e) => setNewCycle((p) => ({ ...p, treatment_type: e.target.value }))}
+                  placeholder="Ex: Reabilitação Joelho Direito"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1652,6 +2091,39 @@ const Tratamentos: React.FC = () => {
                   ).toLocaleDateString("pt-BR")}
                 </strong>
               </div>
+
+              {newCycle.patient_id && ptsDisponiveis.length > 0 && (
+                <div>
+                  <Label>Vincular ao PTS (opcional)</Label>
+                  <Select
+                    value={newCycle.pts_id || "none"}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, pts_id: v === "none" ? "" : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um PTS" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {ptsDisponiveis.map((pts) => (
+                        <SelectItem key={pts.id} value={pts.id}>
+                          {pts.diagnostico_funcional.substring(0, 60)} —{" "}
+                          {new Date(pts.created_at).toLocaleDateString("pt-BR")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Vincular um PTS permite acompanhar os objetivos terapêuticos diretamente no ciclo de tratamento.
+                  </p>
+                </div>
+              )}
+
+              {newCycle.patient_id && ptsDisponiveis.length === 0 && (
+                <div className="p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
+                  ℹ️ Este paciente não possui PTS ativo. Você pode criar um no módulo PTS e vincular depois.
+                </div>
+              )}
+
               <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg text-xs text-warning">
                 ℹ️ As sessões serão criadas com status <strong>Aguardando Agendamento</strong>. A recepção ou master
                 precisará agendar cada sessão respeitando as vagas disponíveis.
@@ -1672,7 +2144,6 @@ const Tratamentos: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
       <Dialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
@@ -1692,7 +2163,7 @@ const Tratamentos: React.FC = () => {
               {deleteTarget?.treatment_type ? ` — ${deleteTarget.treatment_type}` : ""}.
             </p>
             <p className="text-sm text-destructive font-medium">
-              Todas as sessões e extensões vinculadas serão removidas permanentemente.
+              Todas as sessões, extensões e vínculos com PTS serão removidos permanentemente.
             </p>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>
