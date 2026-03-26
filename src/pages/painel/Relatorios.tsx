@@ -60,6 +60,9 @@ const Relatorios: React.FC = () => {
   const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
   const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
   const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
+  const [nursingEvals, setNursingEvals] = useState<any[]>([]);
+  const [multiEvals, setMultiEvals] = useState<any[]>([]);
+  const [ptsData, setPtsData] = useState<any[]>([]);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -128,6 +131,16 @@ const Relatorios: React.FC = () => {
         const [{ data: cyclesData }, { data: sessionsData }] = await Promise.all([qCycles, qSessions]);
         if (cyclesData) setTreatmentCycles(cyclesData);
         if (sessionsData) setTreatmentSessions(sessionsData);
+
+        // Load nursing evaluations, multiprofessional evaluations, PTS
+        const [{ data: nursingData }, { data: multiData }, { data: ptsDataResult }] = await Promise.all([
+          supabase.from('nursing_evaluations').select('*'),
+          supabase.from('multiprofessional_evaluations').select('*'),
+          supabase.from('pts').select('*'),
+        ]);
+        if (nursingData) setNursingEvals(nursingData);
+        if (multiData) setMultiEvals(multiData);
+        if (ptsDataResult) setPtsData(ptsDataResult);
       } catch (err) { console.error('Error loading report data:', err); }
     };
     load();
@@ -543,6 +556,51 @@ const Relatorios: React.FC = () => {
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
 
+  // === NURSING EVALUATIONS REPORT ===
+  const nursingReport = useMemo(() => {
+    const filteredNursing = nursingEvals.filter((n: any) => {
+      if (filterUnit !== 'all' && n.unit_id !== filterUnit) return false;
+      if (dateFrom && n.evaluation_date < dateFrom) return false;
+      if (dateTo && n.evaluation_date > dateTo) return false;
+      return true;
+    });
+    const total = filteredNursing.length;
+    const aptos = filteredNursing.filter((n: any) => n.resultado === 'apto').length;
+    const inaptos = filteredNursing.filter((n: any) => n.resultado === 'inapto').length;
+    const multiprof = filteredNursing.filter((n: any) => n.resultado === 'multiprofissional').length;
+    const byPriority: Record<string, number> = {};
+    filteredNursing.forEach((n: any) => { byPriority[n.prioridade || 'media'] = (byPriority[n.prioridade || 'media'] || 0) + 1; });
+    return { total, aptos, inaptos, multiprof, byPriority: Object.entries(byPriority).map(([k, v]) => ({ nome: k === 'alta' ? 'Alta' : k === 'media' ? 'Média' : 'Baixa', total: v })) };
+  }, [nursingEvals, filterUnit, dateFrom, dateTo]);
+
+  // === MULTIPROFESSIONAL EVALUATIONS REPORT ===
+  const multiReport = useMemo(() => {
+    const filteredMulti = multiEvals.filter((m: any) => {
+      if (filterUnit !== 'all' && m.unit_id !== filterUnit) return false;
+      if (dateFrom && m.evaluation_date < dateFrom) return false;
+      if (dateTo && m.evaluation_date > dateTo) return false;
+      return true;
+    });
+    const total = filteredMulti.length;
+    const bySpecialty: Record<string, number> = {};
+    filteredMulti.forEach((m: any) => { bySpecialty[m.specialty || 'Outros'] = (bySpecialty[m.specialty || 'Outros'] || 0) + 1; });
+    const byParecer: Record<string, number> = {};
+    filteredMulti.forEach((m: any) => { byParecer[m.parecer || 'favoravel'] = (byParecer[m.parecer || 'favoravel'] || 0) + 1; });
+    return { total, bySpecialty: Object.entries(bySpecialty).map(([k, v]) => ({ nome: k, total: v })), byParecer: Object.entries(byParecer).map(([k, v]) => ({ nome: k === 'favoravel' ? 'Favorável' : 'Desfavorável', total: v })) };
+  }, [multiEvals, filterUnit, dateFrom, dateTo]);
+
+  // === PTS REPORT ===
+  const ptsReport = useMemo(() => {
+    const filteredPts = ptsData.filter((p: any) => {
+      if (filterUnit !== 'all' && p.unit_id !== filterUnit) return false;
+      return true;
+    });
+    const total = filteredPts.length;
+    const ativos = filteredPts.filter((p: any) => p.status === 'ativo').length;
+    const concluidos = filteredPts.filter((p: any) => p.status !== 'ativo').length;
+    return { total, ativos, concluidos };
+  }, [ptsData, filterUnit]);
+
   const exportCSV = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -841,6 +899,9 @@ ${dataRows}
           <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
           <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
           <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
+          <TabsTrigger value="enfermagem" className="text-xs">Enfermagem</TabsTrigger>
+          <TabsTrigger value="multiprofissional" className="text-xs">Multiprofissional</TabsTrigger>
+          <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
           <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
         </TabsList>
@@ -1612,6 +1673,110 @@ ${dataRows}
                     <Tooltip />
                   </PieChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === ENFERMAGEM === */}
+        <TabsContent value="enfermagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Avaliações', value: nursingReport.total },
+              { label: 'Aptos', value: nursingReport.aptos },
+              { label: 'Inaptos', value: nursingReport.inaptos },
+              { label: 'Multiprofissional', value: nursingReport.multiprof },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {nursingReport.byPriority.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Avaliações por Prioridade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={nursingReport.byPriority} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {nursingReport.byPriority.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === MULTIPROFISSIONAL === */}
+        <TabsContent value="multiprofissional" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-lg font-bold text-foreground">{multiReport.total}</p>
+                <p className="text-[10px] text-muted-foreground">Total Avaliações</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {multiReport.bySpecialty.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Especialidade</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={multiReport.bySpecialty}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" fill="hsl(262, 83%, 58%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+            {multiReport.byParecer.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Parecer</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={multiReport.byParecer} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                        {multiReport.byParecer.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* === PTS === */}
+        <TabsContent value="pts_report" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Total PTS', value: ptsReport.total },
+              { label: 'Ativos', value: ptsReport.ativos },
+              { label: 'Concluídos', value: ptsReport.concluidos },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {ptsReport.total === 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Nenhum PTS registrado no período selecionado.
               </CardContent>
             </Card>
           )}
