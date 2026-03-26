@@ -44,6 +44,7 @@ interface FilaItem {
   descricaoClinica: string;
   prioridade: string;
   horaChegada: string;
+  agendamento_id?: string;
 }
 
 interface PacienteInfo {
@@ -53,6 +54,9 @@ interface PacienteInfo {
   descricao_clinica?: string;
   diagnostico_resumido?: string;
 }
+
+// Status que indicam que o paciente está aguardando triagem
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada"];
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
@@ -97,17 +101,23 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
 
-  // Load from fila_espera where status = 'aguardando' (AGUARDANDO TRIAGEM)
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("fila_espera")
         .select("*")
-        .in("status", ["aguardando", "aguardando_triagem"])
+        .in("status", STATUS_AGUARDANDO_TRIAGEM)
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
+
+      console.log(
+        "Fila carregada:",
+        data?.length,
+        "itens com status:",
+        data?.map((d) => d.status),
+      );
 
       if (data && !error) {
         setFila(
@@ -122,11 +132,16 @@ const Triagem: React.FC = () => {
             descricaoClinica: f.descricao_clinica || "",
             prioridade: f.prioridade || "normal",
             horaChegada: f.hora_chegada || "",
+            agendamento_id: f.agendamento_id,
           })),
         );
+      } else if (error) {
+        console.error("Erro ao carregar fila:", error);
+        toast.error("Erro ao carregar lista de triagem");
       }
     } catch (err) {
       console.error("Error loading triage queue:", err);
+      toast.error("Erro ao carregar lista de triagem");
     }
     setLoading(false);
   }, [user?.unidadeId]);
@@ -135,7 +150,6 @@ const Triagem: React.FC = () => {
     loadFila();
   }, [loadFila]);
 
-  // Realtime on fila_espera
   useEffect(() => {
     if (!user?.unidadeId) return;
     const channel = supabase
@@ -151,20 +165,14 @@ const Triagem: React.FC = () => {
     setSelectedItem(item);
     setStartedAt(new Date().toISOString());
 
-    // Load patient info
-    const { data: pacData } = await (supabase as any)
+    const { data: pacData } = await supabase
       .from("pacientes")
       .select("especialidade_destino, cid, justificativa, descricao_clinica, diagnostico_resumido")
       .eq("id", item.pacienteId)
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
-    // Check existing triage record
-    const { data } = await (supabase as any)
-      .from("triage_records")
-      .select("*")
-      .eq("agendamento_id", item.id)
-      .maybeSingle();
+    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
 
     if (data) {
       setForm({
@@ -175,12 +183,12 @@ const Triagem: React.FC = () => {
         frequenciaCardiaca: data.frequencia_cardiaca?.toString() || "",
         saturacaoOxigenio: data.saturacao_oxigenio?.toString() || "",
         glicemia: data.glicemia?.toString() || "",
-        dor: 0,
+        dor: (data as any).dor || 0,
         queixaPrincipal: data.queixa || "",
-        classificacaoRisco: "",
+        classificacaoRisco: (data as any).classificacao_risco || "",
         alergias: data.alergias || [],
         medicamentos: data.medicamentos || [],
-        observacoes: "",
+        observacoes: (data as any).observacoes || "",
       });
       setStartedAt(data.iniciado_em || new Date().toISOString());
     } else {
@@ -214,9 +222,12 @@ const Triagem: React.FC = () => {
     frequencia_cardiaca: parseInt(form.frequenciaCardiaca) || null,
     saturacao_oxigenio: parseInt(form.saturacaoOxigenio) || null,
     glicemia: parseFloat(form.glicemia) || null,
+    dor: form.dor,
     alergias: form.alergias,
     medicamentos: form.medicamentos,
     queixa: form.queixaPrincipal || null,
+    classificacao_risco: form.classificacaoRisco,
+    observacoes: form.observacoes,
     iniciado_em: startedAt,
   });
 
@@ -224,9 +235,10 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await (supabase as any).from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
+      await supabase.from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
       toast.success("Rascunho salvo!");
     } catch (err) {
+      console.error("Erro ao salvar rascunho:", err);
       toast.error("Erro ao salvar rascunho.");
     }
     setSaving(false);
@@ -257,18 +269,22 @@ const Triagem: React.FC = () => {
 
     setSaving(true);
     try {
-      // Save triage record (clinical history)
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      await (supabase as any).from("triage_records").upsert(record, { onConflict: "agendamento_id" });
+      await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
 
-      // Determine next status based on choice
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
 
-      await (supabase as any).from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
+      await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
-      // If skipping nursing, auto-log that fact
+      if (selectedItem.agendamento_id) {
+        await supabase
+          .from("agendamentos")
+          .update({ status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "apto_agendamento" })
+          .eq("id", selectedItem.agendamento_id);
+      }
+
       if (!encaminharEnfermagem) {
-        await (supabase as any).from("nursing_evaluations").insert({
+        await supabase.from("nursing_evaluations").insert({
           patient_id: selectedItem.pacienteId,
           agendamento_id: selectedItem.id,
           professional_id: user?.id || "",
@@ -310,6 +326,7 @@ const Triagem: React.FC = () => {
       await loadFila();
       await refreshFila();
     } catch (err) {
+      console.error("Erro ao confirmar triagem:", err);
       toast.error("Erro ao confirmar triagem.");
     }
     setSaving(false);
@@ -405,7 +422,6 @@ const Triagem: React.FC = () => {
             <DialogTitle className="font-display">Triagem — {selectedItem?.pacienteNome}</DialogTitle>
           </DialogHeader>
 
-          {/* Specialty + referral info */}
           {(pacienteInfo || selectedItem) && (
             <div className="space-y-2">
               {espLabel && (
@@ -435,7 +451,6 @@ const Triagem: React.FC = () => {
           )}
 
           <div className="space-y-4">
-            {/* Vital Signs Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <Label>Peso (kg) *</Label>
@@ -517,7 +532,6 @@ const Triagem: React.FC = () => {
               </div>
             </div>
 
-            {/* Pain Scale */}
             <div>
               <Label className="text-base font-semibold">Escala de Dor (0–10): {form.dor}</Label>
               <Slider
@@ -534,7 +548,6 @@ const Triagem: React.FC = () => {
               </div>
             </div>
 
-            {/* Risk Classification */}
             <div>
               <Label className="text-base font-semibold">Classificação de Risco *</Label>
               <Select
@@ -552,7 +565,6 @@ const Triagem: React.FC = () => {
               </Select>
             </div>
 
-            {/* Main complaint */}
             <div>
               <Label>Queixa Principal *</Label>
               <Textarea
@@ -563,7 +575,6 @@ const Triagem: React.FC = () => {
               />
             </div>
 
-            {/* Allergies */}
             <div>
               <Label>Alergias</Label>
               <div className="flex gap-2 mt-1">
@@ -594,7 +605,6 @@ const Triagem: React.FC = () => {
               )}
             </div>
 
-            {/* Medications */}
             <div>
               <Label>Medicamentos em uso</Label>
               <div className="flex gap-2 mt-1">
@@ -627,7 +637,6 @@ const Triagem: React.FC = () => {
               )}
             </div>
 
-            {/* Observations */}
             <div>
               <Label>Observações *</Label>
               <Textarea
@@ -638,7 +647,6 @@ const Triagem: React.FC = () => {
               />
             </div>
 
-            {/* Actions */}
             <div className="flex flex-col gap-2">
               <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
