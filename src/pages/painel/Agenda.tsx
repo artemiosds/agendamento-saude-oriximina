@@ -541,8 +541,33 @@ const Agenda: React.FC = () => {
             .eq("unidade_id", ag.unidadeId)
             .eq("ativo", true);
           if ((count ?? 0) > 0) {
+            // CORREÇÃO: Atualizar o agendamento e também criar registro na fila_espera
             await updateAgendamento(agId, { status: "aguardando_triagem" as any });
-            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+
+            // Criar registro na fila_espera para o técnico de enfermagem
+            const { error: filaError } = await (supabase as any).from("fila_espera").insert({
+              id: `fila_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+              paciente_id: ag.pacienteId,
+              paciente_nome: ag.pacienteNome,
+              unidade_id: ag.unidadeId,
+              profissional_id: ag.profissionalId,
+              profissional_nome: ag.profissionalNome,
+              especialidade_destino: ag.tipo,
+              status: "aguardando_triagem",
+              prioridade: "normal",
+              criado_em: new Date().toISOString(),
+              agendamento_id: ag.id,
+              hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              cid: "",
+              descricao_clinica: "",
+            });
+
+            if (filaError) {
+              console.error("Erro ao criar registro na fila_espera:", filaError);
+              toast.error("Chegada confirmada, mas houve erro ao encaminhar para triagem.");
+            } else {
+              toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+            }
             return;
           }
         }
@@ -550,6 +575,7 @@ const Agenda: React.FC = () => {
         console.error("Error checking triage settings:", err);
       }
     }
+
     await updateAgendamento(agId, { status: newStatus as any });
     const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
     const unidade = unidades.find((u) => u.id === ag.unidadeId);
