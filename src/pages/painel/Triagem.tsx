@@ -54,6 +54,15 @@ interface PacienteInfo {
   diagnostico_resumido?: string;
 }
 
+// Status que indicam que o paciente está aguardando triagem
+const STATUS_AGUARDANDO_TRIAGEM = [
+  "aguardando",
+  "aguard. triagem",
+  "aguardando_triagem",
+  "aguardando_triagem",
+  "chegada_confirmada", // Incluir status de chegada confirmada que pode precisar de triagem
+];
+
 const Triagem: React.FC = () => {
   const { user } = useAuth();
   const { logAction, refreshFila } = useData();
@@ -97,17 +106,25 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
 
-  // Load from fila_espera where status = 'aguardando' (AGUARDANDO TRIAGEM)
+  // CORREÇÃO: Carregar da fila_espera onde status indica aguardando triagem
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
+      // Buscar todos os status que indicam necessidade de triagem
       const { data, error } = await (supabase as any)
         .from("fila_espera")
         .select("*")
-        .in("status", ["aguardando", "aguard. triagem"])
+        .in("status", STATUS_AGUARDANDO_TRIAGEM)
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
+
+      console.log(
+        "Fila carregada:",
+        data?.length,
+        "itens com status:",
+        data?.map((d) => d.status),
+      );
 
       if (data && !error) {
         setFila(
@@ -121,12 +138,16 @@ const Triagem: React.FC = () => {
             cid: f.cid || "",
             descricaoClinica: f.descricao_clinica || "",
             prioridade: f.prioridade || "normal",
-            horaChegada: f.hora_chegada || "",
+            horaChegada: f.hora_chegada || f.hora_chegada || "",
           })),
         );
+      } else if (error) {
+        console.error("Erro ao carregar fila:", error);
+        toast.error("Erro ao carregar lista de triagem");
       }
     } catch (err) {
       console.error("Error loading triage queue:", err);
+      toast.error("Erro ao carregar lista de triagem");
     }
     setLoading(false);
   }, [user?.unidadeId]);
@@ -310,6 +331,7 @@ const Triagem: React.FC = () => {
       await loadFila();
       await refreshFila();
     } catch (err) {
+      console.error("Erro ao confirmar triagem:", err);
       toast.error("Erro ao confirmar triagem.");
     }
     setSaving(false);
