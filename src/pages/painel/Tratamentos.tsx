@@ -879,7 +879,7 @@ const Tratamentos: React.FC = () => {
     try {
       const { error } = await supabase
         .from("treatment_cycles")
-        .update({ pts_id: selectedPtsId })
+        .update({ pts_id: selectedPtsId } as any)
         .eq("id", selectedCycle.id);
       if (error) throw error;
 
@@ -907,7 +907,7 @@ const Tratamentos: React.FC = () => {
   const handleDesvincularPts = async () => {
     if (!selectedCycle) return;
     try {
-      const { error } = await supabase.from("treatment_cycles").update({ pts_id: null }).eq("id", selectedCycle.id);
+      const { error } = await supabase.from("treatment_cycles").update({ pts_id: null } as any).eq("id", selectedCycle.id);
       if (error) throw error;
 
       await logAction({

@@ -1263,6 +1263,7 @@ export type Database = {
           id: string
           patient_id: string
           professional_id: string
+          pts_id: string | null
           sessions_done: number
           specialty: string
           start_date: string
@@ -1281,6 +1282,7 @@ export type Database = {
           id?: string
           patient_id: string
           professional_id: string
+          pts_id?: string | null
           sessions_done?: number
           specialty?: string
           start_date?: string
@@ -1299,6 +1301,7 @@ export type Database = {
           id?: string
           patient_id?: string
           professional_id?: string
+          pts_id?: string | null
           sessions_done?: number
           specialty?: string
           start_date?: string
@@ -1308,7 +1311,15 @@ export type Database = {
           unit_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "treatment_cycles_pts_id_fkey"
+            columns: ["pts_id"]
+            isOneToOne: false
+            referencedRelation: "pts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       treatment_extensions: {
         Row: {
