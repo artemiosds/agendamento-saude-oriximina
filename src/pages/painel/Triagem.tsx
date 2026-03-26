@@ -210,9 +210,7 @@ const Triagem: React.FC = () => {
     setSaving(false);
   };
 
-  const confirmarTriagem = async () => {
-    if (!selectedItem) return;
-
+  const validateTriagemFields = (): string[] => {
     const missing: string[] = [];
     if (!form.pressaoArterial.trim()) missing.push('Pressão Arterial');
     if (!form.frequenciaCardiaca.trim()) missing.push('Frequência Cardíaca');
@@ -223,7 +221,13 @@ const Triagem: React.FC = () => {
     if (!form.classificacaoRisco) missing.push('Classificação de Risco');
     if (!form.queixaPrincipal.trim()) missing.push('Queixa Principal');
     if (!form.observacoes.trim()) missing.push('Observações');
+    return missing;
+  };
 
+  const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
+    if (!selectedItem) return;
+
+    const missing = validateTriagemFields();
     if (missing.length > 0) {
       toast.error(`Campos obrigatórios: ${missing.join(', ')}`);
       return;
@@ -235,10 +239,29 @@ const Triagem: React.FC = () => {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
       await (supabase as any).from('triage_records').upsert(record, { onConflict: 'agendamento_id' });
 
-      // Update fila_espera status to aguardando_enfermagem
+      // Determine next status based on choice
+      const nextStatus = encaminharEnfermagem ? 'aguardando_enfermagem' : 'apto_agendamento';
+
       await (supabase as any).from('fila_espera')
-        .update({ status: 'aguardando_enfermagem' })
+        .update({ status: nextStatus })
         .eq('id', selectedItem.id);
+
+      // If skipping nursing, auto-log that fact
+      if (!encaminharEnfermagem) {
+        await (supabase as any).from('nursing_evaluations').insert({
+          patient_id: selectedItem.pacienteId,
+          agendamento_id: selectedItem.id,
+          professional_id: user?.id || '',
+          unit_id: user?.unidadeId || '',
+          anamnese_resumida: 'Paciente seguiu fluxo sem atendimento de enfermagem',
+          condicao_clinica: '',
+          avaliacao_risco: '',
+          prioridade: 'media',
+          observacoes_clinicas: 'Triagem concluída — enfermagem dispensada pelo técnico',
+          resultado: 'apto',
+          motivo_inapto: '',
+        });
+      }
 
       await logAction({
         acao: 'triagem_realizada', entidade: 'triagem', entidadeId: selectedItem.id,
@@ -249,10 +272,13 @@ const Triagem: React.FC = () => {
           peso: form.peso, altura: form.altura, imc: imc?.value,
           classificacao_risco: form.classificacaoRisco,
           dor: form.dor,
+          encaminhado_enfermagem: encaminharEnfermagem,
         },
       });
 
-      toast.success('Triagem confirmada! Encaminhado para enfermagem.');
+      toast.success(encaminharEnfermagem
+        ? 'Triagem confirmada! Encaminhado para enfermagem.'
+        : 'Triagem confirmada! Paciente apto para agendamento.');
       setDialogOpen(false);
       await loadFila();
       await refreshFila();
@@ -474,15 +500,21 @@ const Triagem: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={salvarRascunho} disabled={saving}>
+            <div className="flex flex-col gap-2">
+              <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 <Save className="w-4 h-4 mr-2" /> Salvar Rascunho
               </Button>
-              <Button className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={confirmarTriagem} disabled={saving}>
-                {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                <CheckCircle className="w-4 h-4 mr-2" /> Confirmar Triagem
-              </Button>
+              <div className="flex gap-2">
+                <Button className="flex-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => confirmarTriagem(true)} disabled={saving}>
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <CheckCircle className="w-4 h-4 mr-2" /> Encaminhar Enfermagem
+                </Button>
+                <Button className="flex-1" variant="secondary" onClick={() => confirmarTriagem(false)} disabled={saving}>
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <CheckCircle className="w-4 h-4 mr-2" /> Seguir sem Enfermagem
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

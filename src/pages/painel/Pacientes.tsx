@@ -220,6 +220,41 @@ const Pacientes: React.FC = () => {
         await refreshPacientes();
         toast.success('Paciente atualizado!');
       } else {
+        // === DUPLICATE DETECTION ===
+        const duplicateChecks: string[] = [];
+
+        // Check by CPF
+        if (form.cpf.trim()) {
+          const { data: cpfMatch } = await supabase.from('pacientes').select('id, nome').eq('cpf', form.cpf.trim()).limit(1);
+          if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
+        }
+
+        // Check by CNS
+        if (form.cns.trim()) {
+          const { data: cnsMatch } = await supabase.from('pacientes').select('id, nome').eq('cns', form.cns.trim()).limit(1);
+          if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
+        }
+
+        // Check by name + DOB + mother name
+        if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
+          const { data: nameMatch } = await supabase.from('pacientes').select('id, nome')
+            .eq('nome', form.nome.trim())
+            .eq('data_nascimento', form.dataNascimento)
+            .eq('nome_mae', form.nomeMae.trim())
+            .limit(1);
+          if (nameMatch && nameMatch.length > 0) duplicateChecks.push(`Nome + Data Nasc. + Mãe já cadastrado: ${nameMatch[0].nome}`);
+        }
+
+        if (duplicateChecks.length > 0) {
+          const confirmed = window.confirm(
+            `⚠️ Possível duplicidade detectada:\n\n${duplicateChecks.join('\n')}\n\nDeseja continuar com o cadastro mesmo assim?`
+          );
+          if (!confirmed) {
+            setSaving(false);
+            return;
+          }
+        }
+
         const id = `p${Date.now()}`;
         await supabase.from('pacientes').insert({ id, ...dbFields });
 
