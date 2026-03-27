@@ -308,53 +308,95 @@ const Disponibilidade: React.FC = () => {
         </CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {disponibilidades.map(d => {
-            const prof = funcionarios.find(f => f.id === d.profissionalId);
-            const unidade = unidades.find(u => u.id === d.unidadeId);
-            const sala = d.salaId ? salas.find(s => s.id === d.salaId) : null;
-            return (
-              <Card key={d.id} className="shadow-card border-0">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-semibold text-foreground">{prof?.nome || 'Profissional não encontrado'}</h3>
-                      <p className="text-sm text-muted-foreground">{unidade?.nome || 'Unidade não encontrada'}{sala ? ` • ${sala.nome}` : ''}</p>
-                      <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                        <p><Calendar className="w-3.5 h-3.5 inline mr-1" />{d.dataInicio} a {d.dataFim}</p>
-                        <p><Clock className="w-3.5 h-3.5 inline mr-1" />{d.horaInicio} — {d.horaFim}</p>
-                        <p>Vagas: {d.vagasPorHora}/hora • {d.vagasPorDia}/dia • Consulta: {d.duracaoConsulta || 30}min</p>
-                        <p>Dias: {d.diasSemana.sort((a, b) => a - b).map(i => diasSemanaFull[i]).join(', ')}</p>
-                        {d.diasSemana.some(i => i === 0 || i === 6) && (
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 mt-1">
-                            🟠 Ativo no fim de semana
-                          </span>
-                        )}
+          {(() => {
+            // Group by profissionalId + dataInicio + dataFim
+            const groups = new Map<string, typeof disponibilidades>();
+            disponibilidades.forEach(d => {
+              const key = `${d.profissionalId}|${d.dataInicio}|${d.dataFim}`;
+              if (!groups.has(key)) groups.set(key, []);
+              groups.get(key)!.push(d);
+            });
+
+            return Array.from(groups.entries()).map(([key, records]) => {
+              const first = records[0];
+              const prof = funcionarios.find(f => f.id === first.profissionalId);
+              const unidade = unidades.find(u => u.id === first.unidadeId);
+              const sala = first.salaId ? salas.find(s => s.id === first.salaId) : null;
+
+              // Build per-day info sorted by day number
+              const dayEntries = records
+                .flatMap(r => r.diasSemana.map(dayNum => ({ dayNum, horaInicio: r.horaInicio, horaFim: r.horaFim, id: r.id })))
+                .sort((a, b) => a.dayNum - b.dayNum);
+
+              const hasWeekend = dayEntries.some(de => de.dayNum === 0 || de.dayNum === 6);
+              const allIds = records.map(r => r.id);
+
+              return (
+                <Card key={key} className="shadow-card border-0">
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-foreground">{prof?.nome || 'Profissional não encontrado'}</h3>
+                        <p className="text-sm text-muted-foreground">{unidade?.nome || 'Unidade não encontrada'}{sala ? ` • ${sala.nome}` : ''}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}
+                        </p>
                       </div>
-                      {todayStr >= d.dataInicio && todayStr <= d.dataFim && (
-                        <div className="mt-2">
-                          <SlotInfoBadge
-                            profissionalId={d.profissionalId}
-                            unidadeId={d.unidadeId}
-                            date={todayStr}
-                          />
-                        </div>
-                      )}
+                      <div className="flex gap-1 shrink-0">
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(first)}><Pencil className="w-4 h-4" /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Essa ação não pode ser desfeita. Todos os {records.length} registro(s) deste grupo serão removidos.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const id of allIds) { await deleteDisponibilidade(id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-4 h-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Essa ação não pode ser desfeita. Os horários vinculados não aparecerão mais no agendamento online.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { await deleteDisponibilidade(d.id); toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+
+                    {/* Day pills */}
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {dayEntries.map((de, i) => {
+                        const isWeekend = de.dayNum === 0 || de.dayNum === 6;
+                        return (
+                          <span key={i} className={cn(
+                            "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border",
+                            isWeekend
+                              ? "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30"
+                              : "bg-primary/10 text-primary border-primary/20"
+                          )}>
+                            {diasSemanaLabels[de.dayNum]} {de.horaInicio}–{de.horaFim}
+                          </span>
+                        );
+                      })}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+
+                    {/* Footer */}
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground border-t border-border pt-2">
+                      <span>{first.vagasPorHora} vagas/hora</span>
+                      <span>•</span>
+                      <span>{first.vagasPorDia} vagas/dia</span>
+                      <span>•</span>
+                      <span>{first.duracaoConsulta || 30}min/consulta</span>
+                    </div>
+
+                    {hasWeekend && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 mt-2">
+                        ⚠️ Ativo no fim de semana
+                      </span>
+                    )}
+
+                    {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
+                      <div className="mt-2">
+                        <SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            });
+          })()}
         </div>
       )}
     </div>
