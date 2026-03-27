@@ -56,7 +56,7 @@ interface PacienteInfo {
 }
 
 // Status que indicam que o paciente está aguardando triagem
-const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada"];
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada", "confirmado_chegada"];
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();

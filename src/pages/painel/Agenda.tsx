@@ -542,6 +542,26 @@ const Agenda: React.FC = () => {
             .eq("ativo", true);
           if ((count ?? 0) > 0) {
             await updateAgendamento(agId, { status: "aguardando_triagem" as any });
+            // Also insert into fila_espera so triagem screen can find the patient
+            try {
+              const filaId = `fila_${Date.now()}`;
+              await supabase.from("fila_espera").insert({
+                id: filaId,
+                paciente_id: ag.pacienteId,
+                paciente_nome: ag.pacienteNome,
+                unidade_id: ag.unidadeId,
+                profissional_id: ag.profissionalId,
+                status: "aguardando_triagem",
+                prioridade: ag.prioridadePerfil || "normal",
+                prioridade_perfil: ag.prioridadePerfil || "normal",
+                hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                setor: "",
+                especialidade_destino: "",
+                criado_por: user?.nome || "recepcao",
+              });
+            } catch (filaErr) {
+              console.error("Error inserting fila_espera for triage:", filaErr);
+            }
             toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
             return;
           }

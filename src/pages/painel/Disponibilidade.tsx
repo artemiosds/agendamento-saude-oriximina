@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Switch } from '@/components/ui/switch';
 import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -16,19 +17,36 @@ import { SlotInfoBadge } from '@/components/SlotInfoBadge';
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+interface DaySchedule {
+  ativo: boolean;
+  horaInicio: string;
+  horaFim: string;
+}
+
+const defaultDaySchedules: DaySchedule[] = [
+  { ativo: false, horaInicio: '08:00', horaFim: '17:00' }, // Dom
+  { ativo: true, horaInicio: '08:00', horaFim: '17:00' },  // Seg
+  { ativo: true, horaInicio: '08:00', horaFim: '17:00' },  // Ter
+  { ativo: true, horaInicio: '08:00', horaFim: '17:00' },  // Qua
+  { ativo: true, horaInicio: '08:00', horaFim: '17:00' },  // Qui
+  { ativo: true, horaInicio: '08:00', horaFim: '17:00' },  // Sex
+  { ativo: false, horaInicio: '08:00', horaFim: '17:00' }, // Sáb
+];
+
 const Disponibilidade: React.FC = () => {
   const { disponibilidades, addDisponibilidade, updateDisponibilidade, deleteDisponibilidade, funcionarios, unidades, salas, refreshFuncionarios, refreshDisponibilidades } = useData();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  
+
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
   const { unidadesVisiveis } = useUnidadeFilter();
-  
+
   const [form, setForm] = useState({
     profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '',
-    horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25,
-    diasSemana: [1, 2, 3, 4, 5] as number[], duracaoConsulta: 30,
+    vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30,
   });
+
+  const [daySchedules, setDaySchedules] = useState<DaySchedule[]>(defaultDaySchedules.map(d => ({ ...d })));
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -39,7 +57,8 @@ const Disponibilidade: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '', horaInicio: '08:00', horaFim: '17:00', vagasPorHora: 3, vagasPorDia: 25, diasSemana: [1, 2, 3, 4, 5], duracaoConsulta: 30 });
+    setForm({ profissionalId: '', unidadeId: '', salaId: '', dataInicio: '', dataFim: '', vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30 });
+    setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
     setDialogOpen(true);
   };
 
@@ -47,10 +66,18 @@ const Disponibilidade: React.FC = () => {
     setEditId(d.id);
     setForm({
       profissionalId: d.profissionalId, unidadeId: d.unidadeId, salaId: d.salaId || '',
-      dataInicio: d.dataInicio, dataFim: d.dataFim, horaInicio: d.horaInicio, horaFim: d.horaFim,
-      vagasPorHora: d.vagasPorHora, vagasPorDia: d.vagasPorDia, diasSemana: [...d.diasSemana],
+      dataInicio: d.dataInicio, dataFim: d.dataFim,
+      vagasPorHora: d.vagasPorHora, vagasPorDia: d.vagasPorDia,
       duracaoConsulta: d.duracaoConsulta || 30,
     });
+    // Populate day schedules from this single record
+    const newSchedules = defaultDaySchedules.map(ds => ({ ...ds, ativo: false }));
+    d.diasSemana.forEach(dayNum => {
+      if (dayNum >= 0 && dayNum <= 6) {
+        newSchedules[dayNum] = { ativo: true, horaInicio: d.horaInicio, horaFim: d.horaFim };
+      }
+    });
+    setDaySchedules(newSchedules);
     setDialogOpen(true);
   };
 
@@ -59,39 +86,64 @@ const Disponibilidade: React.FC = () => {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
-    if (form.diasSemana.length === 0) {
-      toast.error('Selecione pelo menos um dia da semana.');
-      return;
-    }
-    const startH = parseInt(form.horaInicio.split(':')[0]);
-    const endH = parseInt(form.horaFim.split(':')[0]);
-    const hoursCount = endH - startH;
-    if (hoursCount <= 0) {
-      toast.error('Hora fim deve ser maior que hora início.');
-      return;
-    }
-    const maxPossible = hoursCount * form.vagasPorHora;
-    if (form.vagasPorDia > maxPossible) {
-      toast.error(`Total por dia (${form.vagasPorDia}) excede o máximo possível (${maxPossible} = ${hoursCount}h × ${form.vagasPorHora} vagas/hora). Ajuste os valores.`);
+    const activeDays = daySchedules.map((ds, i) => ({ ...ds, dayNum: i })).filter(ds => ds.ativo);
+    if (activeDays.length === 0) {
+      toast.error('Ative pelo menos um dia da semana.');
       return;
     }
 
-    const dispData = { ...form, duracaoConsulta: form.duracaoConsulta };
-    if (editId) {
-      await updateDisponibilidade(editId, dispData);
-      toast.success('Disponibilidade atualizada!');
-    } else {
-      await addDisponibilidade({ id: `d${Date.now()}`, ...dispData });
-      toast.success('Disponibilidade configurada!');
+    // Validate each active day
+    for (const day of activeDays) {
+      const startH = parseInt(day.horaInicio.split(':')[0]);
+      const endH = parseInt(day.horaFim.split(':')[0]);
+      if (endH <= startH) {
+        toast.error(`${diasSemanaFull[day.dayNum]}: Hora fim deve ser maior que hora início.`);
+        return;
+      }
+      const hoursCount = endH - startH;
+      const maxPossible = hoursCount * form.vagasPorHora;
+      if (form.vagasPorDia > maxPossible) {
+        toast.error(`${diasSemanaFull[day.dayNum]}: Total por dia (${form.vagasPorDia}) excede o máximo possível (${maxPossible}).`);
+        return;
+      }
     }
+
+    try {
+      // If editing, delete the old record first
+      if (editId) {
+        await deleteDisponibilidade(editId);
+      }
+
+      // Create one record per active day
+      for (const day of activeDays) {
+        await addDisponibilidade({
+          id: `d${Date.now()}_${day.dayNum}`,
+          profissionalId: form.profissionalId,
+          unidadeId: form.unidadeId,
+          salaId: form.salaId,
+          dataInicio: form.dataInicio,
+          dataFim: form.dataFim,
+          horaInicio: day.horaInicio,
+          horaFim: day.horaFim,
+          vagasPorHora: form.vagasPorHora,
+          vagasPorDia: form.vagasPorDia,
+          diasSemana: [day.dayNum],
+          duracaoConsulta: form.duracaoConsulta,
+        });
+      }
+
+      toast.success(editId ? 'Disponibilidade atualizada!' : `${activeDays.length} registro(s) de disponibilidade criado(s)!`);
+    } catch (err) {
+      console.error('Erro ao salvar disponibilidade:', err);
+      toast.error('Erro ao salvar disponibilidade.');
+    }
+
     setDialogOpen(false);
     await refreshDisponibilidades();
   };
 
-  const toggleDia = (dia: number) => {
-    setForm(p => ({
-      ...p, diasSemana: p.diasSemana.includes(dia) ? p.diasSemana.filter(d => d !== dia) : [...p.diasSemana, dia],
-    }));
+  const updateDaySchedule = (dayIndex: number, field: keyof DaySchedule, value: any) => {
+    setDaySchedules(prev => prev.map((ds, i) => i === dayIndex ? { ...ds, [field]: value } : ds));
   };
 
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
@@ -140,7 +192,7 @@ const Disponibilidade: React.FC = () => {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -178,47 +230,67 @@ const Disponibilidade: React.FC = () => {
               <div><Label>Data Início *</Label><Input type="date" value={form.dataInicio} onChange={e => setForm(p => ({ ...p, dataInicio: e.target.value }))} /></div>
               <div><Label>Data Fim *</Label><Input type="date" value={form.dataFim} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} /></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Hora Início</Label><Input type="time" value={form.horaInicio} onChange={e => setForm(p => ({ ...p, horaInicio: e.target.value }))} /></div>
-              <div><Label>Hora Fim</Label><Input type="time" value={form.horaFim} onChange={e => setForm(p => ({ ...p, horaFim: e.target.value }))} /></div>
-            </div>
             <div className="grid grid-cols-3 gap-3">
               <div><Label>Vagas/Hora</Label><Input type="number" min={1} value={form.vagasPorHora} onChange={e => setForm(p => ({ ...p, vagasPorHora: parseInt(e.target.value) || 1 }))} /></div>
               <div><Label>Vagas/Dia</Label><Input type="number" min={1} value={form.vagasPorDia} onChange={e => setForm(p => ({ ...p, vagasPorDia: parseInt(e.target.value) || 1 }))} /></div>
               <div><Label>Duração (min)</Label><Input type="number" min={10} step={5} value={form.duracaoConsulta} onChange={e => setForm(p => ({ ...p, duracaoConsulta: parseInt(e.target.value) || 30 }))} /></div>
             </div>
+
+            {/* Per-day schedule grid */}
             <div>
-              <Label className="mb-2 block">Dias da Semana</Label>
-              <div className="grid grid-cols-7 gap-1.5">
-                {diasSemanaLabels.map((label, i) => {
+              <Label className="mb-2 block">Horário por Dia da Semana</Label>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="grid grid-cols-[1fr_auto_1fr_1fr] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+                  <span>Dia</span>
+                  <span className="text-center px-2">Ativo</span>
+                  <span className="text-center">Início</span>
+                  <span className="text-center">Fim</span>
+                </div>
+                {daySchedules.map((ds, i) => {
                   const isFds = i === 0 || i === 6;
-                  const isSelected = form.diasSemana.includes(i);
                   return (
-                    <div key={i} className="flex flex-col items-center gap-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isSelected ? 'default' : 'outline'}
-                        className={cn(
-                          'w-full text-center text-xs font-medium',
-                          isSelected && !isFds && 'gradient-primary text-primary-foreground',
-                          isSelected && isFds && 'bg-orange-500 text-white hover:bg-orange-600 border-orange-500',
-                          !isSelected && isFds && 'border-destructive/40 text-destructive bg-destructive/5',
-                        )}
-                        onClick={() => toggleDia(i)}
-                      >
-                        {label}
-                      </Button>
-                      {isFds && (
-                        <span className={cn('text-[10px] leading-tight', isSelected ? 'text-orange-500 font-medium' : 'text-destructive/60')}>
-                          {isSelected ? 'Ativo FDS' : 'FDS'}
-                        </span>
-                      )}
+                    <div key={i} className={cn(
+                      "grid grid-cols-[1fr_auto_1fr_1fr] gap-0 items-center px-3 py-2 border-b border-border last:border-b-0",
+                      !ds.ativo && "bg-muted/20",
+                      isFds && ds.ativo && "bg-orange-500/5",
+                    )}>
+                      <span className={cn(
+                        "text-sm font-medium",
+                        ds.ativo ? "text-foreground" : "text-muted-foreground",
+                        isFds && ds.ativo && "text-orange-600 dark:text-orange-400",
+                      )}>
+                        {diasSemanaFull[i]}
+                        {isFds && <span className="text-[10px] ml-1 text-muted-foreground">(FDS)</span>}
+                      </span>
+                      <div className="flex justify-center px-2">
+                        <Switch
+                          checked={ds.ativo}
+                          onCheckedChange={(checked) => updateDaySchedule(i, 'ativo', checked)}
+                        />
+                      </div>
+                      <div className="px-1">
+                        <Input
+                          type="time"
+                          value={ds.horaInicio}
+                          onChange={e => updateDaySchedule(i, 'horaInicio', e.target.value)}
+                          disabled={!ds.ativo}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="px-1">
+                        <Input
+                          type="time"
+                          value={ds.horaFim}
+                          onChange={e => updateDaySchedule(i, 'horaFim', e.target.value)}
+                          disabled={!ds.ativo}
+                          className="h-8 text-xs"
+                        />
+                      </div>
                     </div>
                   );
                 })}
               </div>
-              {form.diasSemana.some(d => d === 0 || d === 6) && (
+              {daySchedules.some((ds, i) => ds.ativo && (i === 0 || i === 6)) && (
                 <p className="text-xs text-orange-500 mt-2 flex items-center gap-1">
                   ⚠️ Atenção: disponibilidade em fim de semana. Certifique-se de que é intencional.
                 </p>
@@ -258,7 +330,6 @@ const Disponibilidade: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      {/* Slot info for today */}
                       {todayStr >= d.dataInicio && todayStr <= d.dataFim && (
                         <div className="mt-2">
                           <SlotInfoBadge
