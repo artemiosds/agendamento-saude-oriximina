@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import {
   Agendamento,
   Paciente,
@@ -24,6 +24,7 @@ const inlineSetores = [
   { id: "st7", nome: "Nutrição" },
 ];
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 
 interface BloqueioAgenda {
@@ -581,36 +582,295 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadBloqueios,
   ]);
 
-  // ── Realtime subscriptions for automatic data sync ──
-  const realtimeDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
+    const index = prev.findIndex((item) => item.id === nextItem.id);
+    if (index === -1) return [nextItem, ...prev];
+    const cloned = [...prev];
+    cloned[index] = nextItem;
+    return cloned;
+  };
 
-  useEffect(() => {
-    const debouncedRefresh = (key: string, fn: () => Promise<void>, ms = 300) => {
-      if (realtimeDebounceRef.current[key]) clearTimeout(realtimeDebounceRef.current[key]);
-      realtimeDebounceRef.current[key] = setTimeout(() => { fn(); }, ms);
-    };
+  const removeById = <T extends { id: string }>(prev: T[], id: string) => prev.filter((item) => item.id !== id);
 
-    const channel = supabase
-      .channel('data-context-realtime')
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'agendamentos' }, () => debouncedRefresh('ag', loadAgendamentos))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'fila_espera' }, () => debouncedRefresh('fila', loadFila))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'atendimentos' }, () => debouncedRefresh('at', loadAgendamentos))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'pacientes' }, () => debouncedRefresh('pac', loadPacientes))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'disponibilidades' }, () => debouncedRefresh('disp', loadDisponibilidades))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'bloqueios' }, () => debouncedRefresh('bloq', loadBloqueios))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'funcionarios' }, () => debouncedRefresh('func', loadFuncionarios))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'unidades' }, () => debouncedRefresh('uni', loadUnidades))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'salas' }, () => debouncedRefresh('salas', loadSalas))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'treatment_cycles' }, () => debouncedRefresh('ag', loadAgendamentos))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'treatment_sessions' }, () => debouncedRefresh('ag', loadAgendamentos))
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'prontuarios' }, () => debouncedRefresh('ag', loadAgendamentos))
-      .subscribe();
+  useRealtimeSync({
+    table: "agendamentos",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setAgendamentos((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Agendamento = {
+        id: row.id,
+        pacienteId: row.paciente_id,
+        pacienteNome: row.paciente_nome,
+        unidadeId: row.unidade_id,
+        salaId: row.sala_id || "",
+        setorId: row.setor_id || "",
+        profissionalId: row.profissional_id,
+        profissionalNome: row.profissional_nome,
+        data: row.data,
+        hora: row.hora,
+        status: row.status,
+        tipo: row.tipo,
+        observacoes: row.observacoes || "",
+        origem: row.origem || "recepcao",
+        googleEventId: row.google_event_id || "",
+        syncStatus: row.sync_status || "",
+        criadoEm: row.criado_em || "",
+        criadoPor: row.criado_por || "",
+      };
+      setAgendamentos((prev) => upsertById(prev, mapped));
+    },
+    poll: loadAgendamentos,
+  });
 
-    return () => {
-      Object.values(realtimeDebounceRef.current).forEach(clearTimeout);
-      supabase.removeChannel(channel);
-    };
-  }, [loadAgendamentos, loadFila, loadPacientes, loadDisponibilidades, loadBloqueios, loadFuncionarios, loadUnidades, loadSalas]);
+  useRealtimeSync({
+    table: "fila_espera",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setFila((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: FilaEspera = {
+        id: row.id,
+        pacienteId: row.paciente_id,
+        pacienteNome: row.paciente_nome,
+        unidadeId: row.unidade_id,
+        profissionalId: row.profissional_id || "",
+        setor: row.setor || "",
+        prioridade: (row.prioridade_perfil && row.prioridade_perfil !== "normal" ? row.prioridade_perfil : row.prioridade) as FilaEspera["prioridade"],
+        status: row.status as FilaEspera["status"],
+        posicao: row.posicao,
+        horaChegada: row.hora_chegada,
+        horaChamada: row.hora_chamada || "",
+        observacoes: row.observacoes || "",
+        descricaoClinica: row.descricao_clinica || "",
+        cid: row.cid || "",
+        criadoPor: row.criado_por || "",
+        criadoEm: row.criado_em || "",
+        dataSolicitacaoOriginal: row.data_solicitacao_original || "",
+        origemCadastro: row.origem_cadastro || "normal",
+        especialidadeDestino: row.especialidade_destino || "",
+      };
+      setFila((prev) => upsertById(prev, mapped));
+    },
+    poll: loadFila,
+  });
+
+  useRealtimeSync({
+    table: "pacientes",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setPacientes((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Paciente = {
+        id: row.id,
+        nome: row.nome,
+        cpf: row.cpf || "",
+        cns: row.cns || "",
+        nomeMae: row.nome_mae || "",
+        telefone: row.telefone || "",
+        dataNascimento: row.data_nascimento || "",
+        email: row.email || "",
+        endereco: row.endereco || "",
+        observacoes: row.observacoes || "",
+        descricaoClinica: row.descricao_clinica || "",
+        cid: row.cid || "",
+        criadoEm: row.criado_em || "",
+      };
+      setPacientes((prev) => upsertById(prev, mapped));
+    },
+    poll: loadPacientes,
+  });
+
+  useRealtimeSync({
+    table: "disponibilidades",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setDisponibilidades((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Disponibilidade = {
+        id: row.id,
+        profissionalId: row.profissional_id,
+        unidadeId: row.unidade_id,
+        salaId: row.sala_id || "",
+        dataInicio: row.data_inicio,
+        dataFim: row.data_fim,
+        horaInicio: row.hora_inicio,
+        horaFim: row.hora_fim,
+        vagasPorHora: row.vagas_por_hora,
+        vagasPorDia: row.vagas_por_dia,
+        diasSemana: row.dias_semana || [],
+        duracaoConsulta: row.duracao_consulta || 30,
+      };
+      setDisponibilidades((prev) => upsertById(prev, mapped));
+    },
+    poll: loadDisponibilidades,
+  });
+
+  useRealtimeSync({
+    table: "bloqueios",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setBloqueios((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: BloqueioAgenda = {
+        id: row.id,
+        titulo: row.titulo,
+        tipo: row.tipo,
+        dataInicio: row.data_inicio,
+        dataFim: row.data_fim,
+        diaInteiro: row.dia_inteiro ?? true,
+        horaInicio: row.hora_inicio || "",
+        horaFim: row.hora_fim || "",
+        unidadeId: row.unidade_id || "",
+        profissionalId: row.profissional_id || "",
+        criadoPor: row.criado_por || "",
+      };
+      setBloqueios((prev) => upsertById(prev, mapped));
+    },
+    poll: loadBloqueios,
+  });
+
+  useRealtimeSync({
+    table: "funcionarios",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setFuncionarios((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: User = {
+        id: row.id,
+        authUserId: row.auth_user_id || "",
+        nome: row.nome,
+        usuario: row.usuario,
+        email: row.email,
+        setor: row.setor || "",
+        unidadeId: row.unidade_id || "",
+        salaId: row.sala_id || "",
+        cargo: row.cargo || "",
+        role: row.role as User["role"],
+        ativo: row.ativo ?? true,
+        criadoEm: row.criado_em || "",
+        criadoPor: row.criado_por || "",
+        tempoAtendimento: row.tempo_atendimento || 30,
+        profissao: row.profissao || "",
+        tipoConselho: row.tipo_conselho || "",
+        numeroConselho: row.numero_conselho || "",
+        ufConselho: row.uf_conselho || "",
+        podeAgendarRetorno: row.pode_agendar_retorno ?? false,
+        coren: row.coren || "",
+      };
+      setFuncionarios((prev) => upsertById(prev, mapped));
+    },
+    poll: loadFuncionarios,
+  });
+
+  useRealtimeSync({
+    table: "unidades",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setUnidades((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Unidade = {
+        id: row.id,
+        nome: row.nome,
+        endereco: row.endereco || "",
+        telefone: row.telefone || "",
+        whatsapp: row.whatsapp || "",
+        ativo: row.ativo ?? true,
+      };
+      setUnidades((prev) => upsertById(prev, mapped));
+    },
+    poll: loadUnidades,
+  });
+
+  useRealtimeSync({
+    table: "salas",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setSalas((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Sala = {
+        id: row.id,
+        nome: row.nome,
+        unidadeId: row.unidade_id,
+        ativo: row.ativo ?? true,
+      };
+      setSalas((prev) => upsertById(prev, mapped));
+    },
+    poll: loadSalas,
+  });
+
+  useRealtimeSync({
+    table: "atendimentos",
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const id = String((payload.old as any)?.id || "");
+        if (!id) return;
+        setAtendimentos((prev) => removeById(prev, id));
+        return;
+      }
+      const row = payload.new as any;
+      if (!row?.id) return;
+      const mapped: Atendimento = {
+        id: row.id,
+        agendamentoId: row.agendamento_id || "",
+        pacienteId: row.paciente_id,
+        pacienteNome: row.paciente_nome,
+        profissionalId: row.profissional_id,
+        profissionalNome: row.profissional_nome,
+        unidadeId: row.unidade_id || "",
+        salaId: row.sala_id || "",
+        setor: row.setor || "",
+        procedimento: row.procedimento || "",
+        observacoes: row.observacoes || "",
+        data: row.data,
+        horaInicio: row.hora_inicio || "",
+        horaFim: row.hora_fim || "",
+        duracaoMinutos: row.duracao_minutos || null,
+        status: row.status || "em_atendimento",
+      } as Atendimento;
+      setAtendimentos((prev) => upsertById(prev, mapped));
+    },
+  });
 
   const refreshFuncionarios = loadFuncionarios;
   const refreshDisponibilidades = loadDisponibilidades;
