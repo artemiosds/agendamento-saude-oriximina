@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Play, Clock, X, Plus, CheckCircle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { differenceInMinutes } from "date-fns";
 
 const ESPECIALIDADE_LABELS: Record<string, string> = {
@@ -57,6 +58,22 @@ interface PacienteInfo {
 
 // Status que indicam que o paciente está aguardando triagem
 const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada", "confirmado_chegada"];
+
+const mapFilaItem = (f: any): FilaItem => ({
+  id: f.id,
+  pacienteNome: f.paciente_nome,
+  pacienteId: f.paciente_id,
+  unidadeId: f.unidade_id,
+  criadoEm: f.criado_em || "",
+  especialidadeDestino: f.especialidade_destino || "",
+  cid: f.cid || "",
+  descricaoClinica: f.descricao_clinica || "",
+  prioridade: f.prioridade || "normal",
+  horaChegada: f.hora_chegada || "",
+  agendamento_id: f.agendamento_id,
+});
+
+const sortFilaByCreatedAt = (items: FilaItem[]) => [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
@@ -113,20 +130,7 @@ const Triagem: React.FC = () => {
         .order("criado_em", { ascending: true });
 
       if (data && !error) {
-        const mappedData: FilaItem[] = data.map((f: any) => ({
-          id: f.id,
-          pacienteNome: f.paciente_nome,
-          pacienteId: f.paciente_id,
-          unidadeId: f.unidade_id,
-          criadoEm: f.criado_em || "",
-          especialidadeDestino: f.especialidade_destino || "",
-          cid: f.cid || "",
-          descricaoClinica: f.descricao_clinica || "",
-          prioridade: f.prioridade || "normal",
-          horaChegada: f.hora_chegada || "",
-          agendamento_id: f.agendamento_id,
-        }));
-        setFila(mappedData);
+        setFila(sortFilaByCreatedAt(data.map(mapFilaItem)));
       } else if (error) {
         console.error("Erro ao carregar fila:", error);
         toast.error("Erro ao carregar lista de triagem");
@@ -142,16 +146,31 @@ const Triagem: React.FC = () => {
     loadFila();
   }, [loadFila]);
 
-  useEffect(() => {
-    if (!user?.unidadeId) return;
-    const channel = supabase
-      .channel("triagem-fila-espera")
-      .on("postgres_changes", { event: "*", schema: "public", table: "fila_espera" }, () => loadFila())
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.unidadeId, loadFila]);
+  useRealtimeSync({
+    table: "fila_espera",
+    filter: user?.unidadeId ? `unidade_id=eq.${user.unidadeId}` : undefined,
+    enabled: Boolean(user?.unidadeId),
+    onEvent: (payload) => {
+      if (payload.eventType === "DELETE") {
+        const deletedId = String((payload.old as any)?.id || "");
+        if (!deletedId) return;
+        setFila((prev) => prev.filter((item) => item.id !== deletedId));
+        return;
+      }
+
+      const row = payload.new as any;
+      if (!row?.id) return;
+
+      const shouldRender = STATUS_AGUARDANDO_TRIAGEM.includes(String(row.status || ""));
+      setFila((prev) => {
+        const withoutCurrent = prev.filter((item) => item.id !== row.id);
+        if (!shouldRender) return withoutCurrent;
+        return sortFilaByCreatedAt([...withoutCurrent, mapFilaItem(row)]);
+      });
+    },
+    poll: loadFila,
+    pollIntervalMs: 30000,
+  });
 
   const openTriagem = async (item: FilaItem) => {
     setSelectedItem(item);
