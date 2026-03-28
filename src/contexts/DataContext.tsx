@@ -24,6 +24,7 @@ const inlineSetores = [
   { id: "st7", nome: "Nutrição" },
 ];
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 
 interface BloqueioAgenda {
