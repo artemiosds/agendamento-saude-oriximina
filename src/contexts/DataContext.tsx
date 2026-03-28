@@ -585,7 +585,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const realtimeDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
-    const debouncedRefresh = (key: string, fn: () => Promise<void>, ms = 400) => {
+    const debouncedRefresh = (key: string, fn: () => Promise<void>, ms = 300) => {
       if (realtimeDebounceRef.current[key]) clearTimeout(realtimeDebounceRef.current[key]);
       realtimeDebounceRef.current[key] = setTimeout(() => { fn(); }, ms);
     };
@@ -596,13 +596,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'fila_espera' }, () => debouncedRefresh('fila', loadFila))
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'atendimentos' }, () => debouncedRefresh('at', loadAgendamentos))
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'pacientes' }, () => debouncedRefresh('pac', loadPacientes))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'disponibilidades' }, () => debouncedRefresh('disp', loadDisponibilidades))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'bloqueios' }, () => debouncedRefresh('bloq', loadBloqueios))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'funcionarios' }, () => debouncedRefresh('func', loadFuncionarios))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'unidades' }, () => debouncedRefresh('uni', loadUnidades))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'salas' }, () => debouncedRefresh('salas', loadSalas))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'treatment_cycles' }, () => debouncedRefresh('ag', loadAgendamentos))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'treatment_sessions' }, () => debouncedRefresh('ag', loadAgendamentos))
+      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'prontuarios' }, () => debouncedRefresh('ag', loadAgendamentos))
       .subscribe();
 
     return () => {
       Object.values(realtimeDebounceRef.current).forEach(clearTimeout);
       supabase.removeChannel(channel);
     };
-  }, [loadAgendamentos, loadFila, loadPacientes]);
+  }, [loadAgendamentos, loadFila, loadPacientes, loadDisponibilidades, loadBloqueios, loadFuncionarios, loadUnidades, loadSalas]);
 
   const refreshFuncionarios = loadFuncionarios;
   const refreshDisponibilidades = loadDisponibilidades;
