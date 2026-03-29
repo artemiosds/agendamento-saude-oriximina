@@ -1276,13 +1276,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     else console.error("Error deleting sala:", error);
   }, []);
 
-  const addFuncionario = useCallback((u: User) => setFuncionarios((prev) => [...prev, u]), []);
+  const addFuncionario = useCallback((u: User) => { setFuncionarios((prev) => [...prev, u]); emitDbUpdate(); }, [emitDbUpdate]);
   const updateFuncionario = useCallback(
-    (id: string, data: Partial<User>) =>
-      setFuncionarios((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u))),
-    [],
+    (id: string, data: Partial<User>) => {
+      setFuncionarios((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
   );
-  const deleteFuncionario = useCallback((id: string) => setFuncionarios((prev) => prev.filter((u) => u.id !== id)), []);
+  const deleteFuncionario = useCallback((id: string) => { setFuncionarios((prev) => prev.filter((u) => u.id !== id)); emitDbUpdate(); }, [emitDbUpdate]);
 
   const addDisponibilidade = useCallback(async (d: Disponibilidade) => {
     const { error } = await supabase.from("disponibilidades" as any).insert({
