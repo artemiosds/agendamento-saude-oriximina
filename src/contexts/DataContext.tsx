@@ -1196,12 +1196,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     // Sempre atualiza estado local independente de erro no banco
     setAtendimentos((prev) => [...prev, a]);
-  }, []);
+    emitDbUpdate();
+  }, [emitDbUpdate]);
 
   const updateAtendimento = useCallback(
-    (id: string, data: Partial<Atendimento>) =>
-      setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a))),
-    [],
+    (id: string, data: Partial<Atendimento>) => {
+      setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
   );
 
   const addUnidade = useCallback(async (u: Unidade) => {
