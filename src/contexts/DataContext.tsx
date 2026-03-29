@@ -612,7 +612,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Wrap logAction to also emit db_update after any mutation
   const logActionAndSync = useCallback(
     async (input: Parameters<typeof logAction>[0]) => {
-      await logAction(input);
+      await logActionAndSync(input);
       emitDbUpdate();
     },
     [logAction, emitDbUpdate],
@@ -933,7 +933,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setPacientes((prev) => [...prev, p]);
-        await logAction({ acao: "criar", entidade: "paciente", entidadeId: p.id, detalhes: { nome: p.nome } });
+        await logActionAndSync({ acao: "criar", entidade: "paciente", entidadeId: p.id, detalhes: { nome: p.nome } });
       } else console.error("Error adding paciente:", error);
     },
     [logAction],
@@ -959,7 +959,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "paciente",
           entidadeId: id,
@@ -1018,7 +1018,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setAgendamentos((prev) => [...prev, ag]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "agendamento",
           entidadeId: ag.id,
@@ -1052,7 +1052,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "agendamento",
           entidadeId: id,
@@ -1108,7 +1108,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "fila_espera",
           entidadeId: f.id,
@@ -1143,7 +1143,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "fila_espera",
           entidadeId: id,
@@ -1162,7 +1162,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.filter((f) => f.id !== id));
-        await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
+        await logActionAndSync({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
       } else console.error("Error removing from fila:", error);
     },
     [logAction],
@@ -1364,7 +1364,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           criadoPor: d.criado_por || "",
         };
         setBloqueios((prev) => [...prev, mapped]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "bloqueio",
           entidadeId: mapped.id,
@@ -1394,7 +1394,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "bloqueio",
           entidadeId: id,
@@ -1413,7 +1413,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setBloqueios((prev) => prev.filter((b) => b.id !== id));
-        await logAction({ acao: "excluir", entidade: "bloqueio", entidadeId: id });
+        await logActionAndSync({ acao: "excluir", entidade: "bloqueio", entidadeId: id });
       }
     },
     [logAction],
