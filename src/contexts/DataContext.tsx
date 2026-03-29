@@ -560,16 +560,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  useEffect(() => {
-    loadConfiguracoes();
-    loadUnidades();
-    loadSalas();
-    loadFuncionarios();
-    loadDisponibilidades();
-    loadPacientes();
-    loadAgendamentos();
-    loadFila();
-    loadBloqueios();
+  const loadAll = useCallback(async () => {
+    await Promise.all([
+      loadConfiguracoes(),
+      loadUnidades(),
+      loadSalas(),
+      loadFuncionarios(),
+      loadDisponibilidades(),
+      loadPacientes(),
+      loadAgendamentos(),
+      loadFila(),
+      loadBloqueios(),
+    ]);
   }, [
     loadConfiguracoes,
     loadUnidades,
@@ -581,6 +583,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadFila,
     loadBloqueios,
   ]);
+
+  // Initial load
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // Global db_update event listener — debounced full refresh
+  const dbUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const handler = () => {
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+      dbUpdateTimerRef.current = setTimeout(() => {
+        loadAll();
+      }, 500);
+    };
+    window.addEventListener("db_update", handler);
+    return () => {
+      window.removeEventListener("db_update", handler);
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+    };
+  }, [loadAll]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
