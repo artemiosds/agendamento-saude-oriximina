@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Agendamento,
   Paciente,
@@ -560,16 +560,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  useEffect(() => {
-    loadConfiguracoes();
-    loadUnidades();
-    loadSalas();
-    loadFuncionarios();
-    loadDisponibilidades();
-    loadPacientes();
-    loadAgendamentos();
-    loadFila();
-    loadBloqueios();
+  const loadAll = useCallback(async () => {
+    await Promise.all([
+      loadConfiguracoes(),
+      loadUnidades(),
+      loadSalas(),
+      loadFuncionarios(),
+      loadDisponibilidades(),
+      loadPacientes(),
+      loadAgendamentos(),
+      loadFila(),
+      loadBloqueios(),
+    ]);
   }, [
     loadConfiguracoes,
     loadUnidades,
@@ -581,6 +583,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadFila,
     loadBloqueios,
   ]);
+
+  // Initial load
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // Global db_update event listener — debounced full refresh
+  const dbUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const handler = () => {
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+      dbUpdateTimerRef.current = setTimeout(() => {
+        loadAll();
+      }, 500);
+    };
+    window.addEventListener("db_update", handler);
+    return () => {
+      window.removeEventListener("db_update", handler);
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+    };
+  }, [loadAll]);
+
+  const emitDbUpdate = useCallback(() => {
+    try { window.dispatchEvent(new Event("db_update")); } catch { /* SSR safety */ }
+  }, []);
+
+  // Wrap logAction to also emit db_update after any mutation
+  const logActionAndSync = useCallback(
+    async (input: Parameters<typeof logAction>[0]) => {
+      await logActionAndSync(input);
+      emitDbUpdate();
+    },
+    [logAction, emitDbUpdate],
+  );
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -897,7 +933,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setPacientes((prev) => [...prev, p]);
-        await logAction({ acao: "criar", entidade: "paciente", entidadeId: p.id, detalhes: { nome: p.nome } });
+        await logActionAndSync({ acao: "criar", entidade: "paciente", entidadeId: p.id, detalhes: { nome: p.nome } });
       } else console.error("Error adding paciente:", error);
     },
     [logAction],
@@ -923,7 +959,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "paciente",
           entidadeId: id,
@@ -982,7 +1018,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setAgendamentos((prev) => [...prev, ag]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "agendamento",
           entidadeId: ag.id,
@@ -1016,7 +1052,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "agendamento",
           entidadeId: id,
@@ -1072,7 +1108,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "fila_espera",
           entidadeId: f.id,
@@ -1107,7 +1143,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "fila_espera",
           entidadeId: id,
@@ -1126,7 +1162,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.filter((f) => f.id !== id));
-        await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
+        await logActionAndSync({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
       } else console.error("Error removing from fila:", error);
     },
     [logAction],
@@ -1160,12 +1196,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     // Sempre atualiza estado local independente de erro no banco
     setAtendimentos((prev) => [...prev, a]);
-  }, []);
+    emitDbUpdate();
+  }, [emitDbUpdate]);
 
   const updateAtendimento = useCallback(
-    (id: string, data: Partial<Atendimento>) =>
-      setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a))),
-    [],
+    (id: string, data: Partial<Atendimento>) => {
+      setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
   );
 
   const addUnidade = useCallback(async (u: Unidade) => {
@@ -1179,7 +1218,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         whatsapp: u.whatsapp,
         ativo: u.ativo,
       } as any);
-    if (!error) setUnidades((prev) => [...prev, u]);
+    if (!error) { emitDbUpdate(); setUnidades((prev) => [...prev, u]); }
     else console.error("Error adding unidade:", error);
   }, []);
 
@@ -1194,7 +1233,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u))); }
     else console.error("Error updating unidade:", error);
   }, []);
 
@@ -1203,7 +1242,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) setUnidades((prev) => prev.filter((u) => u.id !== id));
+    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.filter((u) => u.id !== id)); }
     else console.error("Error deleting unidade:", error);
   }, []);
 
@@ -1211,7 +1250,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase
       .from("salas" as any)
       .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
-    if (!error) setSalas((prev) => [...prev, s]);
+    if (!error) { emitDbUpdate(); setSalas((prev) => [...prev, s]); }
     else console.error("Error adding sala:", error);
   }, []);
 
@@ -1224,7 +1263,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+    if (!error) { emitDbUpdate(); setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s))); }
     else console.error("Error updating sala:", error);
   }, []);
 
@@ -1233,17 +1272,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .delete()
       .eq("id", id);
-    if (!error) setSalas((prev) => prev.filter((s) => s.id !== id));
+    if (!error) { emitDbUpdate(); setSalas((prev) => prev.filter((s) => s.id !== id)); }
     else console.error("Error deleting sala:", error);
   }, []);
 
-  const addFuncionario = useCallback((u: User) => setFuncionarios((prev) => [...prev, u]), []);
+  const addFuncionario = useCallback((u: User) => { setFuncionarios((prev) => [...prev, u]); emitDbUpdate(); }, [emitDbUpdate]);
   const updateFuncionario = useCallback(
-    (id: string, data: Partial<User>) =>
-      setFuncionarios((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u))),
-    [],
+    (id: string, data: Partial<User>) => {
+      setFuncionarios((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
   );
-  const deleteFuncionario = useCallback((id: string) => setFuncionarios((prev) => prev.filter((u) => u.id !== id)), []);
+  const deleteFuncionario = useCallback((id: string) => { setFuncionarios((prev) => prev.filter((u) => u.id !== id)); emitDbUpdate(); }, [emitDbUpdate]);
 
   const addDisponibilidade = useCallback(async (d: Disponibilidade) => {
     const { error } = await supabase.from("disponibilidades" as any).insert({
@@ -1260,7 +1301,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dias_semana: d.diasSemana,
       duracao_consulta: d.duracaoConsulta || 30,
     } as any);
-    if (!error) setDisponibilidades((prev) => [...prev, d]);
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => [...prev, d]); }
     else console.error("Error adding disponibilidade:", error);
   }, []);
 
@@ -1281,7 +1322,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d)));
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d))); }
     else console.error("Error updating disponibilidade:", error);
   }, []);
 
@@ -1290,7 +1331,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.filter((d) => d.id !== id)); }
     else console.error("Error deleting disponibilidade:", error);
   }, []);
 
@@ -1328,7 +1369,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           criadoPor: d.criado_por || "",
         };
         setBloqueios((prev) => [...prev, mapped]);
-        await logAction({
+        await logActionAndSync({
           acao: "criar",
           entidade: "bloqueio",
           entidadeId: mapped.id,
@@ -1358,7 +1399,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
-        await logAction({
+        await logActionAndSync({
           acao: "editar",
           entidade: "bloqueio",
           entidadeId: id,
@@ -1377,7 +1418,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setBloqueios((prev) => prev.filter((b) => b.id !== id));
-        await logAction({ acao: "excluir", entidade: "bloqueio", entidadeId: id });
+        await logActionAndSync({ acao: "excluir", entidade: "bloqueio", entidadeId: id });
       }
     },
     [logAction],
