@@ -38,32 +38,28 @@ const ALL_MODULES: ModuleName[] = [
 ];
 
 const defaultPerm: ModulePermission = {
-  can_view: false,
-  can_create: false,
-  can_edit: false,
-  can_delete: false,
-  can_execute: false,
+  can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
 };
 
 const fullPerm: ModulePermission = {
-  can_view: true,
-  can_create: true,
-  can_edit: true,
-  can_delete: true,
-  can_execute: true,
+  can_view: true, can_create: true, can_edit: true, can_delete: true, can_execute: true,
 };
 
-const PermissionsContext = createContext<PermissionsContextType | null>(null);
-
-export const usePermissions = () => {
-  const ctx = useContext(PermissionsContext);
-  if (!ctx) throw new Error('usePermissions must be used within PermissionsProvider');
-  return ctx;
-};
-
-// Permissões padrão por perfil — fallback quando não há registros na tabela
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
   gestor: {
+    pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    agenda:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: true,  can_execute: true  },
+    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    tratamento:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    relatorios:     { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: true  },
+    usuarios:       { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
+  },
+  coordenador: {
     pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
     encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
     fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
@@ -115,15 +111,47 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
     relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
     usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
   },
+  tecnico: {
+    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
+    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    atendimento:    { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    prontuario:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+  },
+  enfermagem: {
+    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
+    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
+    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
+    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+  },
 };
 
 function buildFullMap(partial: Partial<PermissionsMap>): PermissionsMap {
   const map = {} as PermissionsMap;
-  ALL_MODULES.forEach((m) => {
-    map[m] = partial[m] ?? { ...defaultPerm };
-  });
+  ALL_MODULES.forEach((m) => { map[m] = partial[m] ?? { ...defaultPerm }; });
   return map;
 }
+
+const PermissionsContext = createContext<PermissionsContextType | null>(null);
+
+export const usePermissions = () => {
+  const ctx = useContext(PermissionsContext);
+  if (!ctx) throw new Error('usePermissions must be used within PermissionsProvider');
+  return ctx;
+};
 
 export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -140,47 +168,19 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setLoading(true);
 
     try {
-      // 1. Buscar role direto do banco — não confiar só no AuthContext
-      //    Isso evita race condition onde user.role ainda está undefined
-      let role = user.role?.toLowerCase().trim();
+      // AuthContext já buscou o role da tabela 'funcionarios' — usar diretamente
+      const role = (user.role || '').toLowerCase().trim();
+
+      console.log('[Permissions] user.id:', user.id, '| role:', role);
 
       if (!role) {
-        // Tentar buscar da tabela profiles
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (profileData?.role) {
-          role = profileData.role.toLowerCase().trim();
-        } else {
-          // Tentar tabela usuarios como fallback
-          const { data: usuarioData } = await (supabase as any)
-            .from('usuarios')
-            .select('perfil, role, tipo')
-            .eq('id', user.id)
-            .maybeSingle();
-
-          role = (
-            usuarioData?.role ||
-            usuarioData?.perfil ||
-            usuarioData?.tipo ||
-            ''
-          ).toLowerCase().trim();
-        }
-      }
-
-      console.log('[Permissions] user.id:', user.id, '| role resolvido:', role);
-
-      if (!role) {
-        console.warn('[Permissions] Role não encontrado para o usuário. Sem permissões.');
+        console.warn('[Permissions] Role vazio');
         setPermissions(buildFullMap({}));
         setLoading(false);
         return;
       }
 
-      // 2. Master sempre tem tudo
+      // Master tem tudo
       if (role === 'master') {
         const full = {} as PermissionsMap;
         ALL_MODULES.forEach((m) => { full[m] = { ...fullPerm }; });
@@ -189,19 +189,34 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      // 3. Buscar da tabela permissoes
+      // Buscar da tabela permissoes
       const { data, error } = await (supabase as any)
         .from('permissoes')
         .select('modulo, can_view, can_create, can_edit, can_delete, can_execute')
         .eq('perfil', role);
 
       if (error) {
-        console.error('[Permissions] Erro ao buscar tabela permissoes:', error);
-        // Usar defaults por role como fallback
-        const fallback = DEFAULT_PERMISSIONS_BY_ROLE[role];
-        if (fallback) {
-          console.warn('[Permissions] Usando permissões padrão para role:', role);
-          setPermissions(buildFullMap(fallback));
+        console.error('[Permissions] Erro:', error);
+        setPermissions(buildFullMap(DEFAULT_PERMISSIONS_BY_ROLE[role] ?? {}));
+        setLoading(false);
+        return;
+      }
+
+      console.log('[Permissions] Registros:', data?.length ?? 0, 'para role:', role);
+
+      // Tabela vazia — gravar defaults e usar
+      if (!data || data.length === 0) {
+        const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role];
+        if (defaults) {
+          const inserts = ALL_MODULES.map((m) => ({
+            perfil: role,
+            modulo: m,
+            ...(defaults[m] ?? defaultPerm),
+          }));
+          await (supabase as any)
+            .from('permissoes')
+            .upsert(inserts, { onConflict: 'perfil,modulo' });
+          setPermissions(buildFullMap(defaults));
         } else {
           setPermissions(buildFullMap({}));
         }
@@ -209,34 +224,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      console.log('[Permissions] Registros encontrados na tabela:', data?.length ?? 0);
-
-      // 4. Se tabela vazia para esse role, usar defaults
-      if (!data || data.length === 0) {
-        console.warn('[Permissions] Nenhum registro na tabela permissoes para role:', role, '— usando defaults');
-        const fallback = DEFAULT_PERMISSIONS_BY_ROLE[role];
-        if (fallback) {
-          setPermissions(buildFullMap(fallback));
-        } else {
-          // Inserir defaults no banco para não precisar fazer isso toda vez
-          const defaultsForRole = DEFAULT_PERMISSIONS_BY_ROLE[role];
-          if (defaultsForRole) {
-            const inserts = ALL_MODULES.map((m) => ({
-              perfil: role,
-              modulo: m,
-              ...(defaultsForRole[m] ?? defaultPerm),
-            }));
-            await (supabase as any).from('permissoes').insert(inserts).throwOnError();
-            setPermissions(buildFullMap(defaultsForRole));
-          } else {
-            setPermissions(buildFullMap({}));
-          }
-        }
-        setLoading(false);
-        return;
-      }
-
-      // 5. Montar mapa com dados do banco
+      // Montar mapa
       const map: Partial<PermissionsMap> = {};
       (data as any[]).forEach((row) => {
         map[row.modulo as ModuleName] = {
@@ -247,8 +235,8 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           can_execute: row.can_execute ?? false,
         };
       });
-
       setPermissions(buildFullMap(map));
+
     } catch (err) {
       console.error('[Permissions] Erro inesperado:', err);
       setPermissions(buildFullMap({}));
@@ -261,24 +249,15 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     loadPermissions();
   }, [loadPermissions]);
 
-  // Realtime — atualiza permissões se tabela mudar
+  // Realtime
   useEffect(() => {
     if (!user?.id) return;
-
     const channel = supabase
-      .channel('permissoes-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'permissoes' },
-        (payload) => {
-          console.log('[Permissions] Mudança detectada na tabela permissoes:', payload);
-          loadPermissions();
-        }
-      )
-      .subscribe((status) => {
-        console.log('[Permissions] Realtime status:', status);
-      });
-
+      .channel(`permissoes-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => {
+        loadPermissions();
+      })
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, loadPermissions]);
 
@@ -286,9 +265,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     (modulo: ModuleName, action: keyof ModulePermission): boolean => {
       if (loading) return false;
       if (!permissions) return false;
-      const perm = permissions[modulo];
-      if (!perm) return false;
-      return perm[action] === true;
+      return permissions[modulo]?.[action] === true;
     },
     [permissions, loading]
   );
