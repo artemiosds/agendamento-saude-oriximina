@@ -606,8 +606,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadAll]);
 
   const emitDbUpdate = useCallback(() => {
-    window.dispatchEvent(new Event("db_update"));
+    try { window.dispatchEvent(new Event("db_update")); } catch { /* SSR safety */ }
   }, []);
+
+  // Wrap logAction to also emit db_update after any mutation
+  const logActionAndSync = useCallback(
+    async (input: Parameters<typeof logAction>[0]) => {
+      await logAction(input);
+      emitDbUpdate();
+    },
+    [logAction, emitDbUpdate],
+  );
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
