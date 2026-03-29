@@ -1215,7 +1215,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         whatsapp: u.whatsapp,
         ativo: u.ativo,
       } as any);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => [...prev, u]);
+    if (!error) { emitDbUpdate(); setUnidades((prev) => [...prev, u]); }
     else console.error("Error adding unidade:", error);
   }, []);
 
@@ -1230,7 +1230,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u))); }
     else console.error("Error updating unidade:", error);
   }, []);
 
@@ -1239,7 +1239,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.filter((u) => u.id !== id));
+    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.filter((u) => u.id !== id)); }
     else console.error("Error deleting unidade:", error);
   }, []);
 
@@ -1247,7 +1247,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase
       .from("salas" as any)
       .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
-    if (!error) { emitDbUpdate(); setSalas((prev) => [...prev, s]);
+    if (!error) { emitDbUpdate(); setSalas((prev) => [...prev, s]); }
     else console.error("Error adding sala:", error);
   }, []);
 
@@ -1260,7 +1260,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+    if (!error) { emitDbUpdate(); setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s))); }
     else console.error("Error updating sala:", error);
   }, []);
 
@@ -1269,7 +1269,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setSalas((prev) => prev.filter((s) => s.id !== id));
+    if (!error) { emitDbUpdate(); setSalas((prev) => prev.filter((s) => s.id !== id)); }
     else console.error("Error deleting sala:", error);
   }, []);
 
@@ -1296,7 +1296,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dias_semana: d.diasSemana,
       duracao_consulta: d.duracaoConsulta || 30,
     } as any);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => [...prev, d]);
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => [...prev, d]); }
     else console.error("Error adding disponibilidade:", error);
   }, []);
 
@@ -1317,7 +1317,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d)));
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d))); }
     else console.error("Error updating disponibilidade:", error);
   }, []);
 
@@ -1326,7 +1326,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
+    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.filter((d) => d.id !== id)); }
     else console.error("Error deleting disponibilidade:", error);
   }, []);
 
