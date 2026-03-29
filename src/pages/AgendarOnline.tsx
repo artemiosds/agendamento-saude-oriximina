@@ -1,6 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { useData } from '@/contexts/DataContext';
-import { useWebhookNotify } from '@/hooks/useWebhookNotify';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +11,8 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
+import type { DayInfo } from '@/components/CalendarioDisponibilidade';
 
-// Helper function to apply date mask DD/MM/AAAA
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
   if (digits.length <= 2) return digits;
@@ -22,27 +20,19 @@ const applyDateMask = (value: string): string => {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
 };
 
-// Validate date in DD/MM/AAAA format
 const validateDateBrazilian = (dateStr: string): boolean => {
-  if (!dateStr) return true; // Optional field
+  if (!dateStr) return true;
   const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
   const match = dateStr.match(regex);
   if (!match) return false;
-  
   const day = parseInt(match[1], 10);
   const month = parseInt(match[2], 10);
   const year = parseInt(match[3], 10);
-  
-  if (day < 1 || day > 31) return false;
-  if (month < 1 || month > 12) return false;
-  if (year < 1900 || year > new Date().getFullYear()) return false;
-  
-  // Check if date is valid
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > new Date().getFullYear()) return false;
   const date = new Date(year, month - 1, day);
   return date.getDate() === day && date.getMonth() === month - 1;
 };
 
-// Convert DD/MM/AAAA to YYYY-MM-DD for database
 const convertBrazilianToISO = (dateStr: string): string => {
   if (!dateStr) return '';
   const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -50,60 +40,248 @@ const convertBrazilianToISO = (dateStr: string): string => {
   return `${match[3]}-${match[2]}-${match[1]}`;
 };
 
+interface PublicUnit { id: string; nome: string; endereco: string; telefone: string; whatsapp: string; ativo: boolean }
+interface PublicProf { id: string; nome: string; setor: string; unidade_id: string; sala_id: string; role: string; ativo: boolean; profissao: string; tempo_atendimento: number; pode_agendar_retorno: boolean }
+interface PublicDisp { id: string; profissional_id: string; unidade_id: string; data_inicio: string; data_fim: string; dias_semana: number[]; hora_inicio: string; hora_fim: string; vagas_por_hora: number; vagas_por_dia: number; duracao_consulta: number }
+interface PublicBloqueio { id: string; data_inicio: string; data_fim: string; dia_inteiro: boolean; hora_inicio: string; hora_fim: string; profissional_id: string; unidade_id: string; tipo: string; titulo: string }
+interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string }
+
+const statusOcupaVaga = (s: string) => !['cancelado','falta'].includes(s);
+
 const AgendarOnline: React.FC = () => {
-  const { unidades, funcionarios, disponibilidades, addAgendamento, addPaciente, pacientes, getAvailableDates, getAvailableSlots, getDayInfoMap, refreshPacientes } = useData();
-  const { notify } = useWebhookNotify();
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
+
+  const [unidades, setUnidades] = useState<PublicUnit[]>([]);
+  const [profissionais, setProfissionais] = useState<PublicProf[]>([]);
+  const [disponibilidades, setDisponibilidades] = useState<PublicDisp[]>([]);
+  const [bloqueios, setBloqueios] = useState<PublicBloqueio[]>([]);
+  const [agendamentos, setAgendamentos] = useState<PublicAg[]>([]);
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
     nome: '', cpf: '', cns: '', telefone: '', dataNascimento: '', email: '', obs: '',
-    data: '', hora: '',
-    senha: '', senhaConfirm: '',
+    data: '', hora: '', senha: '', senhaConfirm: '',
   });
 
-  const unidadesComDisponibilidade = useMemo(() => {
-    const unidadeIdsComDisponibilidade = new Set(disponibilidades.map(d => d.unidadeId));
-    const unidadeIdsComProfissional = new Set(
-      funcionarios.filter(f => f.role === 'profissional' && f.ativo && f.unidadeId)
-        .map(f => f.unidadeId)
+  const loadPublicData = useCallback(async () => {
+    try {
+      setDataLoading(true);
+      const { data, error } = await supabase.functions.invoke('public-scheduling', {
+        method: 'GET',
+        body: undefined,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      // Edge functions invoked via SDK use POST, so let's use query param approach
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=data`,
+        { headers: { 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
+      );
+      if (!res.ok) throw new Error('Failed to load scheduling data');
+      const json = await res.json();
+      setUnidades(json.unidades || []);
+      setProfissionais(json.profissionais || []);
+      setDisponibilidades(json.disponibilidades || []);
+      setBloqueios(json.bloqueios || []);
+      setAgendamentos(json.agendamentos || []);
+    } catch (err) {
+      console.error('Failed to load public scheduling data:', err);
+      toast.error('Erro ao carregar dados de agendamento.');
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadPublicData(); }, [loadPublicData]);
+
+  // Availability calculation (replicated from DataContext for public use)
+  const isSlotBlocked = useCallback((profissionalId: string, unidadeId: string, date: string, time?: string) => {
+    const dateRef = new Date(`${date}T00:00:00`).getTime();
+    return bloqueios.some(b => {
+      const ini = new Date(`${b.data_inicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.data_fim}T00:00:00`).getTime();
+      if (dateRef < ini || dateRef > fim) return false;
+      const isGlobal = (!b.unidade_id || b.unidade_id === '') && (!b.profissional_id || b.profissional_id === '');
+      const isUnitLevel = b.unidade_id === unidadeId && (!b.profissional_id || b.profissional_id === '');
+      const isProfLevel = b.profissional_id === profissionalId;
+      if (!isGlobal && !isUnitLevel && !isProfLevel) return false;
+      if (b.dia_inteiro || !time) return true;
+      const start = b.hora_inicio || '00:00';
+      const end = b.hora_fim || '23:59';
+      return time >= start && time < end;
+    });
+  }, [bloqueios]);
+
+  const appointmentCountsByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissional_id}|${a.unidade_id}|${a.data}`;
+        map.set(key, (map.get(key) || 0) + 1);
+      }
+    }
+    return map;
+  }, [agendamentos]);
+
+  const appointmentsByDateProfUnit = useMemo(() => {
+    const map = new Map<string, PublicAg[]>();
+    for (const a of agendamentos) {
+      if (statusOcupaVaga(a.status)) {
+        const key = `${a.profissional_id}|${a.unidade_id}|${a.data}`;
+        const arr = map.get(key);
+        if (arr) arr.push(a); else map.set(key, [a]);
+      }
+    }
+    return map;
+  }, [agendamentos]);
+
+  const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string): string[] => {
+    const dateObj = new Date(`${date}T00:00:00`);
+    const dayOfWeek = dateObj.getDay();
+    const disp = disponibilidades.find(d =>
+      d.profissional_id === profissionalId && d.unidade_id === unidadeId &&
+      d.dias_semana.includes(dayOfWeek) && date >= d.data_inicio && date <= d.data_fim
     );
-    return unidades.filter(u => u.ativo && unidadeIdsComProfissional.has(u.id) && unidadeIdsComDisponibilidade.has(u.id));
-  }, [unidades, funcionarios, disponibilidades]);
+    if (!disp) return [];
+
+    const slots: string[] = [];
+    const startHour = parseInt(disp.hora_inicio.split(':')[0]);
+    const startMin = parseInt(disp.hora_inicio.split(':')[1] || '0');
+    const endHour = parseInt(disp.hora_fim.split(':')[0]);
+    const endMin = parseInt(disp.hora_fim.split(':')[1] || '0');
+
+    const key = `${profissionalId}|${unidadeId}|${date}`;
+    const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
+    if (dayAppointments.length >= disp.vagas_por_dia) return [];
+
+    const hourCounts = new Map<string, number>();
+    const slotCounts = new Map<string, number>();
+    for (const a of dayAppointments) {
+      const hKey = a.hora.substring(0, 3);
+      hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+      slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+    }
+
+    const prof = profissionais.find(f => f.id === profissionalId);
+    const intervalMinutes = Math.max(15, prof?.tempo_atendimento || 30);
+    const agora = new Date();
+    const ehHoje = date === agora.toISOString().split('T')[0];
+    const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
+
+    let h = startHour, m = startMin;
+    while (h < endHour || (h === endHour && m < endMin)) {
+      const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      if (ehHoje && h * 60 + m <= limiteMinutos) { m += intervalMinutes; while (m >= 60) { m -= 60; h++; } continue; }
+      const hourStr = `${String(h).padStart(2, '0')}:`;
+      const hourCount = hourCounts.get(hourStr) || 0;
+      const slotCount = slotCounts.get(timeStr) || 0;
+      const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
+      if (!blocked && hourCount < disp.vagas_por_hora && slotCount === 0) slots.push(timeStr);
+      m += intervalMinutes;
+      while (m >= 60) { m -= 60; h++; }
+    }
+    return slots;
+  }, [disponibilidades, appointmentsByDateProfUnit, profissionais, isSlotBlocked]);
+
+  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
+    const disps = disponibilidades.filter(d => d.profissional_id === profissionalId && d.unidade_id === unidadeId);
+    if (disps.length === 0) return [];
+    const dates: string[] = [];
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (const disp of disps) {
+      const start = new Date(`${disp.data_inicio}T00:00:00`);
+      const end = new Date(`${disp.data_fim}T00:00:00`);
+      const current = new Date(Math.max(start.getTime(), today.getTime()));
+      while (current <= end) {
+        const dayOfWeek = current.getDay();
+        if (disp.dias_semana.includes(dayOfWeek)) {
+          const dateStr = current.toISOString().split('T')[0];
+          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount < disp.vagas_por_dia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
+            if (!dates.includes(dateStr)) dates.push(dateStr);
+          }
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    }
+    return dates.sort().filter(d => getAvailableSlots(profissionalId, unidadeId, d).length > 0);
+  }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, getAvailableSlots]);
+
+  const getBlockingInfo = useCallback((profissionalId: string, unidadeId: string, date: string) => {
+    const dateRef = new Date(`${date}T00:00:00`).getTime();
+    for (const b of bloqueios) {
+      const ini = new Date(`${b.data_inicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.data_fim}T00:00:00`).getTime();
+      if (dateRef < ini || dateRef > fim) continue;
+      const isGlobal = (!b.unidade_id || b.unidade_id === '') && (!b.profissional_id || b.profissional_id === '');
+      const isUnitLevel = b.unidade_id === unidadeId && (!b.profissional_id || b.profissional_id === '');
+      const isProfLevel = b.profissional_id === profissionalId;
+      if (!isGlobal && !isUnitLevel && !isProfLevel) continue;
+      if (!b.dia_inteiro) continue;
+      return { blocked: true, type: b.tipo, label: `${b.titulo || b.tipo}` };
+    }
+    return { blocked: false };
+  }, [bloqueios]);
+
+  const unidadesComDisponibilidade = useMemo(() => {
+    const unidadeIdsComDisp = new Set(disponibilidades.map(d => d.unidade_id));
+    const unidadeIdsComProf = new Set(profissionais.filter(f => f.role === 'profissional' && f.ativo && f.unidade_id).map(f => f.unidade_id));
+    return unidades.filter(u => u.ativo && unidadeIdsComProf.has(u.id) && unidadeIdsComDisp.has(u.id));
+  }, [unidades, profissionais, disponibilidades]);
 
   const profissionaisComDisponibilidade = useMemo(() => {
     if (!form.unidadeId) return [];
-    const profIdsComDisponibilidade = new Set(
-      disponibilidades.filter(d => d.unidadeId === form.unidadeId).map(d => d.profissionalId)
-    );
-    return funcionarios.filter(f => 
-      f.role === 'profissional' && f.ativo && profIdsComDisponibilidade.has(f.id)
-    );
-  }, [funcionarios, disponibilidades, form.unidadeId]);
+    const profIds = new Set(disponibilidades.filter(d => d.unidade_id === form.unidadeId).map(d => d.profissional_id));
+    return profissionais.filter(f => f.role === 'profissional' && f.ativo && profIds.has(f.id));
+  }, [profissionais, disponibilidades, form.unidadeId]);
 
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
-    const allDates = getAvailableDates(form.profissionalId, form.unidadeId, true);
-    // REGRA 1: Paciente não pode agendar para hoje — apenas a partir de amanhã
-    const amanha = new Date();
-    amanha.setDate(amanha.getDate() + 1);
-    amanha.setHours(0, 0, 0, 0);
+    const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(0, 0, 0, 0);
     const amanhaStr = amanha.toISOString().split('T')[0];
     return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
   const dayInfoMap = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return {};
-    return getDayInfoMap(form.profissionalId, form.unidadeId, true);
-  }, [form.profissionalId, form.unidadeId, getDayInfoMap]);
+    const map: Record<string, DayInfo> = {};
+    const disps = disponibilidades.filter(d => d.profissional_id === form.profissionalId && d.unidade_id === form.unidadeId);
+    if (disps.length === 0) return map;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (let i = 0; i < 90; i++) {
+      const current = new Date(today); current.setDate(current.getDate() + i);
+      const dateStr = current.toISOString().split('T')[0];
+      const dayOfWeek = current.getDay();
+      const hasDisp = disps.some(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
+      if (!hasDisp) continue;
+      const blockInfo = getBlockingInfo(form.profissionalId, form.unidadeId, dateStr);
+      if (blockInfo.blocked) {
+        const isHoliday = blockInfo.type === 'feriado';
+        map[dateStr] = { dateStr, status: isHoliday ? 'holiday' : 'blocked', label: blockInfo.label || (isHoliday ? 'Feriado' : 'Bloqueado') };
+        continue;
+      }
+      const slots = getAvailableSlots(form.profissionalId, form.unidadeId, dateStr);
+      if (slots.length === 0) {
+        const disp = disps.find(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
+        if (disp) {
+          const key = `${form.profissionalId}|${form.unidadeId}|${dateStr}`;
+          const dayCount = appointmentCountsByKey.get(key) || 0;
+          if (dayCount > 0) map[dateStr] = { dateStr, status: 'full', label: 'Lotado — sem vagas restantes' };
+        }
+      }
+    }
+    return map;
+  }, [form.profissionalId, form.unidadeId, disponibilidades, appointmentCountsByKey, getAvailableSlots, getBlockingInfo]);
 
   const availableSlots = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId || !form.data) return [];
-    return getAvailableSlots(form.profissionalId, form.unidadeId, form.data, true);
+    return getAvailableSlots(form.profissionalId, form.unidadeId, form.data);
   }, [form.profissionalId, form.unidadeId, form.data, getAvailableSlots]);
 
   const validateStep2 = (): boolean => {
@@ -117,13 +295,11 @@ const AgendarOnline: React.FC = () => {
       toast.error(err);
       return false;
     }
-    // Validate birth date if provided
     if (form.dataNascimento && !validateDateBrazilian(form.dataNascimento)) {
       setErrors({ dataNascimento: 'Data de nascimento inválida.' });
       toast.error('Data de nascimento inválida.');
       return false;
     }
-    // Validate password
     if (!form.senha || form.senha.length < 6) {
       setErrors({ senha: 'Senha deve ter no mínimo 6 caracteres.' });
       toast.error('Senha deve ter no mínimo 6 caracteres.');
@@ -138,19 +314,15 @@ const AgendarOnline: React.FC = () => {
     return true;
   };
 
-  const handleNext2 = () => {
-    if (validateStep2()) setStep(3);
-  };
+  const handleNext2 = () => { if (validateStep2()) setStep(3); };
 
   const handleSubmit = async () => {
     if (!form.nome || !form.telefone || !form.email || !form.data || !form.hora || !form.profissionalId || !form.unidadeId) {
       toast.error('Preencha todos os campos obrigatórios.');
       return;
     }
-
     setLoading(true);
     try {
-      let pacienteId: string;
       const normalizePhone = (t: string) => t.replace(/\D/g, '');
       const normalizeCpf = (c: string) => c.replace(/\D/g, '');
       const normalizeEmail = (e: string) => e.trim().toLowerCase();
@@ -158,22 +330,21 @@ const AgendarOnline: React.FC = () => {
       const cpfNorm = normalizeCpf(form.cpf);
       const emailNorm = normalizeEmail(form.email);
 
-      // Deduplication: query DB directly to avoid 1000-row limit on local state
-      let existingPatient: { id: string } | null = null;
-      const orFilters: string[] = [];
-      if (cpfNorm) orFilters.push(`cpf.eq.${cpfNorm}`);
-      if (phoneNorm) orFilters.push(`telefone.eq.${phoneNorm}`);
-      if (emailNorm) orFilters.push(`email.ilike.${emailNorm}`);
-      if (orFilters.length > 0) {
-        const { data: found } = await supabase.from('pacientes').select('id').or(orFilters.join(',')).limit(1);
-        if (found && found.length > 0) existingPatient = found[0];
-      }
+      // Check for existing patient via edge function
+      const checkRes = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=check-patient`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ cpf: cpfNorm, telefone: phoneNorm, email: emailNorm }) }
+      );
+      const checkData = await checkRes.json();
 
-      if (existingPatient) {
-        pacienteId = existingPatient.id;
-        // Update CNS if provided and not already set
+      let pacienteId: string;
+      if (checkData.found) {
+        pacienteId = checkData.id;
         if (form.cns) {
-          await supabase.from('pacientes').update({ cns: form.cns } as any).eq('id', pacienteId);
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=update-patient-cns`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+              body: JSON.stringify({ id: pacienteId, cns: form.cns }) });
         }
       } else {
         if (form.tipo === 'Retorno') {
@@ -182,15 +353,15 @@ const AgendarOnline: React.FC = () => {
           return;
         }
         pacienteId = `p${Date.now()}`;
-        await addPaciente({
-          id: pacienteId, nome: form.nome, cpf: form.cpf, cns: form.cns, nomeMae: '', telefone: form.telefone,
-          dataNascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, endereco: '',
-          observacoes: form.obs, descricaoClinica: '', cid: '', criadoEm: new Date().toISOString(),
-        });
-        await refreshPacientes();
+        const createRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-patient`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+            body: JSON.stringify({ id: pacienteId, nome: form.nome, cpf: form.cpf, cns: form.cns, telefone: form.telefone, data_nascimento: convertBrazilianToISO(form.dataNascimento), email: form.email, observacoes: form.obs }) }
+        );
+        if (!createRes.ok) throw new Error('Failed to create patient');
       }
 
-      // Create patient portal account
+      // Create portal account
       try {
         await supabase.functions.invoke('patient-signup', {
           body: { email: emailNorm, senha: form.senha, pacienteId },
@@ -199,28 +370,26 @@ const AgendarOnline: React.FC = () => {
         console.error('Patient account creation failed (non-blocking):', authErr);
       }
 
-      const prof = funcionarios.find(p => p.id === form.profissionalId);
+      const prof = profissionais.find(p => p.id === form.profissionalId);
       const unidade = unidades.find(u => u.id === form.unidadeId);
-      
       const agId = `ag${Date.now()}`;
-      await addAgendamento({
-        id: agId, pacienteId, pacienteNome: form.nome,
-        unidadeId: form.unidadeId, salaId: '', setorId: prof?.setor || '',
-        profissionalId: form.profissionalId, profissionalNome: prof?.nome || '',
-        data: form.data, hora: form.hora, status: 'pendente', tipo: form.tipo,
-        observacoes: form.obs, origem: 'online', syncStatus: 'pendente',
-        criadoEm: new Date().toISOString(), criadoPor: 'online',
-      });
 
-      // Enviar notificação (aguardar para garantir que complete)
-      await notify({
-        evento: 'novo_agendamento',
-        paciente_nome: form.nome, telefone: form.telefone, email: form.email,
-        data_consulta: form.data, hora_consulta: form.hora,
-        unidade: unidade?.nome || '', profissional: prof?.nome || '',
-        tipo_atendimento: form.tipo, status_agendamento: 'pendente',
-        id_agendamento: agId, observacoes: form.obs,
-      });
+      // Create appointment via edge function
+      const agRes = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=create-appointment`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ id: agId, paciente_id: pacienteId, paciente_nome: form.nome, unidade_id: form.unidadeId, sala_id: '', setor_id: prof?.setor || '', profissional_id: form.profissionalId, profissional_nome: prof?.nome || '', data: form.data, hora: form.hora, tipo: form.tipo, observacoes: form.obs }) }
+      );
+      if (!agRes.ok) throw new Error('Failed to create appointment');
+
+      // Send webhook notification
+      try {
+        await supabase.functions.invoke('webhook-notify', {
+          body: { evento: 'novo_agendamento', paciente_nome: form.nome, telefone: form.telefone, email: form.email, data_consulta: form.data, hora_consulta: form.hora, unidade: unidade?.nome || '', profissional: prof?.nome || '', tipo_atendimento: form.tipo, status_agendamento: 'pendente', id_agendamento: agId, observacoes: form.obs },
+        });
+      } catch (notifyErr) {
+        console.error('Webhook notification failed (non-blocking):', notifyErr);
+      }
 
       toast.success('Agendamento realizado com sucesso!');
       setDone(true);
@@ -232,7 +401,20 @@ const AgendarOnline: React.FC = () => {
     }
   };
 
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando dados de agendamento...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (done) {
+    const prof = profissionais.find(f => f.id === form.profissionalId);
+    const unidade = unidades.find(u => u.id === form.unidadeId);
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
@@ -245,18 +427,10 @@ const AgendarOnline: React.FC = () => {
               <p className="text-muted-foreground mb-4">
                 {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
               </p>
-              <p className="text-sm text-muted-foreground mb-2">
-                <strong>Profissional:</strong> {funcionarios.find(f => f.id === form.profissionalId)?.nome}
-              </p>
-              <p className="text-sm text-muted-foreground mb-2">
-                <strong>Unidade:</strong> {unidades.find(u => u.id === form.unidadeId)?.nome}
-              </p>
-              <p className="text-sm text-muted-foreground mb-2">
-                <strong>Tipo:</strong> {form.tipo}
-              </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Lembre-se de chegar com 15 minutos de antecedência.
-              </p>
+              <p className="text-sm text-muted-foreground mb-2"><strong>Profissional:</strong> {prof?.nome}</p>
+              <p className="text-sm text-muted-foreground mb-2"><strong>Unidade:</strong> {unidade?.nome}</p>
+              <p className="text-sm text-muted-foreground mb-2"><strong>Tipo:</strong> {form.tipo}</p>
+              <p className="text-sm text-muted-foreground mb-4">Lembre-se de chegar com 15 minutos de antecedência.</p>
               <div className="bg-info/10 p-3 rounded-lg text-sm text-info mb-4">
                 <p className="font-medium">Sua conta no Portal do Paciente foi criada!</p>
                 <p className="text-xs mt-1">Acesse com seu e-mail e a senha escolhida para ver seus agendamentos.</p>
@@ -299,7 +473,6 @@ const AgendarOnline: React.FC = () => {
             {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Unidade e Profissional</h2>
-                
                 {unidadesComDisponibilidade.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-warning shrink-0" />
@@ -320,7 +493,7 @@ const AgendarOnline: React.FC = () => {
                         <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
                         <SelectContent>
                           {profissionaisComDisponibilidade.map(p => (
-                            <SelectItem key={p.id} value={p.id}>{p.nome} — {p.cargo}</SelectItem>
+                            <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -370,16 +543,9 @@ const AgendarOnline: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Data Nasc.</Label>
-                    <Input
-                      type="text"
-                      value={form.dataNascimento}
-                      onChange={e => {
-                        const masked = applyDateMask(e.target.value);
-                        setForm(p => ({ ...p, dataNascimento: masked }));
-                      }}
-                      placeholder="DD/MM/AAAA"
-                      maxLength={10}
-                    />
+                    <Input type="text" value={form.dataNascimento}
+                      onChange={e => { const masked = applyDateMask(e.target.value); setForm(p => ({ ...p, dataNascimento: masked })); }}
+                      placeholder="DD/MM/AAAA" maxLength={10} />
                     <p className="text-xs text-muted-foreground mt-1">Digite a data no formato: 23/11/1985</p>
                     {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
                   </div>
@@ -389,8 +555,6 @@ const AgendarOnline: React.FC = () => {
                     {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
                   </div>
                 </div>
-
-                {/* Password fields for portal access */}
                 <div className="border-t pt-4 mt-2">
                   <p className="text-sm font-medium text-foreground mb-3">Criar acesso ao Portal do Paciente</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -415,7 +579,6 @@ const AgendarOnline: React.FC = () => {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">Use este e-mail e senha para acessar o Portal do Paciente.</p>
                 </div>
-
                 <div><Label>Observações</Label><Input value={form.obs} onChange={e => setForm(p => ({ ...p, obs: e.target.value }))} /></div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Voltar</Button>
@@ -427,12 +590,10 @@ const AgendarOnline: React.FC = () => {
             {step === 3 && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold font-display text-foreground">Data e Horário</h2>
-                
                 <div className="flex items-center gap-2 p-3 bg-info/10 rounded-lg text-sm text-info">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>Agendamentos disponíveis a partir de amanhã.</span>
                 </div>
-
                 {availableDates.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">
                     <AlertCircle className="w-5 h-5 text-warning shrink-0" />
@@ -452,7 +613,6 @@ const AgendarOnline: React.FC = () => {
                         />
                       </div>
                     </div>
-
                     {form.data && (
                       <div>
                         <Label>Horário Disponível *</Label>
@@ -471,7 +631,6 @@ const AgendarOnline: React.FC = () => {
                     )}
                   </>
                 )}
-
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="flex-1">Voltar</Button>
                   <Button onClick={handleSubmit} className="flex-1 gradient-primary text-primary-foreground" disabled={!form.data || !form.hora || loading}>
