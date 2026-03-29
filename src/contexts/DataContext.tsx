@@ -605,6 +605,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [loadAll]);
 
+  const emitDbUpdate = useCallback(() => {
+    window.dispatchEvent(new Event("db_update"));
+  }, []);
+
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
     if (index === -1) return [nextItem, ...prev];
