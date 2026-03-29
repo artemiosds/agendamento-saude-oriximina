@@ -16,9 +16,16 @@ serve(async (req) => {
   try {
     const { usuario, senha } = await req.json();
 
-    if (!usuario || !senha) {
+    if (!usuario || typeof usuario !== 'string' || !senha || typeof senha !== 'string') {
       return new Response(
         JSON.stringify({ error: "Usuário e senha são obrigatórios." }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (senha.length > 200 || usuario.length > 200) {
+      return new Response(
+        JSON.stringify({ error: "Dados de entrada inválidos." }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -136,7 +143,7 @@ serve(async (req) => {
     console.error("Login error:", err);
     return new Response(
       JSON.stringify({
-        error: err instanceof Error ? err.message : "Erro interno",
+        error: "Erro interno no servidor.",
       }),
       { status: 500, headers: corsHeaders }
     );
