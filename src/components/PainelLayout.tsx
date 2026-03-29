@@ -1,68 +1,98 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { 
-  LayoutDashboard, Calendar, Users, ClipboardList, FileText, 
-  Settings, Building2, UserCog, ListOrdered, LogOut, Menu, X,
-  Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse, ClipboardList as ClipboardListIcon,
-  BookOpen, Lock
+import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
+import {
+  LayoutDashboard, Calendar, Users, ClipboardList, FileText,
+  Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
+  Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
+  ClipboardList as ClipboardListIcon, BookOpen, Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import logoSms from '@/assets/logo-sms.jpeg';
 
-const menuItems = [
-  { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, roles: ['master', 'coordenador', 'gestao'] },
-  { to: '/painel/agenda', label: 'Agenda', icon: Calendar, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
-  { to: '/painel/fila', label: 'Fila de Espera', icon: ListOrdered, roles: ['master', 'coordenador', 'recepcao'] },
-  { to: '/painel/pacientes', label: 'Pacientes', icon: Users, roles: ['master', 'coordenador', 'recepcao', 'profissional', 'enfermagem'] },
-  { to: '/painel/atendimentos', label: 'Atendimentos', icon: ClipboardList, roles: ['master', 'coordenador', 'recepcao', 'profissional'] },
-  { to: '/painel/tratamentos', label: 'Gestão de Tratamentos', icon: Activity, roles: ['master', 'coordenador', 'profissional'] },
-  { to: '/painel/regulacao', label: 'Regulação CER', icon: ClipboardListIcon, roles: ['master', 'coordenador', 'profissional'] },
-  { to: '/painel/prontuario', label: 'Prontuário', icon: Stethoscope, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
-  { to: '/painel/relatorios', label: 'Relatórios', icon: FileText, roles: ['master', 'coordenador', 'gestao'] },
-  { to: '/painel/funcionarios', label: 'Funcionários', icon: UserCog, roles: ['master', 'coordenador'] },
-  { to: '/painel/unidades', label: 'Unidades/Salas', icon: Building2, roles: ['master', 'coordenador'] },
-  { to: '/painel/disponibilidade', label: 'Disponibilidade', icon: CalendarClock, roles: ['master', 'coordenador'] },
-  { to: '/painel/bloqueios', label: 'Feriados/Bloqueios', icon: CalendarClock, roles: ['master', 'coordenador', 'recepcao'] },
-  { to: '/painel/triagem', label: 'Triagem', icon: HeartPulse, roles: ['master', 'coordenador', 'tecnico'] },
-  { to: '/painel/enfermagem', label: 'Avaliação Enfermagem', icon: Stethoscope, roles: ['master', 'coordenador', 'enfermagem'] },
-  { to: '/painel/pts', label: 'PTS', icon: FileText, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
-  { to: '/painel/multiprofissional', label: 'Avaliação Multi', icon: BookOpen, roles: ['master', 'coordenador', 'profissional', 'enfermagem'] },
-  { to: '/painel/auditoria', label: 'Logs & Auditoria', icon: ShieldCheck, roles: ['master', 'coordenador', 'gestao'] },
-  { to: '/painel/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
-  { to: '/painel/permissoes', label: 'Permissões', icon: Lock, roles: ['master'] },
+// Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
+// roles_fallback = usado APENAS se o PermissionsContext ainda estiver carregando
+const menuItems: {
+  to: string;
+  label: string;
+  icon: React.ElementType;
+  modulo: ModuleName | null;     // null = sempre visível (ex: dashboard para master)
+  roles_master_only?: boolean;   // true = só master vê
+}[] = [
+  { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
+  { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
+  { to: '/painel/fila',             label: 'Fila de Espera',         icon: ListOrdered,        modulo: 'fila' },
+  { to: '/painel/pacientes',        label: 'Pacientes',              icon: Users,              modulo: 'pacientes' },
+  { to: '/painel/atendimentos',     label: 'Atendimentos',           icon: ClipboardList,      modulo: 'atendimento' },
+  { to: '/painel/tratamentos',      label: 'Gestão de Tratamentos',  icon: Activity,           modulo: 'tratamento' },
+  { to: '/painel/regulacao',        label: 'Regulação CER',          icon: ClipboardListIcon,  modulo: 'encaminhamento' },
+  { to: '/painel/prontuario',       label: 'Prontuário',             icon: Stethoscope,        modulo: 'prontuario' },
+  { to: '/painel/triagem',          label: 'Triagem',                icon: HeartPulse,         modulo: 'triagem' },
+  { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
+  { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
+  { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },
+  { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
+  { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
+  { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
+  { to: '/painel/disponibilidade',  label: 'Disponibilidade',        icon: CalendarClock,      modulo: 'usuarios' },
+  { to: '/painel/bloqueios',        label: 'Feriados/Bloqueios',     icon: CalendarClock,      modulo: 'agenda' },
+  { to: '/painel/auditoria',        label: 'Logs & Auditoria',       icon: ShieldCheck,        modulo: 'relatorios' },
+  { to: '/painel/configuracoes',    label: 'Configurações',          icon: Settings,           modulo: null, roles_master_only: true },
+  { to: '/painel/permissoes',       label: 'Permissões',             icon: Lock,               modulo: null, roles_master_only: true },
 ];
 
+const roleLabels: Record<string, string> = {
+  master:             'Master',
+  gestor:             'Gestor',
+  coordenador:        'Coordenador',
+  recepcao:           'Recepção',
+  profissional:       'Profissional de Saúde',
+  gestao:             'Gestão',
+  tecnico:            'Triagem',
+  tecnico_enfermagem: 'Técnico de Enfermagem',
+  enfermagem:         'Enfermagem',
+};
+
 const PainelLayout: React.FC = () => {
-  const { user, logout, hasPermission } = useAuth();
+  const { user, logout } = useAuth();
+  const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const isMaster = user?.role?.toLowerCase().trim() === 'master';
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const filteredMenu = menuItems.filter(item => 
-    hasPermission(item.roles as any[])
-  );
+  // Decide se o item aparece no menu
+  const isItemVisible = (item: typeof menuItems[0]): boolean => {
+    // Itens só para master
+    if (item.roles_master_only) return isMaster;
 
-  const roleLabels: Record<string, string> = {
-    master: 'Master',
-    coordenador: 'Coordenador',
-    recepcao: 'Recepção',
-    profissional: 'Profissional de Saúde',
-    gestao: 'Gestão',
-    tecnico: 'Triagem',
-    enfermagem: 'Enfermagem',
+    // Master vê tudo
+    if (isMaster) return true;
+
+    // Sem módulo definido = visível para todos autenticados
+    if (item.modulo === null) return true;
+
+    // Usa PermissionsContext — respeita o que foi configurado na tela de permissões
+    return can(item.modulo, 'can_view');
   };
+
+  const filteredMenu = menuItems.filter(isItemVisible);
 
   return (
     <div className="min-h-screen flex bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-foreground/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div
+          className="fixed inset-0 bg-foreground/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
       )}
 
       {/* Sidebar */}
@@ -73,10 +103,18 @@ const PainelLayout: React.FC = () => {
         <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
           <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-lg object-cover" />
           <div>
-            <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight">SMS Oriximiná</h2>
-            <p className="text-xs text-sidebar-foreground/60">Secretaria Municipal de Saúde</p>
+            <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight">CER II</h2>
+            <p className="text-xs text-sidebar-foreground/60">Oriximiná</p>
           </div>
         </div>
+
+        {/* Loading de permissões */}
+        {permLoading && (
+          <div className="px-4 py-2 text-xs text-sidebar-foreground/40 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block" />
+            Carregando permissões...
+          </div>
+        )}
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {filteredMenu.map(item => (
@@ -101,7 +139,12 @@ const PainelLayout: React.FC = () => {
         <div className="p-4 border-t border-sidebar-border">
           <div className="mb-3">
             <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.nome}</p>
-            <p className="text-xs text-sidebar-foreground/50">{roleLabels[user?.role || '']}</p>
+            <p className="text-xs text-sidebar-foreground/50">
+              {roleLabels[user?.role?.toLowerCase().trim() || ''] || user?.role}
+            </p>
+            {user?.cargo && (
+              <p className="text-xs text-sidebar-foreground/40 truncate">{user.cargo}</p>
+            )}
           </div>
           <Button
             variant="ghost"
@@ -128,7 +171,7 @@ const PainelLayout: React.FC = () => {
           </Button>
           <div className="flex-1" />
           <span className="text-sm text-muted-foreground hidden sm:block">
-            {user?.setor} • {user?.cargo}
+            {user?.setor && `${user.setor} • `}{user?.cargo}
           </span>
         </header>
 
