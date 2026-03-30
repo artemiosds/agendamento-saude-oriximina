@@ -16,7 +16,6 @@ import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, File
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
-import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import ImportarPacientesCSV from '@/components/ImportarPacientesCSV';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -171,27 +170,7 @@ const Pacientes: React.FC = () => {
   };
 
   const handleSave = async () => {
-    const newErrors: Record<string, string> = {};
-    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
-    if (!form.nomeMae.trim()) newErrors.nomeMae = 'Nome da mãe é obrigatório';
-    if (!form.dataNascimento) newErrors.dataNascimento = 'Data de nascimento é obrigatória';
-    if (!form.cpf.trim()) newErrors.cpf = 'CPF é obrigatório';
-    if (!form.telefone.trim()) newErrors.telefone = 'Telefone é obrigatório';
-    if (!form.municipio) newErrors.municipio = 'Município é obrigatório';
-    if (!form.especialidadeDestino) newErrors.especialidadeDestino = 'Especialidade destino é obrigatória';
-    if (!form.ubsOrigem) newErrors.ubsOrigem = 'UBS origem é obrigatória';
-    if (!form.profissionalSolicitante.trim()) newErrors.profissionalSolicitante = 'Profissional solicitante é obrigatório';
-    if (!form.cid.trim()) newErrors.cid = 'CID é obrigatório';
-    if (!form.justificativa.trim()) newErrors.justificativa = 'Justificativa clínica é obrigatória';
-    if (!form.documentoUrl && !editId) newErrors.documentoUrl = 'Documento de encaminhamento é obrigatório';
-    if (form.menorIdade && !form.nomeResponsavel.trim()) newErrors.nomeResponsavel = 'Nome do responsável é obrigatório';
-    if (form.menorIdade && !form.cpfResponsavel.trim()) newErrors.cpfResponsavel = 'CPF do responsável é obrigatório';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      toast.error(Object.values(newErrors)[0]);
-      return;
-    }
+    // REMOVIDA TODA VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS
     setErrors({});
     setSaving(true);
 
@@ -220,22 +199,19 @@ const Pacientes: React.FC = () => {
         await refreshPacientes();
         toast.success('Paciente atualizado!');
       } else {
-        // === DUPLICATE DETECTION ===
+        // === DUPLICATE DETECTION (apenas alerta, não bloqueia) ===
         const duplicateChecks: string[] = [];
 
-        // Check by CPF
         if (form.cpf.trim()) {
           const { data: cpfMatch } = await supabase.from('pacientes').select('id, nome').eq('cpf', form.cpf.trim()).limit(1);
           if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
         }
 
-        // Check by CNS
         if (form.cns.trim()) {
           const { data: cnsMatch } = await supabase.from('pacientes').select('id, nome').eq('cns', form.cns.trim()).limit(1);
           if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
         }
 
-        // Check by name + DOB + mother name
         if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
           const { data: nameMatch } = await supabase.from('pacientes').select('id, nome')
             .eq('nome', form.nome.trim())
@@ -258,13 +234,13 @@ const Pacientes: React.FC = () => {
         const id = `p${Date.now()}`;
         await supabase.from('pacientes').insert({ id, ...dbFields });
 
-        // Auto-insert into fila_espera with status "aguardando" (AGUARDANDO TRIAGEM)
+        // Auto-insert into fila_espera com valores padrão para evitar erros
         const filaId = `f${Date.now()}`;
         const defaultUnidade = unidades.length === 1 ? unidades[0].id : (user?.unidadeId || unidades[0]?.id || '');
         await supabase.from('fila_espera').insert({
           id: filaId,
           paciente_id: id,
-          paciente_nome: form.nome,
+          paciente_nome: form.nome || 'Sem nome',
           unidade_id: defaultUnidade,
           profissional_id: '',
           setor: '',
@@ -284,7 +260,7 @@ const Pacientes: React.FC = () => {
 
         await logAction({
           acao: 'criar', entidade: 'fila_espera', entidadeId: filaId,
-          detalhes: { pacienteNome: form.nome, especialidade: form.especialidadeDestino, origem: 'cadastro_automatico' },
+          detalhes: { pacienteNome: form.nome || 'Sem nome', especialidade: form.especialidadeDestino, origem: 'cadastro_automatico' },
           user, modulo: 'fila_espera',
         });
 
@@ -293,7 +269,8 @@ const Pacientes: React.FC = () => {
         toast.success('Paciente cadastrado e adicionado à fila de espera!');
       }
       setDialogOpen(false);
-    } catch {
+    } catch (error) {
+      console.error(error);
       toast.error('Erro ao salvar paciente.');
     } finally {
       setSaving(false);
