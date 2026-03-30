@@ -81,8 +81,41 @@ const PortalPaciente: React.FC = () => {
 
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) await loadPacienteData(session.user.id);
+    if (session?.user) {
+      // Check if portal is globally enabled and patient is not blocked
+      const accessCheck = await checkPortalAccess(session.user.id);
+      if (!accessCheck.allowed) {
+        await supabase.auth.signOut();
+        toast.error(accessCheck.message);
+        setIsLoading(false);
+        return;
+      }
+      await loadPacienteData(session.user.id);
+    }
     setIsLoading(false);
+  };
+
+  const checkPortalAccess = async (authUserId: string): Promise<{ allowed: boolean; message: string }> => {
+    try {
+      // Load global config
+      const { data: configData } = await (supabase as any).from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const portalConfig = configData?.configuracoes?.portalPaciente;
+
+      // Check global portal toggle
+      if (portalConfig && portalConfig.permitirPortal === false) {
+        return { allowed: false, message: 'O portal do paciente está temporariamente desativado. Procure a unidade de saúde.' };
+      }
+
+      // Check per-patient block
+      const { data: pac } = await (supabase as any).from('pacientes').select('id').eq('auth_user_id', authUserId).single();
+      if (pac && portalConfig?.pacientesBloqueados?.includes(pac.id)) {
+        return { allowed: false, message: 'Seu acesso ao portal está temporariamente desativado. Procure a unidade.' };
+      }
+
+      return { allowed: true, message: '' };
+    } catch {
+      return { allowed: true, message: '' }; // fail open to not break existing flow
+    }
   };
 
   const loadPacienteData = async (authUserId: string) => {
@@ -103,7 +136,17 @@ const PortalPaciente: React.FC = () => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: loginForm.email.trim().toLowerCase(), password: loginForm.senha });
       if (error) { toast.error('E-mail ou senha incorretos.'); setLoginLoading(false); return; }
-      if (data.session?.user) await loadPacienteData(data.session.user.id);
+      if (data.session?.user) {
+        // Check portal access before allowing login
+        const accessCheck = await checkPortalAccess(data.session.user.id);
+        if (!accessCheck.allowed) {
+          await supabase.auth.signOut();
+          toast.error(accessCheck.message);
+          setLoginLoading(false);
+          return;
+        }
+        await loadPacienteData(data.session.user.id);
+      }
     } catch { toast.error('Erro ao conectar.'); }
     setLoginLoading(false);
   };

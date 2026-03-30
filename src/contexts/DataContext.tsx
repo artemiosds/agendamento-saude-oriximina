@@ -81,6 +81,12 @@ const defaultConfiguracoes: Configuracoes = {
     smtpPort: 587,
   },
   canalNotificacao: "webhook",
+  portalPaciente: {
+    permitirPortal: true,
+    enviarSenhaAutomaticamente: true,
+    enviarLinkAcesso: true,
+    pacientesBloqueados: [],
+  },
 };
 
 interface DataContextType {
@@ -199,6 +205,13 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
     webhook: { ...defaultConfiguracoes.webhook, ...incoming.webhook },
     gmail: { ...defaultConfiguracoes.gmail!, ...incoming.gmail },
     canalNotificacao: incoming.canalNotificacao || defaultConfiguracoes.canalNotificacao,
+    portalPaciente: {
+      permitirPortal: true,
+      enviarSenhaAutomaticamente: true,
+      enviarLinkAcesso: true,
+      pacientesBloqueados: [],
+      ...incoming.portalPaciente,
+    },
   };
 };
 

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -315,6 +315,57 @@ const Configuracoes: React.FC = () => {
               }
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Acesso do Paciente ao Portal */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-info" />
+            </div>
+            <div>
+              <h3 className="font-semibold font-display text-foreground">Acesso do Paciente</h3>
+              <p className="text-sm text-muted-foreground">Controle de acesso ao portal e envio de credenciais</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-foreground">Permitir acesso ao portal do paciente</span>
+                <p className="text-xs text-muted-foreground">Quando desativado, nenhum paciente consegue acessar o portal</p>
+              </div>
+              <Switch
+                checked={configuracoes.portalPaciente?.permitirPortal ?? true}
+                onCheckedChange={v => updateConfiguracoes({ portalPaciente: { ...configuracoes.portalPaciente!, permitirPortal: v, enviarSenhaAutomaticamente: configuracoes.portalPaciente?.enviarSenhaAutomaticamente ?? true, enviarLinkAcesso: configuracoes.portalPaciente?.enviarLinkAcesso ?? true, pacientesBloqueados: configuracoes.portalPaciente?.pacientesBloqueados ?? [] } })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-foreground">Enviar senha automaticamente por e-mail</span>
+                <p className="text-xs text-muted-foreground">Ao cadastrar paciente, envia login e senha temporária por e-mail</p>
+              </div>
+              <Switch
+                checked={configuracoes.portalPaciente?.enviarSenhaAutomaticamente ?? true}
+                onCheckedChange={v => updateConfiguracoes({ portalPaciente: { ...configuracoes.portalPaciente!, enviarSenhaAutomaticamente: v, permitirPortal: configuracoes.portalPaciente?.permitirPortal ?? true, enviarLinkAcesso: configuracoes.portalPaciente?.enviarLinkAcesso ?? true, pacientesBloqueados: configuracoes.portalPaciente?.pacientesBloqueados ?? [] } })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-foreground">Enviar link de acesso ao portal</span>
+                <p className="text-xs text-muted-foreground">Inclui link do portal no e-mail de credenciais</p>
+              </div>
+              <Switch
+                checked={configuracoes.portalPaciente?.enviarLinkAcesso ?? true}
+                onCheckedChange={v => updateConfiguracoes({ portalPaciente: { ...configuracoes.portalPaciente!, enviarLinkAcesso: v, permitirPortal: configuracoes.portalPaciente?.permitirPortal ?? true, enviarSenhaAutomaticamente: configuracoes.portalPaciente?.enviarSenhaAutomaticamente ?? true, pacientesBloqueados: configuracoes.portalPaciente?.pacientesBloqueados ?? [] } })}
+              />
+            </div>
+            <div className="p-3 bg-muted rounded-lg text-xs text-muted-foreground">
+              <p><strong>Nota:</strong> Notificações de agendamento (confirmação, lembrete, cancelamento) continuam funcionando independentemente destas configurações.</p>
+              <p className="mt-1">Para bloquear o acesso de um paciente específico, use o botão "Bloquear Portal" no cadastro individual do paciente.</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

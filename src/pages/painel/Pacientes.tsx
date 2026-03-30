@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, ShieldBan, ShieldCheck } from 'lucide-react';
 import ContactActionButton from '@/components/ContactActionButton';
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from '@/components/DetalheDrawer';
 import { toast } from 'sonner';
@@ -25,7 +25,7 @@ import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from '@/com
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
-  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes, refreshFila } = useData();
+  const { pacientes, addPaciente, updatePaciente, agendamentos, fila, addToFila, unidades, funcionarios, logAction, refreshPacientes, refreshFila, configuracoes, updateConfiguracoes } = useData();
   const { user, hasPermission } = useAuth();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
@@ -668,6 +668,64 @@ const Pacientes: React.FC = () => {
                   </div>
                 </Secao>
               )}
+              <Secao titulo="Acesso ao Portal">
+                {(() => {
+                  const blocked = configuracoes.portalPaciente?.pacientesBloqueados?.includes(detalhePaciente.id) ?? false;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {blocked ? '🔒 Acesso bloqueado' : '✅ Acesso permitido'}
+                        </span>
+                        <Badge variant={blocked ? 'destructive' : 'default'} className="text-xs">
+                          {blocked ? 'Bloqueado' : 'Ativo'}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant={blocked ? 'default' : 'destructive'}
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          const currentBlocked = configuracoes.portalPaciente?.pacientesBloqueados || [];
+                          const newBlocked = blocked
+                            ? currentBlocked.filter((id: string) => id !== detalhePaciente.id)
+                            : [...currentBlocked, detalhePaciente.id];
+                          updateConfiguracoes({
+                            portalPaciente: {
+                              ...configuracoes.portalPaciente!,
+                              permitirPortal: configuracoes.portalPaciente?.permitirPortal ?? true,
+                              enviarSenhaAutomaticamente: configuracoes.portalPaciente?.enviarSenhaAutomaticamente ?? true,
+                              enviarLinkAcesso: configuracoes.portalPaciente?.enviarLinkAcesso ?? true,
+                              pacientesBloqueados: newBlocked,
+                            },
+                          });
+                          await logAction({
+                            acao: blocked ? 'portal_desbloqueado' : 'portal_bloqueado',
+                            entidade: 'paciente',
+                            entidadeId: detalhePaciente.id,
+                            detalhes: { pacienteNome: detalhePaciente.nome },
+                            user,
+                            modulo: 'pacientes',
+                          });
+                          toast.success(blocked
+                            ? `Acesso ao portal liberado para ${detalhePaciente.nome}`
+                            : `Acesso ao portal bloqueado para ${detalhePaciente.nome}`
+                          );
+                        }}
+                      >
+                        {blocked ? <ShieldCheck className="w-4 h-4 mr-2" /> : <ShieldBan className="w-4 h-4 mr-2" />}
+                        {blocked ? 'Liberar Acesso ao Portal' : 'Bloquear Acesso ao Portal'}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {blocked
+                          ? 'Paciente não consegue acessar o portal. Notificações continuam normalmente.'
+                          : 'Paciente pode acessar o portal normalmente.'
+                        }
+                      </p>
+                    </div>
+                  );
+                })()}
+              </Secao>
             </>
           );
         })()}
