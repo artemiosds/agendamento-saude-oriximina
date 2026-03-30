@@ -982,7 +982,7 @@ export type Database = {
           id: string
           nome: string
           profissao: string
-          profissional_id: string | null
+          profissionais_ids: string[] | null
         }
         Insert: {
           ativo?: boolean
@@ -993,7 +993,7 @@ export type Database = {
           id?: string
           nome: string
           profissao?: string
-          profissional_id?: string | null
+          profissionais_ids?: string[] | null
         }
         Update: {
           ativo?: boolean
@@ -1004,7 +1004,7 @@ export type Database = {
           id?: string
           nome?: string
           profissao?: string
-          profissional_id?: string | null
+          profissionais_ids?: string[] | null
         }
         Relationships: []
       }
@@ -1552,6 +1552,7 @@ export type Database = {
         }
         Returns: Json
       }
+      has_staff_role: { Args: { _role: string }; Returns: boolean }
       iniciar_atendimento: {
         Args: { p_agendamento_id: string; p_profissional_id: string }
         Returns: undefined
@@ -1564,6 +1565,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_staff_member: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
