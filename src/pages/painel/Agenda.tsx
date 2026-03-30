@@ -720,12 +720,17 @@ const Agenda: React.FC = () => {
     });
 
     toast.success("Atendimento iniciado!");
+    const prof = funcionarios.find(f => f.id === ag.profissionalId);
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
       pacienteNome: ag.pacienteNome,
       agendamentoId: ag.id,
       horaInicio,
       data: ag.data,
+      tipoAtendimento: ag.tipo || "Consulta",
+      especialidade: prof?.profissao || prof?.cargo || "",
+      profissionalId: ag.profissionalId,
+      origemFluxo: "agenda",
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   };
