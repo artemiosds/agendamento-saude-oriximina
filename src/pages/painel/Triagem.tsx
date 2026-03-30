@@ -46,6 +46,7 @@ interface FilaItem {
   prioridade: string;
   horaChegada: string;
   agendamento_id?: string;
+  status?: string;
 }
 
 interface PacienteInfo {
@@ -61,27 +62,28 @@ interface TriageHistoricoItem {
   paciente_id: string;
   pacientes?: { nome: string; cpf?: string };
   agendamentos?: { data: string; hora: string; profissional_nome?: string };
-  peso: number;
-  altura: number;
-  imc: number;
-  pressao_arterial: string;
-  temperatura: number;
-  frequencia_cardiaca: number;
-  saturacao_oxigenio: number;
-  glicemia: number;
+  peso: number | null;
+  altura: number | null;
+  imc: number | null;
+  pressao_arterial: string | null;
+  temperatura: number | null;
+  frequencia_cardiaca: number | null;
+  saturacao_oxigenio: number | null;
+  glicemia: number | null;
   dor: number;
-  queixa: string;
+  queixa: string | null;
   classificacao_risco: string;
   alergias: string[];
   medicamentos: string[];
-  observacoes: string;
+  observacoes: string | null;
   confirmado_em: string;
   tecnico_id: string;
+  iniciado_em: string;
 }
 
-// Status que indicam que o paciente está aguardando triagem
-// CORREÇÃO: Removido status genéricos, mantido apenas aguardando_triagem
-const STATUS_AGUARDANDO_TRIAGEM = ["aguardando_triagem"];
+// CORREÇÃO: Usar status válido que existe no sistema
+// O status "aguardando" já existe e é usado para pacientes na fila aguardando triagem
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando"];
 
 const mapFilaItem = (f: any): FilaItem => ({
   id: f.id,
@@ -95,6 +97,7 @@ const mapFilaItem = (f: any): FilaItem => ({
   prioridade: f.prioridade || "normal",
   horaChegada: f.hora_chegada || "",
   agendamento_id: f.agendamento_id,
+  status: f.status,
 });
 
 const sortFilaByCreatedAt = (items: FilaItem[]) => [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
@@ -156,12 +159,12 @@ const Triagem: React.FC = () => {
     return fila.filter((item) => item.pacienteNome.toLowerCase().includes(termo));
   }, [fila, busca]);
 
-  // CORREÇÃO: Carregar apenas pacientes com agendamento confirmado
+  // CORREÇÃO: Carregar apenas pacientes com agendamento confirmado e status aguardando
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
-      // Buscar pacientes na fila com status aguardando_triagem
+      // Buscar pacientes na fila com status aguardando
       const { data, error } = await supabase
         .from("fila_espera")
         .select(
@@ -182,16 +185,18 @@ const Triagem: React.FC = () => {
         .order("criado_em", { ascending: true });
 
       if (data && !error) {
-        // Filtrar apenas os que têm agendamento confirmado
+        // CORREÇÃO: Verificar se agendamentos existe e é um objeto/array
         const filteredData = data.filter((item) => {
           // Se não tem agendamento_id, não deve aparecer na triagem
           if (!item.agendamento_id) return false;
           // Verificar se o agendamento existe e está confirmado
           const agendamento = item.agendamentos;
           if (!agendamento) return false;
+          // Acessar status de forma segura
+          const agendamentoStatus = Array.isArray(agendamento) ? agendamento[0]?.status : agendamento?.status;
           // Apenas agendamentos confirmados ou com chegada confirmada
-          const validStatuses = ["confirmado", "confirmado_chegada", "aguardando_triagem"];
-          return validStatuses.includes(agendamento.status);
+          const validStatuses = ["confirmado", "confirmado_chegada", "aguardando"];
+          return validStatuses.includes(agendamentoStatus);
         });
 
         setFila(sortFilaByCreatedAt(filteredData.map(mapFilaItem)));
@@ -262,7 +267,31 @@ const Triagem: React.FC = () => {
         .limit(50);
 
       if (data && !error) {
-        setHistoricoTriagens(data as TriageHistoricoItem[]);
+        // CORREÇÃO: Mapear os dados para o tipo correto
+        const mappedData: TriageHistoricoItem[] = data.map((item: any) => ({
+          id: item.id,
+          paciente_id: item.paciente_id,
+          pacientes: item.pacientes,
+          agendamentos: item.agendamentos,
+          peso: item.peso,
+          altura: item.altura,
+          imc: item.imc,
+          pressao_arterial: item.pressao_arterial,
+          temperatura: item.temperatura,
+          frequencia_cardiaca: item.frequencia_cardiaca,
+          saturacao_oxigenio: item.saturacao_oxigenio,
+          glicemia: item.glicemia,
+          dor: item.dor,
+          queixa: item.queixa,
+          classificacao_risco: item.classificacao_risco,
+          alergias: item.alergias || [],
+          medicamentos: item.medicamentos || [],
+          observacoes: item.observacoes,
+          confirmado_em: item.confirmado_em,
+          tecnico_id: item.tecnico_id,
+          iniciado_em: item.iniciado_em,
+        }));
+        setHistoricoTriagens(mappedData);
       }
     } catch (err) {
       console.error("Erro ao carregar histórico:", err);
@@ -325,6 +354,7 @@ const Triagem: React.FC = () => {
   const buildRecord = () => ({
     agendamento_id: selectedItem!.id,
     tecnico_id: user?.id || "",
+    paciente_id: selectedItem!.pacienteId,
     peso: parseFloat(form.peso) || null,
     altura: parseFloat(form.altura) || null,
     imc: imc ? parseFloat(imc.value) : null,
@@ -385,8 +415,6 @@ const Triagem: React.FC = () => {
       await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
 
       // CORREÇÃO: Definir status correto para aparecer na agenda do profissional
-      // Se encaminhar para enfermagem: aguardando_enfermagem
-      // Se NÃO encaminhar: aguardando_atendimento (para o profissional iniciar)
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "aguardando_atendimento";
 
       // Atualizar fila_espera
