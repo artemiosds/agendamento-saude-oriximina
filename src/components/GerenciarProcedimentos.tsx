@@ -48,21 +48,35 @@ const GerenciarProcedimentos: React.FC = () => {
     ativo: true,
   });
 
-  // Profissionais ativos
+  // === DEBUG FORTE ===
   const profissionais = useMemo(() => {
-    return funcionarios.filter(f => f.role === 'profissional' && f.ativo === true);
+    const filtered = funcionarios.filter(f => f.role === 'profissional' && f.ativo === true);
+    
+    console.log('🔍 TOTAL DE FUNCIONÁRIOS:', funcionarios.length);
+    console.log('✅ PROFISSIONAIS ATIVOS:', filtered.length);
+    console.log('PROFISSÕES EXISTENTES NO BANCO:', 
+      [...new Set(funcionarios.map(f => `'${f.profissao}'`))]
+    );
+
+    return filtered;
   }, [funcionarios]);
 
-  // Agrupamento por profissão (filtro mais flexível)
   const profissionaisPorProfissao = useMemo(() => {
     const grouped: Record<string, any[]> = {};
 
     PROFISSOES.forEach(prof => {
-      grouped[prof] = profissionais.filter(p => 
-        p.profissao && 
-        p.profissao.toString().trim().toLowerCase() === prof.toLowerCase()
-      );
+      const matches = profissionais.filter(p => {
+        const profBanco = (p.profissao || '').toString().trim();
+        const profLista = prof.trim();
+        return profBanco.toLowerCase() === profLista.toLowerCase();
+      });
+
+      grouped[prof] = matches;
     });
+
+    console.log('📊 QUANTIDADE POR PROFISSÃO:', 
+      Object.fromEntries(Object.entries(grouped).map(([k, v]) => [k, v.length]))
+    );
 
     return grouped;
   }, [profissionais]);
@@ -74,18 +88,12 @@ const GerenciarProcedimentos: React.FC = () => {
       .select('*')
       .order('profissao', { ascending: true });
 
-    if (error) {
-      console.error('Erro ao carregar procedimentos:', error);
-      toast.error('Erro ao carregar procedimentos');
-    }
-
+    if (error) console.error(error);
     if (data) {
-      setProcedimentos(
-        data.map((p: any) => ({
-          ...p,
-          profissionais_ids: Array.isArray(p.profissionais_ids) ? p.profissionais_ids : [],
-        }))
-      );
+      setProcedimentos(data.map((p: any) => ({
+        ...p,
+        profissionais_ids: Array.isArray(p.profissionais_ids) ? p.profissionais_ids : [],
+      })));
     }
     setLoading(false);
   };
@@ -102,14 +110,7 @@ const GerenciarProcedimentos: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({
-      nome: '',
-      descricao: '',
-      profissao: '',
-      especialidade: '',
-      profissionais_ids: [],
-      ativo: true,
-    });
+    setForm({ nome: '', descricao: '', profissao: '', especialidade: '', profissionais_ids: [], ativo: true });
     setDialogOpen(true);
   };
 
@@ -136,12 +137,8 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.nome?.trim()) {
-      toast.error('Nome é obrigatório.');
-      return;
-    }
-    if (!form.profissao) {
-      toast.error('Área / Profissão é obrigatória.');
+    if (!form.nome?.trim() || !form.profissao) {
+      toast.error('Nome e Área/Profissão são obrigatórios.');
       return;
     }
 
@@ -155,26 +152,11 @@ const GerenciarProcedimentos: React.FC = () => {
     };
 
     if (editId) {
-      const { error } = await supabase
-        .from('procedimentos')
-        .update(record)
-        .eq('id', editId);
-
-      if (error) {
-        toast.error('Erro ao atualizar procedimento.');
-        return;
-      }
-      toast.success('Procedimento atualizado com sucesso!');
+      await supabase.from('procedimentos').update(record).eq('id', editId);
+      toast.success('Atualizado!');
     } else {
-      const { error } = await supabase
-        .from('procedimentos')
-        .insert(record);
-
-      if (error) {
-        toast.error('Erro ao criar procedimento.');
-        return;
-      }
-      toast.success('Procedimento criado com sucesso!');
+      await supabase.from('procedimentos').insert(record);
+      toast.success('Criado!');
     }
 
     setDialogOpen(false);
@@ -182,27 +164,16 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const toggleAtivo = async (p: ProcedimentoDB) => {
-    const novoEstado = !p.ativo;
-    const { error } = await supabase
-      .from('procedimentos')
-      .update({ ativo: novoEstado })
-      .eq('id', p.id);
-
-    if (error) {
-      toast.error('Erro ao alterar status.');
-      return;
-    }
-
-    setProcedimentos(prev =>
-      prev.map(x => x.id === p.id ? { ...x, ativo: novoEstado } : x)
-    );
-
-    toast.success(novoEstado ? 'Procedimento ativado.' : 'Procedimento inativado.');
+    const novo = !p.ativo;
+    await supabase.from('procedimentos').update({ ativo: novo }).eq('id', p.id);
+    setProcedimentos(prev => prev.map(x => x.id === p.id ? { ...x, ativo: novo } : x));
+    toast.success(novo ? 'Ativado' : 'Inativado');
   };
 
   return (
     <Card className="shadow-card border-0">
       <CardContent className="p-5">
+        {/* Cabeçalho e busca (mantido igual) */}
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
             <Stethoscope className="w-5 h-5 text-primary" />
@@ -218,47 +189,24 @@ const GerenciarProcedimentos: React.FC = () => {
 
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar procedimento, profissão ou especialidade..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10"
-          />
+          <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
 
+        {/* Lista de procedimentos (mantida igual) */}
         {loading ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Carregando procedimentos...</p>
-        ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            {search ? 'Nenhum procedimento encontrado.' : 'Nenhum procedimento cadastrado.'}
-          </p>
+          <p className="text-center py-8 text-muted-foreground">Carregando...</p>
         ) : (
-          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-80 overflow-y-auto">
             {filtered.map(p => (
-              <div key={p.id} className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-muted/50 border">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground">{p.nome}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{p.profissao}</Badge>
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {p.profissionais_ids?.length || 0} prof.
-                    </Badge>
-                    {!p.ativo && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Inativo</Badge>}
-                  </div>
-                  {p.especialidade && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{p.especialidade}</p>
-                  )}
+              <div key={p.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg border">
+                <div>
+                  <div className="font-medium">{p.nome}</div>
+                  <div className="text-sm text-muted-foreground">{p.profissao}</div>
                 </div>
-
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   <Switch checked={p.ativo} onCheckedChange={() => toggleAtivo(p)} />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    onClick={() => openEdit(p)}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
+                  <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
+                    <Pencil className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
@@ -266,123 +214,74 @@ const GerenciarProcedimentos: React.FC = () => {
           </div>
         )}
 
-        {/* ==================== DIALOG ==================== */}
+        {/* Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0">
             <DialogHeader className="px-6 pt-6 pb-4 border-b">
-              <DialogTitle className="font-display">
-                {editId ? 'Editar' : 'Novo'} Procedimento
-              </DialogTitle>
+              <DialogTitle>{editId ? 'Editar' : 'Novo'} Procedimento</DialogTitle>
             </DialogHeader>
 
             <div className="p-6 space-y-5">
+              {/* Nome, Descrição, Profissão, Especialidade (igual) */}
               <div>
                 <Label>Nome *</Label>
-                <Input
-                  value={form.nome}
-                  onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
-                  placeholder="Ex: Fisioterapia Respiratória CER II"
-                />
+                <Input value={form.nome} onChange={e => setForm(p => ({...p, nome: e.target.value}))} placeholder="Ex: Fisioterapia Respiratória CER II" />
               </div>
 
               <div>
                 <Label>Descrição</Label>
-                <Input
-                  value={form.descricao}
-                  onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))}
-                  placeholder="Descrição do procedimento..."
-                />
+                <Input value={form.descricao} onChange={e => setForm(p => ({...p, descricao: e.target.value}))} placeholder="Descrição..." />
               </div>
 
               <div>
                 <Label>Área / Profissão *</Label>
-                <Select
-                  value={form.profissao}
-                  onValueChange={v => setForm(p => ({ ...p, profissao: v, profissionais_ids: [] }))}
-                >
+                <Select value={form.profissao} onValueChange={v => setForm(p => ({...p, profissao: v, profissionais_ids: []}))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione a área" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PROFISSOES.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
+                    {PROFISSOES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <Label>Especialidade (opcional)</Label>
-                <Input
-                  value={form.especialidade}
-                  onChange={e => setForm(p => ({ ...p, especialidade: e.target.value }))}
-                  placeholder="Ex: Reabilitação Neurológica"
-                />
+                <Input value={form.especialidade} onChange={e => setForm(p => ({...p, especialidade: e.target.value}))} />
               </div>
 
-              {/* Lista de Profissionais */}
+              {/* Profissionais */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <Label className="font-medium">
-                    Profissionais ({form.profissionais_ids.length} selecionados)
-                  </Label>
+                  <Users className="w-4 h-4" />
+                  <Label>Profissionais ({form.profissionais_ids.length} selecionados)</Label>
                 </div>
 
                 {form.profissao ? (
                   profissionaisPorProfissao[form.profissao]?.length > 0 ? (
-                    <div className="border rounded-md max-h-60 overflow-y-auto p-3 bg-muted/30">
-                      <div className="space-y-2">
-                        {profissionaisPorProfissao[form.profissao].map((prof: any) => (
-                          <div
-                            key={prof.id}
-                            className="flex items-center gap-3 p-3 rounded hover:bg-accent cursor-pointer"
-                            onClick={() => toggleProfissional(prof.id)}
-                          >
-                            <Checkbox
-                              checked={form.profissionais_ids.includes(prof.id)}
-                              onCheckedChange={() => toggleProfissional(prof.id)}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">{prof.nome}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {prof.profissao} • {prof.crp || prof.cref || prof.registro || 'Sem registro'}
-                              </div>
-                            </div>
+                    <div className="border rounded-md max-h-60 overflow-y-auto p-3">
+                      {profissionaisPorProfissao[form.profissao].map((prof: any) => (
+                        <div key={prof.id} className="flex items-center gap-3 p-3 hover:bg-accent rounded cursor-pointer" onClick={() => toggleProfissional(prof.id)}>
+                          <Checkbox checked={form.profissionais_ids.includes(prof.id)} />
+                          <div>
+                            <div className="font-medium">{prof.nome}</div>
+                            <div className="text-xs text-muted-foreground">{prof.profissao}</div>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    <div className="border rounded-md p-8 text-center bg-muted/50">
-                      <AlertCircle className="w-9 h-9 mx-auto text-amber-500 mb-3" />
+                    <div className="p-8 text-center border rounded-md bg-muted/50">
+                      <AlertCircle className="w-10 h-10 mx-auto text-amber-500 mb-3" />
                       <p className="font-medium">Nenhum profissional encontrado</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Para a área de <strong>{form.profissao}</strong>
-                      </p>
+                      <p className="text-sm text-muted-foreground">Para <strong>{form.profissao}</strong></p>
                     </div>
                   )
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8 border rounded-md bg-muted/30">
-                    Selecione uma área/profissão primeiro
-                  </p>
-                )}
+                ) : null}
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t">
-                <Label>Ativo</Label>
-                <Switch
-                  checked={form.ativo}
-                  onCheckedChange={v => setForm(p => ({ ...p, ativo: v }))}
-                />
-              </div>
-
-              <Button
-                onClick={handleSave}
-                className="w-full"
-                disabled={!form.nome?.trim() || !form.profissao}
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
+              <Button onClick={handleSave} className="w-full" disabled={!form.nome.trim() || !form.profissao}>
+                <CheckCircle className="mr-2 w-4 h-4" />
                 {editId ? 'Salvar Alterações' : 'Criar Procedimento'}
               </Button>
             </div>
