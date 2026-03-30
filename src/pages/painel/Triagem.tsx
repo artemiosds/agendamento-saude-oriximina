@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search, History } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search, History, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -46,6 +47,8 @@ interface FilaItem {
   prioridade: string;
   horaChegada: string;
   agendamento_id?: string;
+  tipo_entrada?: string;
+  observacoes?: string;
 }
 
 interface PacienteInfo {
@@ -79,10 +82,6 @@ interface TriageHistoricoItem {
   tecnico_id: string;
 }
 
-// Status que indicam que o paciente está aguardando triagem
-// CORREÇÃO: Removido status genéricos, mantido apenas aguardando_triagem
-const STATUS_AGUARDANDO_TRIAGEM = ["aguardando_triagem"];
-
 const mapFilaItem = (f: any): FilaItem => ({
   id: f.id,
   pacienteNome: f.paciente_nome,
@@ -95,10 +94,12 @@ const mapFilaItem = (f: any): FilaItem => ({
   prioridade: f.prioridade || "normal",
   horaChegada: f.hora_chegada || "",
   agendamento_id: f.agendamento_id,
+  tipo_entrada: f.tipo_entrada,
+  observacoes: f.observacoes,
 });
 
 const sortFilaByCreatedAt = (items: FilaItem[]) =>
-  [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+  [...items].sort((a, b) => new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime());
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
@@ -112,11 +113,10 @@ const Triagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
-
-  // NOVO: estado para histórico
   const [historicoOpen, setHistoricoOpen] = useState(false);
   const [historicoTriagens, setHistoricoTriagens] = useState<TriageHistoricoItem[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState<"triagem" | "demanda">("triagem");
 
   const [form, setForm] = useState({
     peso: "",
@@ -150,7 +150,6 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
 
-  // Filtra a fila em tempo real conforme o texto digitado
   const filaFiltrada = useMemo(() => {
     if (!busca.trim()) return fila;
     const termo = busca.trim().toLowerCase();
@@ -159,12 +158,35 @@ const Triagem: React.FC = () => {
     );
   }, [fila, busca]);
 
-  // CORREÇÃO: Carregar apenas pacientes com agendamento confirmado
+  // Separar por tipo de entrada
+  const pacientesTriagemNormal = useMemo(() => {
+    return filaFiltrada.filter(item => item.tipo_entrada !== "demanda_reprimida");
+  }, [filaFiltrada]);
+
+  const pacientesDemandaReprimida = useMemo(() => {
+    return filaFiltrada.filter(item => item.tipo_entrada === "demanda_reprimida");
+  }, [filaFiltrada]);
+
+  // Ordenar: mais antigo primeiro (prioridade para quem espera mais)
+  const pacientesTriagemNormalOrdenados = useMemo(() => {
+    return sortFilaByCreatedAt(pacientesTriagemNormal);
+  }, [pacientesTriagemNormal]);
+
+  const pacientesDemandaReprimidaOrdenados = useMemo(() => {
+    return sortFilaByCreatedAt(pacientesDemandaReprimida);
+  }, [pacientesDemandaReprimida]);
+
+  const listaExibir = abaAtiva === "triagem" 
+    ? pacientesTriagemNormalOrdenados 
+    : pacientesDemandaReprimidaOrdenados;
+
+  // CORREÇÃO: Carregar apenas pacientes com status aguardando_triagem
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
-      // Buscar pacientes na fila com status aguardando_triagem
+      const hoje = new Date().toISOString().split("T")[0];
+      
       const { data, error } = await supabase
         .from("fila_espera")
         .select(`
@@ -178,21 +200,24 @@ const Triagem: React.FC = () => {
             paciente_id
           )
         `)
-        .in("status", STATUS_AGUARDANDO_TRIAGEM)
         .eq("unidade_id", user.unidadeId)
+        .eq("status", "aguardando_triagem")
         .order("criado_em", { ascending: true });
 
       if (data && !error) {
-        // Filtrar apenas os que têm agendamento confirmado
+        // Filtrar: para demanda normal, precisa ter agendamento confirmado hoje
+        // Para demanda reprimida, pode não ter agendamento
         const filteredData = data.filter(item => {
-          // Se não tem agendamento_id, não deve aparecer na triagem
+          // Demanda reprimida - sempre mostra
+          if (item.tipo_entrada === "demanda_reprimida") {
+            return true;
+          }
+          // Demanda normal - precisa ter agendamento confirmado hoje
           if (!item.agendamento_id) return false;
-          // Verificar se o agendamento existe e está confirmado
           const agendamento = item.agendamentos;
           if (!agendamento) return false;
-          // Apenas agendamentos confirmados ou com chegada confirmada
-          const validStatuses = ["confirmado", "confirmado_chegada", "aguardando_triagem"];
-          return validStatuses.includes(agendamento.status);
+          return agendamento.data === hoje && 
+                 ["confirmado_chegada", "aguardando_triagem"].includes(agendamento.status);
         });
         
         setFila(sortFilaByCreatedAt(filteredData.map(mapFilaItem)));
@@ -226,7 +251,7 @@ const Triagem: React.FC = () => {
       const row = payload.new as any;
       if (!row?.id) return;
 
-      const shouldRender = STATUS_AGUARDANDO_TRIAGEM.includes(String(row.status || ""));
+      const shouldRender = row.status === "aguardando_triagem";
       setFila((prev) => {
         const withoutCurrent = prev.filter((item) => item.id !== row.id);
         if (!shouldRender) return withoutCurrent;
@@ -237,7 +262,6 @@ const Triagem: React.FC = () => {
     pollIntervalMs: 30000,
   });
 
-  // NOVO: carregar histórico de triagens
   const loadHistoricoTriagens = useCallback(async () => {
     if (!user?.id) return;
     setLoadingHistorico(true);
@@ -374,7 +398,6 @@ const Triagem: React.FC = () => {
     return missing;
   };
 
-  // CORREÇÃO PRINCIPAL: Fluxo correto após triagem
   const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
     if (!selectedItem) return;
 
@@ -391,18 +414,13 @@ const Triagem: React.FC = () => {
         .from("triage_records")
         .upsert(record, { onConflict: "agendamento_id" });
 
-      // CORREÇÃO: Definir status correto para aparecer na agenda do profissional
-      // Se encaminhar para enfermagem: aguardando_enfermagem
-      // Se NÃO encaminhar: aguardando_atendimento (para o profissional iniciar)
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "aguardando_atendimento";
 
-      // Atualizar fila_espera
       await supabase
         .from("fila_espera")
         .update({ status: nextStatus })
         .eq("id", selectedItem.id);
 
-      // Atualizar agendamento com o mesmo status
       if (selectedItem.agendamento_id) {
         await supabase
           .from("agendamentos")
@@ -410,25 +428,21 @@ const Triagem: React.FC = () => {
           .eq("id", selectedItem.agendamento_id);
       }
 
-      // Se NÃO encaminhou para enfermagem, registrar que não precisou de enfermagem
-      if (!encaminharEnfermagem) {
-        try {
-          await supabase.from("nursing_evaluations").insert({
-            patient_id: selectedItem.pacienteId,
-            agendamento_id: selectedItem.id,
-            professional_id: user?.id || "",
-            unit_id: user?.unidadeId || "",
-            anamnese_resumida: "Paciente seguiu fluxo sem atendimento de enfermagem (triagem direta)",
-            condicao_clinica: "",
-            avaliacao_risco: form.classificacaoRisco,
-            prioridade: form.classificacaoRisco === "alto" ? "alta" : form.classificacaoRisco === "medio" ? "media" : "baixa",
-            observacoes_clinicas: `Triagem concluída pelo técnico ${user?.nome}. Queixa: ${form.queixaPrincipal}. Sinais: PA ${form.pressaoArterial}, FC ${form.frequenciaCardiaca}, SatO₂ ${form.saturacaoOxigenio}%.`,
-            resultado: "apto",
-            motivo_inapto: "",
-          });
-        } catch (err) {
-          console.error("Erro ao registrar dispensação de enfermagem:", err);
-        }
+      // Se for demanda reprimida e não encaminhou para enfermagem, registrar
+      if (selectedItem.tipo_entrada === "demanda_reprimida" && !encaminharEnfermagem) {
+        await supabase.from("nursing_evaluations").insert({
+          patient_id: selectedItem.pacienteId,
+          agendamento_id: selectedItem.id,
+          professional_id: user?.id || "",
+          unit_id: user?.unidadeId || "",
+          anamnese_resumida: "PACIENTE DEMANDA REPRIMIDA - Triagem concluída",
+          condicao_clinica: "",
+          avaliacao_risco: form.classificacaoRisco,
+          prioridade: form.classificacaoRisco === "alto" ? "alta" : form.classificacaoRisco === "medio" ? "media" : "baixa",
+          observacoes_clinicas: `Triagem de demanda reprimida. Queixa: ${form.queixaPrincipal}`,
+          resultado: "apto",
+          motivo_inapto: "",
+        });
       }
 
       await logAction({
@@ -439,7 +453,7 @@ const Triagem: React.FC = () => {
         user,
         detalhes: {
           paciente_nome: selectedItem.pacienteNome,
-          especialidade_destino: selectedItem.especialidadeDestino,
+          tipo_entrada: selectedItem.tipo_entrada || "normal",
           peso: form.peso,
           altura: form.altura,
           imc: imc?.value,
@@ -491,19 +505,86 @@ const Triagem: React.FC = () => {
         ).toUpperCase()
       : null;
 
+  const renderPacienteCard = (item: FilaItem) => {
+    const waitMinutes = item.criadoEm
+      ? differenceInMinutes(now, new Date(item.criadoEm))
+      : 0;
+    const waitLabel =
+      waitMinutes >= 60
+        ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min`
+        : `${waitMinutes}min`;
+    const espBadge = item.especialidadeDestino
+      ? ESPECIALIDADE_LABELS[item.especialidadeDestino] ||
+        item.especialidadeDestino.toUpperCase()
+      : null;
+    const isDemandaReprimida = item.tipo_entrada === "demanda_reprimida";
+
+    return (
+      <Card key={item.id} className="shadow-card border-0">
+        <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">
+            {item.horaChegada}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-foreground">{item.pacienteNome}</p>
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {isDemandaReprimida && (
+                <Badge variant="destructive" className="text-[10px] animate-pulse">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  DEMANDA REPRIMIDA
+                </Badge>
+              )}
+              {espBadge && (
+                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                  {espBadge}
+                </Badge>
+              )}
+              {item.cid && (
+                <Badge variant="outline" className="text-[10px]">
+                  CID: {item.cid}
+                </Badge>
+              )}
+            </div>
+            {isDemandaReprimida && item.criadoEm && (
+              <p className="text-xs text-muted-foreground mt-1">
+                📅 Data de cadastro: {new Date(item.criadoEm).toLocaleDateString("pt-BR")}
+              </p>
+            )}
+            {item.observacoes && (
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                💬 {item.observacoes}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              <Clock className="w-3 h-3 mr-1" /> {waitLabel}
+            </Badge>
+            <Button
+              size="sm"
+              className={isDemandaReprimida ? "bg-orange-600 hover:bg-orange-700" : "gradient-primary"}
+              onClick={() => openTriagem(item)}
+            >
+              <Play className="w-3.5 h-3.5 mr-1" /> Iniciar triagem
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">
             Triagem de Enfermagem
           </h1>
           <p className="text-muted-foreground text-sm">
-            {filaFiltrada.length} paciente(s) aguardando triagem
+            {pacientesTriagemNormal.length + pacientesDemandaReprimida.length} paciente(s) aguardando triagem
           </p>
         </div>
         
-        {/* NOVO: Botão de Histórico */}
         <Button 
           variant="outline" 
           onClick={() => {
@@ -516,7 +597,6 @@ const Triagem: React.FC = () => {
         </Button>
       </div>
 
-      {/* Campo de busca por nome */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -530,89 +610,81 @@ const Triagem: React.FC = () => {
             }}
           />
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setBusca(buscaInput.trim())}
-        >
+        <Button variant="outline" onClick={() => setBusca(buscaInput.trim())}>
           <Search className="w-4 h-4" />
         </Button>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      ) : filaFiltrada.length === 0 ? (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            {busca.trim()
-              ? `Nenhum paciente encontrado para "${busca}".`
-              : "Nenhum paciente aguardando triagem no momento."}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {filaFiltrada.map((item) => {
-            const waitMinutes = item.criadoEm
-              ? differenceInMinutes(now, new Date(item.criadoEm))
-              : 0;
-            const waitLabel =
-              waitMinutes >= 60
-                ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min`
-                : `${waitMinutes}min`;
-            const espBadge = item.especialidadeDestino
-              ? ESPECIALIDADE_LABELS[item.especialidadeDestino] ||
-                item.especialidadeDestino.toUpperCase()
-              : null;
-            return (
-              <Card key={item.id} className="shadow-card border-0">
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">
-                    {item.horaChegada}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{item.pacienteNome}</p>
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {espBadge && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] border-primary/30 text-primary"
-                        >
-                          {espBadge}
-                        </Badge>
-                      )}
-                      {item.cid && (
-                        <Badge variant="outline" className="text-[10px]">
-                          CID: {item.cid}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      <Clock className="w-3 h-3 mr-1" /> {waitLabel}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      className="gradient-primary text-primary-foreground"
-                      onClick={() => openTriagem(item)}
-                    >
-                      <Play className="w-3.5 h-3.5 mr-1" /> Iniciar triagem
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+      <Tabs value={abaAtiva} onValueChange={(v) => setAbaAtiva(v as "triagem" | "demanda")} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="triagem" className="flex gap-2">
+            Triagem Normal
+            <Badge variant="secondary" className="ml-1">
+              {pacientesTriagemNormal.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="demanda" className="flex gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Demanda Reprimida
+            <Badge variant="destructive" className="ml-1">
+              {pacientesDemandaReprimida.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="triagem" className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : listaExibir.length === 0 ? (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                {busca.trim()
+                  ? `Nenhum paciente encontrado para "${busca}".`
+                  : "Nenhum paciente com chegada confirmada aguardando triagem hoje."}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {listaExibir.map(renderPacienteCard)}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="demanda" className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : listaExibir.length === 0 ? (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                {busca.trim()
+                  ? `Nenhum paciente encontrado para "${busca}".`
+                  : "Nenhum paciente de demanda reprimida aguardando triagem."}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {listaExibir.map(renderPacienteCard)}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog de Triagem */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display">
+            <DialogTitle className="font-display flex items-center gap-2">
               Triagem — {selectedItem?.pacienteNome}
+              {selectedItem?.tipo_entrada === "demanda_reprimida" && (
+                <Badge variant="destructive" className="text-xs">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  DEMANDA REPRIMIDA
+                </Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
 
@@ -639,6 +711,11 @@ const Triagem: React.FC = () => {
               {pacienteInfo?.justificativa && (
                 <p className="text-xs">
                   <strong>Justificativa:</strong> {pacienteInfo.justificativa}
+                </p>
+              )}
+              {selectedItem?.observacoes && (
+                <p className="text-xs bg-muted/30 p-2 rounded">
+                  <strong>Observações da fila:</strong> {selectedItem.observacoes}
                 </p>
               )}
             </div>
@@ -683,9 +760,7 @@ const Triagem: React.FC = () => {
                 <Label>Pressão Arterial *</Label>
                 <Input
                   value={form.pressaoArterial}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, pressaoArterial: e.target.value }))
-                  }
+                  onChange={(e) => setForm((p) => ({ ...p, pressaoArterial: e.target.value }))}
                   placeholder="120/80"
                 />
               </div>
@@ -704,9 +779,7 @@ const Triagem: React.FC = () => {
                 <Input
                   type="number"
                   value={form.frequenciaCardiaca}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))
-                  }
+                  onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))}
                   placeholder="72"
                 />
               </div>
@@ -715,9 +788,7 @@ const Triagem: React.FC = () => {
                 <Input
                   type="number"
                   value={form.saturacaoOxigenio}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))
-                  }
+                  onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))}
                   placeholder="98"
                 />
               </div>
@@ -773,9 +844,7 @@ const Triagem: React.FC = () => {
               <Textarea
                 rows={2}
                 value={form.queixaPrincipal}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))
-                }
+                onChange={(e) => setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))}
                 placeholder="Queixa principal do paciente..."
               />
             </div>
@@ -822,16 +891,9 @@ const Triagem: React.FC = () => {
                   value={newMedicamento}
                   onChange={(e) => setNewMedicamento(e.target.value)}
                   placeholder="Digitar medicamento"
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && (e.preventDefault(), addMedicamento())
-                  }
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addMedicamento())}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={addMedicamento}
-                >
+                <Button type="button" variant="outline" size="icon" onClick={addMedicamento}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -868,12 +930,7 @@ const Triagem: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={salvarRascunho}
-                disabled={saving}
-              >
+              <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 <Save className="w-4 h-4 mr-2" /> Salvar Rascunho
               </Button>
@@ -901,7 +958,7 @@ const Triagem: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* NOVO: Modal de Histórico */}
+      {/* Modal de Histórico */}
       <Dialog open={historicoOpen} onOpenChange={setHistoricoOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
