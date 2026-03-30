@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Play, Clock, X, Plus, CheckCircle, Save } from "lucide-react";
+import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -73,7 +73,8 @@ const mapFilaItem = (f: any): FilaItem => ({
   agendamento_id: f.agendamento_id,
 });
 
-const sortFilaByCreatedAt = (items: FilaItem[]) => [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
+const sortFilaByCreatedAt = (items: FilaItem[]) =>
+  [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
 
 const Triagem: React.FC = () => {
   const { user } = useAuth();
@@ -85,6 +86,8 @@ const Triagem: React.FC = () => {
   const [pacienteInfo, setPacienteInfo] = useState<PacienteInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [buscaInput, setBuscaInput] = useState("");
+  const [busca, setBusca] = useState("");
 
   const [form, setForm] = useState({
     peso: "",
@@ -117,6 +120,15 @@ const Triagem: React.FC = () => {
     const value = w / (h * h);
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
+
+  // Filtra a fila em tempo real conforme o texto digitado
+  const filaFiltrada = useMemo(() => {
+    if (!busca.trim()) return fila;
+    const termo = busca.trim().toLowerCase();
+    return fila.filter((item) =>
+      item.pacienteNome.toLowerCase().includes(termo)
+    );
+  }, [fila, busca]);
 
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
@@ -183,7 +195,11 @@ const Triagem: React.FC = () => {
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
-    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
+    const { data } = await supabase
+      .from("triage_records")
+      .select("*")
+      .eq("agendamento_id", item.id)
+      .maybeSingle();
 
     if (data) {
       const triageData = data as any;
@@ -247,7 +263,9 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await supabase.from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
+      await supabase
+        .from("triage_records")
+        .upsert(buildRecord(), { onConflict: "agendamento_id" });
       toast.success("Rascunho salvo!");
     } catch (err) {
       console.error("Erro ao salvar rascunho:", err);
@@ -282,16 +300,26 @@ const Triagem: React.FC = () => {
     setSaving(true);
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
+      await supabase
+        .from("triage_records")
+        .upsert(record, { onConflict: "agendamento_id" });
 
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
 
-      await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
+      await supabase
+        .from("fila_espera")
+        .update({ status: nextStatus })
+        .eq("id", selectedItem.id);
 
       if (selectedItem.agendamento_id) {
         await supabase
           .from("agendamentos")
-          .update({ status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "apto_agendamento" })
+          .update({
+            status:
+              nextStatus === "aguardando_enfermagem"
+                ? "aguardando_enfermagem"
+                : "apto_agendamento",
+          })
           .eq("id", selectedItem.agendamento_id);
       }
 
@@ -360,45 +388,89 @@ const Triagem: React.FC = () => {
 
   const espLabel =
     pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino
-      ? ESPECIALIDADE_LABELS[pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino || ""] ||
-        (pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino || "").toUpperCase()
+      ? ESPECIALIDADE_LABELS[
+          pacienteInfo?.especialidade_destino || selectedItem?.especialidadeDestino || ""
+        ] ||
+        (
+          pacienteInfo?.especialidade_destino ||
+          selectedItem?.especialidadeDestino ||
+          ""
+        ).toUpperCase()
       : null;
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Triagem de Enfermagem</h1>
-        <p className="text-muted-foreground text-sm">{fila.length} paciente(s) aguardando triagem</p>
+        <h1 className="text-2xl font-bold font-display text-foreground">
+          Triagem de Enfermagem
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {filaFiltrada.length} paciente(s) aguardando triagem
+        </p>
+      </div>
+
+      {/* ── Campo de busca por nome ── */}
+      <div className="relative flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-9"
+            placeholder="Buscar paciente por nome..."
+            value={buscaInput}
+            onChange={(e) => setBuscaInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") setBusca(buscaInput.trim());
+            }}
+          />
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setBusca(buscaInput.trim())}
+        >
+          <Search className="w-4 h-4" />
+        </Button>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      ) : fila.length === 0 ? (
+      ) : filaFiltrada.length === 0 ? (
         <Card className="shadow-card border-0">
           <CardContent className="p-8 text-center text-muted-foreground">
-            Nenhum paciente aguardando triagem no momento.
+            {busca.trim()
+              ? `Nenhum paciente encontrado para "${busca}".`
+              : "Nenhum paciente aguardando triagem no momento."}
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
-          {fila.map((item) => {
-            const waitMinutes = item.criadoEm ? differenceInMinutes(now, new Date(item.criadoEm)) : 0;
+          {filaFiltrada.map((item) => {
+            const waitMinutes = item.criadoEm
+              ? differenceInMinutes(now, new Date(item.criadoEm))
+              : 0;
             const waitLabel =
-              waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
+              waitMinutes >= 60
+                ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min`
+                : `${waitMinutes}min`;
             const espBadge = item.especialidadeDestino
-              ? ESPECIALIDADE_LABELS[item.especialidadeDestino] || item.especialidadeDestino.toUpperCase()
+              ? ESPECIALIDADE_LABELS[item.especialidadeDestino] ||
+                item.especialidadeDestino.toUpperCase()
               : null;
             return (
               <Card key={item.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{item.horaChegada}</span>
+                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">
+                    {item.horaChegada}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{item.pacienteNome}</p>
                     <div className="flex flex-wrap gap-1 mt-0.5">
                       {espBadge && (
-                        <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-primary/30 text-primary"
+                        >
                           {espBadge}
                         </Badge>
                       )}
@@ -431,7 +503,9 @@ const Triagem: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-display">Triagem — {selectedItem?.pacienteNome}</DialogTitle>
+            <DialogTitle className="font-display">
+              Triagem — {selectedItem?.pacienteNome}
+            </DialogTitle>
           </DialogHeader>
 
           {(pacienteInfo || selectedItem) && (
@@ -489,7 +563,8 @@ const Triagem: React.FC = () => {
                 <div className="mt-1 p-2 bg-muted rounded-lg text-sm">
                   {imc ? (
                     <span className="font-semibold">
-                      {imc.value} — <span className="text-muted-foreground">{imc.label}</span>
+                      {imc.value} —{" "}
+                      <span className="text-muted-foreground">{imc.label}</span>
                     </span>
                   ) : (
                     <span className="text-muted-foreground">Informe peso e altura</span>
@@ -500,7 +575,9 @@ const Triagem: React.FC = () => {
                 <Label>Pressão Arterial *</Label>
                 <Input
                   value={form.pressaoArterial}
-                  onChange={(e) => setForm((p) => ({ ...p, pressaoArterial: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, pressaoArterial: e.target.value }))
+                  }
                   placeholder="120/80"
                 />
               </div>
@@ -519,7 +596,9 @@ const Triagem: React.FC = () => {
                 <Input
                   type="number"
                   value={form.frequenciaCardiaca}
-                  onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))
+                  }
                   placeholder="72"
                 />
               </div>
@@ -528,7 +607,9 @@ const Triagem: React.FC = () => {
                 <Input
                   type="number"
                   value={form.saturacaoOxigenio}
-                  onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))
+                  }
                   placeholder="98"
                 />
               </div>
@@ -545,7 +626,9 @@ const Triagem: React.FC = () => {
             </div>
 
             <div>
-              <Label className="text-base font-semibold">Escala de Dor (0–10): {form.dor}</Label>
+              <Label className="text-base font-semibold">
+                Escala de Dor (0–10): {form.dor}
+              </Label>
               <Slider
                 value={[form.dor]}
                 onValueChange={(v) => setForm((p) => ({ ...p, dor: v[0] }))}
@@ -582,7 +665,9 @@ const Triagem: React.FC = () => {
               <Textarea
                 rows={2}
                 value={form.queixaPrincipal}
-                onChange={(e) => setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))
+                }
                 placeholder="Queixa principal do paciente..."
               />
             </div>
@@ -607,7 +692,12 @@ const Triagem: React.FC = () => {
                       {a}{" "}
                       <button
                         className="ml-1"
-                        onClick={() => setForm((p) => ({ ...p, alergias: p.alergias.filter((_, j) => j !== i) }))}
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            alergias: p.alergias.filter((_, j) => j !== i),
+                          }))
+                        }
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -624,9 +714,16 @@ const Triagem: React.FC = () => {
                   value={newMedicamento}
                   onChange={(e) => setNewMedicamento(e.target.value)}
                   placeholder="Digitar medicamento"
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addMedicamento())}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && (e.preventDefault(), addMedicamento())
+                  }
                 />
-                <Button type="button" variant="outline" size="icon" onClick={addMedicamento}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={addMedicamento}
+                >
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
@@ -638,7 +735,10 @@ const Triagem: React.FC = () => {
                       <button
                         className="ml-1"
                         onClick={() =>
-                          setForm((p) => ({ ...p, medicamentos: p.medicamentos.filter((_, j) => j !== i) }))
+                          setForm((p) => ({
+                            ...p,
+                            medicamentos: p.medicamentos.filter((_, j) => j !== i),
+                          }))
                         }
                       >
                         <X className="w-3 h-3" />
@@ -660,7 +760,12 @@ const Triagem: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={salvarRascunho}
+                disabled={saving}
+              >
                 {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                 <Save className="w-4 h-4 mr-2" /> Salvar Rascunho
               </Button>
