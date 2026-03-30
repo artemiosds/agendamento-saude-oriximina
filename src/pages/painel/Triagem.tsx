@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search } from "lucide-react";
+import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search, History } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -56,8 +56,32 @@ interface PacienteInfo {
   diagnostico_resumido?: string;
 }
 
+interface TriageHistoricoItem {
+  id: string;
+  paciente_id: string;
+  pacientes?: { nome: string; cpf?: string };
+  agendamentos?: { data: string; hora: string; profissional_nome?: string };
+  peso: number;
+  altura: number;
+  imc: number;
+  pressao_arterial: string;
+  temperatura: number;
+  frequencia_cardiaca: number;
+  saturacao_oxigenio: number;
+  glicemia: number;
+  dor: number;
+  queixa: string;
+  classificacao_risco: string;
+  alergias: string[];
+  medicamentos: string[];
+  observacoes: string;
+  confirmado_em: string;
+  tecnico_id: string;
+}
+
 // Status que indicam que o paciente está aguardando triagem
-const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguard. triagem", "aguardando_triagem", "chegada_confirmada", "confirmado_chegada"];
+// CORREÇÃO: Removido status genéricos, mantido apenas aguardando_triagem
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando_triagem"];
 
 const mapFilaItem = (f: any): FilaItem => ({
   id: f.id,
@@ -88,6 +112,11 @@ const Triagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
+
+  // NOVO: estado para histórico
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [historicoTriagens, setHistoricoTriagens] = useState<TriageHistoricoItem[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
 
   const [form, setForm] = useState({
     peso: "",
@@ -130,19 +159,43 @@ const Triagem: React.FC = () => {
     );
   }, [fila, busca]);
 
+  // CORREÇÃO: Carregar apenas pacientes com agendamento confirmado
   const loadFila = useCallback(async () => {
     if (!user?.unidadeId) return;
     setLoading(true);
     try {
+      // Buscar pacientes na fila com status aguardando_triagem
       const { data, error } = await supabase
         .from("fila_espera")
-        .select("*")
+        .select(`
+          *,
+          agendamentos!left (
+            id,
+            status,
+            data,
+            hora,
+            profissional_nome,
+            paciente_id
+          )
+        `)
         .in("status", STATUS_AGUARDANDO_TRIAGEM)
         .eq("unidade_id", user.unidadeId)
         .order("criado_em", { ascending: true });
 
       if (data && !error) {
-        setFila(sortFilaByCreatedAt(data.map(mapFilaItem)));
+        // Filtrar apenas os que têm agendamento confirmado
+        const filteredData = data.filter(item => {
+          // Se não tem agendamento_id, não deve aparecer na triagem
+          if (!item.agendamento_id) return false;
+          // Verificar se o agendamento existe e está confirmado
+          const agendamento = item.agendamentos;
+          if (!agendamento) return false;
+          // Apenas agendamentos confirmados ou com chegada confirmada
+          const validStatuses = ["confirmado", "confirmado_chegada", "aguardando_triagem"];
+          return validStatuses.includes(agendamento.status);
+        });
+        
+        setFila(sortFilaByCreatedAt(filteredData.map(mapFilaItem)));
       } else if (error) {
         console.error("Erro ao carregar fila:", error);
         toast.error("Erro ao carregar lista de triagem");
@@ -183,6 +236,39 @@ const Triagem: React.FC = () => {
     poll: loadFila,
     pollIntervalMs: 30000,
   });
+
+  // NOVO: carregar histórico de triagens
+  const loadHistoricoTriagens = useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingHistorico(true);
+    try {
+      const { data, error } = await supabase
+        .from("triage_records")
+        .select(`
+          *,
+          pacientes!inner (
+            nome,
+            cpf
+          ),
+          agendamentos (
+            data,
+            hora,
+            profissional_nome
+          )
+        `)
+        .eq("tecnico_id", user.id)
+        .order("confirmado_em", { ascending: false })
+        .limit(50);
+
+      if (data && !error) {
+        setHistoricoTriagens(data as TriageHistoricoItem[]);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar histórico:", err);
+      toast.error("Erro ao carregar histórico");
+    }
+    setLoadingHistorico(false);
+  }, [user?.id]);
 
   const openTriagem = async (item: FilaItem) => {
     setSelectedItem(item);
@@ -288,6 +374,7 @@ const Triagem: React.FC = () => {
     return missing;
   };
 
+  // CORREÇÃO PRINCIPAL: Fluxo correto após triagem
   const confirmarTriagem = async (encaminharEnfermagem: boolean) => {
     if (!selectedItem) return;
 
@@ -304,39 +391,44 @@ const Triagem: React.FC = () => {
         .from("triage_records")
         .upsert(record, { onConflict: "agendamento_id" });
 
-      const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
+      // CORREÇÃO: Definir status correto para aparecer na agenda do profissional
+      // Se encaminhar para enfermagem: aguardando_enfermagem
+      // Se NÃO encaminhar: aguardando_atendimento (para o profissional iniciar)
+      const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "aguardando_atendimento";
 
+      // Atualizar fila_espera
       await supabase
         .from("fila_espera")
         .update({ status: nextStatus })
         .eq("id", selectedItem.id);
 
+      // Atualizar agendamento com o mesmo status
       if (selectedItem.agendamento_id) {
         await supabase
           .from("agendamentos")
-          .update({
-            status:
-              nextStatus === "aguardando_enfermagem"
-                ? "aguardando_enfermagem"
-                : "apto_agendamento",
-          })
+          .update({ status: nextStatus })
           .eq("id", selectedItem.agendamento_id);
       }
 
+      // Se NÃO encaminhou para enfermagem, registrar que não precisou de enfermagem
       if (!encaminharEnfermagem) {
-        await supabase.from("nursing_evaluations").insert({
-          patient_id: selectedItem.pacienteId,
-          agendamento_id: selectedItem.id,
-          professional_id: user?.id || "",
-          unit_id: user?.unidadeId || "",
-          anamnese_resumida: "Paciente seguiu fluxo sem atendimento de enfermagem",
-          condicao_clinica: "",
-          avaliacao_risco: "",
-          prioridade: "media",
-          observacoes_clinicas: "Triagem concluída — enfermagem dispensada pelo técnico",
-          resultado: "apto",
-          motivo_inapto: "",
-        });
+        try {
+          await supabase.from("nursing_evaluations").insert({
+            patient_id: selectedItem.pacienteId,
+            agendamento_id: selectedItem.id,
+            professional_id: user?.id || "",
+            unit_id: user?.unidadeId || "",
+            anamnese_resumida: "Paciente seguiu fluxo sem atendimento de enfermagem (triagem direta)",
+            condicao_clinica: "",
+            avaliacao_risco: form.classificacaoRisco,
+            prioridade: form.classificacaoRisco === "alto" ? "alta" : form.classificacaoRisco === "medio" ? "media" : "baixa",
+            observacoes_clinicas: `Triagem concluída pelo técnico ${user?.nome}. Queixa: ${form.queixaPrincipal}. Sinais: PA ${form.pressaoArterial}, FC ${form.frequenciaCardiaca}, SatO₂ ${form.saturacaoOxigenio}%.`,
+            resultado: "apto",
+            motivo_inapto: "",
+          });
+        } catch (err) {
+          console.error("Erro ao registrar dispensação de enfermagem:", err);
+        }
       }
 
       await logAction({
@@ -354,13 +446,14 @@ const Triagem: React.FC = () => {
           classificacao_risco: form.classificacaoRisco,
           dor: form.dor,
           encaminhado_enfermagem: encaminharEnfermagem,
+          status_final: nextStatus,
         },
       });
 
       toast.success(
         encaminharEnfermagem
-          ? "Triagem confirmada! Encaminhado para enfermagem."
-          : "Triagem confirmada! Paciente apto para agendamento.",
+          ? "Triagem confirmada! Paciente encaminhado para enfermagem."
+          : "Triagem confirmada! Paciente aguardando atendimento na agenda do profissional.",
       );
       setDialogOpen(false);
       await loadFila();
@@ -400,16 +493,30 @@ const Triagem: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">
-          Triagem de Enfermagem
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          {filaFiltrada.length} paciente(s) aguardando triagem
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">
+            Triagem de Enfermagem
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {filaFiltrada.length} paciente(s) aguardando triagem
+          </p>
+        </div>
+        
+        {/* NOVO: Botão de Histórico */}
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            loadHistoricoTriagens();
+            setHistoricoOpen(true);
+          }}
+        >
+          <History className="w-4 h-4 mr-2" />
+          Histórico
+        </Button>
       </div>
 
-      {/* ── Campo de busca por nome ── */}
+      {/* Campo de busca por nome */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -500,6 +607,7 @@ const Triagem: React.FC = () => {
         </div>
       )}
 
+      {/* Dialog de Triagem */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -785,11 +893,107 @@ const Triagem: React.FC = () => {
                   disabled={saving}
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <CheckCircle className="w-4 h-4 mr-2" /> Seguir sem Enfermagem
+                  <CheckCircle className="w-4 h-4 mr-2" /> Seguir para Atendimento
                 </Button>
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* NOVO: Modal de Histórico */}
+      <Dialog open={historicoOpen} onOpenChange={setHistoricoOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display">Histórico de Triagens Realizadas</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Últimas 50 triagens realizadas por você
+            </p>
+          </DialogHeader>
+          {loadingHistorico ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : historicoTriagens.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              Nenhuma triagem realizada ainda.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {historicoTriagens.map((triage) => (
+                <Card key={triage.id} className="border-0 shadow-card">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {triage.pacientes?.nome || "Paciente"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {triage.agendamentos?.data && (
+                            <>📅 {new Date(triage.agendamentos.data).toLocaleDateString("pt-BR")} </>
+                          )}
+                          {triage.agendamentos?.hora && <>🕐 {triage.agendamentos.hora}</>}
+                          {triage.agendamentos?.profissional_nome && (
+                            <> • 👨‍⚕️ {triage.agendamentos.profissional_nome}</>
+                          )}
+                        </p>
+                      </div>
+                      <Badge 
+                        variant={
+                          triage.classificacao_risco === "alto" 
+                            ? "destructive" 
+                            : triage.classificacao_risco === "medio" 
+                              ? "default" 
+                              : "outline"
+                        }
+                      >
+                        {triage.classificacao_risco?.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">Sinais:</span>
+                        <p className="text-xs">
+                          {triage.peso}kg / {triage.altura}cm • 
+                          PA: {triage.pressao_arterial} • 
+                          FC: {triage.frequencia_cardiaca} • 
+                          SatO₂: {triage.saturacao_oxigenio}%
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">Dor:</span>
+                        <p className="text-xs">{triage.dor}/10</p>
+                      </div>
+                    </div>
+                    {triage.queixa && (
+                      <div className="mt-2">
+                        <span className="text-muted-foreground text-xs">Queixa:</span>
+                        <p className="text-sm">{triage.queixa}</p>
+                      </div>
+                    )}
+                    {triage.observacoes && (
+                      <div className="mt-1">
+                        <span className="text-muted-foreground text-xs">Observações:</span>
+                        <p className="text-xs text-muted-foreground">{triage.observacoes}</p>
+                      </div>
+                    )}
+                    {triage.alergias && triage.alergias.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {triage.alergias.map((alergia, idx) => (
+                          <Badge key={idx} variant="destructive" className="text-xs">
+                            ⚠️ {alergia}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Realizado em: {new Date(triage.confirmado_em).toLocaleString("pt-BR")}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
