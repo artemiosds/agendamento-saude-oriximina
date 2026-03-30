@@ -622,6 +622,7 @@ const FilaEspera: React.FC = () => {
     return null;
   };
 
+  // ✅ CORREÇÃO: handleImportSave com status "aguardando_triagem" para demanda reprimida
   const handleImportSave = async (existingPatient?: (typeof pacientes)[0]) => {
     if (!importForm.nome.trim() && !existingPatient) {
       toast.error("Informe o nome do paciente.");
@@ -705,6 +706,8 @@ const FilaEspera: React.FC = () => {
         sortableDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
       const newId = `f${Date.now()}`;
+      
+      // ✅ CORREÇÃO PRINCIPAL: status "aguardando_triagem" para aparecer na triagem
       await addToFila({
         id: newId,
         pacienteId,
@@ -713,7 +716,8 @@ const FilaEspera: React.FC = () => {
         profissionalId: importForm.profissionalId,
         setor: "",
         prioridade: importForm.prioridade as any,
-        status: "aguardando",
+        status: "aguardando_triagem",  // 👈 CORRIGIDO
+        tipo_entrada: "demanda_reprimida",  // 👈 ADICIONADO
         posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         criadoPor: user?.id || "sistema",
@@ -743,7 +747,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome || "",
           profissional: prof?.nome || "",
           tipo_atendimento: importForm.tipo === "retorno" ? "Retorno" : "Primeira Consulta",
-          status_agendamento: "aguardando",
+          status_agendamento: "aguardando_triagem",  // 👈 Atualizado
           id_agendamento: "",
         });
       }
@@ -756,6 +760,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome,
           profissional: prof?.nome,
           origemCadastro: "demanda_reprimida",
+          status: "aguardando_triagem",  // 👈 Registrado no log
           dataSolicitacaoOriginal: sortableDate,
           descricaoClinica: importForm.descricaoClinica || undefined,
           cid: importForm.cid || undefined,
@@ -763,7 +768,7 @@ const FilaEspera: React.FC = () => {
         user,
         modulo: "fila_espera",
       });
-      toast.success(`${pacienteNome} importado da lista antiga para a fila!`);
+      toast.success(`${pacienteNome} importado da lista antiga para a fila de triagem!`);
       setImportDialogOpen(false);
       setImportDup(null);
       setImportErrors({});
@@ -1558,7 +1563,7 @@ const FilaEspera: React.FC = () => {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Cadastre pacientes da lista em papel anterior ao sistema. Eles entrarão na fila de espera com a etiqueta
-            DEMANDA REPRIMIDA.
+            DEMANDA REPRIMIDA e aparecerão na tela de triagem.
           </p>
           {importDup && (
             <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
@@ -1700,7 +1705,6 @@ const FilaEspera: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Tipo</Label>
-                    {/* ✅ ALTERAÇÃO: opções de tipo expandidas */}
                     <Select value={importForm.tipo} onValueChange={(v) => setImportForm((p) => ({ ...p, tipo: v }))}>
                       <SelectTrigger>
                         <SelectValue />
@@ -1773,7 +1777,7 @@ const FilaEspera: React.FC = () => {
               className="w-full gradient-primary text-primary-foreground"
               disabled={importSaving}
             >
-              {importSaving ? "Importando..." : "Importar para Fila de Espera"}
+              {importSaving ? "Importando..." : "Importar para Fila de Triagem"}
             </Button>
           </div>
         </DialogContent>
