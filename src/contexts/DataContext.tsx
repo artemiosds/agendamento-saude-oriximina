@@ -81,6 +81,12 @@ const defaultConfiguracoes: Configuracoes = {
     smtpPort: 587,
   },
   canalNotificacao: "webhook",
+  portalPaciente: {
+    permitirPortal: true,
+    enviarSenhaAutomaticamente: true,
+    enviarLinkAcesso: true,
+    pacientesBloqueados: [],
+  },
 };
 
 interface DataContextType {

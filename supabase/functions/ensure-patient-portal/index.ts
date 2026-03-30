@@ -209,7 +209,7 @@ serve(async (req) => {
       .eq("id", pacienteId);
 
     // Send email with credentials
-    const portalLink = portalUrl || "https://agendamento-saude-oriximina.lovable.app/portal";
+    const portalLink = sendAccessLink ? (portalUrl || "https://agendamento-saude-oriximina.lovable.app/portal") : "";
 
     // Build context-specific info
     let contextHtml = "";
