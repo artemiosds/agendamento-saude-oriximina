@@ -8,7 +8,8 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Pencil, Search, Stethoscope, Users, CheckCircle, AlertCircle } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Plus, Pencil, Search, Stethoscope, Users, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useData } from '@/contexts/DataContext';
@@ -16,9 +17,9 @@ import { useData } from '@/contexts/DataContext';
 interface ProcedimentoDB {
   id: string;
   nome: string;
-  descricao: string | null;
+  descricao: string;
   profissao: string;
-  especialidade: string | null;
+  especialidade: string;
   profissionais_ids: string[];
   ativo: boolean;
   criado_em: string;
@@ -32,96 +33,58 @@ const PROFISSOES = [
 
 const GerenciarProcedimentos: React.FC = () => {
   const { funcionarios } = useData();
-
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-
   const [form, setForm] = useState({
-    nome: '',
-    descricao: '',
-    profissao: '',
-    especialidade: '',
-    profissionais_ids: [] as string[],
-    ativo: true,
+    nome: '', descricao: '', profissao: '', especialidade: '', profissionais_ids: [] as string[], ativo: true,
   });
 
-  // Profissionais ativos
-  const profissionais = useMemo(() => {
-    return funcionarios.filter(f => f.role === 'profissional' && f.ativo === true);
-  }, [funcionarios]);
+  const profissionais = useMemo(() =>
+    funcionarios.filter(f => f.role === 'profissional' && f.ativo),
+    [funcionarios]
+  );
 
-  // Agrupamento por profissão com filtro flexível
   const profissionaisPorProfissao = useMemo(() => {
     const grouped: Record<string, any[]> = {};
-
     PROFISSOES.forEach(prof => {
-      grouped[prof] = profissionais.filter(p => {
-        const profBanco = (p.profissao || '').toString().trim().toLowerCase();
-        return profBanco === prof.toLowerCase();
-      });
+      grouped[prof] = profissionais.filter(p => p.profissao === prof);
     });
-
     return grouped;
   }, [profissionais]);
 
   const loadProcedimentos = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('procedimentos')
-      .select('*')
-      .order('profissao', { ascending: true });
-
-    if (error) {
-      console.error(error);
-      toast.error('Erro ao carregar procedimentos');
-    }
-
+    const { data } = await (supabase as any).from('procedimentos').select('*').order('profissao', { ascending: true });
     if (data) {
-      setProcedimentos(
-        data.map((p: any) => ({
-          ...p,
-          profissionais_ids: Array.isArray(p.profissionais_ids) ? p.profissionais_ids : [],
-        }))
-      );
+      setProcedimentos(data.map((p: any) => ({
+        ...p,
+        profissionais_ids: p.profissionais_ids || (p.profissional_id ? [p.profissional_id] : [])
+      })));
     }
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadProcedimentos();
-  }, []);
+  useEffect(() => { loadProcedimentos(); }, []);
 
   const filtered = procedimentos.filter(p =>
     p.nome.toLowerCase().includes(search.toLowerCase()) ||
-    p.profissao.toLowerCase().includes(search.toLowerCase()) ||
-    (p.especialidade && p.especialidade.toLowerCase().includes(search.toLowerCase()))
+    p.profissao.toLowerCase().includes(search.toLowerCase())
   );
 
   const openNew = () => {
     setEditId(null);
-    setForm({
-      nome: '',
-      descricao: '',
-      profissao: '',
-      especialidade: '',
-      profissionais_ids: [],
-      ativo: true,
-    });
+    setForm({ nome: '', descricao: '', profissao: '', especialidade: '', profissionais_ids: [], ativo: true });
     setDialogOpen(true);
   };
 
   const openEdit = (p: ProcedimentoDB) => {
     setEditId(p.id);
     setForm({
-      nome: p.nome,
-      descricao: p.descricao || '',
-      profissao: p.profissao || '',
-      especialidade: p.especialidade || '',
-      profissionais_ids: Array.isArray(p.profissionais_ids) ? p.profissionais_ids : [],
-      ativo: p.ativo,
+      nome: p.nome, descricao: p.descricao || '', profissao: p.profissao || '',
+      especialidade: p.especialidade || '', profissionais_ids: p.profissionais_ids || [], ativo: p.ativo,
     });
     setDialogOpen(true);
   };
@@ -136,52 +99,33 @@ const GerenciarProcedimentos: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.nome?.trim()) {
-      toast.error('Nome é obrigatório.');
-      return;
-    }
-    if (!form.profissao) {
-      toast.error('Área / Profissão é obrigatória.');
-      return;
-    }
+    if (!form.nome) { toast.error('Nome é obrigatório.'); return; }
+    if (!form.profissao) { toast.error('Profissão/área é obrigatória.'); return; }
 
     const record = {
-      nome: form.nome.trim(),
-      descricao: form.descricao?.trim() || null,
-      profissao: form.profissao,
-      especialidade: form.especialidade?.trim() || null,
+      nome: form.nome, descricao: form.descricao, profissao: form.profissao,
+      especialidade: form.especialidade, 
       profissionais_ids: form.profissionais_ids,
-      ativo: form.ativo,
+      ativo: form.ativo, atualizado_em: new Date().toISOString(),
     };
 
     if (editId) {
-      const { error } = await supabase.from('procedimentos').update(record).eq('id', editId);
-      if (error) toast.error('Erro ao atualizar.');
-      else toast.success('Procedimento atualizado!');
+      const { error } = await (supabase as any).from('procedimentos').update(record).eq('id', editId);
+      if (error) { toast.error('Erro ao atualizar.'); return; }
+      toast.success('Procedimento atualizado!');
     } else {
-      const { error } = await supabase.from('procedimentos').insert(record);
-      if (error) toast.error('Erro ao criar.');
-      else toast.success('Procedimento criado!');
+      const { error } = await (supabase as any).from('procedimentos').insert(record);
+      if (error) { toast.error('Erro ao criar.'); return; }
+      toast.success('Procedimento criado!');
     }
-
     setDialogOpen(false);
     await loadProcedimentos();
   };
 
   const toggleAtivo = async (p: ProcedimentoDB) => {
-    const novoEstado = !p.ativo;
-    const { error } = await supabase
-      .from('procedimentos')
-      .update({ ativo: novoEstado })
-      .eq('id', p.id);
-
-    if (error) {
-      toast.error('Erro ao alterar status.');
-      return;
-    }
-
-    setProcedimentos(prev => prev.map(x => x.id === p.id ? { ...x, ativo: novoEstado } : x));
-    toast.success(novoEstado ? 'Procedimento ativado.' : 'Procedimento inativado.');
+    await (supabase as any).from('procedimentos').update({ ativo: !p.ativo }).eq('id', p.id);
+    setProcedimentos(prev => prev.map(x => x.id === p.id ? { ...x, ativo: !x.ativo } : x));
+    toast.success(p.ativo ? 'Procedimento inativado.' : 'Procedimento ativado.');
   };
 
   return (
@@ -195,19 +139,12 @@ const GerenciarProcedimentos: React.FC = () => {
             <h3 className="font-semibold font-display text-foreground">Procedimentos Clínicos</h3>
             <p className="text-sm text-muted-foreground">Multi-seleção de profissionais por procedimento</p>
           </div>
-          <Button size="sm" onClick={openNew}>
-            <Plus className="w-4 h-4 mr-1" /> Novo
-          </Button>
+          <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1" /> Novo</Button>
         </div>
 
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar procedimento..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10"
-          />
+          <Input placeholder="Buscar procedimento..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
         </div>
 
         {loading ? (
@@ -240,122 +177,64 @@ const GerenciarProcedimentos: React.FC = () => {
           </div>
         )}
 
-        {/* Dialog com seleção múltipla */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto p-0">
-            <DialogHeader className="px-6 pt-6 pb-4 border-b">
-              <DialogTitle className="font-display">
-                {editId ? 'Editar' : 'Novo'} Procedimento
-              </DialogTitle>
+          <DialogContent className="sm:max-w-lg max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="font-display">{editId ? 'Editar' : 'Novo'} Procedimento</DialogTitle>
             </DialogHeader>
-
-            <div className="p-6 space-y-5">
-              <div>
-                <Label>Nome *</Label>
-                <Input
-                  value={form.nome}
-                  onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
-                  placeholder="Ex: Fisioterapia Respiratória CER II"
-                />
-              </div>
-
-              <div>
-                <Label>Descrição</Label>
-                <Input
-                  value={form.descricao}
-                  onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))}
-                  placeholder="Descrição do procedimento..."
-                />
-              </div>
-
+            
+            <div className="space-y-4">
+              <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Fisioterapia Respiratória CER II" /></div>
+              
+              <div><Label>Descrição</Label><Input value={form.descricao} onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Descrição do procedimento..." /></div>
+              
               <div>
                 <Label>Área / Profissão *</Label>
-                <Select
-                  value={form.profissao}
-                  onValueChange={v => setForm(p => ({ ...p, profissao: v, profissionais_ids: [] }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a área" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROFISSOES.map(p => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
+                <Select value={form.profissao} onValueChange={v => setForm(p => ({ ...p, profissao: v, profissionais_ids: [] }))}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a área" /></SelectTrigger>
+                  <SelectContent>{PROFISSOES.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
+              
+              <div><Label>Especialidade (opcional)</Label><Input value={form.especialidade} onChange={e => setForm(p => ({ ...p, especialidade: e.target.value }))} placeholder="Ex: Reabilitação Neurológica" /></div>
 
-              <div>
-                <Label>Especialidade (opcional)</Label>
-                <Input
-                  value={form.especialidade}
-                  onChange={e => setForm(p => ({ ...p, especialidade: e.target.value }))}
-                  placeholder="Ex: Reabilitação Neurológica"
-                />
-              </div>
-
-              {/* Seleção múltipla de profissionais */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-muted-foreground" />
-                  <Label className="font-medium">
-                    Profissionais ({form.profissionais_ids.length} selecionados)
-                  </Label>
+                  <Label className="font-medium">Profissionais ({form.profissionais_ids.length} selecionados)</Label>
                 </div>
-
-                {form.profissao ? (
-                  profissionaisPorProfissao[form.profissao]?.length > 0 ? (
-                    <div className="border rounded-md max-h-64 overflow-y-auto p-3 bg-muted/30">
-                      <div className="space-y-2">
-                        {profissionaisPorProfissao[form.profissao].map((prof: any) => (
-                          <div
-                            key={prof.id}
-                            className="flex items-center gap-3 p-3 rounded hover:bg-accent cursor-pointer"
-                            onClick={() => toggleProfissional(prof.id)}
-                          >
-                            <Checkbox
-                              checked={form.profissionais_ids.includes(prof.id)}
-                              onCheckedChange={() => toggleProfissional(prof.id)}
-                            />
-                            <div className="flex-1">
-                              <div className="font-medium text-sm">{prof.nome}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {prof.profissao} • {prof.crp || prof.cref || prof.registro || 'Sem registro'}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                
+                {form.profissao && profissionaisPorProfissao[form.profissao]?.length > 0 ? (
+                  <ScrollArea className="h-32 border rounded-md p-2">
+                    <div className="space-y-1">
+                      {profissionaisPorProfissao[form.profissao].map(prof => (
+                        <div key={prof.id} className="flex items-center space-x-2 p-1 rounded hover:bg-accent">
+                          <Checkbox 
+                            id={`prof-${prof.id}`}
+                            checked={form.profissionais_ids.includes(prof.id)}
+                            onCheckedChange={() => toggleProfissional(prof.id)}
+                          />
+                          <Label htmlFor={`prof-${prof.id}`} className="text-sm cursor-pointer flex-1">
+                            {prof.nome}
+                            <span className="text-xs text-muted-foreground ml-1">({prof.crp || prof.cref || 'CRE'})</span>
+                          </Label>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="border rounded-md p-8 text-center bg-muted/50">
-                      <AlertCircle className="w-9 h-9 mx-auto text-amber-500 mb-3" />
-                      <p className="font-medium">Nenhum profissional encontrado</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Para a área de <strong>{form.profissao}</strong>
-                      </p>
-                    </div>
-                  )
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8 border rounded-md">
-                    Selecione uma área/profissão primeiro
+                  </ScrollArea>
+                ) : form.profissao ? (
+                  <p className="text-sm text-muted-foreground p-3 text-center border rounded-md bg-muted/50">
+                    Nenhum profissional nesta área ainda.
                   </p>
-                )}
+                ) : null}
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t">
+              <div className="flex items-center justify-between pt-2 border-t">
                 <Label>Ativo</Label>
-                <Switch
-                  checked={form.ativo}
-                  onCheckedChange={v => setForm(p => ({ ...p, ativo: v }))}
-                />
+                <Switch checked={form.ativo} onCheckedChange={v => setForm(p => ({ ...p, ativo: v }))} />
               </div>
-
-              <Button
-                onClick={handleSave}
-                className="w-full"
-                disabled={!form.nome?.trim() || !form.profissao}
-              >
+              
+              <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
                 <CheckCircle className="w-4 h-4 mr-2" />
                 {editId ? 'Salvar Alterações' : 'Criar Procedimento'}
               </Button>
