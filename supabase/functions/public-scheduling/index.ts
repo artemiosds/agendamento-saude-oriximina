@@ -19,7 +19,19 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const action = url.searchParams.get("action");
+    let action = url.searchParams.get("action");
+    
+    // Support action in POST body as fallback
+    if (!action && req.method === "POST") {
+      try {
+        const cloned = req.clone();
+        const bodyJson = await cloned.json();
+        if (bodyJson?.action) action = bodyJson.action;
+      } catch { /* no body or invalid JSON */ }
+    }
+    
+    // Default to "data" for GET requests without action
+    if (!action && req.method === "GET") action = "data";
 
     if (req.method === "GET" && action === "data") {
       // Return public scheduling data with minimal fields

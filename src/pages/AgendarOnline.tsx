@@ -71,12 +71,6 @@ const AgendarOnline: React.FC = () => {
   const loadPublicData = useCallback(async () => {
     try {
       setDataLoading(true);
-      const { data, error } = await supabase.functions.invoke('public-scheduling', {
-        method: 'GET',
-        body: undefined,
-        headers: { 'Content-Type': 'application/json' },
-      });
-      // Edge functions invoked via SDK use POST, so let's use query param approach
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/public-scheduling?action=data`,
         { headers: { 'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
