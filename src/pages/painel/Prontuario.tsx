@@ -73,7 +73,7 @@ interface ProcedimentoDB {
   nome: string;
   profissao: string;
   especialidade: string;
-  profissional_id: string | null;
+  profissionais_ids: string[] | null;
   ativo: boolean;
 }
 
@@ -211,7 +211,7 @@ const ProntuarioPage: React.FC = () => {
     if (!user) return [];
     return procedimentos.filter((p) => {
       if (p.profissao && user.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
-      if (p.profissional_id && p.profissional_id !== user.id) return false;
+      if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
       return true;
     });
   }, [procedimentos, user]);
