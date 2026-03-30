@@ -66,6 +66,48 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
+    // Load portal access config
+    let portalConfig: any = null;
+    try {
+      const { data: cfgData } = await supabaseAdmin
+        .from("system_config")
+        .select("configuracoes")
+        .eq("id", "default")
+        .maybeSingle();
+      portalConfig = cfgData?.configuracoes?.portalPaciente || null;
+    } catch (_) { /* ignore */ }
+
+    // Check global portal toggle
+    if (portalConfig && portalConfig.permitirPortal === false) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          created: false,
+          alreadyExists: false,
+          message: "Portal do paciente está desativado nas configurações.",
+        }),
+        { headers: corsHeaders }
+      );
+    }
+
+    // Check if auto-send password is disabled
+    const autoSendPassword = portalConfig?.enviarSenhaAutomaticamente ?? true;
+    const sendAccessLink = portalConfig?.enviarLinkAcesso ?? true;
+
+    // Check if patient is individually blocked
+    const blockedPatients: string[] = portalConfig?.pacientesBloqueados || [];
+    if (blockedPatients.includes(pacienteId)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          created: false,
+          alreadyExists: false,
+          message: "Acesso ao portal bloqueado para este paciente.",
+        }),
+        { headers: corsHeaders }
+      );
+    }
+
     // Load patient
     const { data: paciente, error: pacErr } = await supabaseAdmin
       .from("pacientes")
@@ -83,7 +125,6 @@ serve(async (req) => {
     const email = (paciente.email || "").trim().toLowerCase();
     
     if (!email) {
-      // No email — log and skip
       return new Response(
         JSON.stringify({
           success: false,
@@ -103,6 +144,19 @@ serve(async (req) => {
           alreadyExists: true,
           created: false,
           message: "Paciente já possui acesso ao portal.",
+        }),
+        { headers: corsHeaders }
+      );
+    }
+
+    // If auto-send is disabled, don't create account automatically
+    if (!autoSendPassword) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          created: false,
+          alreadyExists: false,
+          message: "Envio automático de senha está desativado nas configurações.",
         }),
         { headers: corsHeaders }
       );
