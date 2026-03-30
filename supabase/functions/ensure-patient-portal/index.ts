@@ -253,11 +253,12 @@ serve(async (req) => {
             </table>
           </div>
           
-          <p style="text-align:center;margin:20px 0;">
-            <a href="${portalLink}" style="display:inline-block;background:#0284c7;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;">
-              Acessar Portal do Paciente
-            </a>
-          </p>
+           ${portalLink ? `
+           <p style="text-align:center;margin:20px 0;">
+             <a href="${portalLink}" style="display:inline-block;background:#0284c7;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;">
+               Acessar Portal do Paciente
+             </a>
+           </p>` : ""}
           
           <p style="color:#ef4444;font-size:13px;font-weight:bold;">⚠️ Recomendamos que você altere sua senha no primeiro acesso.</p>
           
