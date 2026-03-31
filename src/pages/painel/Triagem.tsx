@@ -200,7 +200,24 @@ const Triagem: React.FC = () => {
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
-    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
+    // Look up the real agendamento for this patient (today's date, matching unit)
+    const today = new Date().toISOString().split("T")[0];
+    const { data: agData } = await supabase
+      .from("agendamentos")
+      .select("id")
+      .eq("paciente_id", item.pacienteId)
+      .eq("unidade_id", item.unidadeId)
+      .in("status", ["aguardando_triagem", "confirmado_chegada", "confirmado"])
+      .eq("data", today)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const foundAgId = agData?.id || "";
+    setRealAgendamentoId(foundAgId);
+
+    // Use the fila ID as fallback key for triage_records (demanda reprimida has no agendamento)
+    const triageKey = foundAgId || item.id;
+    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", triageKey).maybeSingle();
 
     if (data) {
       const triageData = data as any;
