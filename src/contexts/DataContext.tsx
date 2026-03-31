@@ -1076,7 +1076,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.status === "confirmado_chegada") {
           const agend = agendamentos.find((a) => a.id === id);
           if (agend) {
-            await supabase.from("fila_espera").insert({
+            await supabase.from("fila_espera").as any({
               paciente_id: agend.pacienteId || (agend as any).paciente_id,
               unidade_id: agend.unidadeId || (agend as any).unidade_id,
               profissional_id: agend.profissionalId || (agend as any).profissional_id,
