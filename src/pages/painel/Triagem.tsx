@@ -93,6 +93,8 @@ const Triagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
+  // Store the real agendamento_id found by lookup (fila_espera doesn't have this column)
+  const [realAgendamentoId, setRealAgendamentoId] = useState<string>("");
 
   const [form, setForm] = useState({
     peso: "",
