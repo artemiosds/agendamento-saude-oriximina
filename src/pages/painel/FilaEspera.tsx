@@ -357,8 +357,8 @@ const FilaEspera: React.FC = () => {
       });
   }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
 
-  const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
-  const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
+  const activeQueue = fila.filter((f) => ["aguardando", "aguardando_triagem", "chamado", "em_atendimento"].includes(f.status));
+  const aguardandoCount = fila.filter((f) => f.status === "aguardando" || f.status === "aguardando_triagem").length;
   const chamadoCount = fila.filter((f) => f.status === "chamado").length;
   const emAtendimentoCount = fila.filter((f) => f.status === "em_atendimento").length;
 

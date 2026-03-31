@@ -93,6 +93,8 @@ const Triagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
+  // Store the real agendamento_id found by lookup (fila_espera doesn't have this column)
+  const [realAgendamentoId, setRealAgendamentoId] = useState<string>("");
 
   const [form, setForm] = useState({
     peso: "",
@@ -198,7 +200,24 @@ const Triagem: React.FC = () => {
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
-    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", item.id).maybeSingle();
+    // Look up the real agendamento for this patient (today's date, matching unit)
+    const today = new Date().toISOString().split("T")[0];
+    const { data: agData } = await supabase
+      .from("agendamentos")
+      .select("id")
+      .eq("paciente_id", item.pacienteId)
+      .eq("unidade_id", item.unidadeId)
+      .in("status", ["aguardando_triagem", "confirmado_chegada", "confirmado"])
+      .eq("data", today)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const foundAgId = agData?.id || "";
+    setRealAgendamentoId(foundAgId);
+
+    // Use the fila ID as fallback key for triage_records (demanda reprimida has no agendamento)
+    const triageKey = foundAgId || item.id;
+    const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", triageKey).maybeSingle();
 
     if (data) {
       const triageData = data as any;
@@ -238,8 +257,11 @@ const Triagem: React.FC = () => {
     setDialogOpen(true);
   };
 
+  // Use real agendamento_id if found, otherwise fall back to fila ID
+  const triageKey = realAgendamentoId || selectedItem?.id || "";
+
   const buildRecord = () => ({
-    agendamento_id: selectedItem!.id,
+    agendamento_id: triageKey,
     tecnico_id: user?.id || "",
     peso: parseFloat(form.peso) || null,
     altura: parseFloat(form.altura) || null,
@@ -262,7 +284,17 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await supabase.from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
+      const rec = buildRecord();
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", rec.agendamento_id)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("triage_records").update(rec).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(rec);
+      }
       toast.success("Rascunho salvo!");
     } catch (err) {
       console.error("Erro ao salvar rascunho:", err);
@@ -297,25 +329,36 @@ const Triagem: React.FC = () => {
     setSaving(true);
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
+      // Save triage record (check exists first to avoid upsert issues)
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", record.agendamento_id)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("triage_records").update(record).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(record);
+      }
 
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
-      if (selectedItem.agendamento_id) {
+      // Update agendamento status using the real agendamento_id
+      if (realAgendamentoId) {
         await supabase
           .from("agendamentos")
           .update({
-            status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "apto_agendamento",
+            status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "aguardando_atendimento",
           })
-          .eq("id", selectedItem.agendamento_id);
+          .eq("id", realAgendamentoId);
       }
 
       if (!encaminharEnfermagem) {
         await supabase.from("nursing_evaluations").insert({
           patient_id: selectedItem.pacienteId,
-          agendamento_id: selectedItem.id,
+          agendamento_id: realAgendamentoId || selectedItem.id,
           professional_id: user?.id || "",
           unit_id: user?.unidadeId || "",
           anamnese_resumida: "Paciente seguiu fluxo sem atendimento de enfermagem",
@@ -337,6 +380,7 @@ const Triagem: React.FC = () => {
         detalhes: {
           paciente_nome: selectedItem.pacienteNome,
           especialidade_destino: selectedItem.especialidadeDestino,
+          agendamento_id: realAgendamentoId || "",
           peso: form.peso,
           altura: form.altura,
           imc: imc?.value,
