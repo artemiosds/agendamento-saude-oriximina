@@ -91,7 +91,8 @@ const prioridadeLabel: Record<string, string> = {
 };
 
 const statusLabels: Record<string, { label: string; color: string }> = {
-  aguardando: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
+  aguardando: { label: "Aguardando", color: "bg-muted text-muted-foreground" },
+  aguardando_triagem: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
   aguardando_enfermagem: { label: "Aguardando Enfermagem", color: "bg-blue-500/10 text-blue-600" },
   apto_agendamento: { label: "Apto p/ Agendamento", color: "bg-success/10 text-success" },
   aguardando_multiprofissional: { label: "Avaliação Multiprofissional", color: "bg-purple-500/10 text-purple-600" },
@@ -707,7 +708,6 @@ const FilaEspera: React.FC = () => {
       }
       const newId = `f${Date.now()}`;
 
-      // CORREÇÃO: usar status "aguardando" que já existe no sistema
       await addToFila({
         id: newId,
         pacienteId,
@@ -716,7 +716,7 @@ const FilaEspera: React.FC = () => {
         profissionalId: importForm.profissionalId,
         setor: "",
         prioridade: importForm.prioridade as any,
-        status: "aguardando",
+        status: "aguardando_triagem",
         posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         criadoPor: user?.id || "sistema",
@@ -725,6 +725,9 @@ const FilaEspera: React.FC = () => {
         cid: importForm.cid,
         dataSolicitacaoOriginal: sortableDate,
         origemCadastro: "demanda_reprimida",
+        especialidadeDestino: importForm.profissionalId
+          ? funcionarios.find((f) => f.id === importForm.profissionalId)?.profissao || ""
+          : "",
       });
       const unidade = unidades.find((u) => u.id === importForm.unidadeId);
       const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;
@@ -759,7 +762,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome,
           profissional: prof?.nome,
           origemCadastro: "demanda_reprimida",
-          status: "aguardando",
+           status: "aguardando_triagem",
           dataSolicitacaoOriginal: sortableDate,
           descricaoClinica: importForm.descricaoClinica || undefined,
           cid: importForm.cid || undefined,

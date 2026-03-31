@@ -314,6 +314,27 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         if (cnsClean) existingCns.add(cnsClean);
         existingPhones.add(phoneClean);
         existingNameDob.add(nameKey);
+
+        // Also insert into fila_espera so patient appears in triage
+        try {
+          const filaId = `f${Date.now()}${i}`;
+          await supabase.from('fila_espera').insert({
+            id: filaId,
+            paciente_id: id,
+            paciente_nome: nome,
+            unidade_id: user?.unidadeId || '',
+            status: 'aguardando_triagem',
+            prioridade: 'normal',
+            prioridade_perfil: 'normal',
+            hora_chegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            setor: '',
+            especialidade_destino: '',
+            criado_por: user?.id || 'sistema',
+            origem_cadastro: 'importacao_csv',
+          });
+        } catch (filaErr) {
+          console.error('Error inserting fila_espera for CSV import:', filaErr);
+        }
       }
       setProgress({ ...state });
     }
