@@ -942,40 +942,43 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select()
         .single();
 
-      if (!error && newPac) {
-        setPacientes((prev) => [...prev, newPac]);
-
-        // === CORREÇÃO CRÍTICA: Demanda Reprimida ===
-        if (filaData) {
-          const { error: filaError } = await supabase.from("fila_espera" as any).insert({
-            paciente_id: newPac.id,
-            unidade_id: filaData.unidadeId,
-            especialidade_destino: filaData.especialidade,
-            prioridade: filaData.prioridade || "normal",
-            status: "aguardando",
-            origem_cadastro: "demanda_reprimida",
-            observacoes: filaData.observacoes || "",
-            data_entrada: new Date().toISOString(),
-          });
-
-          if (!filaError) {
-            toast.success("✅ Paciente adicionado à Demanda Reprimida!");
-            await refreshFila?.();
-          } else {
-            console.error("Erro ao salvar na fila_espera:", filaError);
-          }
-        }
-
-        await logActionAndSync({
-          acao: "criar",
-          entidade: "paciente",
-          entidadeId: newPac.id,
-          detalhes: data,
-        });
-      } else {
+      if (error || !newPac) {
         console.error("Error adding paciente:", error);
         toast.error("Erro ao cadastrar paciente");
+        return;
       }
+
+      const paciente = newPac as Paciente; // TypeScript seguro
+
+      setPacientes((prev) => [...prev, paciente]);
+
+      // Demanda Reprimida
+      if (filaData) {
+        const { error: filaError } = await supabase.from("fila_espera" as any).insert({
+          paciente_id: paciente.id,
+          unidade_id: filaData.unidadeId,
+          especialidade_destino: filaData.especialidade,
+          prioridade: filaData.prioridade || "normal",
+          status: "aguardando",
+          origem_cadastro: "demanda_reprimida",
+          observacoes: filaData.observacoes || "",
+          data_entrada: new Date().toISOString(),
+        });
+
+        if (!filaError) {
+          toast.success("✅ Paciente adicionado à Demanda Reprimida!");
+          await refreshFila?.();
+        } else {
+          console.error("Erro ao salvar na fila_espera:", filaError);
+        }
+      }
+
+      await logActionAndSync({
+        acao: "criar",
+        entidade: "paciente",
+        entidadeId: paciente.id,
+        detalhes: data,
+      });
     },
     [logAction, refreshFila],
   );
