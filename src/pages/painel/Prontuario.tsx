@@ -237,12 +237,36 @@ const ProntuarioPage: React.FC = () => {
 
   const loadTriagem = async (agendamentoId: string) => {
     try {
-      const { data } = await (supabase as any)
+      // Try to find triage by agendamento_id first
+      let { data } = await (supabase as any)
         .from("triage_records")
         .select("*")
         .eq("agendamento_id", agendamentoId)
         .not("confirmado_em", "is", null)
         .maybeSingle();
+
+      // If not found, also try searching by patient + recent date (for demanda reprimida)
+      if (!data) {
+        const pacienteId = searchParams.get("pacienteId");
+        if (pacienteId) {
+          const { data: fallback } = await (supabase as any)
+            .from("triage_records")
+            .select("*")
+            .not("confirmado_em", "is", null)
+            .order("confirmado_em", { ascending: false })
+            .limit(10);
+          // Match by checking if any record's agendamento_id corresponds to a fila entry for this patient
+          if (fallback && fallback.length > 0) {
+            const { data: filaIds } = await supabase
+              .from("fila_espera")
+              .select("id")
+              .eq("paciente_id", pacienteId);
+            const filaIdSet = new Set((filaIds || []).map((f: any) => f.id));
+            data = fallback.find((t: any) => filaIdSet.has(t.agendamento_id)) || null;
+          }
+        }
+      }
+
       if (data) {
         const { data: tecnico } = await supabase
           .from("funcionarios")
