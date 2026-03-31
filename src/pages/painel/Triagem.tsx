@@ -329,25 +329,36 @@ const Triagem: React.FC = () => {
     setSaving(true);
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      await supabase.from("triage_records").upsert(record, { onConflict: "agendamento_id" });
+      // Save triage record (check exists first to avoid upsert issues)
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", record.agendamento_id)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("triage_records").update(record).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(record);
+      }
 
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
-      if (selectedItem.agendamento_id) {
+      // Update agendamento status using the real agendamento_id
+      if (realAgendamentoId) {
         await supabase
           .from("agendamentos")
           .update({
-            status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "apto_agendamento",
+            status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "aguardando_atendimento",
           })
-          .eq("id", selectedItem.agendamento_id);
+          .eq("id", realAgendamentoId);
       }
 
       if (!encaminharEnfermagem) {
         await supabase.from("nursing_evaluations").insert({
           patient_id: selectedItem.pacienteId,
-          agendamento_id: selectedItem.id,
+          agendamento_id: realAgendamentoId || selectedItem.id,
           professional_id: user?.id || "",
           unit_id: user?.unidadeId || "",
           anamnese_resumida: "Paciente seguiu fluxo sem atendimento de enfermagem",
@@ -369,6 +380,7 @@ const Triagem: React.FC = () => {
         detalhes: {
           paciente_nome: selectedItem.pacienteNome,
           especialidade_destino: selectedItem.especialidadeDestino,
+          agendamento_id: realAgendamentoId || "",
           peso: form.peso,
           altura: form.altura,
           imc: imc?.value,
