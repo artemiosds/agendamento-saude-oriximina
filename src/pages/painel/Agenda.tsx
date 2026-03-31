@@ -558,7 +558,7 @@ const Agenda: React.FC = () => {
                 prioridade_perfil: (ag as any).prioridadePerfil || "normal",
                 hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
                 setor: "",
-                especialidade_destino: pacienteData?.especialidadeDestino || profData?.profissao || "",
+                especialidade_destino: (pacienteData as any)?.especialidade_destino || pacienteData?.especialidadeDestino || profData?.profissao || "",
                 descricao_clinica: pacienteData?.descricaoClinica || "",
                 cid: pacienteData?.cid || "",
                 criado_por: user?.id || "recepcao",
