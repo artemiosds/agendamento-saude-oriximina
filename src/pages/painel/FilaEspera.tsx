@@ -91,8 +91,8 @@ const prioridadeLabel: Record<string, string> = {
 };
 
 const statusLabels: Record<string, { label: string; color: string }> = {
-  aguardando: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
-  aguardando_enfermagem: { label: "Aguardando Enfermagem", color: "bg-blue-500/10 text-blue-600" },
+  aguardando: { label: "Aguardando", color: "bg-muted text-muted-foreground" },
+  aguardando_triagem: { label: "Aguardando Triagem", color: "bg-warning/10 text-warning" },
   apto_agendamento: { label: "Apto p/ Agendamento", color: "bg-success/10 text-success" },
   aguardando_multiprofissional: { label: "Avaliação Multiprofissional", color: "bg-purple-500/10 text-purple-600" },
   indeferido: { label: "Indeferido", color: "bg-destructive/10 text-destructive" },
