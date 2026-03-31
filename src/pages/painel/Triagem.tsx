@@ -284,7 +284,17 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await supabase.from("triage_records").upsert(buildRecord(), { onConflict: "agendamento_id" });
+      const rec = buildRecord();
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", rec.agendamento_id)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from("triage_records").update(rec).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(rec);
+      }
       toast.success("Rascunho salvo!");
     } catch (err) {
       console.error("Erro ao salvar rascunho:", err);
