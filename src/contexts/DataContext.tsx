@@ -1082,7 +1082,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
 
-      // Mantém sua lógica original de lembretes
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
@@ -1096,7 +1095,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
 
-        // === CORREÇÃO CRÍTICA: Envia para Triagem ===
+        // Envia para Triagem ao confirmar chegada
         if (data.status === "confirmado_chegada") {
           const agend = agendamentos.find((a) => a.id === id);
           if (agend) {
@@ -1112,8 +1111,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
 
             if (!filaError) {
-              toast.success("✅ Paciente enviado para Triagem!");
-              await refreshFila?.(); // atualiza a tela de triagem em tempo real
+              toast.success("✅ Paciente enviado para a Triagem!");
+              await refreshFila?.();
             } else {
               console.error("Erro ao inserir na fila_espera:", filaError);
             }
@@ -1131,7 +1130,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast.error("Erro ao atualizar agendamento");
       }
     },
-    [logAction, agendamentos, refreshFila], // dependências corretas
+    [logAction, agendamentos, refreshFila],
   );
 
   // FIX #15: cancelAgendamento agora é async com tratamento de erro real
