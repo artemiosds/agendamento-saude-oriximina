@@ -119,7 +119,6 @@ interface ReservaInfo {
   expiresAt: number;
 }
 
-// Calculate wait time in minutes from criadoEm or horaChegada
 const getWaitMinutes = (f: { criadoEm?: string; horaChegada: string }, nowMs: number): number => {
   if (f.criadoEm) {
     const entryTime = new Date(f.criadoEm).getTime();
@@ -232,6 +231,7 @@ const FilaEspera: React.FC = () => {
     cid: "",
     observacoes: "",
     prioridade: "normal",
+    especialidadeDestino: "", // ✅ ADICIONADO
   });
   const [importDup, setImportDup] = useState<(typeof pacientes)[0] | null>(null);
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
@@ -625,7 +625,6 @@ const FilaEspera: React.FC = () => {
     return null;
   };
 
-  // ✅ CORREÇÃO: handleImportSave com origemCadastro = "demanda_reprimida"
   const handleImportSave = async (existingPatient?: (typeof pacientes)[0]) => {
     if (!importForm.nome.trim() && !existingPatient) {
       toast.error("Informe o nome do paciente.");
@@ -710,7 +709,6 @@ const FilaEspera: React.FC = () => {
       }
       const newId = `f${Date.now()}`;
 
-      // ✅ CORREÇÃO: origemCadastro definido como "demanda_reprimida"
       await addToFila({
         id: newId,
         pacienteId,
@@ -727,7 +725,7 @@ const FilaEspera: React.FC = () => {
         descricaoClinica: importForm.descricaoClinica,
         cid: importForm.cid,
         dataSolicitacaoOriginal: sortableDate,
-        origemCadastro: "demanda_reprimida", // ✅ CORRETO
+        origemCadastro: "demanda_reprimida",
         especialidadeDestino: importForm.especialidadeDestino || "",
       });
       const unidade = unidades.find((u) => u.id === importForm.unidadeId);
@@ -999,6 +997,7 @@ const FilaEspera: React.FC = () => {
                     cid: "",
                     observacoes: "",
                     prioridade: "normal",
+                    especialidadeDestino: "", // ✅ ADICIONADO
                   } as any);
                   setImportDup(null);
                   setImportErrors({});
@@ -1743,6 +1742,25 @@ const FilaEspera: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="mt-3">
+                  <Label>Especialidade Destino (opcional)</Label>
+                  <Select
+                    value={importForm.especialidadeDestino}
+                    onValueChange={(v) => setImportForm((p) => ({ ...p, especialidadeDestino: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a especialidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fisioterapia">Fisioterapia</SelectItem>
+                      <SelectItem value="fonoaudiologia">Fonoaudiologia</SelectItem>
+                      <SelectItem value="nutricao">Nutrição</SelectItem>
+                      <SelectItem value="psicologia">Psicologia</SelectItem>
+                      <SelectItem value="terapia_ocupacional">Terapia Ocupacional</SelectItem>
+                      <SelectItem value="outros">Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
