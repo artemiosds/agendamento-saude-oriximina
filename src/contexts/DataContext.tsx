@@ -13,7 +13,6 @@ import {
   Procedimento,
   EpisodioClinico,
 } from "@/types";
-// Setores inline — no more mockData dependency
 const inlineSetores = [
   { id: "st1", nome: "Clínica Geral" },
   { id: "st2", nome: "Pediatria" },
@@ -169,7 +168,6 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | null>(null);
 
-// FIX #12: 'crianca' adicionado ao priorityRank — antes ficava em ?? 99 (abaixo de normal)
 const priorityRank: Record<string, number> = {
   urgente: 0,
   gestante: 1,
@@ -597,12 +595,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadBloqueios,
   ]);
 
-  // Initial load
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  // Global db_update event listener — debounced full refresh
   const dbUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const handler = () => {
@@ -626,7 +622,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Wrap logAction to also emit db_update after any mutation
   const logActionAndSync = useCallback(
     async (input: Parameters<typeof logAction>[0]) => {
       await logActionAndSync(input);
@@ -934,53 +929,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshFila = loadFila;
   const refreshBloqueios = loadBloqueios;
 
+  // ✅ CORREÇÃO: addPaciente agora aceita Paciente completo (com id)
   const addPaciente = useCallback(
-    async (data: Omit<Paciente, "id">, filaData?: any) => {
-      const { data: newPac, error } = await supabase
-        .from("pacientes" as any)
-        .insert(data)
-        .select()
-        .single();
-
-      if (error || !newPac) {
-        console.error("Error adding paciente:", error);
-        toast.error("Erro ao cadastrar paciente");
-        return;
-      }
-
-      const paciente = newPac as Paciente; // TypeScript seguro
-
-      setPacientes((prev) => [...prev, paciente]);
-
-      // Demanda Reprimida
-      if (filaData) {
-        const { error: filaError } = await supabase.from("fila_espera" as any).insert({
-          paciente_id: paciente.id,
-          unidade_id: filaData.unidadeId,
-          especialidade_destino: filaData.especialidade,
-          prioridade: filaData.prioridade || "normal",
-          status: "aguardando",
-          origem_cadastro: "demanda_reprimida",
-          observacoes: filaData.observacoes || "",
-          data_entrada: new Date().toISOString(),
-        });
-
-        if (!filaError) {
-          toast.success("✅ Paciente adicionado à Demanda Reprimida!");
-          await refreshFila?.();
-        } else {
-          console.error("Erro ao salvar na fila_espera:", filaError);
-        }
-      }
-
-      await logActionAndSync({
-        acao: "criar",
-        entidade: "paciente",
-        entidadeId: paciente.id,
-        detalhes: data,
-      });
+    async (p: Paciente) => {
+      const { error } = await supabase.from("pacientes" as any).insert({
+        id: p.id,
+        nome: p.nome,
+        cpf: p.cpf,
+        cns: p.cns || "",
+        nome_mae: p.nomeMae || "",
+        telefone: p.telefone,
+        data_nascimento: p.dataNascimento,
+        email: p.email,
+        endereco: p.endereco,
+        observacoes: p.observacoes,
+        descricao_clinica: p.descricaoClinica || "",
+        cid: p.cid || "",
+      } as any);
+      if (!error) {
+        setPacientes((prev) => [...prev, p]);
+        await logActionAndSync({ acao: "criar", entidade: "paciente", entidadeId: p.id, detalhes: { nome: p.nome } });
+      } else console.error("Error adding paciente:", error);
     },
-    [logAction, refreshFila],
+    [logAction],
   );
 
   const updatePaciente = useCallback(
@@ -1098,19 +1069,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
 
-        // Envia para Triagem ao confirmar chegada
+        // ✅ CORREÇÃO: enviar para triagem quando status for "confirmado_chegada"
         if (data.status === "confirmado_chegada") {
           const agend = agendamentos.find((a) => a.id === id);
           if (agend) {
+            const filaId = `fila_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
             const { error: filaError } = await supabase.from("fila_espera" as any).insert({
-              paciente_id: agend.pacienteId || (agend as any).paciente_id,
-              unidade_id: agend.unidadeId || (agend as any).unidade_id,
-              profissional_id: agend.profissionalId || (agend as any).profissional_id,
+              id: filaId,
+              paciente_id: agend.pacienteId,
+              paciente_nome: agend.pacienteNome,
+              unidade_id: agend.unidadeId,
+              profissional_id: agend.profissionalId,
               agendamento_id: id,
               status: "aguardando_triagem",
-              origem_cadastro: "agenda",
               prioridade: "normal",
-              data_entrada: new Date().toISOString(),
+              prioridade_perfil: "normal",
+              hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              setor: "",
+              criado_por: "sistema",
             });
 
             if (!filaError) {
@@ -1136,7 +1112,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [logAction, agendamentos, refreshFila],
   );
 
-  // FIX #15: cancelAgendamento agora é async com tratamento de erro real
   const cancelAgendamento = useCallback(
     async (id: string): Promise<FilaEspera[]> => {
       const ag = agendamentos.find((a) => a.id === id);
@@ -1241,7 +1216,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [logAction],
   );
 
-  // FIX #5: addAtendimento agora persiste no banco E atualiza estado local
   const addAtendimento = useCallback(
     async (a: Atendimento) => {
       try {
@@ -1268,7 +1242,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error("Error adding atendimento:", err);
       }
-      // Sempre atualiza estado local independente de erro no banco
       setAtendimentos((prev) => [...prev, a]);
       emitDbUpdate();
     },
@@ -1560,8 +1533,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [fila],
   );
-
-  // FIX #15: cancelAgendamento já declarado acima como async — referência movida para após checkFilaForSlot
 
   const encaixarDaFila = useCallback(
     async (filaId: string, agData: Omit<Agendamento, "id" | "criadoEm">) => {
