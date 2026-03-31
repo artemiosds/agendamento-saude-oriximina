@@ -46,7 +46,7 @@ interface FilaItem {
   prioridade: string;
   horaChegada: string;
   agendamento_id?: string;
-  origemCadastro?: string; // ✅ Adicionado
+  origemCadastro?: string;
 }
 
 interface PacienteInfo {
@@ -57,7 +57,6 @@ interface PacienteInfo {
   diagnostico_resumido?: string;
 }
 
-// ✅ Status que indicam que o paciente está aguardando triagem
 const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguardando_triagem", "chegada_confirmada", "confirmado_chegada"];
 
 const mapFilaItem = (f: any): FilaItem => ({
@@ -72,7 +71,7 @@ const mapFilaItem = (f: any): FilaItem => ({
   prioridade: f.prioridade || "normal",
   horaChegada: f.hora_chegada || "",
   agendamento_id: f.agendamento_id,
-  origemCadastro: f.origem_cadastro, // ✅ Mapear origem_cadastro
+  origemCadastro: f.origem_cadastro,
 });
 
 const sortFilaByCreatedAt = (items: FilaItem[]) => [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
@@ -194,7 +193,6 @@ const Triagem: React.FC = () => {
       .maybeSingle();
     setPacienteInfo(pacData || null);
 
-    // Look up the real agendamento for this patient (today's date, matching unit)
     const today = new Date().toISOString().split("T")[0];
     const { data: agData } = await supabase
       .from("agendamentos")
@@ -209,7 +207,6 @@ const Triagem: React.FC = () => {
     const foundAgId = agData?.id || "";
     setRealAgendamentoId(foundAgId);
 
-    // Use the fila ID as fallback key for triage_records (demanda reprimida has no agendamento)
     const triageKey = foundAgId || item.id;
     const { data } = await supabase.from("triage_records").select("*").eq("agendamento_id", triageKey).maybeSingle();
 
@@ -333,7 +330,7 @@ const Triagem: React.FC = () => {
         await supabase.from("triage_records").insert(record);
       }
 
-      // ✅ CORREÇÃO: status correto para aparecer na agenda do profissional
+      // ✅ status final correto: após triagem vai para agenda do profissional
       const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "aguardando_atendimento";
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
@@ -458,6 +455,8 @@ const Triagem: React.FC = () => {
             const espBadge = item.especialidadeDestino
               ? ESPECIALIDADE_LABELS[item.especialidadeDestino] || item.especialidadeDestino.toUpperCase()
               : null;
+            const isDemandaReprimida = item.origemCadastro === "demanda_reprimida";
+
             return (
               <Card key={item.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -465,8 +464,7 @@ const Triagem: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{item.pacienteNome}</p>
                     <div className="flex flex-wrap gap-1 mt-0.5">
-                      {/* ✅ Badge para demanda reprimida */}
-                      {item.origemCadastro === "demanda_reprimida" && (
+                      {isDemandaReprimida && (
                         <Badge
                           variant="outline"
                           className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
