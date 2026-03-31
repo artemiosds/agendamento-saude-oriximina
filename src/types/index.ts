@@ -168,7 +168,7 @@ export interface FilaEspera {
   setor: string;
   profissionalId?: string;
   prioridade: "normal" | "alta" | "urgente";
-  status: "aguardando" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado";
+  status: "aguardando" | "aguardando_triagem" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
