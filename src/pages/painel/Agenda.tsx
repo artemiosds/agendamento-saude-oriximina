@@ -165,11 +165,8 @@ const Agenda: React.FC = () => {
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalheAg, setDetalheAg] = useState<(typeof agendamentos)[0] | null>(null);
 
-  // NOVO: rejeição com motivo
   const [rejeicaoTarget, setRejeicaoTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
-
-  // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
   const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
@@ -178,7 +175,6 @@ const Agenda: React.FC = () => {
   const canAprovar = hasPermission(["master", "coordenador", "recepcao"]);
   const profissionais = profissionaisVisiveis;
 
-  // NOVO: agendamentos online pendentes de aprovação
   const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
       .filter((a) => {
@@ -406,7 +402,6 @@ const Agenda: React.FC = () => {
     });
   };
 
-  // NOVO: aprovar agendamento online
   const handleAprovar = async (ag: (typeof agendamentos)[0]) => {
     try {
       await updateAgendamento(ag.id, { status: "confirmado" } as any);
@@ -452,7 +447,6 @@ const Agenda: React.FC = () => {
     }
   };
 
-  // NOVO: rejeitar agendamento online
   const handleRejeitar = async () => {
     if (!rejeicaoTarget || !rejeicaoMotivo.trim()) {
       toast.error("Informe o motivo da rejeição.");
@@ -524,8 +518,10 @@ const Agenda: React.FC = () => {
       }
     }
 
+    // ✅ CORREÇÃO PRINCIPAL: Confirmação de chegada
     if (newStatus === "confirmado_chegada") {
       try {
+        // Verificar se triagem está ativa E se há técnico na unidade
         const { data: setting } = await (supabase as any)
           .from("triage_settings")
           .select("enabled")
@@ -533,47 +529,58 @@ const Agenda: React.FC = () => {
           .eq("enabled", true)
           .limit(1)
           .maybeSingle();
-        if (setting) {
-          const { count } = await supabase
-            .from("funcionarios")
-            .select("*", { count: "exact", head: true })
-            .eq("role", "tecnico")
-            .eq("unidade_id", ag.unidadeId)
-            .eq("ativo", true);
-          if ((count ?? 0) > 0) {
-            await updateAgendamento(agId, { status: "aguardando_triagem" as any });
-            // Also insert into fila_espera so triagem screen can find the patient
-            try {
-              const filaId = `fila_${Date.now()}`;
-              const pacienteData = pacientes.find((p) => p.id === ag.pacienteId);
-              const profData = funcionarios.find((f) => f.id === ag.profissionalId);
-              await supabase.from("fila_espera").insert({
-                id: filaId,
-                paciente_id: ag.pacienteId,
-                paciente_nome: ag.pacienteNome,
-                unidade_id: ag.unidadeId,
-                profissional_id: ag.profissionalId,
-                status: "aguardando_triagem",
-                prioridade: (ag as any).prioridadePerfil || "normal",
-                prioridade_perfil: (ag as any).prioridadePerfil || "normal",
-                hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-                setor: "",
-                especialidade_destino: (pacienteData as any)?.especialidade_destino || pacienteData?.especialidadeDestino || profData?.profissao || "",
-                descricao_clinica: pacienteData?.descricaoClinica || "",
-                cid: pacienteData?.cid || "",
-                criado_por: user?.id || "recepcao",
-              });
-            } catch (filaErr) {
-              console.error("Error inserting fila_espera for triage:", filaErr);
-            }
-            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
-            return;
-          }
+
+        const { count: temTecnico } = await supabase
+          .from("funcionarios")
+          .select("*", { count: "exact", head: true })
+          .eq("role", "tecnico")
+          .eq("unidade_id", ag.unidadeId)
+          .eq("ativo", true);
+
+        // Se triagem ativa E tem técnico, vai para triagem
+        if (setting && (temTecnico ?? 0) > 0) {
+          await updateAgendamento(agId, { status: "aguardando_triagem" as any });
+
+          // Inserir na fila_espera com ID único
+          const filaId = `fila_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          const pacienteData = pacientes.find((p) => p.id === ag.pacienteId);
+          const profData = funcionarios.find((f) => f.id === ag.profissionalId);
+
+          await supabase.from("fila_espera").insert({
+            id: filaId,
+            paciente_id: ag.pacienteId,
+            paciente_nome: ag.pacienteNome,
+            unidade_id: ag.unidadeId,
+            profissional_id: ag.profissionalId,
+            agendamento_id: agId,
+            status: "aguardando_triagem",
+            tipo_entrada: "normal",
+            prioridade: "normal",
+            prioridade_perfil: "normal",
+            hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            setor: "",
+            especialidade_destino: pacienteData?.especialidade_destino || profData?.profissao || "",
+            descricao_clinica: pacienteData?.descricaoClinica || "",
+            cid: pacienteData?.cid || "",
+            criado_por: user?.id || "recepcao",
+          });
+
+          toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+          return;
+        } else {
+          // Sem triagem ativa ou sem técnico: vai direto para atendimento
+          await updateAgendamento(agId, { status: "aguardando_atendimento" as any });
+          toast.success(`Chegada de ${ag.pacienteNome} confirmada! Paciente aguardando atendimento.`);
+          return;
         }
       } catch (err) {
-        console.error("Error checking triage settings:", err);
+        console.error("Error during arrival confirmation:", err);
+        toast.error("Erro ao confirmar chegada.");
+        return;
       }
     }
+
+    // Demais status (exceto confirmado_chegada)
     await updateAgendamento(agId, { status: newStatus as any });
     const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
     const unidade = unidades.find((u) => u.id === ag.unidadeId);
@@ -724,7 +731,7 @@ const Agenda: React.FC = () => {
     });
 
     toast.success("Atendimento iniciado!");
-    const prof = funcionarios.find(f => f.id === ag.profissionalId);
+    const prof = funcionarios.find((f) => f.id === ag.profissionalId);
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
       pacienteNome: ag.pacienteNome,
@@ -813,7 +820,6 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
-            {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
                 variant={abaAtiva === "pendentes" ? "default" : "outline"}
@@ -960,7 +966,6 @@ const Agenda: React.FC = () => {
         )}
       </div>
 
-      {/* NOVO: Painel de aprovação */}
       {abaAtiva === "pendentes" && canAprovar && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1012,7 +1017,6 @@ const Agenda: React.FC = () => {
                       </span>
                     </div>
 
-                    {/* Documento */}
                     {anexoUrl ? (
                       <div className="flex items-center gap-2 p-2 bg-info/10 border border-info/20 rounded-lg">
                         <Paperclip className="w-4 h-4 text-info shrink-0" />
@@ -1063,11 +1067,9 @@ const Agenda: React.FC = () => {
         </div>
       )}
 
-      {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
           <div className="flex items-center gap-3 flex-wrap">
-            {/* NOVO: componente de calendário no lugar dos botões e input de data */}
             <CalendarioAgenda
               selectedDate={selectedDate}
               onDateChange={(date) => setSelectedDate(date)}
@@ -1120,7 +1122,6 @@ const Agenda: React.FC = () => {
             )}
           </div>
 
-          {/* Slot availability summary for selected professional */}
           {filterProf !== "all" && (
             <SlotInfoBadge
               profissionalId={filterProf}
@@ -1337,7 +1338,6 @@ const Agenda: React.FC = () => {
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
 
-                        {/* NOVO: aprovação inline */}
                         {ehPendenteOnline && canAprovar && (
                           <>
                             <Button
@@ -1529,7 +1529,6 @@ const Agenda: React.FC = () => {
         </>
       )}
 
-      {/* NOVO: Dialog de rejeição com motivo */}
       <Dialog
         open={!!rejeicaoTarget}
         onOpenChange={(open) => {
@@ -1581,7 +1580,6 @@ const Agenda: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Retorno Dialog */}
       <Dialog open={retornoDialogOpen} onOpenChange={setRetornoDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -1656,7 +1654,6 @@ const Agenda: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Detalhe Drawer */}
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
         {detalheAg &&
           (() => {
@@ -1718,7 +1715,6 @@ const Agenda: React.FC = () => {
                     }
                   />
                 </Secao>
-                {/* NOVO: documento */}
                 {anexoUrl && (
                   <Secao titulo="Documento Anexado">
                     <div className="flex items-center gap-2 p-2 bg-info/10 rounded-lg">
