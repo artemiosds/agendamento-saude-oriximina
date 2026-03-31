@@ -638,24 +638,31 @@ const FilaEspera: React.FC = () => {
       toast.error("Informe a data de solicitação original.");
       return;
     }
+
     setImportSaving(true);
+
     try {
       let pacienteId: string;
       let pacienteNome: string;
       let telefone: string;
       let email: string;
+
       if (existingPatient) {
+        // Usar paciente já existente
         pacienteId = existingPatient.id;
         pacienteNome = existingPatient.nome;
         telefone = existingPatient.telefone;
         email = existingPatient.email;
       } else {
+        // Verificar duplicidade antes de criar
         const dup = checkImportDuplicidade(importForm);
         if (dup && !importDup) {
           setImportDup(dup);
           setImportSaving(false);
           return;
         }
+
+        // Validar campos obrigatórios
         const err = validatePacienteFields({
           nome: importForm.nome,
           telefone: importForm.telefone,
