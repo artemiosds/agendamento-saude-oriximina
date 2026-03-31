@@ -1060,34 +1060,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
 
-      // MANTÉM SUA LÓGICA DE LEMBRETES: Resetar se mudar data/hora ou remarcar
+      // Mantém sua lógica original de lembretes
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
       }
 
-      const { error } = await supabase.from("agendamentos").update(dbData).eq("id", id);
+      const { error } = await supabase
+        .from("agendamentos" as any)
+        .update(dbData)
+        .eq("id", id);
 
       if (!error) {
-        // Atualiza interface local
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
 
-        // NOVA LÓGICA: Enviar para Triagem quando confirmar chegada
+        // === CORREÇÃO CRÍTICA: Envia para Triagem ===
         if (data.status === "confirmado_chegada") {
           const agend = agendamentos.find((a) => a.id === id);
           if (agend) {
-            await supabase.from("fila_espera").as any({
+            const { error: filaError } = await supabase.from("fila_espera" as any).insert({
               paciente_id: agend.pacienteId || (agend as any).paciente_id,
               unidade_id: agend.unidadeId || (agend as any).unidade_id,
               profissional_id: agend.profissionalId || (agend as any).profissional_id,
               agendamento_id: id,
-              status: "aguardando_triagem", // Aparece na tela de Triagem
+              status: "aguardando_triagem",
               origem_cadastro: "agenda",
               prioridade: "normal",
               data_entrada: new Date().toISOString(),
             });
-            toast.success("Paciente enviado para a Triagem!");
-            refreshFila();
+
+            if (!filaError) {
+              toast.success("✅ Paciente enviado para Triagem!");
+              await refreshFila?.(); // atualiza a tela de triagem em tempo real
+            } else {
+              console.error("Erro ao inserir na fila_espera:", filaError);
+            }
           }
         }
 
@@ -1102,7 +1109,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast.error("Erro ao atualizar agendamento");
       }
     },
-    [logAction, agendamentos, refreshFila],
+    [logAction, agendamentos, refreshFila], // dependências corretas
   );
 
   // FIX #15: cancelAgendamento agora é async com tratamento de erro real
