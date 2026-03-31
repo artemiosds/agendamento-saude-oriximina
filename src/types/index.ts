@@ -118,6 +118,7 @@ export interface Paciente {
   descricaoClinica: string;
   cid: string;
   criadoEm: string;
+  especialidadeDestino?: string;
 }
 
 export interface Agendamento {
