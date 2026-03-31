@@ -707,7 +707,6 @@ const FilaEspera: React.FC = () => {
       }
       const newId = `f${Date.now()}`;
 
-      // CORREÇÃO: usar status "aguardando" que já existe no sistema
       await addToFila({
         id: newId,
         pacienteId,
@@ -716,7 +715,7 @@ const FilaEspera: React.FC = () => {
         profissionalId: importForm.profissionalId,
         setor: "",
         prioridade: importForm.prioridade as any,
-        status: "aguardando",
+        status: "aguardando_triagem",
         posicao: fila.length + 1,
         horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         criadoPor: user?.id || "sistema",
@@ -725,6 +724,9 @@ const FilaEspera: React.FC = () => {
         cid: importForm.cid,
         dataSolicitacaoOriginal: sortableDate,
         origemCadastro: "demanda_reprimida",
+        especialidadeDestino: importForm.profissionalId
+          ? funcionarios.find((f) => f.id === importForm.profissionalId)?.profissao || ""
+          : "",
       });
       const unidade = unidades.find((u) => u.id === importForm.unidadeId);
       const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;

@@ -545,6 +545,8 @@ const Agenda: React.FC = () => {
             // Also insert into fila_espera so triagem screen can find the patient
             try {
               const filaId = `fila_${Date.now()}`;
+              const pacienteData = pacientes.find((p) => p.id === ag.pacienteId);
+              const profData = funcionarios.find((f) => f.id === ag.profissionalId);
               await supabase.from("fila_espera").insert({
                 id: filaId,
                 paciente_id: ag.pacienteId,
@@ -552,12 +554,14 @@ const Agenda: React.FC = () => {
                 unidade_id: ag.unidadeId,
                 profissional_id: ag.profissionalId,
                 status: "aguardando_triagem",
-                prioridade: "normal",
-                prioridade_perfil: "normal",
+                prioridade: ag.prioridadePerfil || "normal",
+                prioridade_perfil: ag.prioridadePerfil || "normal",
                 hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
                 setor: "",
-                especialidade_destino: "",
-                criado_por: user?.nome || "recepcao",
+                especialidade_destino: pacienteData?.especialidadeDestino || profData?.profissao || "",
+                descricao_clinica: pacienteData?.descricaoClinica || "",
+                cid: pacienteData?.cid || "",
+                criado_por: user?.id || "recepcao",
               });
             } catch (filaErr) {
               console.error("Error inserting fila_espera for triage:", filaErr);
