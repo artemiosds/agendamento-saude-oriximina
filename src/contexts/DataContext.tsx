@@ -1060,26 +1060,49 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
 
+      // MANTÉM SUA LÓGICA DE LEMBRETES: Resetar se mudar data/hora ou remarcar
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
       }
 
-      const { error } = await supabase
-        .from("agendamentos" as any)
-        .update(dbData)
-        .eq("id", id);
+      const { error } = await supabase.from("agendamentos").update(dbData).eq("id", id);
+
       if (!error) {
+        // Atualiza interface local
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+
+        // NOVA LÓGICA: Enviar para Triagem quando confirmar chegada
+        if (data.status === "confirmado_chegada") {
+          const agend = agendamentos.find((a) => a.id === id);
+          if (agend) {
+            await supabase.from("fila_espera").insert({
+              paciente_id: agend.pacienteId || (agend as any).paciente_id,
+              unidade_id: agend.unidadeId || (agend as any).unidade_id,
+              profissional_id: agend.profissionalId || (agend as any).profissional_id,
+              agendamento_id: id,
+              status: "aguardando_triagem", // Aparece na tela de Triagem
+              origem_cadastro: "agenda",
+              prioridade: "normal",
+              data_entrada: new Date().toISOString(),
+            });
+            toast.success("Paciente enviado para a Triagem!");
+            refreshFila();
+          }
+        }
+
         await logActionAndSync({
           acao: "editar",
           entidade: "agendamento",
           entidadeId: id,
           detalhes: data as Record<string, unknown>,
         });
-      } else console.error("Error updating agendamento:", error);
+      } else {
+        console.error("Error updating agendamento:", error);
+        toast.error("Erro ao atualizar agendamento");
+      }
     },
-    [logAction],
+    [logAction, agendamentos, refreshFila],
   );
 
   // FIX #15: cancelAgendamento agora é async com tratamento de erro real
