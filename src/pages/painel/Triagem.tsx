@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search } from "lucide-react";
+import { Loader2, Play, Clock, X, Plus, CheckCircle, Save, Search, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
@@ -34,21 +34,20 @@ const classificarIMC = (imc: number): string => {
   return "Obesidade grau III";
 };
 
-// Adicionar no mapFilaItem:
-const mapFilaItem = (f: any): FilaItem => ({
-  id: f.id,
-  pacienteNome: f.paciente_nome,
-  pacienteId: f.paciente_id,
-  unidadeId: f.unidade_id,
-  criadoEm: f.criado_em || "",
-  especialidadeDestino: f.especialidade_destino || "",
-  cid: f.cid || "",
-  descricaoClinica: f.descricao_clinica || "",
-  prioridade: f.prioridade || "normal",
-  horaChegada: f.hora_chegada || "",
-  agendamento_id: f.agendamento_id,
-  origemCadastro: f.origem_cadastro, // ✅ ADICIONADO
-});
+interface FilaItem {
+  id: string;
+  pacienteNome: string;
+  pacienteId: string;
+  unidadeId: string;
+  criadoEm: string;
+  especialidadeDestino: string;
+  cid: string;
+  descricaoClinica: string;
+  prioridade: string;
+  horaChegada: string;
+  agendamento_id?: string;
+  origemCadastro?: string; // ✅ Adicionado
+}
 
 interface PacienteInfo {
   especialidade_destino?: string;
@@ -58,14 +57,8 @@ interface PacienteInfo {
   diagnostico_resumido?: string;
 }
 
-// Status que indicam que o paciente está aguardando triagem
-const STATUS_AGUARDANDO_TRIAGEM = [
-  "aguardando",
-  "aguard. triagem",
-  "aguardando_triagem",
-  "chegada_confirmada",
-  "confirmado_chegada",
-];
+// ✅ Status que indicam que o paciente está aguardando triagem
+const STATUS_AGUARDANDO_TRIAGEM = ["aguardando", "aguardando_triagem", "chegada_confirmada", "confirmado_chegada"];
 
 const mapFilaItem = (f: any): FilaItem => ({
   id: f.id,
@@ -79,6 +72,7 @@ const mapFilaItem = (f: any): FilaItem => ({
   prioridade: f.prioridade || "normal",
   horaChegada: f.hora_chegada || "",
   agendamento_id: f.agendamento_id,
+  origemCadastro: f.origem_cadastro, // ✅ Mapear origem_cadastro
 });
 
 const sortFilaByCreatedAt = (items: FilaItem[]) => [...items].sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
@@ -95,7 +89,6 @@ const Triagem: React.FC = () => {
   const [now, setNow] = useState(new Date());
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
-  // Store the real agendamento_id found by lookup (fila_espera doesn't have this column)
   const [realAgendamentoId, setRealAgendamentoId] = useState<string>("");
 
   const [form, setForm] = useState({
@@ -130,7 +123,6 @@ const Triagem: React.FC = () => {
     return { value: value.toFixed(1), label: classificarIMC(value) };
   }, [form.peso, form.altura]);
 
-  // Filtra a fila em tempo real conforme o texto digitado
   const filaFiltrada = useMemo(() => {
     if (!busca.trim()) return fila;
     const termo = busca.trim().toLowerCase();
@@ -259,7 +251,6 @@ const Triagem: React.FC = () => {
     setDialogOpen(true);
   };
 
-  // Use real agendamento_id if found, otherwise fall back to fila ID
   const triageKey = realAgendamentoId || selectedItem?.id || "";
 
   const buildRecord = () => ({
@@ -331,7 +322,6 @@ const Triagem: React.FC = () => {
     setSaving(true);
     try {
       const record = { ...buildRecord(), confirmado_em: new Date().toISOString() };
-      // Save triage record (check exists first to avoid upsert issues)
       const { data: existing } = await supabase
         .from("triage_records")
         .select("id")
@@ -343,18 +333,13 @@ const Triagem: React.FC = () => {
         await supabase.from("triage_records").insert(record);
       }
 
-      const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_agendamento";
+      // ✅ CORREÇÃO: status correto para aparecer na agenda do profissional
+      const nextStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "aguardando_atendimento";
 
       await supabase.from("fila_espera").update({ status: nextStatus }).eq("id", selectedItem.id);
 
-      // Update agendamento status using the real agendamento_id
       if (realAgendamentoId) {
-        await supabase
-          .from("agendamentos")
-          .update({
-            status: nextStatus === "aguardando_enfermagem" ? "aguardando_enfermagem" : "aguardando_atendimento",
-          })
-          .eq("id", realAgendamentoId);
+        await supabase.from("agendamentos").update({ status: nextStatus }).eq("id", realAgendamentoId);
       }
 
       if (!encaminharEnfermagem) {
@@ -395,7 +380,7 @@ const Triagem: React.FC = () => {
       toast.success(
         encaminharEnfermagem
           ? "Triagem confirmada! Encaminhado para enfermagem."
-          : "Triagem confirmada! Paciente apto para agendamento.",
+          : "Triagem confirmada! Paciente aguardando atendimento na agenda do profissional.",
       );
       setDialogOpen(false);
       await loadFila();
@@ -434,7 +419,6 @@ const Triagem: React.FC = () => {
         <p className="text-muted-foreground text-sm">{filaFiltrada.length} paciente(s) aguardando triagem</p>
       </div>
 
-      {/* ── Campo de busca por nome ── */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -481,6 +465,15 @@ const Triagem: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{item.pacienteNome}</p>
                     <div className="flex flex-wrap gap-1 mt-0.5">
+                      {/* ✅ Badge para demanda reprimida */}
+                      {item.origemCadastro === "demanda_reprimida" && (
+                        <Badge
+                          variant="outline"
+                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
+                        >
+                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
+                        </Badge>
+                      )}
                       {espBadge && (
                         <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
                           {espBadge}
@@ -772,7 +765,7 @@ const Triagem: React.FC = () => {
                   disabled={saving}
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  <CheckCircle className="w-4 h-4 mr-2" /> Seguir sem Enfermagem
+                  <CheckCircle className="w-4 h-4 mr-2" /> Seguir para Atendimento
                 </Button>
               </div>
             </div>
