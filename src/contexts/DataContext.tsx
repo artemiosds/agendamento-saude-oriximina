@@ -1132,7 +1132,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           entidade: "fila_espera",
           entidadeId: f.id,
           unidadeId: f.unidadeId,
-          detalhes: { prioridade: f.prioridade },
+          detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
         });
       } else console.error("Error adding to fila:", error);
     },
