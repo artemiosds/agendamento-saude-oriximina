@@ -34,19 +34,21 @@ const classificarIMC = (imc: number): string => {
   return "Obesidade grau III";
 };
 
-interface FilaItem {
-  id: string;
-  pacienteNome: string;
-  pacienteId: string;
-  unidadeId: string;
-  criadoEm: string;
-  especialidadeDestino: string;
-  cid: string;
-  descricaoClinica: string;
-  prioridade: string;
-  horaChegada: string;
-  agendamento_id?: string;
-}
+// Adicionar no mapFilaItem:
+const mapFilaItem = (f: any): FilaItem => ({
+  id: f.id,
+  pacienteNome: f.paciente_nome,
+  pacienteId: f.paciente_id,
+  unidadeId: f.unidade_id,
+  criadoEm: f.criado_em || "",
+  especialidadeDestino: f.especialidade_destino || "",
+  cid: f.cid || "",
+  descricaoClinica: f.descricao_clinica || "",
+  prioridade: f.prioridade || "normal",
+  horaChegada: f.hora_chegada || "",
+  agendamento_id: f.agendamento_id,
+  origemCadastro: f.origem_cadastro, // ✅ ADICIONADO
+});
 
 interface PacienteInfo {
   especialidade_destino?: string;
