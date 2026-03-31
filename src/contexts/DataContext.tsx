@@ -619,7 +619,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [loadAll]);
 
   const emitDbUpdate = useCallback(() => {
-    try { window.dispatchEvent(new Event("db_update")); } catch { /* SSR safety */ }
+    try {
+      window.dispatchEvent(new Event("db_update"));
+    } catch {
+      /* SSR safety */
+    }
   }, []);
 
   // Wrap logAction to also emit db_update after any mutation
@@ -695,7 +699,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unidadeId: row.unidade_id,
         profissionalId: row.profissional_id || "",
         setor: row.setor || "",
-        prioridade: (row.prioridade_perfil && row.prioridade_perfil !== "normal" ? row.prioridade_perfil : row.prioridade) as FilaEspera["prioridade"],
+        prioridade: (row.prioridade_perfil && row.prioridade_perfil !== "normal"
+          ? row.prioridade_perfil
+          : row.prioridade) as FilaEspera["prioridade"],
         status: row.status as FilaEspera["status"],
         posicao: row.posicao,
         horaChegada: row.hora_chegada,
@@ -1182,35 +1188,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   // FIX #5: addAtendimento agora persiste no banco E atualiza estado local
-  const addAtendimento = useCallback(async (a: Atendimento) => {
-    try {
-      const { error } = await supabase.from("atendimentos" as any).insert({
-        id: a.id,
-        agendamento_id: a.agendamentoId,
-        paciente_id: a.pacienteId,
-        paciente_nome: a.pacienteNome,
-        profissional_id: a.profissionalId,
-        profissional_nome: a.profissionalNome,
-        unidade_id: a.unidadeId,
-        sala_id: a.salaId || "",
-        setor: a.setor || "",
-        procedimento: a.procedimento,
-        observacoes: a.observacoes || "",
-        data: a.data,
-        hora_inicio: a.horaInicio,
-        hora_fim: a.horaFim || "",
-        status: a.status,
-      } as any);
-      if (error) {
-        console.error("Error persisting atendimento:", error);
+  const addAtendimento = useCallback(
+    async (a: Atendimento) => {
+      try {
+        const { error } = await supabase.from("atendimentos" as any).insert({
+          id: a.id,
+          agendamento_id: a.agendamentoId,
+          paciente_id: a.pacienteId,
+          paciente_nome: a.pacienteNome,
+          profissional_id: a.profissionalId,
+          profissional_nome: a.profissionalNome,
+          unidade_id: a.unidadeId,
+          sala_id: a.salaId || "",
+          setor: a.setor || "",
+          procedimento: a.procedimento,
+          observacoes: a.observacoes || "",
+          data: a.data,
+          hora_inicio: a.horaInicio,
+          hora_fim: a.horaFim || "",
+          status: a.status,
+        } as any);
+        if (error) {
+          console.error("Error persisting atendimento:", error);
+        }
+      } catch (err) {
+        console.error("Error adding atendimento:", err);
       }
-    } catch (err) {
-      console.error("Error adding atendimento:", err);
-    }
-    // Sempre atualiza estado local independente de erro no banco
-    setAtendimentos((prev) => [...prev, a]);
-    emitDbUpdate();
-  }, [emitDbUpdate]);
+      // Sempre atualiza estado local independente de erro no banco
+      setAtendimentos((prev) => [...prev, a]);
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
+  );
 
   const updateAtendimento = useCallback(
     (id: string, data: Partial<Atendimento>) => {
@@ -1221,18 +1230,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const addUnidade = useCallback(async (u: Unidade) => {
-    const { error } = await supabase
-      .from("unidades" as any)
-      .insert({
-        id: u.id,
-        nome: u.nome,
-        endereco: u.endereco,
-        telefone: u.telefone,
-        whatsapp: u.whatsapp,
-        ativo: u.ativo,
-      } as any);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => [...prev, u]); }
-    else console.error("Error adding unidade:", error);
+    const { error } = await supabase.from("unidades" as any).insert({
+      id: u.id,
+      nome: u.nome,
+      endereco: u.endereco,
+      telefone: u.telefone,
+      whatsapp: u.whatsapp,
+      ativo: u.ativo,
+    } as any);
+    if (!error) {
+      emitDbUpdate();
+      setUnidades((prev) => [...prev, u]);
+    } else console.error("Error adding unidade:", error);
   }, []);
 
   const updateUnidade = useCallback(async (id: string, data: Partial<Unidade>) => {
@@ -1246,8 +1255,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u))); }
-    else console.error("Error updating unidade:", error);
+    if (!error) {
+      emitDbUpdate();
+      setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
+    } else console.error("Error updating unidade:", error);
   }, []);
 
   const deleteUnidade = useCallback(async (id: string) => {
@@ -1255,16 +1266,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("unidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setUnidades((prev) => prev.filter((u) => u.id !== id)); }
-    else console.error("Error deleting unidade:", error);
+    if (!error) {
+      emitDbUpdate();
+      setUnidades((prev) => prev.filter((u) => u.id !== id));
+    } else console.error("Error deleting unidade:", error);
   }, []);
 
   const addSala = useCallback(async (s: Sala) => {
     const { error } = await supabase
       .from("salas" as any)
       .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
-    if (!error) { emitDbUpdate(); setSalas((prev) => [...prev, s]); }
-    else console.error("Error adding sala:", error);
+    if (!error) {
+      emitDbUpdate();
+      setSalas((prev) => [...prev, s]);
+    } else console.error("Error adding sala:", error);
   }, []);
 
   const updateSala = useCallback(async (id: string, data: Partial<Sala>) => {
@@ -1276,8 +1291,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s))); }
-    else console.error("Error updating sala:", error);
+    if (!error) {
+      emitDbUpdate();
+      setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+    } else console.error("Error updating sala:", error);
   }, []);
 
   const deleteSala = useCallback(async (id: string) => {
@@ -1285,11 +1302,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("salas" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setSalas((prev) => prev.filter((s) => s.id !== id)); }
-    else console.error("Error deleting sala:", error);
+    if (!error) {
+      emitDbUpdate();
+      setSalas((prev) => prev.filter((s) => s.id !== id));
+    } else console.error("Error deleting sala:", error);
   }, []);
 
-  const addFuncionario = useCallback((u: User) => { setFuncionarios((prev) => [...prev, u]); emitDbUpdate(); }, [emitDbUpdate]);
+  const addFuncionario = useCallback(
+    (u: User) => {
+      setFuncionarios((prev) => [...prev, u]);
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
+  );
   const updateFuncionario = useCallback(
     (id: string, data: Partial<User>) => {
       setFuncionarios((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
@@ -1297,7 +1322,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [emitDbUpdate],
   );
-  const deleteFuncionario = useCallback((id: string) => { setFuncionarios((prev) => prev.filter((u) => u.id !== id)); emitDbUpdate(); }, [emitDbUpdate]);
+  const deleteFuncionario = useCallback(
+    (id: string) => {
+      setFuncionarios((prev) => prev.filter((u) => u.id !== id));
+      emitDbUpdate();
+    },
+    [emitDbUpdate],
+  );
 
   const addDisponibilidade = useCallback(async (d: Disponibilidade) => {
     const { error } = await supabase.from("disponibilidades" as any).insert({
@@ -1314,8 +1345,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dias_semana: d.diasSemana,
       duracao_consulta: d.duracaoConsulta || 30,
     } as any);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => [...prev, d]); }
-    else console.error("Error adding disponibilidade:", error);
+    if (!error) {
+      emitDbUpdate();
+      setDisponibilidades((prev) => [...prev, d]);
+    } else console.error("Error adding disponibilidade:", error);
   }, []);
 
   const updateDisponibilidade = useCallback(async (id: string, data: Partial<Disponibilidade>) => {
@@ -1335,8 +1368,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .update(dbData)
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d))); }
-    else console.error("Error updating disponibilidade:", error);
+    if (!error) {
+      emitDbUpdate();
+      setDisponibilidades((prev) => prev.map((d) => (d.id === id ? { ...d, ...data } : d)));
+    } else console.error("Error updating disponibilidade:", error);
   }, []);
 
   const deleteDisponibilidade = useCallback(async (id: string) => {
@@ -1344,8 +1379,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .from("disponibilidades" as any)
       .delete()
       .eq("id", id);
-    if (!error) { emitDbUpdate(); setDisponibilidades((prev) => prev.filter((d) => d.id !== id)); }
-    else console.error("Error deleting disponibilidade:", error);
+    if (!error) {
+      emitDbUpdate();
+      setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
+    } else console.error("Error deleting disponibilidade:", error);
   }, []);
 
   const addBloqueio = useCallback(
