@@ -761,7 +761,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome,
           profissional: prof?.nome,
           origemCadastro: "demanda_reprimida",
-          status: "aguardando",
+           status: "aguardando_triagem",
           dataSolicitacaoOriginal: sortableDate,
           descricaoClinica: importForm.descricaoClinica || undefined,
           cid: importForm.cid || undefined,
