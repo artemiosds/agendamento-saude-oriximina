@@ -357,7 +357,9 @@ const FilaEspera: React.FC = () => {
       });
   }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
 
-  const activeQueue = fila.filter((f) => ["aguardando", "aguardando_triagem", "chamado", "em_atendimento"].includes(f.status));
+  const activeQueue = fila.filter((f) =>
+    ["aguardando", "aguardando_triagem", "chamado", "em_atendimento"].includes(f.status),
+  );
   const aguardandoCount = fila.filter((f) => f.status === "aguardando" || f.status === "aguardando_triagem").length;
   const chamadoCount = fila.filter((f) => f.status === "chamado").length;
   const emAtendimentoCount = fila.filter((f) => f.status === "em_atendimento").length;
@@ -623,7 +625,7 @@ const FilaEspera: React.FC = () => {
     return null;
   };
 
-  // CORREÇÃO: handleImportSave com status "aguardando" para demanda reprimida
+  // ✅ CORREÇÃO: handleImportSave com origemCadastro = "demanda_reprimida"
   const handleImportSave = async (existingPatient?: (typeof pacientes)[0]) => {
     if (!importForm.nome.trim() && !existingPatient) {
       toast.error("Informe o nome do paciente.");
@@ -708,6 +710,7 @@ const FilaEspera: React.FC = () => {
       }
       const newId = `f${Date.now()}`;
 
+      // ✅ CORREÇÃO: origemCadastro definido como "demanda_reprimida"
       await addToFila({
         id: newId,
         pacienteId,
@@ -724,10 +727,8 @@ const FilaEspera: React.FC = () => {
         descricaoClinica: importForm.descricaoClinica,
         cid: importForm.cid,
         dataSolicitacaoOriginal: sortableDate,
-        origemCadastro: "demanda_reprimida",
-        especialidadeDestino: importForm.profissionalId
-          ? funcionarios.find((f) => f.id === importForm.profissionalId)?.profissao || ""
-          : "",
+        origemCadastro: "demanda_reprimida", // ✅ CORRETO
+        especialidadeDestino: importForm.especialidadeDestino || "",
       });
       const unidade = unidades.find((u) => u.id === importForm.unidadeId);
       const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;
@@ -749,7 +750,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome || "",
           profissional: prof?.nome || "",
           tipo_atendimento: importForm.tipo === "retorno" ? "Retorno" : "Primeira Consulta",
-          status_agendamento: "aguardando",
+          status_agendamento: "aguardando_triagem",
           id_agendamento: "",
         });
       }
@@ -762,7 +763,7 @@ const FilaEspera: React.FC = () => {
           unidade: unidade?.nome,
           profissional: prof?.nome,
           origemCadastro: "demanda_reprimida",
-           status: "aguardando_triagem",
+          status: "aguardando_triagem",
           dataSolicitacaoOriginal: sortableDate,
           descricaoClinica: importForm.descricaoClinica || undefined,
           cid: importForm.cid || undefined,
@@ -770,11 +771,12 @@ const FilaEspera: React.FC = () => {
         user,
         modulo: "fila_espera",
       });
-      toast.success(`${pacienteNome} importado da lista antiga para a fila de espera!`);
+      toast.success(`${pacienteNome} importado como DEMANDA REPRIMIDA para a fila de triagem!`);
       setImportDialogOpen(false);
       setImportDup(null);
       setImportErrors({});
-    } catch {
+    } catch (error) {
+      console.error("Erro ao importar:", error);
       toast.error("Erro ao importar paciente.");
     } finally {
       setImportSaving(false);
@@ -1107,6 +1109,7 @@ const FilaEspera: React.FC = () => {
           <SelectContent>
             <SelectItem value="all">Todos Status</SelectItem>
             <SelectItem value="aguardando">Aguardando</SelectItem>
+            <SelectItem value="aguardando_triagem">Aguardando Triagem</SelectItem>
             <SelectItem value="encaixado">Encaixado</SelectItem>
             <SelectItem value="chamado">Chamado</SelectItem>
             <SelectItem value="em_atendimento">Em Atendimento</SelectItem>
@@ -1779,7 +1782,7 @@ const FilaEspera: React.FC = () => {
               className="w-full gradient-primary text-primary-foreground"
               disabled={importSaving}
             >
-              {importSaving ? "Importando..." : "Importar para Fila de Espera"}
+              {importSaving ? "Importando..." : "Importar para Fila de Triagem"}
             </Button>
           </div>
         </DialogContent>
@@ -1796,7 +1799,7 @@ const FilaEspera: React.FC = () => {
             const unidade = unidades.find((u) => u.id === f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
             const isChamado = f.status === "chamado";
-            const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
+            const isActive = ["aguardando", "aguardando_triagem", "chamado", "em_atendimento"].includes(f.status);
             const waitMin = getWaitMinutes(f, now);
             const waitColor = getWaitColor(waitMin, f.prioridade);
             return (
