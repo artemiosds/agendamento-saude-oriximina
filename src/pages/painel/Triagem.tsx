@@ -257,8 +257,11 @@ const Triagem: React.FC = () => {
     setDialogOpen(true);
   };
 
+  // Use real agendamento_id if found, otherwise fall back to fila ID
+  const triageKey = realAgendamentoId || selectedItem?.id || "";
+
   const buildRecord = () => ({
-    agendamento_id: selectedItem!.id,
+    agendamento_id: triageKey,
     tecnico_id: user?.id || "",
     peso: parseFloat(form.peso) || null,
     altura: parseFloat(form.altura) || null,
