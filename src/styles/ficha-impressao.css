@@ -1,0 +1,285 @@
+/* ============================================
+   FICHA DE ATENDIMENTO CLÍNICO — ESTILOS
+   ============================================ */
+
+.ficha-container {
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #1e293b;
+  line-height: 1.4;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 12mm;
+  background: #fff;
+}
+
+/* CABEÇALHO */
+.ficha-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #333;
+}
+
+.header-col {
+  flex: 1;
+}
+
+.header-logo {
+  flex: 0 0 auto;
+}
+
+.logo-img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.unidade-nome {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.ficha-titulo {
+  font-size: 11px;
+  color: #64748b;
+  margin: 2px 0 0;
+  font-weight: 500;
+}
+
+.header-right {
+  text-align: right;
+  font-size: 9px;
+  color: #64748b;
+}
+
+.header-info {
+  margin: 2px 0;
+}
+
+/* SEÇÕES */
+.secao {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  page-break-inside: avoid;
+}
+
+.secao-titulo {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px;
+  margin: 0 0 8px;
+}
+
+/* CAMPOS */
+.campo-linha {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.campo-label {
+  font-size: 8px;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.campo-valor {
+  font-size: 11px;
+  color: #0f172a;
+  flex: 1;
+}
+
+.campo-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  margin-bottom: 6px;
+}
+
+.linha-tracejada {
+  border-bottom: 1px dashed #94a3b8;
+  min-height: 16px;
+  display: inline-block;
+  flex: 1;
+}
+
+.linha-tracejada-multipla {
+  margin-top: 4px;
+}
+
+.linha-tracejada-multipla .linha-tracejada {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.campo-linha-vertical {
+  margin-bottom: 6px;
+}
+
+/* TABELA DE SINAIS VITAIS */
+.nota-triagem {
+  font-size: 9px;
+  color: #64748b;
+  font-style: italic;
+  margin-bottom: 6px;
+}
+
+.tabela-vitais {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  page-break-inside: avoid;
+}
+
+.tabela-vitais td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10px;
+}
+
+.vitais-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+/* EVOLUÇÃO CLÍNICA */
+.bloco-evolucao {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  page-break-inside: avoid;
+}
+
+.bloco-vazio {
+  background: #fafbfc;
+}
+
+.evo-header {
+  display: flex;
+  align-items: baseline;
+  font-size: 10px;
+}
+
+.evo-observacao {
+  margin-top: 4px;
+  min-height: 32px;
+  font-size: 10px;
+  color: #334155;
+}
+
+/* ASSINATURA */
+.secao-assinatura {
+  margin-top: 24px;
+  text-align: right;
+  page-break-inside: avoid;
+}
+
+.assinatura-bloco {
+  display: inline-block;
+  text-align: center;
+  width: 240px;
+}
+
+.assinatura-linha {
+  border-top: 1px solid #334155;
+  margin-bottom: 4px;
+  padding-top: 24px;
+}
+
+.assinatura-label {
+  font-size: 9px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* RODAPÉ — apenas na impressão */
+.ficha-rodape {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: 1px solid #999;
+  text-align: center;
+  font-size: 9px;
+  color: #666;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  /* Esconder tudo exceto a ficha */
+  body * {
+    visibility: hidden;
+  }
+
+  #ficha-impressao,
+  #ficha-impressao * {
+    visibility: visible;
+  }
+
+  #ficha-impressao {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Esconder elementos da interface */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Mostrar apenas na impressão */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Configuração da página A4 */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 15mm 20mm 15mm;
+  }
+
+  /* Evitar quebra de página dentro de seções */
+  .secao {
+    page-break-inside: avoid;
+  }
+
+  /* Garantir que tabela de sinais vitais não quebre */
+  table {
+    page-break-inside: avoid;
+  }
+
+  /* Evitar quebra entre assinatura e conteúdo */
+  .secao-assinatura {
+    page-break-inside: avoid;
+  }
+}
+
+/* Esconder rodapé na tela */
+.print-only {
+  display: none;
+}

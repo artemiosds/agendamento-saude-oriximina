@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer, Loader2 } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import { toast } from "sonner";
@@ -32,7 +32,45 @@ import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
-import { printFichaPaciente } from "@/lib/printFichaPaciente";
+import { FichaImpressao } from "@/components/FichaImpressao";
+import "@/styles/ficha-impressao.css";
+
+interface FichaDados {
+  paciente: {
+    nome_completo: string;
+    cpf: string;
+    cns: string;
+    data_nascimento: string;
+    nome_mae: string;
+    telefone: string;
+  };
+  dadosClinicos: {
+    numero_prontuario: string;
+    cid: string;
+    tipo_atendimento: string;
+    unidade_origem: string;
+    unidade_atendimento: string;
+    data_atendimento: string;
+  };
+  sinaisVitais: {
+    pressao_arterial: string;
+    frequencia_cardiaca: string;
+    temperatura: string;
+    saturacao: string;
+    peso: string;
+    altura: string;
+  };
+  profissional: {
+    nome: string;
+    cargo: string;
+    registro: string;
+  };
+  evoluciones: Array<{
+    data: string;
+    observacao: string;
+    profissional: string;
+  }>;
+}
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
@@ -71,6 +109,11 @@ const Pacientes: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalhePaciente, setDetalhePaciente] = useState<(typeof pacientes)[0] | null>(null);
+
+  // Print ficha state
+  const [fichaOpen, setFichaOpen] = useState(false);
+  const [fichaLoading, setFichaLoading] = useState(false);
+  const [fichaData, setFichaData] = useState<FichaDados | null>(null);
 
   // Filter state
   const [filterFila, setFilterFila] = useState("all");
@@ -514,66 +557,124 @@ const Pacientes: React.FC = () => {
     }
   };
 
-  const handlePrintFicha = async (p: (typeof pacientes)[0]) => {
-    // Fetch last appointment info
-    const lastAppt = agendamentos
-      .filter((a) => a.pacienteId === p.id && a.status === "concluido")
-      .sort((a, b) => b.data.localeCompare(a.data))[0];
+  // Função para buscar dados da ficha em paralelo
+  const fetchFichaData = useCallback(async (pacienteId: string): Promise<FichaDados> => {
+    // A) PACIENTE
+    const pacientePromise = supabase
+      .from("pacientes")
+      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone")
+      .eq("id", pacienteId)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) throw new Error("Paciente não encontrado");
+        return {
+          nome_completo: data.nome || "",
+          cpf: data.cpf || "",
+          cns: data.cns || "",
+          data_nascimento: data.data_nascimento || "",
+          nome_mae: data.nome_mae || "",
+          telefone: data.telefone || "",
+        };
+      });
 
-    // Fetch full history for evolution section
-    const historico = agendamentos
-      .filter((a) => a.pacienteId === p.id)
-      .sort((a, b) => b.data.localeCompare(a.data))
-      .slice(0, 8)
-      .map((a) => ({
-        data: a.data,
-        profissional: a.profissionalNome,
-        observacao: a.observacoes || "",
-        tipo: a.tipo,
-      }));
+    // B) DADOS CLÍNICOS — último agendamento
+    const dadosClinicosPromise = supabase
+      .from("agendamentos")
+      .select("id, tipo, data, unidade_id, profissional_id")
+      .eq("paciente_id", pacienteId)
+      .order("data", { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        const lastAg = data?.[0];
+        const unidade = lastAg?.unidade_id ? unidades.find((u) => u.id === lastAg.unidade_id) : null;
+        return {
+          numero_prontuario: pacienteId,
+          cid: "",
+          tipo_atendimento: lastAg?.tipo || "",
+          unidade_origem: "",
+          unidade_atendimento: unidade?.nome || "",
+          data_atendimento: lastAg?.data || "",
+        };
+      });
 
-    const unidadeAtual = lastAppt ? unidades.find((u) => u.id === lastAppt.unidadeId)?.nome : "";
-    const unidadeOrigem = (p as any).ubs_origem || "";
+    // C) SINAIS VITAIS — último registro de triagem
+    const sinaisVitaisPromise = supabase
+      .from("triage_records")
+      .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura")
+      .eq("paciente_id", pacienteId)
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        const triagem = data?.[0];
+        return {
+          pressao_arterial: triagem?.pressao_arterial || "",
+          frequencia_cardiaca: triagem?.frequencia_cardiaca ? String(triagem.frequencia_cardiaca) : "",
+          temperatura: triagem?.temperatura ? String(triagem.temperatura) : "",
+          saturacao: triagem?.saturacao_oxigenio ? String(triagem.saturacao_oxigenio) : "",
+          peso: triagem?.peso ? String(triagem.peso) : "",
+          altura: triagem?.altura ? String(triagem.altura) : "",
+        };
+      });
 
-    printFichaPaciente({
-      paciente: {
-        id: p.id,
-        nome: p.nome,
-        cpf: p.cpf,
-        cns: p.cns || "",
-        nomeMae: p.nomeMae || "",
-        telefone: p.telefone,
-        dataNascimento: p.dataNascimento,
-        email: p.email,
-        endereco: p.endereco || "",
-        descricaoClinica: p.descricaoClinica || "",
-        cid: p.cid || "",
-        criadoEm: p.criadoEm,
-      },
-      unidadeAtual,
-      dataAtendimento: lastAppt?.data,
-      tipoAtendimento: lastAppt?.tipo,
-      unidadeOrigem,
-      ultimoAtendimento: lastAppt
-        ? {
-            data: lastAppt.data,
-            profissional: lastAppt.profissionalNome,
-            procedimentos: "",
-            queixa: "",
-            tipo: lastAppt.tipo,
-          }
-        : undefined,
-      historicoAtendimentos: historico,
+    // D) PROFISSIONAL LOGADO
+    const profissionalPromise = Promise.resolve({
+      nome: user?.nome || "",
+      cargo: user?.role || "",
+      registro: user?.numeroConselho || "",
     });
 
-    await logAction({
-      acao: "imprimir_ficha",
-      entidade: "paciente",
-      entidadeId: p.id,
-      modulo: "pacientes",
-      user,
-      detalhes: { paciente_nome: p.nome },
-    });
+    // E) EVOLUÇÕES CLÍNICAS — últimos atendimentos
+    const evolucionesPromise = supabase
+      .from("agendamentos")
+      .select("data, observacoes, profissional_nome, tipo")
+      .eq("paciente_id", pacienteId)
+      .order("data", { ascending: false })
+      .limit(5)
+      .then(({ data, error }) => {
+        return (data || []).map((ag) => ({
+          data: ag.data || "",
+          observacao: ag.observacoes || "",
+          profissional: ag.profissional_nome || "",
+        }));
+      });
+
+    // Executar todas as buscas em paralelo
+    const [paciente, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
+      pacientePromise,
+      dadosClinicosPromise,
+      sinaisVitaisPromise,
+      profissionalPromise,
+      evolucionesPromise,
+    ]);
+
+    return {
+      paciente,
+      dadosClinicos,
+      sinaisVitais,
+      profissional,
+      evoluciones,
+    };
+  }, [unidades, user]);
+
+  // Abrir ficha de impressão
+  const handleOpenFicha = async (p: (typeof pacientes)[0]) => {
+    setFichaLoading(true);
+    setFichaOpen(true);
+    try {
+      const data = await fetchFichaData(p.id);
+      setFichaData(data);
+    } catch (err) {
+      console.error("Erro ao buscar dados da ficha:", err);
+      toast.error("Erro ao carregar dados para impressão. Verifique sua conexão.");
+      setFichaOpen(false);
+    } finally {
+      setFichaLoading(false);
+    }
+  };
+
+  const handlePrintComplete = () => {
+    setFichaOpen(false);
+    setFichaData(null);
   };
 
   return (
@@ -818,7 +919,7 @@ const Pacientes: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       className="h-8 w-8 p-0"
-                      onClick={() => handlePrintFicha(p)}
+                      onClick={() => handleOpenFicha(p)}
                       title="Imprimir Ficha"
                     >
                       <Printer className="w-3.5 h-3.5" />
@@ -982,7 +1083,7 @@ const Pacientes: React.FC = () => {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => handlePrintFicha(detalhePaciente)}
+                      onClick={() => handleOpenFicha(detalhePaciente)}
                     >
                       <Printer className="w-4 h-4 mr-2" />
                       Imprimir Ficha
@@ -1012,6 +1113,35 @@ const Pacientes: React.FC = () => {
             );
           })()}
       </DetalheDrawer>
+
+      {/* Dialog de impressão da ficha */}
+      <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogTitle className="font-display flex items-center gap-2">
+              <Printer className="w-5 h-5" />
+              Ficha de Atendimento Clínico
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            {fichaLoading ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Carregando dados da ficha...</p>
+              </div>
+            ) : fichaData ? (
+              <FichaImpressao data={fichaData} onPrintComplete={handlePrintComplete} />
+            ) : (
+              <div className="text-center py-16 text-muted-foreground">
+                <p>Erro ao carregar dados da ficha.</p>
+                <Button variant="outline" className="mt-4" onClick={() => setFichaOpen(false)}>
+                  Fechar
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
