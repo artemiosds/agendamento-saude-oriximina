@@ -219,7 +219,7 @@ const Tratamentos: React.FC = () => {
   const canManageFull = hasPermission(["master", "coordenador"]);
   const isProfissional = user?.role === "profissional";
   const canAgendarSessao =
-    user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || (user?.role as string) === "gestao";
+    user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
 
   const loadData = useCallback(async () => {
     setLoading(true);

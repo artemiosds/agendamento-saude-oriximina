@@ -60,13 +60,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.error('Error loading profile:', err);
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    // IMPORTANT: Set up auth state listener BEFORE checking session
+    // IMPORTANT: Set up auth state listener BEFORE checking session (Supabase best practice)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         loadProfile(session.user.id);
@@ -83,9 +82,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setIsLoading(false);
       }
-    }).catch((err) => {
-      console.error('Error getting session:', err);
-      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -108,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: acao.includes('falha') ? 'erro' : 'sucesso',
         erro: '',
         ip,
-      });
+      } as any);
     } catch (err) {
       console.error('Error logging auth action:', err);
     }
@@ -132,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (_) { /* fallback to generic */ }
 
+        // Log LOGIN_FALHA
         await logAuthAction('login_falha', null, { usuario_tentado: usuario.trim(), erro: errorMsg });
 
         return { success: false, error: errorMsg };
@@ -157,6 +154,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           criadoPor: '',
         };
         setUser(loggedUser);
+
+        // Log LOGIN_SUCESSO
         await logAuthAction('login_sucesso', loggedUser);
       }
 
@@ -172,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user) {
       await logAuthAction('logout', user);
     }
-    await supabase.auth.signOut().catch(() => {});
+    await supabase.auth.signOut();
     setUser(null);
   }, [user, logAuthAction]);
 
