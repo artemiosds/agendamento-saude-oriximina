@@ -92,7 +92,7 @@ export type Database = {
           sync_status: string | null
           tipo: string
           unidade_id: string
-          hora_chegada: string | null
+          hora_chegada?: string | null
           attachment_url: string | null
           attachment_name: string | null
           attachment_type: string | null
@@ -1124,10 +1124,10 @@ export type Database = {
           paciente_id: string
           paciente_nome: string
           prescricao?: string | null
-          procedimentos_texto?: string
+          procedimentos```typescript
+_texto?: string
           profissional_id: string
-          ```typescript
-profissional_nome: string
+          profissional_nome: string
           queixa_principal?: string | null
           sala_id?: string | null
           setor?: string | null
@@ -1714,3 +1714,200 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+export type UserRole = "master" | "gestor" | "coordenador" | "recepcao" | "profissional" | "tecnico" | "enfermagem" | "tecnico_enfermagem";
+
+export interface User {
+  id: string;
+  authUserId: string;
+  nome: string;
+  usuario: string;
+  email: string;
+  cpf: string;
+  setor: string;
+  unidadeId: string;
+  salaId: string;
+  cargo: string;
+  role: UserRole;
+  ativo: boolean;
+  criadoEm: string;
+  criadoPor: string;
+  tempoAtendimento: number;
+  profissao: string;
+    tipoConselho: string;
+    numeroConselho: string;
+    ufConselho: string;
+  podeAgendarRetorno: boolean;
+  coren: string;
+}
+
+export interface Unidade {
+  id: string;
+  nome: string;
+  endereco: string;
+  telefone: string;
+  whatsapp: string;
+  ativo: boolean;
+}
+
+export interface Sala {
+  id: string;
+  nome: string;
+  unidadeId: string;
+  ativo: boolean;
+  criadoEm?: string;
+}
+
+export interface Setor {
+  id: string;
+  nome: string;
+}
+
+export interface Paciente {
+  id: string;
+  nome: string;
+  cpf: string;
+  cns: string;
+  nomeMae: string;
+  telefone: string;
+  dataNascimento: string;
+  email: string;
+  endereco: string;
+  observacoes: string;
+  descricaoClinica: string;
+  cid: string;
+  criadoEm?: string;
+}
+
+export interface Agendamento {
+  id: string;
+  pacienteId: string;
+  pacienteNome: string;
+  unidadeId: string;
+  salaId: string;
+  setorId: string;
+  profissionalId: string;
+  profissionalNome: string;
+  data: string;
+  hora: string;
+  status: "pendente" | "confirmado" | "confirmado_chegada" | "cancelado" | "concluido" | "falta" | "atraso" | "remarcado" | "em_atendimento" | "aguardando_triagem" | "aguardando_enfermagem" | "apto_atendimento";
+  tipo: string;
+  observacoes: string;
+  origem: string;
+  googleEventId?: string;
+  syncStatus?: string;
+  criadoEm?: string;
+  criadoPor?: string;
+  horaChegada?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  aprovadoPor?: string;
+  aprovadoEm?: string;
+  rejeitadoMotivo?: string;
+}
+
+export interface FilaEspera {
+  id: string;
+  pacienteId: string;
+  pacienteNome: string;
+  unidadeId: string;
+  profissionalId: string;
+  setor: string;
+  prioridade: string;
+  status: "aguardando" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado" | "encaixado" | "aguardando_triagem" | "apto_agendamento" | "aguardando_multiprofissional" | "indeferido";
+  posicao: number;
+  horaChegada: string;
+  horaChamada?: string;
+  observacoes?: string;
+  descricaoClinica?: string;
+  cid?: string;
+  criadoPor?: string;
+  criadoEm?: string;
+  dataSolicitacaoOriginal?: string;
+  origemCadastro?: string;
+  especialidadeDestino?: string;
+  prioridade_perfil: string;
+}
+
+export interface Atendimento {
+  id: string;
+  agendamentoId: string;
+  pacienteId: string;
+  pacienteNome: string;
+  profissionalId: string;
+  profissionalNome: string;
+  unidadeId: string;
+  salaId: string;
+  setor: string;
+  procedimento: string;
+  data: string;
+  horaInicio: string;
+  horaFim: string;
+  duracaoMinutos: number;
+  status: string;
+}
+
+export interface Disponibilidade {
+  id: string;
+  profissionalId: string;
+  unidadeId: string;
+  salaId: string;
+  dataInicio: string;
+  dataFim: string;
+  horaInicio: string;
+  horaFim: string;
+  vagasPorHora: number;
+  vagasPorDia: number;
+  diasSemana: number[];
+  duracaoConsulta: number;
+}
+
+export interface Configuracoes {
+  whatsapp: {
+    ativo: boolean;
+    provedor: string;
+    token: string;
+    numero: string;
+    notificacoes: {
+      confirmacao: boolean;
+      lembrete24h: boolean;
+      lembrete2h: boolean;
+      remarcacao: boolean;
+      cancelamento: boolean;
+    };
+  };
+  googleCalendar: {
+    conectado: boolean;
+    criarEvento: boolean;
+    atualizarRemarcar: boolean;
+    removerCancelar: boolean;
+    enviarEmail: boolean;
+  };
+  filaEspera: {
+    modoEncaixe: "assistido" | "automatico";
+  };
+  templates: {
+    confirmacao: string;
+    lembrete: string;
+  };
+  webhook: {
+    ativo: boolean;
+    url: string;
+    status: string;
+  };
+  gmail: {
+    ativo: boolean;
+    email: string;
+    senhaApp: string;
+    smtpHost: string;
+    smtpPort: number;
+  };
+  canalNotificacao: "webhook" | "gmail" | "ambos";
+  portalPaciente: {
+    permitirPortal: boolean;
+    enviarSenhaAutomaticamente: boolean;
+    enviarLinkAcesso: boolean;
+    pacientesBloqueados: string[];
+  };
+}
