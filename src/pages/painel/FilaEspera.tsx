@@ -593,7 +593,7 @@ const FilaEspera: React.FC = () => {
     refreshFila();
   }, [fila, pacientes, unidades, addAgendamento, updateFila, logAction, notify, refreshAgendamentos, refreshFila]);
 
-  const expirarReserva = useCallback(async (filaId: string, slot: SlotInfo, user?: User) => {
+  const expirarReserva = useCallback(async (filaId: string, slot: SlotInfo, callingUser?: any) => {
     await updateFila(filaId, {
       status: 'aguardando',
       observacoes: 'Reserva expirada',
