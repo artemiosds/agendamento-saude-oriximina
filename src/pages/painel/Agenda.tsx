@@ -159,15 +159,12 @@ const Agenda: React.FC = () => {
     unidades,
     salas,
     addAgendamento,
-    // configuracoes,
-    // addAtendimento,
     logAction,
     refreshAgendamentos,
-    // fila,
-    // disponibilidades,
+    disponibilidades,
     getAvailableSlots,
     getAvailableDates,
-    // bloqueios,
+    bloqueios,
   } = useData();
   // const [lastProntuarios, setLastProntuarios] = React.useState<Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>>({});
   const { user, hasPermission } = useAuth();
