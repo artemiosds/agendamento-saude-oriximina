@@ -1195,7 +1195,8 @@ const Agenda: React.FC = () => {
                   isProfissional &&
                   (ag.status === "confirmado_chegada" ||
                     ag.status === "aguardando_atendimento" ||
-                    ag.status === "apto_atendimento") && // ADICIONADO ) &&
+                    ag.status === "apto_atendimento" ||
+                    ag.status === "apto_agendamento") &&
                   ehHoje;
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
