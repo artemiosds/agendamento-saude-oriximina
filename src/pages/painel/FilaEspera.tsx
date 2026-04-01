@@ -470,7 +470,7 @@ const FilaEspera: React.FC = () => {
       });
   }, [fila]);
 
-  const chamarProximoDaFila = useCallback(async (slot: SlotInfo, user?: User): Promise<boolean> => {
+  const chamarProximoDaFila = useCallback(async (slot: SlotInfo, callingUser?: any): Promise<boolean> => {
     const candidates = getNextInQueue(slot.profissionalId, slot.unidadeId);
     if (candidates.length === 0) return false;
     const next = candidates[0];
