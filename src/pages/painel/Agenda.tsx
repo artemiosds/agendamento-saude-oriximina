@@ -948,8 +948,8 @@ const Agenda: React.FC = () => {
               selectedDate={selectedDate}
               onDateChange={(date) => setSelectedDate(date)}
               agendamentos={agendamentos}
-              // bloqueios={bloqueios}
-              // disponibilidades={disponibilidades}
+              bloqueios={bloqueios}
+              disponibilidades={disponibilidades}
               filterProf={filterProf}
               filterUnit={filterUnit}
               profissionais={profissionais}
