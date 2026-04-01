@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react"; // refreshed
+import React, { useState, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
+import { printFichaPaciente } from "@/lib/printFichaPaciente";
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
@@ -513,6 +514,68 @@ const Pacientes: React.FC = () => {
     }
   };
 
+  const handlePrintFicha = async (p: (typeof pacientes)[0]) => {
+    // Fetch last appointment info
+    const lastAppt = agendamentos
+      .filter((a) => a.pacienteId === p.id && a.status === "concluido")
+      .sort((a, b) => b.data.localeCompare(a.data))[0];
+
+    // Fetch full history for evolution section
+    const historico = agendamentos
+      .filter((a) => a.pacienteId === p.id)
+      .sort((a, b) => b.data.localeCompare(a.data))
+      .slice(0, 8)
+      .map((a) => ({
+        data: a.data,
+        profissional: a.profissionalNome,
+        observacao: a.observacoes || "",
+        tipo: a.tipo,
+      }));
+
+    const unidadeAtual = lastAppt ? unidades.find((u) => u.id === lastAppt.unidadeId)?.nome : "";
+    const unidadeOrigem = (p as any).ubs_origem || "";
+
+    printFichaPaciente({
+      paciente: {
+        id: p.id,
+        nome: p.nome,
+        cpf: p.cpf,
+        cns: p.cns || "",
+        nomeMae: p.nomeMae || "",
+        telefone: p.telefone,
+        dataNascimento: p.dataNascimento,
+        email: p.email,
+        endereco: p.endereco || "",
+        descricaoClinica: p.descricaoClinica || "",
+        cid: p.cid || "",
+        criadoEm: p.criadoEm,
+      },
+      unidadeAtual,
+      dataAtendimento: lastAppt?.data,
+      tipoAtendimento: lastAppt?.tipo,
+      unidadeOrigem,
+      ultimoAtendimento: lastAppt
+        ? {
+            data: lastAppt.data,
+            profissional: lastAppt.profissionalNome,
+            procedimentos: "",
+            queixa: "",
+            tipo: lastAppt.tipo,
+          }
+        : undefined,
+      historicoAtendimentos: historico,
+    });
+
+    await logAction({
+      acao: "imprimir_ficha",
+      entidade: "paciente",
+      entidadeId: p.id,
+      modulo: "pacientes",
+      user,
+      detalhes: { paciente_nome: p.nome },
+    });
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -751,6 +814,15 @@ const Pacientes: React.FC = () => {
                       patientName={p.nome}
                       unitName={unidades.find((u) => u.id === (filaEntry?.unidadeId || user?.unidadeId))?.nome}
                     />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => handlePrintFicha(p)}
+                      title="Imprimir Ficha"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                    </Button>
                     {canAddToFila && !naFila && (
                       <Button
                         size="sm"
@@ -891,20 +963,31 @@ const Pacientes: React.FC = () => {
                   />
                   <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
                   <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-full"
-                    onClick={() => {
-                      setDetalheOpen(false);
-                      navigate(
-                        `/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`,
-                      );
-                    }}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Ver Prontuários Completos
-                  </Button>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setDetalheOpen(false);
+                        navigate(
+                          `/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`,
+                        );
+                      }}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Ver Prontuários
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handlePrintFicha(detalhePaciente)}
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Imprimir Ficha
+                    </Button>
+                  </div>
                 </Secao>
                 {(naFila || isDemanda) && (
                   <Secao titulo="Etiquetas">
