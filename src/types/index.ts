@@ -142,7 +142,6 @@ export interface Agendamento {
     | "remarcado"
     | "em_atendimento"
     | "aguardando_triagem"
-    | "aguardando_atendimento"
     | "aguardando_enfermagem"
     | "apto_atendimento";
   tipo: string;
@@ -181,8 +180,8 @@ export interface FilaEspera {
     | "chegada_confirmada"
     | "aguardando_triagem"
     | "aguardando_enfermagem"
-    | "aguardando_atendimento"
-    | "apto_atendimento";
+    | "apto_atendimento"
+    | "demanda_reprimida";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
