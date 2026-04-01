@@ -116,7 +116,6 @@ interface ReservaInfo {
   expiresAt: number;
 }
 
-// Calculate wait time in minutes from criadoEm or horaChegada
 function getWaitMinutes(f: { criadoEm?: string; horaChegada: string }, nowMs: number): number {
   if (f.criadoEm) {
     const entryTime = new Date(f.criadoEm).getTime();
@@ -192,9 +191,7 @@ const FilaEspera: React.FC = () => {
   const [rescheduleFilaItem, setRescheduleFilaItem] = useState<(typeof fila)[0] | null>(null);
   const [rescheduleSlot, setRescheduleSlot] = useState({ data: "", hora: "", profissionalId: "", unidadeId: "" });
 
-  const [absenceHistory, setAbsenceHistory] = useState<Record<string, { reason: string; obs: string; date: string }>>(
-    {},
-  );
+  const [absenceHistory, setAbsenceHistory] = useState<Record<string, { reason: string; obs: string; date: string }>>({});
 
   const [criarPaciente, setCriarPaciente] = useState(false);
   const [novoPaciente, setNovoPaciente] = useState({
@@ -272,27 +269,31 @@ const FilaEspera: React.FC = () => {
 
   useEffect(() => {
     const loadAbsenceHistory = async () => {
-      const { data } = await supabase
-        .from("action_logs")
-        .select("entidade_id, detalhes, created_at")
-        .eq("acao", "marcar_falta")
-        .eq("entidade", "fila_espera")
-        .order("created_at", { ascending: false })
-        .limit(500);
-      if (data) {
-        const history: Record<string, { reason: string; obs: string; date: string }> = {};
-        data.forEach((log) => {
-          const d = log.detalhes as any;
-          const pacienteId = d?.pacienteId;
-          if (pacienteId && !history[pacienteId]) {
-            history[pacienteId] = {
-              reason: d?.motivo || "",
-              obs: d?.observacaoFalta || "",
-              date: log.created_at?.split("T")[0] || "",
-            };
-          }
-        });
-        setAbsenceHistory(history);
+      try {
+        const { data } = await supabase
+          .from("action_logs")
+          .select("entidade_id, detalhes, created_at")
+          .eq("acao", "marcar_falta")
+          .eq("entidade", "fila_espera")
+          .order("created_at", { ascending: false })
+          .limit(500);
+        if (data) {
+          const history: Record<string, { reason: string; obs: string; date: string }> = {};
+          data.forEach((log) => {
+            const d = log.detalhes as any;
+            const pacienteId = d?.pacienteId;
+            if (pacienteId && !history[pacienteId]) {
+              history[pacienteId] = {
+                reason: d?.motivo || "",
+                obs: d?.observacaoFalta || "",
+                date: log.created_at?.split("T")[0] || "",
+              };
+            }
+          });
+          setAbsenceHistory(history);
+        }
+      } catch (err) {
+        console.error("Error loading absence history:", err);
       }
     };
     loadAbsenceHistory();
@@ -312,6 +313,7 @@ const FilaEspera: React.FC = () => {
   }, [now, reservas, fila, expirarReserva, user]);
 
   const filteredFila = useMemo(() => {
+    if (!fila || fila.length === 0) return [];
     const prioOrder: Record<string, number> = {
       urgente: 0,
       gestante: 1,
@@ -323,7 +325,7 @@ const FilaEspera: React.FC = () => {
     };
     const query = searchQuery.toLowerCase().trim();
     return [...fila]
-      .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
+      .filter((f) => !query || (f.pacienteNome || "").toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
       .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
       .filter((f) => filterStatus === "all" || f.status === filterStatus)
@@ -336,7 +338,7 @@ const FilaEspera: React.FC = () => {
             return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
           if (a.dataSolicitacaoOriginal && !b.dataSolicitacaoOriginal) return -1;
           if (!a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal) return 1;
-          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
+          return (a.criadoEm || a.horaChegada || "").localeCompare(b.criadoEm || b.horaChegada || "");
         }
         if (sortField === "tempo") {
           const aMin = getWaitMinutes(a, now);
@@ -348,30 +350,154 @@ const FilaEspera: React.FC = () => {
             return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
           if (a.dataSolicitacaoOriginal && !b.dataSolicitacaoOriginal) return -1;
           if (!a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal) return 1;
-          return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
+          return (a.criadoEm || a.horaChegada || "").localeCompare(b.criadoEm || b.horaChegada || "");
         }
-        return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
+        return (a.criadoEm || a.horaChegada || "").localeCompare(b.criadoEm || b.horaChegada || "");
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery, filterEspecialidade]);
 
-  const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
-
-  const handleVagaLiberada = async (agendamento: {
-    id: string;
-    data: string;
-    hora: string;
-    profissionalId: string;
-    profissionalNome: string;
-    unidadeId: string;
-    salaId?: string;
-    tipo: string;
-  }, motivo: 'cancelamento' | 'falta', user?: any) => {
-    console.log('handleVagaLiberada', agendamento, motivo, user);
-  };
+  const activeQueue = useMemo(() => {
+    if (!fila) return [];
+    return fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
+  }, [fila]);
 
   return (
     <div className="space-y-4">
-      {/* Your UI code here */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">Fila de Espera</h1>
+          <p className="text-muted-foreground text-sm">{activeQueue.length} paciente(s) na fila</p>
+        </div>
+        {canManage && (
+          <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground">
+            <Plus className="w-4 h-4 mr-2" /> Novo Paciente na Fila
+          </Button>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Select value={filterUnidade} onValueChange={setFilterUnidade}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas</SelectItem>
+            {unidadesVisiveis.map((u) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterProf} onValueChange={setFilterProf}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Profissional" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {profissionais.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={sortField} onValueChange={(v) => setSortField(v as any)}>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Ordenar" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="prioridade">Prioridade</SelectItem>
+            <SelectItem value="tempo">Tempo de Espera</SelectItem>
+            <SelectItem value="entrada">Ordem de Entrada</SelectItem>
+            <SelectItem value="solicitacao">Data Solicitação</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar paciente..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
+
+      {filteredFila.length === 0 ? (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-8 text-center text-muted-foreground">
+            Nenhum paciente na fila de espera.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {filteredFila.map((item) => {
+            const waitMinutes = getWaitMinutes(item, now);
+            const waitColor = getWaitColor(waitMinutes, item.prioridade);
+            const st = statusLabels[item.status] || statusLabels.aguardando;
+            const pac = pacientes.find((p) => p.id === item.pacienteId);
+            const prof = funcionarios.find((f) => f.id === item.profissionalId);
+            const un = unidades.find((u) => u.id === item.unidadeId);
+
+            return (
+              <Card key={item.id} className="shadow-card border-0 hover:ring-1 hover:ring-primary/20 transition-all">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${waitColor.bg}`}>
+                        {item.posicao}º
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Espera</p>
+                        <p className={`text-sm font-bold ${waitColor.text}`}>{formatWaitTime(waitMinutes)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground">{item.pacienteNome}</p>
+                        <Badge variant="outline" className={cn("text-xs", st.color)}>{st.label}</Badge>
+                        <Badge variant="outline" className={cn("text-xs", prioridadeColors[item.prioridade] || prioridadeColors.normal)}>
+                          {prioridadeLabel[item.prioridade] || item.prioridade}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
+                        {un && <span>🏥 {un.nome}</span>}
+                        {prof && <span>👨‍⚕️ {prof.nome}</span>}
+                        {item.setor && <span>📋 {item.setor}</span>}
+                        {(item as any).especialidadeDestino && <span>🎯 {(item as any).especialidadeDestino}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap shrink-0">
+                      {pac?.telefone && <ContactActionButton phone={pac.telefone} patientName={pac.nome} />}
+                      <Button size="sm" variant="ghost" onClick={() => { setDetalheFila(item); setDetalheOpen(true); }}>
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes da Fila">
+        {detalheFila && (
+          <div className="space-y-4">
+            <Secao titulo="Informações do Paciente">
+              <Campo label="Nome" valor={detalheFila.pacienteNome} />
+              <Campo label="Unidade" valor={unidades.find(u => u.id === detalheFila.unidadeId)?.nome} />
+              <Campo label="Profissional" valor={funcionarios.find(f => f.id === detalheFila.profissionalId)?.nome} />
+              <Campo label="Setor" valor={detalheFila.setor} />
+              <Campo label="Prioridade" valor={prioridadeLabel[detalheFila.prioridade] || detalheFila.prioridade} />
+              <Campo label="Status" valor={statusLabels[detalheFila.status]?.label || detalheFila.status} />
+              <Campo label="Hora Chegada" valor={detalheFila.horaChegada} />
+              <Campo label="Hora Chamada" valor={detalheFila.horaChamada} />
+            </Secao>
+            {detalheFila.observacoes && (
+              <Secao titulo="Observações">
+                <p className="text-sm text-muted-foreground">{detalheFila.observacoes}</p>
+              </Secao>
+            )}
+          </div>
+        )}
+      </DetalheDrawer>
     </div>
   );
 };

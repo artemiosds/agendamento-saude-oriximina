@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Paciente } from "@/types";
@@ -31,101 +31,96 @@ const statusColors: Record<string, string> = {
   apto_atendimento: "bg-emerald-100 text-emerald-800 border-emerald-200",
 };
 
-interface PacienteProps {
-  setSelectedPaciente: (paciente: Paciente) => void;
-  onClose: () => void;
+interface BuscaPacienteProps {
+  pacientes: Paciente[];
+  value: string;
+  onChange: (id: string, nome: string) => void;
 }
 
-export const BuscaPaciente: React.FC<PacienteProps> = ({ setSelectedPaciente, onClose }) => {
-  const { pacientes, unidades, funcionarios } = useData();
+export const BuscaPaciente: React.FC<BuscaPacienteProps> = ({ pacientes, value, onChange }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterUnit, setFilterUnit] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [selectedId, setSelectedId] = useState(value);
+
+  useEffect(() => {
+    setSelectedId(value);
+  }, [value]);
 
   const filteredPacientes = useMemo(() => {
+    if (!pacientes || pacientes.length === 0) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return pacientes.slice(0, 10);
     return pacientes.filter((p) => {
-      const matchesSearch = searchTerm === "" || 
-        p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.cpf.includes(searchTerm.replace(/\D/g, "")) ||
-        p.cns.includes(searchTerm.replace(/\D/g, ""));
-      const matchesUnit = filterUnit === "all" || unidades.find(u => u.id === p.unidadeId)?.nome === filterUnit;
-      return matchesSearch && matchesUnit;
-    });
-  }, [pacientes, searchTerm, filterUnit, unidades]);
+      if (!p) return false;
+      return (
+        (p.nome || "").toLowerCase().includes(term) ||
+        (p.cpf || "").includes(term.replace(/\D/g, "")) ||
+        (p.cns || "").includes(term.replace(/\D/g, ""))
+      );
+    }).slice(0, 10);
+  }, [pacientes, searchTerm]);
 
-  const handlePacienteClick = async (pacienteId: string) => {
-    try {
-      const paciente = pacientes.find(p => p.id === pacienteId);
-      if (!paciente) return;
-      setSelectedPaciente(paciente);
-      onClose();
-    } catch (err) {
-      toast.error("Erro ao carregar paciente");
-    }
+  const handleSelect = (p: Paciente) => {
+    if (!p) return;
+    setSelectedId(p.id);
+    onChange(p.id, p.nome || "");
+    setSearchTerm("");
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Buscar Paciente</h1>
-          <p className="text-sm text-gray-500">Selecione um paciente existente ou cadastre um novo</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            <XCircle className="w-4 h-4 mr-1" /> Fechar
-          </Button>
-        </div>
-      </div>
+  const selectedPaciente = pacientes.find(p => p.id === selectedId);
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Buscar paciente por nome, CPF ou CNS..."
-                className="pl-3 pr-3 py-2 border rounded-md text-sm w-full md:w-64"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2 w-full md:w-auto">
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
-                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {unidades.map((u) => <SelectItem key={u.id} value={u.nome}>{u.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPacientes.map((p) => (
-              <div
-                key={p.id}
-                className="cursor-pointer group p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                onClick={() => handlePacienteClick(p.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-900">{p.nome}</div>
-                    <div className="text-sm text-gray-500">
-                      {p.cpf && <span className="mr-2">CPF: {p.cpf}</span>}
-                      {p.cns && <span className="mr-2">CNS: {p.cns}</span>}
-                    </div>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ArrowRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </div>
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar paciente por nome, CPF ou CNS..."
+          value={searchTerm || (selectedPaciente?.nome || "")}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            if (selectedId) {
+              setSelectedId("");
+              onChange("", "");
+            }
+          }}
+          className="pl-9"
+        />
+      </div>
+      
+      {searchTerm && filteredPacientes.length > 0 && (
+        <div className="border rounded-lg max-h-48 overflow-y-auto bg-background">
+          {filteredPacientes.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleSelect(p)}
+              className="w-full text-left px-3 py-2 hover:bg-muted transition-colors border-b last:border-b-0"
+            >
+              <div className="font-medium text-sm">{p.nome || "Sem nome"}</div>
+              <div className="text-xs text-muted-foreground">
+                {p.cpf && <span>CPF: {p.cpf}</span>}
+                {p.cns && <span className="ml-2">CNS: {p.cns}</span>}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selectedPaciente && !searchTerm && (
+        <div className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded-lg text-sm">
+          <UserIcon className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-primary font-medium">{selectedPaciente.nome}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedId("");
+              onChange("", "");
+            }}
+            className="ml-auto text-muted-foreground hover:text-destructive text-xs"
+          >
+            ✕ limpar
+          </button>
+        </div>
+      )}
     </div>
   );
 };
