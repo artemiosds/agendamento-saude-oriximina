@@ -1023,7 +1023,7 @@ export type Database = {
           descricao?: string
           especialidade?: string
           id?: string
-          nome?: string
+          nome: string
           profissao?: string
           profissionais_ids?: string[] | null
         }
@@ -1124,7 +1124,7 @@ export type Database = {
           paciente_id: string
           paciente_nome: string
           prescricao?: string | null
-          procedimentos```typescript
+          ```typescript
 _texto?: string
           profissional_id: string
           profissional_nome: string
@@ -1815,7 +1815,7 @@ export interface FilaEspera {
   profissionalId: string;
   setor: string;
   prioridade: string;
-  status: "aguardando" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado" | "encaixado" | "aguardando_triagem" | "apto_agendamento" | "aguardando_multiprofissional" | "indeferido";
+  status: "aguardando" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado" | "encaixado" | "aguardando_triagem" | "apto_agendamento" | "aguardando_multiprofissional" | "indeferido" | "demanda_reprimida";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
