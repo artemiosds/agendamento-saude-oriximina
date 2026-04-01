@@ -1712,7 +1712,7 @@ export type CompositeTypes<
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
 
-export type UserRole = "master" | "gestor" | "coordenador" | "recepcao" | "profissional" | "tecnico" | "enfermagem" | "tecnico_enfermagem";
+export type UserRole = "master" | "gestor" | "coordenador" | "recepcao" | "profissional" | "tecnico" | "enfermagem" | "tecnico_enfermagem" | "gestao";
 
 export interface User {
   id: string;
@@ -1773,6 +1773,7 @@ export interface Paciente {
   observacoes: string;
   descricaoClinica: string;
   cid: string;
+  unidadeId?: string;
   criadoEm?: string;
 }
 
@@ -1802,6 +1803,7 @@ export interface Agendamento {
   aprovadoPor?: string;
   aprovadoEm?: string;
   rejeitadoMotivo?: string;
+  cid?: string;
 }
 
 export interface FilaEspera {

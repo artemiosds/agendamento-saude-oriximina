@@ -282,8 +282,9 @@ const FichaImpressao: React.FC<FichaImpressaoProps> = ({
               alt="Logo SMS"
               className="ficha-logo"
               onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-                const fallback = e.target.nextElementSibling as HTMLElement;
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
                 if (fallback) fallback.style.display = 'flex';
               }}
             />

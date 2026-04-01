@@ -51,7 +51,7 @@ const Pacientes: React.FC = () => {
       ] = await Promise.all([
         supabase.from("pacientes").select("*").eq("id", pacienteId).maybeSingle(),
         supabase.from("agendamentos").select("*").eq("paciente_id", pacienteId).order("data", { ascending: false }).limit(1),
-        supabase.from("triage_records").select("*").eq("paciente_id", pacienteId).order("confirmado_em", { ascending: false }).limit(1),
+        (supabase.from("triage_records") as any).select("*").eq("paciente_id", pacienteId).order("confirmado_em", { ascending: false }).limit(1),
         supabase.from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }).limit(5),
       ]);
 
@@ -61,11 +61,11 @@ const Pacientes: React.FC = () => {
       const prontuarios = prontuariosRes.data || [];
 
       // Get unidade names
-      const unidadeOrigem = lastAgendamento?.unidade_id 
+      const unidadeOrigem = lastAgendamento?.unidade_id
         ? unidades.find(u => u.id === lastAgendamento.unidade_id)?.nome || ""
         : "";
-      const unidadeAtendimento = pacienteData?.unidade_id 
-        ? unidades.find(u => u.id === pacienteData.unidade_id)?.nome || ""
+      const unidadeAtendimento = (pacienteData as any)?.unidade_id
+        ? unidades.find(u => u.id === (pacienteData as any).unidade_id)?.nome || ""
         : "";
 
       // Format date
@@ -90,7 +90,7 @@ const Pacientes: React.FC = () => {
         },
         dadosClinicos: {
           numeroProntuario: lastAgendamento?.id?.substring(0, 8) || "",
-          cid: pacienteData?.cid || lastAgendamento?.cid || "",
+          cid: (pacienteData as any)?.cid || (lastAgendamento as any)?.cid || "",
           tipoAtendimento: lastAgendamento?.tipo || "",
           unidadeOrigem,
           unidadeAtendimento,
