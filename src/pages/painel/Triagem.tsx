@@ -163,15 +163,35 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
     try {
-      // CORREÇÃO 8: Salvar como rascunho em triage_records
-      await supabase.from("triage_records").upsert({
+      // Save draft triage record
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", selectedItem.id)
+        .maybeSingle();
+      
+      const triagePayload: any = {
         agendamento_id: selectedItem.id,
-        paciente_id: selectedItem.pacienteId,
-        profissional_id: user?.id || "",
-        dados_triagem: form, // Salva o formulário completo como JSON
-        criado_em: new Date().toISOString(),
-        status: "rascunho",
-      });
+        tecnico_id: user?.id || "",
+        peso: form.peso ? parseFloat(form.peso) : null,
+        altura: form.altura ? parseFloat(form.altura) : null,
+        pressao_arterial: form.pressaoArterial || null,
+        temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
+        frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
+        saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
+        glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
+        imc: (form.peso && form.altura) ? parseFloat((parseFloat(form.peso) / Math.pow(parseFloat(form.altura) / 100, 2)).toFixed(1)) : null,
+        alergias: form.alergias,
+        medicamentos: form.medicamentos,
+        queixa: form.queixaPrincipal || null,
+        iniciado_em: new Date().toISOString(),
+      };
+
+      if (existing?.id) {
+        await supabase.from("triage_records").update(triagePayload).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(triagePayload);
+      }
       toast.success("Rascunho da triagem salvo!");
     } catch (error) {
       console.error("Erro ao salvar rascunho:", error);
