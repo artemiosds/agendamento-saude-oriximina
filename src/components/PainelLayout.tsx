@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
@@ -12,14 +11,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import logoSms from '@/assets/logo-sms.jpeg';
 
-// Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
-// roles_fallback = usado APENAS se o PermissionsContext ainda estiver carregando
 const menuItems: {
   to: string;
   label: string;
   icon: React.ElementType;
-  modulo: ModuleName | null;     // null = sempre visível (ex: dashboard para master)
-  roles_master_only?: boolean;   // true = só master vê
+  modulo: string | null;
+  roles_master_only?: boolean;
 }[] = [
   { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
   { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
@@ -57,7 +54,6 @@ const roleLabels: Record<string, string> = {
 
 const PainelLayout: React.FC = () => {
   const { user, logout } = useAuth();
-  const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -68,22 +64,11 @@ const PainelLayout: React.FC = () => {
     navigate('/login');
   };
 
-  // Decide se o item aparece no menu
-  const isItemVisible = (item: typeof menuItems[0]): boolean => {
-    // Itens só para master
+  // Show all menu items for now (permissions can be added back later)
+  const filteredMenu = menuItems.filter(item => {
     if (item.roles_master_only) return isMaster;
-
-    // Master vê tudo
-    if (isMaster) return true;
-
-    // Sem módulo definido = visível para todos autenticados
-    if (item.modulo === null) return true;
-
-    // Usa PermissionsContext — respeita o que foi configurado na tela de permissões
-    return can(item.modulo, 'can_view');
-  };
-
-  const filteredMenu = menuItems.filter(isItemVisible);
+    return true;
+  });
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -107,14 +92,6 @@ const PainelLayout: React.FC = () => {
             <p className="text-xs text-sidebar-foreground/60">Oriximiná</p>
           </div>
         </div>
-
-        {/* Loading de permissões */}
-        {permLoading && (
-          <div className="px-4 py-2 text-xs text-sidebar-foreground/40 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block" />
-            Carregando permissões...
-          </div>
-        )}
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {filteredMenu.map(item => (

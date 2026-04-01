@@ -1,7 +1,7 @@
 "use client";
 
-import React, { lazy, Suspense } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
@@ -46,43 +46,41 @@ function App() {
     <AuthProvider>
       <DataProvider>
         <Router>
-          <Suspense fallback={<LoadingScreen />}>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/agendar" element={<AgendarOnline />} />
-              <Route path="/portal" element={<PortalPaciente />} />
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/agendar" element={<AgendarOnline />} />
+            <Route path="/portal" element={<PortalPaciente />} />
 
-              {/* Painel routes with layout */}
-              <Route path="/painel" element={<PainelLayout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="agenda" element={<Agenda />} />
-                <Route path="fila" element={<FilaEspera />} />
-                <Route path="pacientes" element={<Pacientes />} />
-                <Route path="atendimentos" element={<Atendimentos />} />
-                <Route path="triagem" element={<Triagem />} />
-                <Route path="prontuario" element={<ProntuarioPage />} />
-                <Route path="configuracoes" element={<Configuracoes />} />
-                <Route path="relatorios" element={<Relatorios />} />
-                <Route path="funcionarios" element={<Funcionarios />} />
-                <Route path="unidades" element={<UnidadesSalas />} />
-                <Route path="disponibilidade" element={<Disponibilidade />} />
-                <Route path="bloqueios" element={<Bloqueios />} />
-                <Route path="auditoria" element={<Auditoria />} />
-                <Route path="permissoes" element={<Permissoes />} />
-                <Route path="tratamentos" element={<Tratamentos />} />
-                <Route path="regulacao" element={<Regulacao />} />
-                <Route path="enfermagem" element={<AvaliacaoEnfermagem />} />
-                <Route path="multiprofissional" element={<AvaliacaoMultiprofissional />} />
-                <Route path="pts" element={<PTS />} />
-                <Route path="agenda-google" element={<AgendaGoogle />} />
-              </Route>
+            {/* Painel routes with layout */}
+            <Route path="/painel" element={<PainelLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="agenda" element={<Agenda />} />
+              <Route path="fila" element={<FilaEspera />} />
+              <Route path="pacientes" element={<Pacientes />} />
+              <Route path="atendimentos" element={<Atendimentos />} />
+              <Route path="triagem" element={<Triagem />} />
+              <Route path="prontuario" element={<ProntuarioPage />} />
+              <Route path="configuracoes" element={<Configuracoes />} />
+              <Route path="relatorios" element={<Relatorios />} />
+              <Route path="funcionarios" element={<Funcionarios />} />
+              <Route path="unidades" element={<UnidadesSalas />} />
+              <Route path="disponibilidade" element={<Disponibilidade />} />
+              <Route path="bloqueios" element={<Bloqueios />} />
+              <Route path="auditoria" element={<Auditoria />} />
+              <Route path="permissoes" element={<Permissoes />} />
+              <Route path="tratamentos" element={<Tratamentos />} />
+              <Route path="regulacao" element={<Regulacao />} />
+              <Route path="enfermagem" element={<AvaliacaoEnfermagem />} />
+              <Route path="multiprofissional" element={<AvaliacaoMultiprofissional />} />
+              <Route path="pts" element={<PTS />} />
+              <Route path="agenda-google" element={<AgendaGoogle />} />
+            </Route>
 
-              {/* Fallback */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+            {/* Fallback */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
           <Toaster />
         </Router>
       </DataProvider>

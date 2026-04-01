@@ -168,13 +168,9 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setLoading(true);
 
     try {
-      // AuthContext já buscou o role da tabela 'funcionarios' — usar diretamente
       const role = (user.role || '').toLowerCase().trim();
 
-      console.log('[Permissions] user.id:', user.id, '| role:', role);
-
       if (!role) {
-        console.warn('[Permissions] Role vazio');
         setPermissions(buildFullMap({}));
         setLoading(false);
         return;
@@ -202,20 +198,10 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      console.log('[Permissions] Registros:', data?.length ?? 0, 'para role:', role);
-
-      // Tabela vazia — gravar defaults e usar
+      // Tabela vazia — usar defaults
       if (!data || data.length === 0) {
         const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role];
         if (defaults) {
-          const inserts = ALL_MODULES.map((m) => ({
-            perfil: role,
-            modulo: m,
-            ...(defaults[m] ?? defaultPerm),
-          }));
-          await (supabase as any)
-            .from('permissoes')
-            .upsert(inserts, { onConflict: 'perfil,modulo' });
           setPermissions(buildFullMap(defaults));
         } else {
           setPermissions(buildFullMap({}));
@@ -248,18 +234,6 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     loadPermissions();
   }, [loadPermissions]);
-
-  // Realtime
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel(`permissoes-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => {
-        loadPermissions();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.id, loadPermissions]);
 
   const can = useCallback(
     (modulo: ModuleName, action: keyof ModulePermission): boolean => {
