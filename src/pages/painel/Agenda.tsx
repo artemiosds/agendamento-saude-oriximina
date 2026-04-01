@@ -366,9 +366,8 @@ const Agenda: React.FC = () => {
       await supabase
         .from("agendamentos")
         .update({
-          aprovado_por: user?.id || "",
-          aprovado_em: new Date().toISOString(),
-        })
+          observacoes: `Aprovado por ${user?.nome || user?.id || ""}. ${ag.observacoes || ""}`,
+        } as any)
         .eq("id", ag.id);
 
       const paciente = pacientes.find((p) => p.id === ag.pacienteId);
