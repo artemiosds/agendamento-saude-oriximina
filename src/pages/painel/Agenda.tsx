@@ -471,7 +471,7 @@ const Agenda: React.FC = () => {
         return;
       }
 
-      await updateAgendamento(agId, { status: newStatus });
+      await updateAgendamento(agId, { status: newStatus as Agendamento["status"] });
       const ag = agendamentos.find(a => a.id === agId);
       const paciente = pacientes.find((p) => p.id === ag?.pacienteId || p.nome === ag?.pacienteNome);
       const unidade = unidades.find((u) => u.id === ag?.unidadeId);

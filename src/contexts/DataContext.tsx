@@ -1316,14 +1316,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id,
         titulo: b.titulo,
         tipo: b.tipo,
-        data_inicio: b.data_inicio,
-        data_fim: b.data_fim,
-        dia_inteiro: b.dia_inteiro,
-        hora_inicio: b.hora_inicio,
-        hora_fim: b.hora_fim,
-        unidade_id: b.unidade_id,
-        profissional_id: b.profissional_id,
-        criado_por: b.criado_por,
+        data_inicio: b.dataInicio,
+        data_fim: b.dataFim,
+        dia_inteiro: b.diaInteiro,
+        hora_inicio: b.horaInicio,
+        hora_fim: b.horaFim,
+        unidade_id: b.unidadeId,
+        profissional_id: b.profissionalId,
+        criado_por: b.criadoPor,
       } as any);
       if (!error) {
         emitDbUpdate();
