@@ -870,9 +870,9 @@ const Agenda: React.FC = () => {
                 audio: "Áudio",
                 outro: "Documento",
               };
-              const anexoUrl = ag.attachment_url || ag.attachmentUrl;
-              const anexoNome = ag.attachment_name || ag.attachmentName;
-              const anexoTipo = ag.attachment_type || ag.attachmentType;
+               const anexoUrl = ag.attachmentUrl;
+              const anexoNome = ag.attachmentName;
+              const anexoTipo = ag.attachmentType;
               return (
                 <Card key={ag.id} className="shadow-card border-0 border-l-4 border-l-warning">
                   <CardContent className="p-4 space-y-3">
