@@ -1,109 +1,57 @@
-# Plan: Complete System Fixes and Enhancements
 
-This plan addresses all the issues reported: day name display, availability sync with public booking, waiting queue improvements, and integration preparations.
 
-## Root Cause Analysis
+# Plan: Fix Build Errors and Clinical Flow Integration
 
-The core issue is that **all data is stored in React state (in-memory)** with no persistence. When availability is configured in the panel, it works within the same browser session, but the public booking page correctly reads from `disponibilidades` state. The day names in the code are already correct (`['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']`), but the layout can be improved. The main sync problem is that the professional filter on `AgendarOnline.tsx` requires `f.unidadeId === form.unidadeId` which is too restrictive -- a professional could serve multiple units via availability config.
+## Problem Summary
+There are 40+ TypeScript build errors across 3 files (`DataContext.tsx`, `Agenda.tsx`, `FilaEspera.tsx`) caused by type mismatches between the code and the `types/index.ts` interfaces. Additionally, the clinical flow needs corrections per the user's rules.
+
+## Root Causes
+
+1. **`DataContext.tsx`**: Uses wrong table name (`configuracoes` instead of `system_config`), maps `User` with wrong field names (`telefone`, `conselho`, `registro` don't exist on User type), `Unidade` mapping missing `telefone`/`whatsapp`, `Agendamento` uses `horaChegada` which doesn't exist on the type, `BloqueioAgenda` uses snake_case in `addBloqueio` but interface is camelCase.
+
+2. **`Agenda.tsx`**: Uses `aprovado_por`, `rejeitado_motivo`, `hora_chegada` (snake_case DB columns) directly in update calls instead of going through `updateAgendamento`. Local `Agendamento` interface has `attachment_url` (snake_case) but the shared type uses `attachmentUrl`. `CalendarioAgenda` call missing `bloqueios` and `disponibilidades` props. Status string not matching union type.
+
+3. **`FilaEspera.tsx`**: Missing imports for `AlertDialog*` and `Clock` from lucide. Compares status with `"demanda_reprimida"` which isn't in the union type. Local `User` type conflicts with imported `User`. Status type incompatibility in `updateFila` call.
 
 ## Changes
 
-### 1. Fix Professional Filtering in Public Booking (`AgendarOnline.tsx`)
+### 1. `src/types/index.ts`
+- Add `horaChegada?: string` to `Agendamento` interface
+- Add `"aguardando_enfermagem" | "apto_atendimento"` to `Agendamento.status` union
+- Add `"demanda_reprimida"` to `FilaEspera.status` union
 
-**Problem:** Line 28 filters by `f.unidadeId === form.unidadeId`, but a professional's `unidadeId` is their "home" unit. They should appear for any unit where they have availability configured.
+### 2. `src/contexts/DataContext.tsx`
+- Fix `loadConfiguracoes`: change table from `"configuracoes"` to `"system_config"`, read `configuracoes` field (JSONB) instead of `config_json`
+- Fix `loadUnidades`: add `telefone` and `whatsapp` to mapping
+- Fix `loadFuncionarios`: map to correct `User` fields (`setor`, `cargo`, `criadoEm`, `criadoPor`, `tipoConselho`, `numeroConselho`, `ufConselho`) instead of `telefone`, `conselho`, `registro`
+- Fix realtime `funcionarios` handler: same field mapping fix
+- Fix `addFuncionario`: use correct DB column names (`tipo_conselho`, `numero_conselho`, `uf_conselho`, `setor`, `cargo`, `criado_por`)
+- Fix `updateFuncionario`: replace `telefone`/`conselho`/`registro` with correct field mappings
+- Fix `addBloqueio`: use camelCase from `BloqueioAgenda` interface (`b.dataInicio`, `b.dataFim`, etc.)
 
-**Fix:** Remove the `f.unidadeId` check and rely solely on `disponibilidades` to determine which professionals are available at which units:
+### 3. `src/pages/painel/Agenda.tsx`
+- Remove local `Agendamento`/`Paciente` interfaces; import from `@/types` or use the ones from `useData()`
+- Fix `handleAprovar`/`handleRejeitar`: use `updateAgendamento` with proper camelCase fields (`aprovadoPor`, `rejeitadoMotivo`) instead of raw supabase calls with snake_case
+- Fix `handleStatusChange`: cast status properly to match the union type
+- Fix `CalendarioAgenda` usage: pass `bloqueios` and `disponibilidades` props
+- Fix attachment references: use `attachmentUrl`/`attachmentName`/`attachmentType` consistently
 
-```tsx
-const profissionaisComDisponibilidade = useMemo(() => {
-  return funcionarios.filter(f => 
-    f.role === 'profissional' && f.ativo &&
-    disponibilidades.some(d => d.profissionalId === f.id && 
-      (!form.unidadeId || d.unidadeId === form.unidadeId))
-  );
-}, [funcionarios, disponibilidades, form.unidadeId]);
-```
+### 4. `src/pages/painel/FilaEspera.tsx`
+- Add missing imports: `AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction` from `@/components/ui/alert-dialog`, and `Clock` from `lucide-react`
+- Remove local `User` type redefinition that conflicts with imported type
+- Fix `demanda_reprimida` status comparison (now valid after types update)
+- Fix `updateFila` call: cast status properly
 
-### 2. Improve Disponibilidade Day Selector (`Disponibilidade.tsx`)
-
-- Ensure day labels are clearly `Dom, Seg, Ter, Qua, Qui, Sex, Sáb`
-- Make buttons equal-width, centered, with clear selected/unselected states
-- Add a "flex-wrap" for mobile responsiveness
-- Show full day names in the availability cards display
-
-### 3. Enhanced Waiting Queue (`FilaEspera.tsx`)
-
-Major rewrite to add:
-
-- **Add patient to queue dialog** with fields: patient search/name, unit, professional, priority, notes
-- **Filters** by unit, professional, priority, status
-- **Auto-slot suggestion**: when a cancellation occurs, check queue for compatible patients and show suggestion
-- **Status options**: aguardando, encaixado, chamado, em_atendimento, atendido, falta
-- **Edit/remove** buttons for queue entries
-- Permission check: only master, gestao, coordenador, recepcao can manage
-
-### 4. Add `FilaEspera` Enhanced Type (`types/index.ts`)
-
-Add fields to `FilaEspera`:
-
-- `profissionalId` (desired professional)
-- `observacoes` (notes)
-- `criadoPor` (who added)
-
-### 5. Auto-Slot Logic (`DataContext.tsx`)
-
-Add a function `checkFilaForSlot(profissionalId, unidadeId, data, hora)` that:
-
-- Searches the queue for patients matching the professional/unit
-- Returns matching candidates sorted by priority then arrival time
-- Provides `encaixarDaFila(filaId, agendamentoData)` to move from queue to appointment
-
-### 6. Configuracoes Improvements (`Configuracoes.tsx`)
-
-- Make WhatsApp settings persist in DataContext state (new `configuracoes` state object)
-- Add save functionality for all settings
-- Make Google Calendar section show connection status
-- Add toggle for auto-slot mode (automatic vs. assisted)
-
-### 7. DataContext Enhancements
-
-- Add `configuracoes` state for system settings (WhatsApp, Google, auto-slot mode)
-- Add `cancelAgendamento` function that triggers queue check
-- Add `getFilaCandidatos` function for auto-slot suggestions
+### 5. Clinical Flow Corrections (code logic only)
+- **Import (demanda reprimida)**: Ensure `handleImportSave` in `FilaEspera.tsx` inserts into `fila_espera` with `status: "demanda_reprimida"` and `origem_cadastro: "demanda_reprimida"`
+- **Arrival confirmation**: `Agenda.tsx` `handleStatusChange` already sets `aguardando_triagem` — verify `updateAgendamento` properly maps `horaChegada` to `hora_chegada` in DB (fix in DataContext)
+- **Triage listing**: `Triagem.tsx` already filters by `aguardando_triagem` from agendamentos — this is correct per the rules
+- **Triage completion**: Verify save logic updates agendamento to `aguardando_enfermagem` or `apto_atendimento`
 
 ## Technical Details
 
-### Files to modify:
+- Total files modified: 4 (`types/index.ts`, `DataContext.tsx`, `Agenda.tsx`, `FilaEspera.tsx`)
+- No database changes
+- No new features — only type fixes and field mapping corrections
+- All changes preserve existing functionality
 
-1. `**src/types/index.ts**` -- Add `profissionalId`, `observacoes`, `criadoPor` to `FilaEspera`; add `Configuracao` interface
-2. `**src/contexts/DataContext.tsx**` -- Add configuracoes state, auto-slot functions, fix availability logic
-3. `**src/pages/AgendarOnline.tsx**` -- Fix professional filtering (remove `f.unidadeId` constraint)
-4. `**src/pages/painel/Disponibilidade.tsx**` -- Improve day selector layout, add flex-wrap, center buttons
-5. `**src/pages/painel/FilaEspera.tsx**` -- Complete rewrite with add dialog, filters, auto-slot, edit/remove
-6. `**src/pages/painel/Configuracoes.tsx**` -- Wire up settings to state, add save logic
-7. `**src/data/mockData.ts**` -- Update mock FilaEspera entries with new fields
-
-### Google Calendar & WhatsApp Note
-
-Real Google Calendar OAuth and WhatsApp API integration require a backend (Supabase/Lovable Cloud) for secure token storage and API calls. The current implementation will prepare the UI and settings infrastructure. To make these integrations functional, you would need to activate Lovable Cloud and create edge functions for the API calls. **Solicitação adicional**
-
-Além das correções propostas, precisamos evoluir o sistema para um ambiente de produção.
-
-Atualmente os dados estão apenas em React state (memória), o que não é adequado para um sistema real de agendamento.
-
-Solicito implementar persistência de dados utilizando Lovable Cloud ou Supabase para armazenar:
-
-- pacientes
-- agendamentos
-- profissionais
-- unidades
-- salas
-- disponibilidade
-- fila de espera
-- configurações do sistema
-
-Assim garantimos que:
-
-- os dados não sejam perdidos
-- o agendamento público e o painel administrativo estejam sincronizados
-- as integrações com Google Agenda e WhatsApp possam funcionar corretamente.
