@@ -118,7 +118,6 @@ export interface Paciente {
   descricaoClinica: string;
   cid: string;
   criadoEm: string;
-  especialidadeDestino?: string;
 }
 
 export interface Agendamento {
@@ -143,10 +142,7 @@ export interface Agendamento {
     | "remarcado"
     | "em_atendimento"
     | "aguardando_triagem"
-    | "aguardando_atendimento"
-    | "aguardando_enfermagem"
-    | "apto_atendimento";
-  horaChegada?: string;
+    | "aguardando_atendimento";
   tipo: string;
   observacoes: string;
   origem: "online" | "recepcao" | "profissional";
@@ -171,7 +167,7 @@ export interface FilaEspera {
   setor: string;
   profissionalId?: string;
   prioridade: "normal" | "alta" | "urgente";
-  status: "aguardando" | "aguardando_triagem" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado" | "demanda_reprimida";
+  status: "aguardando" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;
@@ -260,12 +256,6 @@ export interface Configuracoes {
     smtpPort: number;
   };
   canalNotificacao?: "webhook" | "gmail" | "ambos";
-  portalPaciente?: {
-    permitirPortal: boolean;
-    enviarSenhaAutomaticamente: boolean;
-    enviarLinkAcesso: boolean;
-    pacientesBloqueados: string[];
-  };
 }
 
 export interface AuditLog {
