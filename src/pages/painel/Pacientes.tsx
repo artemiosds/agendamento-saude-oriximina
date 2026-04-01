@@ -1,1113 +1,251 @@
-import React, { useState, useMemo } from "react"; // refreshed
+import React, { useState, useEffect, useMemo } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import { useWebhookNotify } from "@/hooks/useWebhookNotify";
-import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";
-import { Card, CardContent } from "@/components/ui/card";
+import { Agendamento, Paciente, User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer } from "lucide-react";
-import ContactActionButton from "@/components/ContactActionButton";
-import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
+import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, FileText, User as UserIcon, MapPin, Building2, ArrowRight, RefreshCw, Filter, Search, ChevronLeft, ChevronRight, Plus, Eye, Download, Upload, Paperclip, Phone, Mail, Home, Users, Info, File, FilePlus, FileMinus, FileText as FileTextIcon } from "lucide-react";
+import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { validatePacienteFields } from "@/lib/validation";
 import { supabase } from "@/integrations/supabase/client";
-import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
-import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
-import { useNavigate } from "react-router-dom";
-import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
-import { openPrintDocument } from "@/lib/printLayout";
 
-const Pacientes: React.FC = () => {
-  const navigate = useNavigate();
-  const {
-    pacientes,
-    addPaciente,
-    updatePaciente,
-    agendamentos,
-    fila,
-    addToFila,
-    unidades,
-    funcionarios,
-    logAction,
-    refreshPacientes,
-    refreshFila,
-  } = useData();
-  const { user, hasPermission } = useAuth();
-  const { notify } = useWebhookNotify();
-  const { ensurePortalAccess } = useEnsurePortalAccess();
-  const { can } = usePermissions();
-  const isProfissional = user?.role === "profissional";
-  const canDelete = can("pacientes", "can_delete");
-  const canImportCSV = can("pacientes", "can_create");
-  const canAddToFila = can("fila", "can_create");
-  const canCreate = can("pacientes", "can_create");
-  const canEdit = can("pacientes", "can_edit");
-  const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
-  const profissionais = profissionaisVisiveis;
+const statusColors: Record<string, string> = {
+  pendente: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  confirmado: "bg-blue-100 text-blue-800 border-blue-200",
+  confirmado_chegada: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  cancelado: "bg-red-100 text-red-800 border-red-200",
+  concluido: "bg-green-100 text-green-800 border-green-200",
+  falta: "bg-gray-100 text-gray-800 border-gray-200",
+  atraso: "bg-orange-100 text-orange-800 border-orange-200",
+  remarcado: "bg-purple-100 text-purple-800 border-purple-200",
+  em_atendimento: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  aguardando_triagem: "bg-teal-100 text-teal-800 border-teal-200",
+  aguardando_atendimento: "bg-sky-100 text-sky-800 border-sky-200",
+  aguardando_enfermagem: "bg-rose-100 text-rose-800 border-rose-200",
+  apto_atendimento: "bg-emerald-100 text-emerald-800 border-emerald-200",
+};
 
-  const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [detalheOpen, setDetalheOpen] = useState(false);
-  const [detalhePaciente, setDetalhePaciente] = useState<(typeof pacientes)[0] | null>(null);
+export const Pacientes = () => {
+  const { agendamentos, pacientes, unidades, funcionarios, user } = useData();
+  const { user: authUser } = useAuth();
+  const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterUnit, setFilterUnit] = useState<string>("all");
+  const [filterProf, setFilterProf] = useState<string>("all");
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Filter state
-  const [filterFila, setFilterFila] = useState("all");
-  const [sortBy, setSortBy] = useState("nome");
-
-  // Fila dialog
-  const [filaDialogOpen, setFilaDialogOpen] = useState(false);
-  const [filaPaciente, setFilaPaciente] = useState<(typeof pacientes)[0] | null>(null);
-  const [filaForm, setFilaForm] = useState({
-    unidadeId: "",
-    profissionalId: "",
-    prioridade: "normal",
-    observacoes: "",
-    descricaoClinica: "",
-    cid: "",
-  });
-  const [savingFila, setSavingFila] = useState(false);
-
-  // Set of patient IDs currently in active queue
-  const pacientesNaFila = useMemo(() => {
-    const activeStatuses = ["aguardando", "chamado", "em_atendimento", "encaixado"];
-    return new Set(fila.filter((f) => activeStatuses.includes(f.status)).map((f) => f.pacienteId));
-  }, [fila]);
-
-  // Set of patient IDs from demanda reprimida
-  const pacientesDemandaReprimida = useMemo(() => {
-    return new Set(fila.filter((f) => f.origemCadastro === "demanda_reprimida").map((f) => f.pacienteId));
-  }, [fila]);
-
-  // Get fila entry for a patient (for sorting)
-  const filaEntryMap = useMemo(() => {
-    const map = new Map<string, (typeof fila)[0]>();
-    const activeStatuses = ["aguardando", "chamado", "em_atendimento", "encaixado"];
-    fila
-      .filter((f) => activeStatuses.includes(f.status))
-      .forEach((f) => {
-        if (!map.has(f.pacienteId)) map.set(f.pacienteId, f);
-      });
-    return map;
-  }, [fila]);
-
-  // Profissionais só veem pacientes vinculados aos seus agendamentos
-  const visiblePacientes = useMemo(() => {
-    if (!isProfissional || !user) return pacientes;
-    const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
-    return pacientes.filter((p) => myPacienteIds.has(p.id));
-  }, [pacientes, agendamentos, isProfissional, user]);
-
-  const filtered = useMemo(() => {
-    let list = visiblePacientes.filter(
-      (p) =>
-        p.nome.toLowerCase().includes(search.toLowerCase()) ||
-        p.cpf.includes(search) ||
-        p.telefone.includes(search) ||
-        (p.cns && p.cns.includes(search)),
-    );
-
-    // Filter by fila
-    if (filterFila === "fila") {
-      list = list.filter((p) => pacientesNaFila.has(p.id));
-    } else if (filterFila === "sem_fila") {
-      list = list.filter((p) => !pacientesNaFila.has(p.id));
-    } else if (filterFila === "demanda_reprimida") {
-      list = list.filter((p) => pacientesDemandaReprimida.has(p.id));
-    }
-
-    // Sort
-    if (sortBy === "nome") {
-      list.sort((a, b) => a.nome.localeCompare(b.nome));
-    } else if (sortBy === "data_fila") {
-      list.sort((a, b) => {
-        const fa = filaEntryMap.get(a.id);
-        const fb = filaEntryMap.get(b.id);
-        if (fa && !fb) return -1;
-        if (!fa && fb) return 1;
-        if (fa && fb) return fa.horaChegada.localeCompare(fb.horaChegada);
-        return a.nome.localeCompare(b.nome);
-      });
-    } else if (sortBy === "prioridade") {
-      const prioOrder: Record<string, number> = {
-        urgente: 0,
-        gestante: 1,
-        idoso: 2,
-        alta: 3,
-        pcd: 4,
-        crianca: 5,
-        normal: 6,
-      };
-      list.sort((a, b) => {
-        const fa = filaEntryMap.get(a.id);
-        const fb = filaEntryMap.get(b.id);
-        const pa = fa ? (prioOrder[fa.prioridade] ?? 6) : 99;
-        const pb = fb ? (prioOrder[fb.prioridade] ?? 6) : 99;
-        return pa - pb;
-      });
-    }
-
-    return list;
-  }, [visiblePacientes, search, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
-
-  const openNew = () => {
-    setEditId(null);
-    setForm(emptyPacienteForm);
-    setErrors({});
-    setDialogOpen(true);
-  };
-
-  const openEdit = (p: (typeof pacientes)[0]) => {
-    setEditId(p.id);
-    setForm({
-      ...emptyPacienteForm,
-      nome: p.nome,
-      cpf: p.cpf,
-      cns: p.cns || "",
-      nomeMae: p.nomeMae || "",
-      telefone: p.telefone,
-      dataNascimento: p.dataNascimento,
-      email: p.email,
-      endereco: p.endereco || "",
-      descricaoClinica: p.descricaoClinica || "",
-      cid: p.cid || "",
-      especialidadeDestino: (p as any).especialidade_destino || "",
-      municipio: (p as any).municipio || "",
-      menorIdade: (p as any).menor_idade || false,
-      nomeResponsavel: (p as any).nome_responsavel || "",
-      cpfResponsavel: (p as any).cpf_responsavel || "",
-      ubsOrigem: (p as any).ubs_origem || "",
-      profissionalSolicitante: (p as any).profissional_solicitante || "",
-      tipoEncaminhamento: (p as any).tipo_encaminhamento || "",
-      diagnosticoResumido: (p as any).diagnostico_resumido || "",
-      justificativa: (p as any).justificativa || "",
-      dataEncaminhamento: (p as any).data_encaminhamento || "",
-      documentoUrl: (p as any).documento_url || "",
-      tipoCondicao: (p as any).tipo_condicao || "",
-      mobilidade: (p as any).mobilidade || "",
-      usaDispositivo: (p as any).usa_dispositivo || false,
-      tipoDispositivo: (p as any).tipo_dispositivo || "",
-      comunicacao: (p as any).comunicacao || "",
-      comportamento: (p as any).comportamento || "",
-      usaEquipamentos: (p as any).usa_equipamentos || false,
-      equipamentos: (p as any).equipamentos || [],
-      observacaoEquipamentos: (p as any).observacao_equipamentos || "",
-      outroServicoSus: (p as any).outro_servico_sus || false,
-      transporte: (p as any).transporte || "",
-      turnoPreferido: (p as any).turno_preferido || "",
+  const filteredPacientes = useMemo(() => {
+    return pacientes.filter((p) => {
+      const matchesSearch = searchTerm === "" || 
+        p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.cpf.includes(searchTerm.replace(/\D/g, "")) ||
+        p.cns.includes(searchTerm.replace(/\D/g, ""));
+      const matchesUnit = filterUnit === "all" || unidades.find(u => u.id === p.unidadeId)?.nome === filterUnit;
+      return matchesSearch && matchesUnit;
     });
-    setErrors({});
-    setDialogOpen(true);
-  };
+  }, [pacientes, searchTerm, filterUnit, unidades]);
 
-  const handleSave = async () => {
-    const newErrors: Record<string, string> = {};
-    if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
-    if (!form.nomeMae.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
-    if (!form.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
-    if (!form.cpf.trim()) newErrors.cpf = "CPF é obrigatório";
-    if (!form.telefone.trim()) newErrors.telefone = "Telefone é obrigatório";
-    if (!form.municipio) newErrors.municipio = "Município é obrigatório";
-    if (!form.especialidadeDestino) newErrors.especialidadeDestino = "Especialidade destino é obrigatória";
-    if (!form.ubsOrigem) newErrors.ubsOrigem = "UBS origem é obrigatória";
-    if (!form.profissionalSolicitante.trim())
-      newErrors.profissionalSolicitante = "Profissional solicitante é obrigatório";
-    if (!form.cid.trim()) newErrors.cid = "CID é obrigatório";
-    if (!form.justificativa.trim()) newErrors.justificativa = "Justificativa clínica é obrigatória";
-    if (!form.documentoUrl && !editId) newErrors.documentoUrl = "Documento de encaminhamento é obrigatório";
-    if (form.menorIdade && !form.nomeResponsavel.trim())
-      newErrors.nomeResponsavel = "Nome do responsável é obrigatório";
-    if (form.menorIdade && !form.cpfResponsavel.trim()) newErrors.cpfResponsavel = "CPF do responsável é obrigatório";
+  const latestAg = useMemo(() => {
+    if (!selectedPaciente) return null;
+    const latest = agendamentos
+      .filter((a) => a.pacienteId === selectedPaciente.id && a.status !== "cancelado" && a.status !== "falta")
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())[0];
+    return latest;
+  }, [agendamentos, selectedPaciente]);
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      toast.error(Object.values(newErrors)[0]);
-      return;
-    }
-    setErrors({});
-    setSaving(true);
-
-    const dbFields: any = {
-      nome: form.nome,
-      cpf: form.cpf,
-      cns: form.cns,
-      nome_mae: form.nomeMae,
-      telefone: form.telefone,
-      data_nascimento: form.dataNascimento,
-      email: form.email,
-      endereco: form.endereco,
-      descricao_clinica: form.descricaoClinica || form.diagnosticoResumido,
-      cid: form.cid,
-      especialidade_destino: form.especialidadeDestino,
-      municipio: form.municipio,
-      menor_idade: form.menorIdade,
-      nome_responsavel: form.nomeResponsavel,
-      cpf_responsavel: form.cpfResponsavel,
-      ubs_origem: form.ubsOrigem,
-      profissional_solicitante: form.profissionalSolicitante,
-      tipo_encaminhamento: form.tipoEncaminhamento,
-      diagnostico_resumido: form.diagnosticoResumido,
-      justificativa: form.justificativa,
-      data_encaminhamento: form.dataEncaminhamento,
-      documento_url: form.documentoUrl,
-      tipo_condicao: form.tipoCondicao,
-      mobilidade: form.mobilidade,
-      usa_dispositivo: form.usaDispositivo,
-      tipo_dispositivo: form.tipoDispositivo,
-      comunicacao: form.comunicacao,
-      comportamento: form.comportamento,
-      usa_equipamentos: form.usaEquipamentos,
-      equipamentos: form.equipamentos,
-      observacao_equipamentos: form.observacaoEquipamentos,
-      outro_servico_sus: form.outroServicoSus,
-      transporte: form.transporte,
-      turno_preferido: form.turnoPreferido,
-    };
-
+  const handlePacienteClick = async (pacienteId: string) => {
     try {
-      if (editId) {
-        await supabase.from("pacientes").update(dbFields).eq("id", editId);
-        await refreshPacientes();
-        toast.success("Paciente atualizado!");
-      } else {
-        // === DUPLICATE DETECTION ===
-        const duplicateChecks: string[] = [];
-
-        // Check by CPF
-        if (form.cpf.trim()) {
-          const { data: cpfMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("cpf", form.cpf.trim())
-            .limit(1);
-          if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
-        }
-
-        // Check by CNS
-        if (form.cns.trim()) {
-          const { data: cnsMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("cns", form.cns.trim())
-            .limit(1);
-          if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
-        }
-
-        // Check by name + DOB + mother name
-        if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
-          const { data: nameMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("nome", form.nome.trim())
-            .eq("data_nascimento", form.dataNascimento)
-            .eq("nome_mae", form.nomeMae.trim())
-            .limit(1);
-          if (nameMatch && nameMatch.length > 0)
-            duplicateChecks.push(`Nome + Data Nasc. + Mãe já cadastrado: ${nameMatch[0].nome}`);
-        }
-
-        if (duplicateChecks.length > 0) {
-          const confirmed = window.confirm(
-            `⚠️ Possível duplicidade detectada:\n\n${duplicateChecks.join("\n")}\n\nDeseja continuar com o cadastro mesmo assim?`,
-          );
-          if (!confirmed) {
-            setSaving(false);
-            return;
-          }
-        }
-
-        const id = `p${Date.now()}`;
-        await supabase.from("pacientes").insert({ id, ...dbFields });
-
-        // Auto-insert into fila_espera with status "aguardando" (AGUARDANDO TRIAGEM)
-        const filaId = `f${Date.now()}`;
-        const defaultUnidade = unidades.length === 1 ? unidades[0].id : user?.unidadeId || unidades[0]?.id || "";
-        await supabase.from("fila_espera").insert({
-          id: filaId,
-          paciente_id: id,
-          paciente_nome: form.nome,
-          unidade_id: defaultUnidade,
-          profissional_id: "",
-          setor: "",
-          prioridade: "normal",
-          prioridade_perfil: "normal",
-          status: "aguardando",
-          posicao: fila.length + 1,
-          hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-          criado_por: user?.id || "sistema",
-          observacoes: "",
-          descricao_clinica: form.diagnosticoResumido || form.descricaoClinica || "",
-          cid: form.cid,
-          data_solicitacao_original: form.dataEncaminhamento || new Date().toISOString().split("T")[0],
-          origem_cadastro: "normal",
-          especialidade_destino: form.especialidadeDestino,
-        });
-
-        await logAction({
-          acao: "criar",
-          entidade: "fila_espera",
-          entidadeId: filaId,
-          detalhes: {
-            pacienteNome: form.nome,
-            especialidade: form.especialidadeDestino,
-            origem: "cadastro_automatico",
-          },
-          user,
-          modulo: "fila_espera",
-        });
-
-        await refreshPacientes();
-        await refreshFila();
-        toast.success("Paciente cadastrado e adicionado à fila de espera!");
-      }
-      setDialogOpen(false);
-    } catch {
-      toast.error("Erro ao salvar paciente.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (p: (typeof pacientes)[0]) => {
-    if (!can("pacientes", "can_delete")) {
-      toast.error("Sem permissão para excluir.");
-      return;
-    }
-    const activeLinks = agendamentos.filter(
-      (a) => a.pacienteId === p.id && !["cancelado", "concluido", "falta"].includes(a.status),
-    );
-    if (activeLinks.length > 0) {
-      toast.error(`Não é possível excluir: ${p.nome} possui ${activeLinks.length} agendamento(s) ativo(s).`);
-      return;
-    }
-
-    try {
-      await (supabase as any).from("pacientes").delete().eq("id", p.id);
-      await logAction({
-        acao: "excluir",
-        entidade: "paciente",
-        entidadeId: p.id,
-        detalhes: { nome: p.nome, cpf: p.cpf },
-        user,
-      });
-      await refreshPacientes();
-      toast.success("Paciente excluído!");
+      const paciente = pacientes.find(p => p.id === pacienteId);
+      if (!paciente) return;
+      setSelectedPaciente(paciente);
     } catch (err) {
-      console.error("Error deleting patient:", err);
-      toast.error("Erro ao excluir paciente.");
+      toast.error("Erro ao carregar paciente");
     }
   };
 
-  const openFilaDialog = (p: (typeof pacientes)[0]) => {
-    setFilaPaciente(p);
-    setFilaForm({
-      unidadeId: "",
-      profissionalId: "",
-      prioridade: "normal",
-      observacoes: "",
-      descricaoClinica: "",
-      cid: "",
-    });
-    setFilaDialogOpen(true);
-  };
-
-  const handleAddToFila = async () => {
-    if (!filaPaciente || !filaForm.unidadeId) {
-      toast.error("Selecione a unidade.");
-      return;
-    }
-    setSavingFila(true);
+  const handleAgendamentoClick = async (agendamentoId: string) => {
     try {
-      const newId = `f${Date.now()}`;
-      await addToFila({
-        id: newId,
-        pacienteId: filaPaciente.id,
-        pacienteNome: filaPaciente.nome,
-        unidadeId: filaForm.unidadeId,
-        profissionalId: filaForm.profissionalId,
-        setor: "",
-        prioridade: filaForm.prioridade as any,
-        status: "aguardando",
-        posicao: fila.length + 1,
-        horaChegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-        criadoPor: user?.id || "sistema",
-        observacoes: filaForm.observacoes,
-        descricaoClinica: filaForm.descricaoClinica,
-        cid: filaForm.cid,
-      });
-
-      const unidade = unidades.find((u) => u.id === filaForm.unidadeId);
-      const prof = filaForm.profissionalId ? funcionarios.find((f) => f.id === filaForm.profissionalId) : null;
-
-      // Ensure portal access
-      ensurePortalAccess({
-        pacienteId: filaPaciente.id,
-        contexto: "fila",
-        unidade: unidade?.nome || "",
-        profissional: prof?.nome || "",
-        posicaoFila: fila.length + 1,
-      })
-        .then((result) => {
-          if (result.created)
-            toast.info(
-              `Acesso ao portal criado para ${filaPaciente!.nome}. ${result.emailSent ? "E-mail enviado." : ""}`,
-            );
-        })
-        .catch(() => {});
-
-      await notify({
-        evento: "fila_entrada",
-        paciente_nome: filaPaciente.nome,
-        telefone: filaPaciente.telefone,
-        email: filaPaciente.email,
-        data_consulta: new Date().toISOString().split("T")[0],
-        hora_consulta: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-        unidade: unidade?.nome || "",
-        profissional: prof?.nome || "",
-        tipo_atendimento: "Fila de Espera",
-        status_agendamento: "aguardando",
-        id_agendamento: "",
-      });
-
-      await logAction({
-        acao: "criar",
-        entidade: "fila_espera",
-        entidadeId: newId,
-        detalhes: {
-          pacienteNome: filaPaciente.nome,
-          unidade: unidade?.nome,
-          origem: "tela_pacientes",
-          descricaoClinica: filaForm.descricaoClinica || undefined,
-          cid: filaForm.cid || undefined,
-        },
-        user,
-        modulo: "fila_espera",
-      });
-
-      toast.success(`${filaPaciente.nome} adicionado à fila de espera!`);
-      setFilaDialogOpen(false);
-    } catch {
-      toast.error("Erro ao adicionar à fila.");
-    } finally {
-      setSavingFila(false);
-    }
-  };
-
-  const handlePrintFicha = async (p: (typeof pacientes)[0]) => {
-    try {
-      // Fetch latest appointment
-      const { data: latestAg } = await supabase
-        .from("agendamentos")
-        .select("id, unidade_id, profissional_id, data, hora, tipo_atendimento")
-        .eq("paciente_id", p.id)
-        .order("data", { ascending: false })
-        .order("hora", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      // Fetch latest triage record (linked to the latest appointment or just the latest for the patient)
-      let triage: any = null;
-      if (latestAg) {
-        const { data: triageData } = await supabase
-          .from("triage_records")
-          .select("*")
-          .eq("agendamento_id", latestAg.id)
-          .maybeSingle();
-        triage = triageData;
-      }
-
-      const unidade = unidades.find((u) => u.id === (latestAg?.unidade_id || user?.unidadeId));
-      const profissional = funcionarios.find((f) => f.id === (latestAg?.profissional_id || user?.id));
-
-      const html = `
-        <style>
-          .ficha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-          .ficha-section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 15px; }
-          .ficha-section-title { font-weight: 700; font-size: 12px; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; }
-          .vitals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-          .vital-item { border: 1px solid #e2e8f0; padding: 8px; border-radius: 4px; text-align: center; }
-          .vital-label { font-size: 9px; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
-          .vital-value { font-size: 14px; font-weight: 600; color: #1e293b; }
-          .empty-line { border-bottom: 1px solid #cbd5e1; height: 20px; margin-top: 4px; }
-          .evolution-block { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 10px; min-height: 100px; }
-          .evolution-header { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-bottom: 8px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; }
-        </style>
-
-        <div class="ficha-section">
-          <div class="ficha-section-title">Identificação do Paciente</div>
-          <div class="info-grid">
-            <div><div class="info-label">Nome Completo</div><div class="info-value">${p.nome}</div></div>
-            <div><div class="info-label">CPF</div><div class="info-value">${p.cpf || "____________________"}</div></div>
-            <div><div class="info-label">CNS (Cartão SUS)</div><div class="info-value">${p.cns || "____________________"}</div></div>
-            <div><div class="info-label">Data de Nascimento</div><div class="info-value">${p.dataNascimento ? formatarData(p.dataNascimento) : "____/____/____"} (${p.dataNascimento ? calcularIdade(p.dataNascimento) : "__"} anos)</div></div>
-            <div><div class="info-label">Nome da Mãe</div><div class="info-value">${p.nomeMae || "____________________"}</div></div>
-            <div><div class="info-label">Telefone</div><div class="info-value">${p.telefone || "____________________"}</div></div>
-          </div>
-        </div>
-
-        <div class="ficha-grid">
-          <div class="ficha-section">
-            <div class="ficha-section-title">Informações Clínicas</div>
-            <div class="field">
-              <div class="field-label">Prontuário / ID</div>
-              <div class="field-value">${p.id}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">CID-10</div>
-              <div class="field-value">${p.cid || "____________________"}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">Tipo de Atendimento</div>
-              <div class="field-value">${latestAg?.tipo_atendimento || "____________________"}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">Unidade de Origem</div>
-              <div class="field-value">${(p as any).ubs_origem || "____________________"}</div>
-            </div>
-          </div>
-
-          <div class="ficha-section">
-            <div class="ficha-section-title">Atendimento Atual</div>
-            <div class="field">
-              <div class="field-label">Unidade de Atendimento</div>
-              <div class="field-value">${unidade?.nome || "____________________"}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">Data do Atendimento</div>
-              <div class="field-value">${latestAg?.data ? formatarData(latestAg.data) : "____/____/________"}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">Profissional Responsável</div>
-              <div class="field-value">${profissional?.nome || "____________________"}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ficha-section">
-          <div class="ficha-section-title">Sinais Vitais (Triagem)</div>
-          <div class="vitals-grid">
-            <div class="vital-item">
-              <div class="vital-label">P.A. (mmHg)</div>
-              <div class="vital-value">${triage?.pressao_arterial || "____ / ____"}</div>
-            </div>
-            <div class="vital-item">
-              <div class="vital-label">F.C. (bpm)</div>
-              <div class="vital-value">${triage?.frequencia_cardiaca || "________"}</div>
-            </div>
-            <div class="vital-item">
-              <div class="vital-label">Temp. (°C)</div>
-              <div class="vital-value">${triage?.temperatura || "________"}</div>
-            </div>
-            <div class="vital-item">
-              <div class="vital-label">Sat. O2 (%)</div>
-              <div class="vital-value">${triage?.saturacao_oxigenio || "________"}</div>
-            </div>
-            <div class="vital-item">
-              <div class="vital-label">Peso (kg)</div>
-              <div class="vital-value">${triage?.peso || "________"}</div>
-            </div>
-            <div class="vital-item">
-              <div class="vital-label">Altura (cm)</div>
-              <div class="vital-value">${triage?.altura || "________"}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="ficha-section">
-          <div class="ficha-section-title">Encaminhamento / Conduta</div>
-          <div class="info-grid">
-            <div><div class="info-label">Especialidade Destino</div><div class="info-value">${(p as any).especialidade_destino || "____________________"}</div></div>
-            <div><div class="info-label">Unidade Destino</div><div class="info-value">____________________</div></div>
-          </div>
-          <div class="field" style="margin-top: 10px;">
-            <div class="field-label">Observações de Encaminhamento</div>
-            <div class="empty-line"></div>
-            <div class="empty-line"></div>
-          </div>
-        </div>
-
-        <div class="ficha-section">
-          <div class="ficha-section-title">Evolução Clínica</div>
-          <div class="evolution-block">
-            <div class="evolution-header">
-              <span>Data: ____/____/________</span>
-              <span>Profissional: ________________________________</span>
-            </div>
-          </div>
-          <div class="evolution-block">
-            <div class="evolution-header">
-              <span>Data: ____/____/________</span>
-              <span>Profissional: ________________________________</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="signature" style="margin-top: 40px;">
-          <div class="signature-line"></div>
-          <div class="name">${profissional?.nome || "Assinatura do Profissional"}</div>
-          <div class="role">${profissional?.profissao || "CRM / COREN / Registro Profissional"}</div>
-        </div>
-      `;
-
-      openPrintDocument("Ficha Clínica do Paciente", html, {
-        "Paciente": p.nome,
-        "CPF": p.cpf || "N/A",
-        "Unidade": unidade?.nome || "N/A"
-      });
-
-      await logAction({
-        acao: "imprimir",
-        entidade: "paciente",
-        entidadeId: p.id,
-        detalhes: { nome: p.nome, tipo: "ficha_clinica" },
-        user,
-      });
-
-    } catch (error) {
-      console.error("Erro ao gerar ficha clínica:", error);
-      toast.error("Erro ao gerar ficha clínica para impressão.");
+      const agendamento = agendamentos.find(a => a.id === agendamentoId);
+      if (!agendamento) return;
+      // Handle agendamento details
+    } catch (err) {
+      toast.error("Erro ao carregar agendamento");
     }
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
-          <p className="text-muted-foreground text-sm">
-            {visiblePacientes.length} cadastrados
-            {pacientesNaFila.size > 0 && (
-              <span className="ml-2">
-                • <Users className="w-3.5 h-3.5 inline" /> {pacientesNaFila.size} na fila
-              </span>
-            )}
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Pacientes</h1>
+          <p className="text-sm text-gray-500">Gerencie informações e histórico de pacientes</p>
         </div>
-        <div className="flex gap-2">
-          {canImportCSV && (
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <FileDown className="w-4 h-4 mr-2" /> Importar CSV
-            </Button>
-          )}
-          {canCreate && (
-            <Button onClick={openNew} className="gradient-primary text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" /> Novo Paciente
-            </Button>
-          )}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setSelectedPaciente(null)}>
+            <RefreshCw className="w-4 h-4 mr-2" /> Limpar Seleção
+          </Button>
         </div>
       </div>
 
-      {/* Patient create/edit dialog */}
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setErrors({});
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle className="font-display">{editId ? "Editar" : "Cadastrar"} Paciente</DialogTitle>
-          </DialogHeader>
-          <CadastroPacienteForm
-            form={form}
-            onChange={setForm}
-            onSave={handleSave}
-            saving={saving}
-            isEdit={!!editId}
-            errors={errors}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Add to queue dialog */}
-      <Dialog open={filaDialogOpen} onOpenChange={setFilaDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display">Adicionar à Fila de Espera</DialogTitle>
-          </DialogHeader>
-          {filaPaciente && (
-            <div className="space-y-4">
-              <div className="p-3 rounded-lg bg-muted/50">
-                <p className="font-semibold text-foreground">{filaPaciente.nome}</p>
-                <p className="text-sm text-muted-foreground">
-                  {filaPaciente.telefone} • {filaPaciente.email}
-                </p>
-              </div>
-              <div>
-                <Label>Unidade *</Label>
-                <Select value={filaForm.unidadeId} onValueChange={(v) => setFilaForm((p) => ({ ...p, unidadeId: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unidadesVisiveis.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Profissional (opcional)</Label>
-                <Select
-                  value={filaForm.profissionalId || "none"}
-                  onValueChange={(v) => setFilaForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Qualquer</SelectItem>
-                    {profissionais.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                        {p.profissao ? ` — ${p.profissao}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Prioridade</Label>
-                <Select
-                  value={filaForm.prioridade}
-                  onValueChange={(v) => setFilaForm((p) => ({ ...p, prioridade: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="gestante">Gestante</SelectItem>
-                    <SelectItem value="idoso">Idoso 60+</SelectItem>
-                    <SelectItem value="urgente">Urgente</SelectItem>
-                    <SelectItem value="crianca">Criança 0-12</SelectItem>
-                    <SelectItem value="pcd">PNE</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Observação Geral</Label>
-                <Input
-                  value={filaForm.observacoes}
-                  onChange={(e) => setFilaForm((p) => ({ ...p, observacoes: e.target.value }))}
-                  placeholder="Observações administrativas..."
-                />
-              </div>
-              <div className="border-t pt-3 mt-1">
-                <p className="text-sm font-semibold text-foreground mb-2">Informações Clínicas</p>
-                <div className="space-y-3">
-                  <div>
-                    <Label>Descrição Clínica</Label>
-                    <Input
-                      value={filaForm.descricaoClinica}
-                      onChange={(e) => setFilaForm((p) => ({ ...p, descricaoClinica: e.target.value }))}
-                      placeholder="Motivo de espera / queixa principal..."
-                    />
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Buscar paciente por nome, CPF ou CNS..."
+                className="pl-3 pr-3 py-2 border rounded-md text-sm w-full md:w-64"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              <Select value={filterUnit} onValueChange={setFilterUnit}>
+                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {unidades.map((u) => <SelectItem key={u.id} value={u.nome}>{u.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredPacientes.map((p) => (
+              <div
+                key={p.id}
+                className="cursor-pointer group p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={() => handlePacienteClick(p.id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">{p.nome}</div>
+                    <div className="text-sm text-gray-500">
+                      {p.cpf && <span className="mr-2">CPF: {p.cpf}</span>}
+                      {p.cns && <span className="mr-2">CNS: {p.cns}</span>}
+                    </div>
                   </div>
-                  <div>
-                    <Label>CID (opcional)</Label>
-                    <Input
-                      value={filaForm.cid}
-                      onChange={(e) => setFilaForm((p) => ({ ...p, cid: e.target.value }))}
-                      placeholder="Ex: F41.1"
-                    />
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ArrowRight className="w-5 h-5 text-gray-400" />
                   </div>
                 </div>
               </div>
-              <Button
-                onClick={handleAddToFila}
-                className="w-full gradient-primary text-primary-foreground"
-                disabled={savingFila}
-              >
-                {savingFila ? "Adicionando..." : "Adicionar à Fila"}
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedPaciente && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold">Informações do Paciente</CardTitle>
+                <p className="text-sm text-gray-500">Dados pessoais e histórico de atendimentos</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setSelectedPaciente(null)}>
+                <XCircle className="w-4 h-4 mr-1" /> Fechar
               </Button>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="field-label">Nome Completo</div>
+                <div className="field-value">{selectedPaciente.nome}</div>
+              </div>
+              <div>
+                <div className="field-label">CPF</div>
+                <div className="field-value">{selectedPaciente.cpf || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">CNS</div>
+                <div className="field-value">{selectedPaciente.cns || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Nome da Mãe</div>
+                <div className="field-value">{selectedPaciente.nomeMae || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Data de Nascimento</div>
+                <div className="field-value">{selectedPaciente.dataNascimento ? format(new Date(selectedPaciente.dataNascimento), "dd/MM/yyyy") : "____/____/________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Telefone</div>
+                <div className="field-value">{selectedPaciente.telefone || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">E-mail</div>
+                <div className="field-value">{selectedPaciente.email || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Endereço</div>
+                <div className="field-value">{selectedPaciente.endereco || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Observações</div>
+                <div className="field-value">{selectedPaciente.observacoes || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">Descrição Clínica</div>
+                <div className="field-value">{selectedPaciente.descricaoClinica || "____________________"}</div>
+              </div>
+              <div>
+                <div className="field-label">CID</div>
+                <div className="field-value">{selectedPaciente.cid || "____________________"}</div>
+              </div>
+            </div>
 
-      {/* Search + Filters */}
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome, CPF, CNS ou telefone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={filterFila} onValueChange={setFilterFila}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Filtrar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="fila">Na Fila de Espera</SelectItem>
-            <SelectItem value="demanda_reprimida">Demanda Reprimida</SelectItem>
-            <SelectItem value="sem_fila">Sem fila</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Ordenar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="nome">Nome A-Z</SelectItem>
-            <SelectItem value="data_fila">Data entrada fila</SelectItem>
-            <SelectItem value="prioridade">Prioridade fila</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filtered.map((p) => {
-          const naFila = pacientesNaFila.has(p.id);
-          const filaEntry = filaEntryMap.get(p.id);
-
-          return (
-            <Card key={p.id} className="shadow-card border-0 hover:shadow-elevated transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-foreground">{p.nome}</h3>
-                      {naFila && (
-                        <Badge
-                          variant="outline"
-                          className="bg-warning/10 text-warning border-warning/30 text-[10px] px-1.5 py-0"
-                        >
-                          <Clock className="w-3 h-3 mr-0.5" /> FILA DE ESPERA
-                        </Badge>
-                      )}
-                      {pacientesDemandaReprimida.has(p.id) && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                        >
-                          <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{p.cpf || "Sem CPF"}</p>
-                    {naFila && filaEntry && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Entrada: {filaEntry.horaChegada} •{" "}
-                        {filaEntry.prioridade !== "normal" ? filaEntry.prioridade : ""}
-                      </p>
-                    )}
+            {latestAg && (
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold mb-4">Último Atendimento</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="field-label">Data do Atendimento</div>
+                    <div className="field-value">{latestAg.data ? format(new Date(latestAg.data), "dd/MM/yyyy") : "____/____/________"}</div>
                   </div>
-                  <div className="flex gap-1">
-                    <ContactActionButton
-                      phone={p.telefone}
-                      patientName={p.nome}
-                      unitName={unidades.find((u) => u.id === (filaEntry?.unidadeId || user?.unidadeId))?.nome}
-                    />
-                    {canAddToFila && !naFila && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-warning"
-                        onClick={() => openFilaDialog(p)}
-                        title="Adicionar à fila"
-                      >
-                        <Users className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() => {
-                        setDetalhePaciente(p);
-                        setDetalheOpen(true);
-                      }}
-                      title="Detalhes"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      onClick={() =>
-                        navigate(`/painel/prontuario?pacienteId=${p.id}&pacienteNome=${encodeURIComponent(p.nome)}`)
-                      }
-                      title="Ver Prontuários"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEdit(p)}>
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    {canDelete && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir paciente?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Excluir {p.nome}? Será verificado se há agendamentos ativos vinculados. Esta ação é
-                              irreversível e será registrada em log.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(p)}
-                              className="bg-destructive text-destructive-foreground"
-                            >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
+                  <div>
+                    <div className="field-label">Horário</div>
+                    <div className="field-value">{latestAg.hora || "____:____"}</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Unidade</div>
+                    <div className="field-value">{unidades.find(u => u.id === latestAg.unidadeId)?.nome || "____________________"}</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Profissional</div>
+                    <div className="field-value">{funcionarios.find(f => f.id === latestAg.profissionalId)?.nome || "____________________"}</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Status</div>
+                    <div className="field-value">
+                      <Badge className={statusColors[latestAg.status] || "bg-gray-100 text-gray-800"}>
+                        {latestAg.status.replace(/_/g, " ")}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="field-label">Tipo de Atendimento</div>
+                    <div className="field-value">{latestAg.tipo || "____________________"}</div>
+                  </div>
+                  <div>
+                    <div className="field-label">Observações</div>
+                    <div className="field-value">{latestAg.observacoes || "____________________"}</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5" />
-                    {p.telefone}
-                  </span>
-                  {p.email && (
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5" />
-                      {p.email}
-                    </span>
-                  )}
-                </div>
-                {(p.descricaoClinica || p.cid) && (
-                  <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
-                    {p.descricaoClinica && <p>🩺 {p.descricaoClinica}</p>}
-                    {p.cid && <p>CID: {p.cid}</p>}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-      {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
-
-      {/* Detalhe Drawer - Paciente */}
-      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Paciente">
-        {detalhePaciente &&
-          (() => {
-            const naFila = pacientesNaFila.has(detalhePaciente.id);
-            const filaEntry = filaEntryMap.get(detalhePaciente.id);
-            const isDemanda = pacientesDemandaReprimida.has(detalhePaciente.id);
-            const totalAg = agendamentos.filter((a) => a.pacienteId === detalhePaciente.id).length;
-            const ultimoAg = agendamentos
-              .filter((a) => a.pacienteId === detalhePaciente.id && a.status === "concluido")
-              .sort((a, b) => b.data.localeCompare(a.data))[0];
-            return (
-              <>
-                <Secao titulo="Dados Pessoais">
-                  <Campo label="Nome" valor={detalhePaciente.nome} />
-                  <Campo label="CPF" valor={detalhePaciente.cpf} />
-                  <Campo label="Cartão SUS / CNS" valor={detalhePaciente.cns} hide />
-                  <Campo label="Nome da Mãe" valor={detalhePaciente.nomeMae} hide />
-                  <Campo
-                    label="Data de Nascimento"
-                    valor={detalhePaciente.dataNascimento ? formatarData(detalhePaciente.dataNascimento) : undefined}
-                    hide
-                  />
-                  <Campo
-                    label="Idade"
-                    valor={detalhePaciente.dataNascimento ? calcularIdade(detalhePaciente.dataNascimento) : undefined}
-                    hide
-                  />
-                </Secao>
-                <Secao titulo="Contato">
-                  <Campo label="Telefone" valor={detalhePaciente.telefone} />
-                  <Campo label="E-mail" valor={detalhePaciente.email} hide />
-                  <Campo label="Endereço" valor={detalhePaciente.endereco} hide />
-                </Secao>
-                {(detalhePaciente.descricaoClinica || detalhePaciente.cid || detalhePaciente.observacoes) && (
-                  <Secao titulo="Informações Clínicas">
-                    <Campo label="CID" valor={detalhePaciente.cid} hide />
-                    <Campo label="Descrição clínica" valor={detalhePaciente.descricaoClinica} hide />
-                    <Campo label="Observações" valor={detalhePaciente.observacoes} hide />
-                  </Secao>
-                )}
-                <Secao titulo="Histórico">
-                  <Campo
-                    label="Data de cadastro"
-                    valor={detalhePaciente.criadoEm ? formatarData(detalhePaciente.criadoEm) : undefined}
-                    hide
-                  />
-                  <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
-                  <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 w-full"
-                    onClick={() => {
-                      setDetalheOpen(false);
-                      navigate(
-                        `/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`,
-                      );
-                    }}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Ver Prontuários Completos
-                  </Button>
-                </Secao>
-                {(naFila || isDemanda) && (
-                  <Secao titulo="Etiquetas">
-                    <div className="flex gap-2 flex-wrap py-1">
-                      {naFila && (
-                        <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
-                          Fila de Espera
-                        </Badge>
-                      )}
-                      {isDemanda && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs"
-                        >
-                          Demanda Reprimida
-                        </Badge>
-                      )}
-                    </div>
-                  </Secao>
-                )}
-              </>
-            );
-          })()}
-      </DetalheDrawer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
-
-export default Pacientes;

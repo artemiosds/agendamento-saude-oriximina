@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Agendamento } from "@/types";
+import { Agendamento, User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +14,7 @@ import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { CalendarioAgenda } from "./CalendarioAgenda";
+import { supabase } from "@/integrations/supabase/client";
 
 const statusColors: Record<string, string> = {
   pendente: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -159,8 +160,8 @@ export const Agenda = () => {
         <CardContent>
           {viewMode === "calendar" ? (
             <CalendarioAgenda
-              selectedDate={selectedDate}
-              onDateChange={(date) => setSelectedDate(date)}
+              selectedDate={selectedDate.toISOString()} // Convert Date to string
+              onDateChange={(date) => setSelectedDate(new Date(date))} // Convert string to Date
               agendamentos={agendamentos}
               bloqueios={bloqueios}
               disponibilidades={disponibilidades}

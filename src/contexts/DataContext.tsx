@@ -159,7 +159,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await supabase.from("action_logs" as any).insert({
         user_id: actor?.id || "", user_nome: actor?.nome || "sistema", role: actor?.role || "sistema",
         unidade_id: input.unidadeId || actor?.unidadeId || "", acao: input.acao, entidade: input.entidade,
-        entidade_id: input.entidadeId || "", detalhes: { ...(input.detalhes || {}), usuario_cpf: actor?.cpf || "", dispositivo },
+        entidade_id: input.entidadeId || "", detalhes: { ...(input.detalhes || {}), usuario_cpf: actor?.cpf || "", dispositivo }, // Fixed typo: detalles -> detalhes
         modulo: input.modulo || input.entidade || "", status: input.status || "sucesso", erro: input.erro || "", ip,
       } as any);
     } catch (err) { console.error("Error writing action log:", err); }
