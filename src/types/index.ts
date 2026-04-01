@@ -143,7 +143,10 @@ export interface Agendamento {
     | "remarcado"
     | "em_atendimento"
     | "aguardando_triagem"
-    | "aguardando_atendimento";
+    | "aguardando_atendimento"
+    | "aguardando_enfermagem"
+    | "apto_atendimento";
+  horaChegada?: string;
   tipo: string;
   observacoes: string;
   origem: "online" | "recepcao" | "profissional";
