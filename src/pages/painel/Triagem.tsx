@@ -217,15 +217,35 @@ const Triagem: React.FC = () => {
     try {
       const novoStatus = encaminharEnfermagem ? "aguardando_enfermagem" : "apto_atendimento"; // Regra 6
 
-      // CORREÇÃO 8: Salvar histórico de triagem
-      await supabase.from("triage_records").upsert({
+      // Save finalized triage record
+      const { data: existing } = await supabase
+        .from("triage_records")
+        .select("id")
+        .eq("agendamento_id", selectedItem.id)
+        .maybeSingle();
+
+      const triagePayload: any = {
         agendamento_id: selectedItem.id,
-        paciente_id: selectedItem.pacienteId,
-        profissional_id: user?.id || "",
-        dados_triagem: form, // Salva o formulário completo como JSON
-        criado_em: new Date().toISOString(),
-        status: "finalizado",
-      });
+        tecnico_id: user?.id || "",
+        peso: form.peso ? parseFloat(form.peso) : null,
+        altura: form.altura ? parseFloat(form.altura) : null,
+        pressao_arterial: form.pressaoArterial || null,
+        temperatura: form.temperatura ? parseFloat(form.temperatura) : null,
+        frequencia_cardiaca: form.frequenciaCardiaca ? parseInt(form.frequenciaCardiaca) : null,
+        saturacao_oxigenio: form.saturacaoOxigenio ? parseInt(form.saturacaoOxigenio) : null,
+        glicemia: form.glicemia ? parseFloat(form.glicemia) : null,
+        imc: (form.peso && form.altura) ? parseFloat((parseFloat(form.peso) / Math.pow(parseFloat(form.altura) / 100, 2)).toFixed(1)) : null,
+        alergias: form.alergias,
+        medicamentos: form.medicamentos,
+        queixa: form.queixaPrincipal || null,
+        confirmado_em: new Date().toISOString(),
+      };
+
+      if (existing?.id) {
+        await supabase.from("triage_records").update(triagePayload).eq("id", existing.id);
+      } else {
+        await supabase.from("triage_records").insert(triagePayload);
+      }
 
       // Atualizar status do agendamento (Regra 6)
       await updateAgendamento(selectedItem.id, { status: novoStatus });

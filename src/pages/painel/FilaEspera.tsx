@@ -255,7 +255,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, { ...form, prioridade: form.prioridade as any });
+      await updateFila(editId, { ...form, prioridade: form.prioridade as FilaEsperaItem["prioridade"], status: form.status as any });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
       refreshFila();

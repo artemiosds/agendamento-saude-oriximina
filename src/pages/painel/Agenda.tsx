@@ -1530,7 +1530,7 @@ const Agenda: React.FC = () => {
               audio: "Áudio",
               outro: "Documento",
             };
-            const anexoUrl = detalheAg.attachment_url || detalheAg.attachmentUrl;
+            const anexoUrl = detalheAg.attachmentUrl;
             return (
               <>
                 <Secao titulo="Paciente">
