@@ -57,47 +57,8 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 
-// Tipos simplificados para o exemplo
-interface Agendamento {
-  id: string;
-  pacienteId: string;
-  pacienteNome: string;
-  unidadeId: string;
-  salaId?: string;
-  setorId?: string;
-  profissionalId: string;
-  profissionalNome: string;
-  data: string;
-  hora: string;
-  status: string;
-  tipo: string;
-  observacoes?: string;
-  origem?: string;
-  googleEventId?: string;
-  syncStatus?: string;
-  criadoEm?: string;
-  criadoPor?: string;
-  hora_chegada?: string;
-  attachment_url?: string;
-  attachmentUrl?: string;
-  attachment_name?: string;
-  attachmentName?: string;
-  attachment_type?: string;
-  attachmentType?: string;
-}
-
-interface Paciente {
-  id: string;
-  nome: string;
-  cpf?: string;
-  cns?: string;
-  telefone?: string;
-  email?: string;
-  dataNascimento?: string;
-  descricaoClinica?: string;
-  cid?: string;
-}
-
+// Use types from DataContext/types
+import type { Agendamento, Paciente } from "@/types";
 interface User {
   id: string;
   role: string;
