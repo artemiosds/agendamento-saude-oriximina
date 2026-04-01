@@ -1,53 +1,32 @@
-"use client";
-
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Agendamento, Paciente, User } from "@/types";
+import { Paciente } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, FileText, User as UserIcon, MapPin, Building2, ArrowRight, RefreshCw, Filter, Search, ChevronLeft, ChevronRight, Plus, Eye, Download, Upload, Paperclip, Phone, Mail, Home, Users, Info, File, FilePlus, FileMinus, FileText as FileTextIcon } from "lucide-react";
-import { format, addDays, subDays, isSameDay, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { ArrowRight, XCircle, Printer, Loader2, Phone, Mail, MapPin, Calendar, FileText, User, Heart, Activity } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
-import { cn } from "@/lib/utils";
-import { BuscaPaciente } from "@/components/BuscaPaciente";
 import FichaImpressao from "@/components/FichaImpressao";
 
-const statusColors: Record<string, string> = {
-  pendente: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  confirmado: "bg-blue-100 text-blue-800 border-blue-200",
-  confirmado_chegada: "bg-indigo-100 text-indigo-800 border-indigo-200",
-  cancelado: "bg-red-100 text-red-800 border-red-200",
-  concluido: "bg-green-100 text-green-800 border-green-200",
-  falta: "bg-gray-100 text-gray-800 border-gray-200",
-  atraso: "bg-orange-100 text-orange-800 border-orange-200",
-  remarcado: "bg-purple-100 text-purple-800 border-purple-200",
-  em_atendimento: "bg-cyan-100 text-cyan-800 border-cyan-200",
-  aguardando_triagem: "bg-teal-100 text-teal-800 border-teal-200",
-  aguardando_atendimento: "bg-sky-100 text-sky-800 border-sky-200",
-  aguardando_enfermagem: "bg-rose-100 text-rose-800 border-rose-200",
-  apto_atendimento: "bg-emerald-100 text-emerald-800 border-emerald-200",
-};
-
-export const Pacientes = () => {
-  const { agendamentos, pacientes, unidades, funcionarios, user } = useData();
-  const { user: authUser } = useAuth();
-  const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
+const Pacientes: React.FC = () => {
+  const { pacientes, unidades, funcionarios } = useData();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterUnit, setFilterUnit] = useState<string>("all");
-  const [filterProf, setFilterProf] = useState<string>("all");
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showPrintView, setShowPrintView] = useState(false);
-  const [printData, setPrintData] = useState<any>(null);
+  const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [printLoading, setPrintLoading] = useState(false);
+  const [printData, setPrintData] = useState<{
+    paciente: any;
+    dadosClinicos: any;
+    sinaisVitais: any;
+    evolucoesClinicas: any[];
+  } | null>(null);
 
   const filteredPacientes = useMemo(() => {
     return pacientes.filter((p) => {
@@ -55,218 +34,310 @@ export const Pacientes = () => {
         p.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.cpf.includes(searchTerm.replace(/\D/g, "")) ||
         p.cns.includes(searchTerm.replace(/\D/g, ""));
-      const matchesUnit = filterUnit === "all" || unidades.find(u => u.id === p.unidadeId)?.nome === filterUnit;
+      const matchesUnit = filterUnit === "all" || p.unidadeId === filterUnit;
       return matchesSearch && matchesUnit;
     });
-  }, [pacientes, searchTerm, filterUnit, unidades]);
-
-  const handlePacienteClick = async (pacienteId: string) => {
-    try {
-      const paciente = pacientes.find(p => p.id === pacienteId);
-      if (!paciente) return;
-      setSelectedPaciente(paciente);
-    } catch (err) {
-      toast.error("Erro ao carregar paciente");
-    }
-  };
+  }, [pacientes, searchTerm, filterUnit]);
 
   const fetchPrintData = useCallback(async (pacienteId: string) => {
+    setPrintLoading(true);
     try {
-      const { data: pacienteData } = await supabase
-        .from("pacientes")
-        .select("*")
-        .eq("id", pacienteId)
-        .single();
+      // Fetch all data in parallel
+      const [
+        pacienteRes,
+        agendamentosRes,
+        triagemRes,
+        prontuariosRes,
+      ] = await Promise.all([
+        supabase.from("pacientes").select("*").eq("id", pacienteId).maybeSingle(),
+        supabase.from("agendamentos").select("*").eq("paciente_id", pacienteId).order("data", { ascending: false }).limit(1),
+        supabase.from("triage_records").select("*").eq("paciente_id", pacienteId).order("confirmado_em", { ascending: false }).limit(1),
+        supabase.from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }).limit(5),
+      ]);
 
-      const { data: agendamentosData } = await supabase
-        .from("agendamentos")
-        .select("*")
-        .eq("paciente_id", pacienteId)
-        .order("data_atendimento", { ascending: false });
+      const pacienteData = pacienteRes.data;
+      const lastAgendamento = agendamentosRes.data?.[0];
+      const lastTriagem = triagemRes.data?.[0];
+      const prontuarios = prontuariosRes.data || [];
 
+      // Get unidade names
+      const unidadeOrigem = lastAgendamento?.unidade_id 
+        ? unidades.find(u => u.id === lastAgendamento.unidade_id)?.nome || ""
+        : "";
+      const unidadeAtendimento = pacienteData?.unidade_id 
+        ? unidades.find(u => u.id === pacienteData.unidade_id)?.nome || ""
+        : "";
+
+      // Format date
+      const formatDate = (d: string) => {
+        if (!d) return "";
+        try {
+          return format(new Date(d + "T12:00:00"), "dd/MM/yyyy");
+        } catch {
+          return d;
+        }
+      };
+
+      // Build print data
       setPrintData({
-        paciente: pacienteData,
-        agendamentos: agendamentosData,
+        paciente: {
+          nomeCompleto: pacienteData?.nome || "",
+          cpf: pacienteData?.cpf || "",
+          cns: pacienteData?.cns || "",
+          dataNascimento: pacienteData?.data_nascimento ? formatDate(pacienteData.data_nascimento) : "",
+          nomeMae: pacienteData?.nome_mae || "",
+          telefone: pacienteData?.telefone || "",
+        },
+        dadosClinicos: {
+          numeroProntuario: lastAgendamento?.id?.substring(0, 8) || "",
+          cid: pacienteData?.cid || lastAgendamento?.cid || "",
+          tipoAtendimento: lastAgendamento?.tipo || "",
+          unidadeOrigem,
+          unidadeAtendimento,
+          dataAtendimento: lastAgendamento?.data ? formatDate(lastAgendamento.data) : "",
+        },
+        sinaisVitais: {
+          pressaoArterial: lastTriagem?.pressao_arterial || "",
+          frequenciaCardiaca: lastTriagem?.frequencia_cardiaca ? String(lastTriagem.frequencia_cardiaca) : "",
+          temperatura: lastTriagem?.temperatura ? String(lastTriagem.temperatura) : "",
+          saturacao: lastTriagem?.saturacao_oxigenio ? String(lastTriagem.saturacao_oxigenio) : "",
+          peso: lastTriagem?.peso ? String(lastTriagem.peso) : "",
+          altura: lastTriagem?.altura ? String(lastTriagem.altura) : "",
+        },
+        evolucoesClinicas: prontuarios.map((p: any) => ({
+          data: p.data_atendimento ? formatDate(p.data_atendimento) : "",
+          observacao: p.evolucao || p.queixa_principal || p.conduta || "",
+          profissionalResponsavel: p.profissional_nome || "",
+        })),
       });
-    } catch (error) {
-      console.error("Error fetching print data:", error);
-      toast.error("Erro ao carregar dados para impressão.");
+
+      setShowPrintPreview(true);
+    } catch (err) {
+      console.error("Error fetching print data:", err);
+      toast.error("Erro ao carregar dados para impressão. Tente novamente.");
+    } finally {
+      setPrintLoading(false);
     }
+  }, [unidades]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
   }, []);
 
-  const handleImprimirFicha = () => {
-    if (selectedPaciente) {
-      fetchPrintData(selectedPaciente.id).then(() => {
-        setShowPrintView(true);
-        setTimeout(() => {
-          window.print();
-          setShowPrintView(false);
-        }, 500);
-      });
+  const handlePrintComplete = useCallback(() => {
+    setShowPrintPreview(false);
+    setPrintData(null);
+  }, []);
+
+  const handlePacienteClick = useCallback((p: Paciente) => {
+    setSelectedPaciente(p);
+  }, []);
+
+  const calcIdade = (dataNasc: string) => {
+    if (!dataNasc) return "";
+    try {
+      const birth = new Date(dataNasc + "T12:00:00");
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return `${age} anos`;
+    } catch {
+      return "";
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pacientes</h1>
-          <p className="text-sm text-gray-500">Gerencie informações e histórico de pacientes</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setSelectedPaciente(null)}>
-            <XCircle className="w-4 h-4 mr-2" /> Limpar Seleção
-          </Button>
+          <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
+          <p className="text-muted-foreground text-sm">{filteredPacientes.length} paciente(s) cadastrado(s)</p>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Buscar paciente por nome, CPF ou CNS..."
-                className="pl-3 pr-3 py-2 border rounded-md text-sm w-full md:w-64"
+      {/* Filters */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Input
+                placeholder="Buscar por nome, CPF ou CNS..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
               />
             </div>
-            <div className="flex flex-wrap gap-2 w-full md:w-auto">
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
-                <SelectTrigger className="w-[140px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {unidades.map((u) => <SelectItem key={u.id} value={u.nome}>{u.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPacientes.map((p) => (
-              <div
-                key={p.id}
-                className="cursor-pointer group p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                onClick={() => handlePacienteClick(p.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-900">{p.nome}</div>
-                    <div className="text-sm text-gray-500">
-                      {p.cpf && <span className="mr-2">CPF: {p.cpf}</span>}
-                      {p.cns && <span className="mr-2">CNS: {p.cns}</span>}
-                    </div>
-                  </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ArrowRight className="w-5 h-5 text-gray-400" />
-                  </div>
-                </div>
-              </div>
-            ))}
+            <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filtrar por unidade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Unidades</SelectItem>
+                {unidades.filter(u => u.ativo).map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
+      {/* Patient List */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {filteredPacientes.map((p) => (
+          <Card
+            key={p.id}
+            className="shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+            onClick={() => handlePacienteClick(p)}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-foreground truncate">{p.nome}</h3>
+                  <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                    {p.cpf && <span>CPF: {p.cpf}</span>}
+                    {p.cns && <span>CNS: {p.cns}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                    {p.telefone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.telefone}</span>}
+                    {p.dataNascimento && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{calcIdade(p.dataNascimento)}</span>}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {filteredPacientes.length === 0 && (
+          <div className="col-span-full text-center py-12 text-muted-foreground">
+            Nenhum paciente encontrado.
+          </div>
+        )}
+      </div>
+
+      {/* Patient Details */}
       {selectedPaciente && (
-        <Card>
-          <CardHeader>
+        <Card className="shadow-card border-0">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold">Informações do Paciente</CardTitle>
-                <p className="text-sm text-gray-500">Dados pessoais e histórico de atendimentos</p>
+                <CardTitle className="text-lg font-display">{selectedPaciente.nome}</CardTitle>
+                <p className="text-sm text-muted-foreground">Informações detalhadas do paciente</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleImprimirFicha}>
-                  <Printer className="w-4 h-4 mr-1" /> Imprimir Ficha
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchPrintData(selectedPaciente.id)}
+                  disabled={printLoading}
+                >
+                  {printLoading ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4 mr-1" />
+                  )}
+                  Imprimir Ficha
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setSelectedPaciente(null)}>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedPaciente(null)}>
                   <XCircle className="w-4 h-4 mr-1" /> Fechar
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="field-label">Nome Completo</div>
-                <div className="field-value">{selectedPaciente.nome}</div>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">CPF</p>
+                <p className="text-sm font-medium">{selectedPaciente.cpf || "—"}</p>
               </div>
-              <div>
-                <div className="field-label">CPF</div>
-                <div className="field-value">{selectedPaciente.cpf || "____________________"}</div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">CNS</p>
+                <p className="text-sm font-medium">{selectedPaciente.cns || "—"}</p>
               </div>
-              <div>
-                <div className="field-label">CNS</div>
-                <div className="field-value">{selectedPaciente.cns || "____________________"}</div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Data de Nascimento</p>
+                <p className="text-sm font-medium">
+                  {selectedPaciente.dataNascimento ? format(new Date(selectedPaciente.dataNascimento + "T12:00:00"), "dd/MM/yyyy") : "—"}
+                </p>
               </div>
-              <div>
-                <div className="field-label">Nome da Mãe</div>
-                <div className="field-value">{selectedPaciente.nomeMae || "____________________"}</div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Nome da Mãe</p>
+                <p className="text-sm font-medium">{selectedPaciente.nomeMae || "—"}</p>
               </div>
-              <div>
-                <div className="field-label">Data de Nascimento</div>
-                <div className="field-value">{selectedPaciente.dataNascimento ? format(new Date(selectedPaciente.dataNascimento), "dd/MM/yyyy") : "____/____/________"}</div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Telefone</p>
+                <p className="text-sm font-medium">{selectedPaciente.telefone || "—"}</p>
               </div>
-              <div>
-                <div className="field-label">Telefone</div>
-                <div className="field-value">{selectedPaciente.telefone || "____________________"}</div>
-              </div>
-              <div>
-                <div className="field-label">E-mail</div>
-                <div className="field-value">{selectedPaciente.email || "____________________"}</div>
-              </div>
-              <div>
-                <div className="field-label">Endereço</div>
-                <div className="field-value">{selectedPaciente.endereco || "____________________"}</div>
-              </div>
-              <div>
-                <div className="field-label">Observações</div>
-                <div className="field-value">{selectedPaciente.observacoes || "____________________"}</div>
-              </div>
-              <div>
-                <div className="field-label">Descrição Clínica</div>
-                <div className="field-value">{selectedPaciente.descricaoClinica || "____________________"}</div>
-              </div>
-              <div>
-                <div className="field-label">CID</div>
-                <div className="field-value">{selectedPaciente.cid || "____________________"}</div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">E-mail</p>
+                <p className="text-sm font-medium">{selectedPaciente.email || "—"}</p>
               </div>
             </div>
+            {(selectedPaciente.descricaoClinica || selectedPaciente.cid || selectedPaciente.observacoes) && (
+              <div className="border-t pt-4 space-y-3">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-primary" /> Informações Clínicas
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {selectedPaciente.cid && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">CID</p>
+                      <p className="text-sm font-medium">{selectedPaciente.cid}</p>
+                    </div>
+                  )}
+                  {selectedPaciente.descricaoClinica && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Descrição Clínica</p>
+                      <p className="text-sm">{selectedPaciente.descricaoClinica}</p>
+                    </div>
+                  )}
+                  {selectedPaciente.observacoes && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Observações</p>
+                      <p className="text-sm">{selectedPaciente.observacoes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
-      {showPrintView && selectedPaciente && printData && (
-        <FichaImpressao
-          paciente={{
-            nomeCompleto: printData.paciente.nome,
-            cpf: printData.paciente.cpf || "",
-            cns: printData.paciente.cns || "",
-            dataNascimento: printData.paciente.dataNascimento || "",
-            nomeMae: printData.paciente.nomeMae || "",
-            telefone: printData.paciente.telefone || "",
-          }}
-          dadosClinicos={{
-            numeroProntuario: "",
-            cid: printData.paciente.cid || "",
-            tipoAtendimento: "",
-            unidadeOrigem: "",
-            unidadeAtendimento: "",
-            dataAtendimento: "",
-          }}
-          sinaisVitais={{
-            pressaoArterial: "",
-            frequenciaCardiaca: "",
-            temperatura: "",
-            saturacao: "",
-            peso: "",
-            altura: "",
-          }}
-          evolucoesClinicas={[]}
-          nomeProfissional={authUser?.nome || ""}
-          perfilProfissional={authUser?.cargo || authUser?.role || ""}
-        />
+
+      {/* Print Preview Overlay */}
+      {showPrintPreview && printData && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card rounded-lg shadow-elevated max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold font-display">Pré-visualização da Ficha</h2>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handlePrint}>
+                  <Printer className="w-4 h-4 mr-1" /> Imprimir
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handlePrintComplete}>
+                  <XCircle className="w-4 h-4 mr-1" /> Fechar
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-gray-100">
+              <div className="bg-white shadow-lg mx-auto max-w-[210mm]">
+                <FichaImpressao
+                  paciente={printData.paciente}
+                  dadosClinicos={printData.dadosClinicos}
+                  sinaisVitais={printData.sinaisVitais}
+                  evolucoesClinicas={printData.evolucoesClinicas}
+                  nomeProfissional={user?.nome || ""}
+                  perfilProfissional={user?.cargo || user?.role || ""}
+                  registroProfissional={user?.tipoConselho && user?.numeroConselho 
+                    ? `${user.tipoConselho} ${user.numeroConselho}${user.ufConselho ? `/${user.ufConselho}` : ""}`
+                    : ""}
+                  onPrintComplete={handlePrintComplete}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
