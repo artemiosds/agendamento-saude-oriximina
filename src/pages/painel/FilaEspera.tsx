@@ -63,12 +63,7 @@ interface FilaEsperaItem {
   tipo_entrada?: string; // Adicionado para a correção
 }
 
-interface User {
-  id: string;
-  unidadeId: string;
-  role: string;
-  nome?: string;
-}
+// User type from AuthContext — not redefined here
 
 interface Unidade {
   id: string;
