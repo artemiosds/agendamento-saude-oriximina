@@ -255,7 +255,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, { ...form, prioridade: (form.prioridade || "normal") as "normal" | "alta" | "urgente", status: (form.status || "aguardando") as any });
+      await updateFila(editId, { ...form, prioridade: (form.prioridade || "normal") as "normal" | "alta" | "urgente", status: (form.status || "aguardando") as any, origemCadastro: (form.origemCadastro || "normal") as "normal" | "demanda_reprimida" });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
       refreshFila();
