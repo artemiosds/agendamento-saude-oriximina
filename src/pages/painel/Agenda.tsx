@@ -554,17 +554,25 @@ const Agenda: React.FC = () => {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-        await updateAgendamento(agId, { status: "confirmado_chegada" as any, horaChegada } as any);
+        await updateAgendamento(agId, { status: "confirmado_chegada" as any });
 
-        const filaExistente = fila.find((item) => item.id === agId);
+        const filaExistente = fila.find(
+          (item) =>
+            item.id === agId ||
+            (item.pacienteId === ag.pacienteId &&
+              item.unidadeId === ag.unidadeId &&
+              !["atendido", "cancelado", "falta"].includes(item.status)),
+        );
+
         if (filaExistente) {
-          await updateFila(agId, {
+          await updateFila(filaExistente.id, {
             status: "chegada_confirmada" as any,
             pacienteId: ag.pacienteId,
             pacienteNome: ag.pacienteNome,
             unidadeId: ag.unidadeId,
             profissionalId: ag.profissionalId,
             horaChegada,
+            observacoes: ag.observacoes || "",
           } as any);
         } else {
           await addToFila({
