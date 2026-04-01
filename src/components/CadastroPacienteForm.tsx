@@ -86,9 +86,6 @@ export interface PacienteFormData {
   endereco: string;
   nomeMae: string;
   descricaoClinica: string;
-  // === CAMPOS NOVOS PARA DEMANDA REPRIMIDA ===
-  adicionarAFila: boolean;
-  prioridade: string;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -126,9 +123,6 @@ export const emptyPacienteForm: PacienteFormData = {
   endereco: "",
   nomeMae: "",
   descricaoClinica: "",
-  // === VALORES PADRÃO PARA DEMANDA REPRIMIDA ===
-  adicionarAFila: false,
-  prioridade: "normal",
 };
 
 interface Props {
@@ -178,37 +172,43 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         <div className="flex items-center gap-2 text-sm font-semibold text-primary">
           <User className="w-4 h-4" /> Identificação
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
-            <Label>Nome completo</Label>
+            <Label>Nome completo *</Label>
             <Input value={form.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" />
+            {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
           </div>
           <div>
-            <Label>Data nasc.</Label>
+            <Label>Data nasc. *</Label>
             <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </div>
           <div>
-            <Label>CPF</Label>
+            <Label>CPF *</Label>
             <Input value={form.cpf} onChange={(e) => set("cpf", e.target.value)} placeholder="000.000.000-00" />
+            {errors.cpf && <p className="text-xs text-destructive mt-1">{errors.cpf}</p>}
           </div>
           <div>
             <Label>CNS</Label>
             <Input value={form.cns} onChange={(e) => set("cns", e.target.value)} placeholder="Nº Cartão SUS" />
+            {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
           </div>
           <div>
-            <Label>Telefone</Label>
+            <Label>Telefone *</Label>
             <Input
               value={form.telefone}
               onChange={(e) => set("telefone", e.target.value)}
               placeholder="(93) 99999-0000"
             />
+            {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
           </div>
           <div>
-            <Label>Nome da Mãe</Label>
+            <Label>Nome da Mãe *</Label>
             <Input value={form.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} placeholder="Nome da mãe" />
+            {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
           </div>
           <div>
-            <Label>Município</Label>
+            <Label>Município *</Label>
             <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
@@ -221,29 +221,32 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                 ))}
               </SelectContent>
             </Select>
+            {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
           </div>
         </div>
 
+        {/* Menor de idade toggle */}
         <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
           <Switch checked={form.menorIdade} onCheckedChange={(v) => set("menorIdade", v)} id="menor" />
           <Label htmlFor="menor" className="text-sm cursor-pointer">
             Menor de idade?
           </Label>
         </div>
-
         {form.menorIdade && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
             <div>
-              <Label>Nome responsável</Label>
+              <Label>Nome responsável *</Label>
               <Input value={form.nomeResponsavel} onChange={(e) => set("nomeResponsavel", e.target.value)} />
+              {errors.nomeResponsavel && <p className="text-xs text-destructive mt-1">{errors.nomeResponsavel}</p>}
             </div>
             <div>
-              <Label>CPF responsável</Label>
+              <Label>CPF responsável *</Label>
               <Input
                 value={form.cpfResponsavel}
                 onChange={(e) => set("cpfResponsavel", e.target.value)}
                 placeholder="000.000.000-00"
               />
+              {errors.cpfResponsavel && <p className="text-xs text-destructive mt-1">{errors.cpfResponsavel}</p>}
             </div>
           </div>
         )}
@@ -255,8 +258,9 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           <Building2 className="w-4 h-4" /> Encaminhamento (UBS)
         </div>
 
+        {/* ESPECIALIDADE DESTINO — OBRIGATÓRIO */}
         <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-          <Label className="text-base font-semibold text-primary">Especialidade Destino</Label>
+          <Label className="text-base font-semibold text-primary">Especialidade Destino *</Label>
           <p className="text-xs text-muted-foreground mb-2">Define todo o fluxo do paciente no sistema</p>
           <Select value={form.especialidadeDestino || ""} onValueChange={(v) => set("especialidadeDestino", v)}>
             <SelectTrigger className="border-primary/30">
@@ -270,11 +274,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               ))}
             </SelectContent>
           </Select>
+          {errors.especialidadeDestino && (
+            <p className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <Label>UBS origem</Label>
+            <Label>UBS origem *</Label>
             <Select value={form.ubsOrigem || ""} onValueChange={(v) => set("ubsOrigem", v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a UBS" />
@@ -287,14 +294,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                 ))}
               </SelectContent>
             </Select>
+            {errors.ubsOrigem && <p className="text-xs text-destructive mt-1">{errors.ubsOrigem}</p>}
           </div>
           <div>
-            <Label>Profissional solicitante</Label>
+            <Label>Profissional solicitante *</Label>
             <Input
               value={form.profissionalSolicitante}
               onChange={(e) => set("profissionalSolicitante", e.target.value)}
               placeholder="Nome do profissional"
             />
+            {errors.profissionalSolicitante && (
+              <p className="text-xs text-destructive mt-1">{errors.profissionalSolicitante}</p>
+            )}
           </div>
           <div>
             <Label>Tipo encaminhamento</Label>
@@ -312,11 +323,12 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             </Select>
           </div>
           <div>
-            <Label>CID-10</Label>
+            <Label>CID-10 *</Label>
             <Input value={form.cid} onChange={(e) => set("cid", e.target.value)} placeholder="Ex: G80.0" />
+            {errors.cid && <p className="text-xs text-destructive mt-1">{errors.cid}</p>}
           </div>
           <div className="sm:col-span-2">
-            <Label>Diagnóstico resumido</Label>
+            <Label>Diagnóstico resumido *</Label>
             <Input
               value={form.diagnosticoResumido}
               onChange={(e) => set("diagnosticoResumido", e.target.value)}
@@ -324,16 +336,17 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             />
           </div>
           <div className="sm:col-span-2">
-            <Label>Justificativa</Label>
+            <Label>Justificativa *</Label>
             <Textarea
               value={form.justificativa}
               onChange={(e) => set("justificativa", e.target.value)}
               placeholder="Justificativa clínica para encaminhamento"
               className="min-h-[60px]"
             />
+            {errors.justificativa && <p className="text-xs text-destructive mt-1">{errors.justificativa}</p>}
           </div>
           <div>
-            <Label>Data encaminhamento</Label>
+            <Label>Data encaminhamento *</Label>
             <Input
               type="date"
               value={form.dataEncaminhamento}
@@ -341,7 +354,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             />
           </div>
           <div>
-            <Label>Documento</Label>
+            <Label>Documento *</Label>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md border border-input bg-background text-sm hover:bg-accent transition-colors">
                 <Upload className="w-4 h-4" />
@@ -355,6 +368,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                 />
               </label>
             </div>
+            {errors.documentoUrl && <p className="text-xs text-destructive mt-1">{errors.documentoUrl}</p>}
           </div>
         </div>
       </div>
@@ -364,6 +378,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         <div className="flex items-center gap-2 text-sm font-semibold text-primary">
           <Stethoscope className="w-4 h-4" /> Informações Clínicas
         </div>
+
         <div>
           <Label className="mb-2 block">Tipo de condição</Label>
           <RadioGroup
@@ -392,7 +407,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           </RadioGroup>
         </div>
 
-        {/* Conditional fields (mantidos exatamente como estavam) */}
+        {/* Conditional: Física */}
         {form.tipoCondicao === "fisica" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
             <div>
@@ -432,6 +447,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           </div>
         )}
 
+        {/* Conditional: Intelectual / TEA */}
         {(form.tipoCondicao === "intelectual" || form.tipoCondicao === "tea") && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2 border-l-2 border-primary/20">
             <div>
@@ -472,6 +488,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         <AccordionItem value="extra">
           <AccordionTrigger className="text-sm font-semibold text-primary">Dados adicionais</AccordionTrigger>
           <AccordionContent className="space-y-3">
+            {/* Equipamentos */}
             <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
               <Switch checked={form.usaEquipamentos} onCheckedChange={(v) => set("usaEquipamentos", v)} id="equip" />
               <Label htmlFor="equip" className="text-sm cursor-pointer">
@@ -502,6 +519,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
             )}
 
+            {/* Transporte + Turno */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Transporte</Label>
@@ -533,6 +551,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
             </div>
 
+            {/* Email + Endereço */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>E-mail</Label>
@@ -552,6 +571,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
             </div>
 
+            {/* Outro serviço SUS */}
             <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
               <Switch
                 checked={form.outroServicoSus}
@@ -566,45 +586,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         </AccordionItem>
       </Accordion>
 
-      {/* === NOVA SEÇÃO: DEMANDA REPRIMIDA === */}
-      {!isEdit && (
-        <div className="p-4 rounded-xl border-2 border-orange-200 bg-orange-50 space-y-3">
-          <div className="flex items-center gap-3">
-            <Switch
-              checked={form.adicionarAFila}
-              onCheckedChange={(v) => set("adicionarAFila", v)}
-              id="demanda-reprimida"
-            />
-            <Label htmlFor="demanda-reprimida" className="font-bold text-orange-800 cursor-pointer text-base">
-              Colocar na Demanda Reprimida / Lista de Espera
-            </Label>
-          </div>
-
-          {form.adicionarAFila && (
-            <div className="pl-8 space-y-3">
-              <div>
-                <Label className="text-orange-800">Prioridade na Fila</Label>
-                <Select value={form.prioridade} onValueChange={(v) => set("prioridade", v)}>
-                  <SelectTrigger className="bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="idoso">Idoso (60+)</SelectItem>
-                    <SelectItem value="pcd">PCD / Autismo</SelectItem>
-                    <SelectItem value="urgente">Urgente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-[10px] text-orange-700 italic">
-                *O paciente será enviado para a especialidade: {form.especialidadeDestino || "Nenhuma selecionada"}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Botão Salvar */}
+      {/* Save button */}
       <Button className="w-full" onClick={onSave} disabled={saving}>
         {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
         {isEdit ? "Atualizar Paciente" : "Cadastrar Paciente"}
