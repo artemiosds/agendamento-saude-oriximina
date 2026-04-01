@@ -162,7 +162,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
 
   const toggleEquipamento = (eq: string) => {
     const current = form.equipamentos;
-    set("equipamentos", current.includes(eq) ? current.filter((e) => e !== eq) : [...current, eq]);
+    set("equipamentos", current.includes(eq) ? current.filter((e: string) => e !== eq) : [...current, eq]);
   };
 
   return (
