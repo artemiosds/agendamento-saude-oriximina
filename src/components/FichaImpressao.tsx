@@ -34,6 +34,7 @@ interface FichaImpressaoProps {
   nomeProfissional: string;
   perfilProfissional: string;
   registroProfissional: string;
+  unidadeSaude?: string;
   onPrintComplete?: () => void;
 }
 
@@ -47,6 +48,7 @@ const FichaImpressao: React.FC<FichaImpressaoProps> = ({
   nomeProfissional,
   perfilProfissional,
   registroProfissional,
+  unidadeSaude,
   onPrintComplete,
 }) => {
   const fichaRef = useRef<HTMLDivElement>(null);
@@ -55,11 +57,19 @@ const FichaImpressao: React.FC<FichaImpressaoProps> = ({
   const horaEmissao = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
   useEffect(() => {
+    // Auto-trigger print after a short delay to ensure rendering
+    const timer = setTimeout(() => {
+      window.print();
+    }, 500);
+
     const handleAfterPrint = () => {
       onPrintComplete?.();
     };
     window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
   }, [onPrintComplete]);
 
   return (
@@ -131,11 +141,18 @@ const FichaImpressao: React.FC<FichaImpressaoProps> = ({
         .ficha-title h1 {
           font-size: 14px;
           font-weight: bold;
+          margin: 0 0 2px 0;
+          color: #000;
+          text-transform: uppercase;
+        }
+        .ficha-title h2 {
+          font-size: 12px;
+          font-weight: bold;
           margin: 0 0 4px 0;
           color: #111;
         }
-        .ficha-title h2 {
-          font-size: 11px;
+        .ficha-title h3 {
+          font-size: 10px;
           font-weight: normal;
           margin: 0;
           color: #444;
@@ -275,8 +292,9 @@ const FichaImpressao: React.FC<FichaImpressaoProps> = ({
             </div>
           </div>
           <div className="ficha-title">
-            <h1>FICHA DE ATENDIMENTO CLÍNICO</h1>
-            <h2>Registro de Atendimento ao Paciente</h2>
+            <h1>{unidadeSaude || 'SECRETARIA MUNICIPAL DE SAÚDE'}</h1>
+            <h2>FICHA DE ATENDIMENTO CLÍNICO</h2>
+            <h3>Registro de Atendimento ao Paciente</h3>
           </div>
           <div className="ficha-date">
             <div>Data de emissão: {dataEmissao}</div>

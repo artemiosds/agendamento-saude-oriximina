@@ -327,6 +327,7 @@ const Pacientes: React.FC = () => {
                   dadosClinicos={printData.dadosClinicos}
                   sinaisVitais={printData.sinaisVitais}
                   evolucoesClinicas={printData.evolucoesClinicas}
+                  unidadeSaude={printData.dadosClinicos.unidadeAtendimento}
                   nomeProfissional={user?.nome || ""}
                   perfilProfissional={user?.cargo || user?.role || ""}
                   registroProfissional={user?.tipoConselho && user?.numeroConselho 
