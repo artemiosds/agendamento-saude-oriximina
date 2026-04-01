@@ -143,7 +143,10 @@ export interface Agendamento {
     | "remarcado"
     | "em_atendimento"
     | "aguardando_triagem"
-    | "aguardando_atendimento";
+    | "aguardando_atendimento"
+    | "aguardando_enfermagem"
+    | "apto_atendimento";
+  horaChegada?: string;
   tipo: string;
   observacoes: string;
   origem: "online" | "recepcao" | "profissional";
@@ -168,7 +171,7 @@ export interface FilaEspera {
   setor: string;
   profissionalId?: string;
   prioridade: "normal" | "alta" | "urgente";
-  status: "aguardando" | "aguardando_triagem" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado";
+  status: "aguardando" | "aguardando_triagem" | "encaixado" | "chamado" | "em_atendimento" | "atendido" | "falta" | "cancelado" | "demanda_reprimida";
   posicao: number;
   horaChegada: string;
   horaChamada?: string;

@@ -6,10 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FileUp, AlertCircle, CalendarClock, Search, Loader2 } from 'lucide-react';
+import { Plus, FileUp, AlertCircle, CalendarClock, Search, Loader2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useEnsurePortalAccess } from '@/hooks/useEnsurePortalAccess';
@@ -53,12 +63,7 @@ interface FilaEsperaItem {
   tipo_entrada?: string; // Adicionado para a correção
 }
 
-interface User {
-  id: string;
-  unidadeId: string;
-  role: string;
-  nome?: string;
-}
+// User type from AuthContext — not redefined here
 
 interface Unidade {
   id: string;
@@ -250,7 +255,7 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, { ...form, prioridade: form.prioridade as any });
+      await updateFila(editId, { ...form, prioridade: (form.prioridade || "normal") as "normal" | "alta" | "urgente", status: (form.status || "aguardando") as any, origemCadastro: (form.origemCadastro || "normal") as "normal" | "demanda_reprimida" });
       toast.success("Registro atualizado!");
       setDialogOpen(false);
       refreshFila();
@@ -465,7 +470,7 @@ const FilaEspera: React.FC = () => {
       });
   }, [fila]);
 
-  const chamarProximoDaFila = useCallback(async (slot: SlotInfo, user?: User): Promise<boolean> => {
+  const chamarProximoDaFila = useCallback(async (slot: SlotInfo, callingUser?: any): Promise<boolean> => {
     const candidates = getNextInQueue(slot.profissionalId, slot.unidadeId);
     if (candidates.length === 0) return false;
     const next = candidates[0];
@@ -517,7 +522,7 @@ const FilaEspera: React.FC = () => {
     return true;
   }, [getNextInQueue, pacientes, unidades, funcionarios, updateFila, logAction, notify]);
 
-  const confirmarEncaixe = useCallback(async (filaId: string, slot: SlotInfo, user?: User) => {
+  const confirmarEncaixe = useCallback(async (filaId: string, slot: SlotInfo, callingUser?: any) => {
     const filaItem = fila.find(f => f.id === filaId);
     if (!filaItem) return;
     const agId = `ag${Date.now()}`;
@@ -588,7 +593,7 @@ const FilaEspera: React.FC = () => {
     refreshFila();
   }, [fila, pacientes, unidades, addAgendamento, updateFila, logAction, notify, refreshAgendamentos, refreshFila]);
 
-  const expirarReserva = useCallback(async (filaId: string, slot: SlotInfo, user?: User) => {
+  const expirarReserva = useCallback(async (filaId: string, slot: SlotInfo, callingUser?: any) => {
     await updateFila(filaId, {
       status: 'aguardando',
       observacoes: 'Reserva expirada',

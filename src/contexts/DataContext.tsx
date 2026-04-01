@@ -318,8 +318,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadConfiguracoes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("configuracoes" as any).select("*").single();
-      if (data && !error) setConfiguracoes(safeConfigMerge(data.config_json));
+      const { data, error } = await supabase.from("system_config").select("*").single();
+      if (data && !error) setConfiguracoes(safeConfigMerge((data as any).configuracoes));
     } catch (err) {
       console.error("Error loading configs:", err);
     }
@@ -329,7 +329,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data, error } = await supabase.from("unidades" as any).select("*");
       if (data && !error)
-        setUnidades(data.map((u: any) => ({ id: u.id, nome: u.nome, endereco: u.endereco || "", ativo: u.ativo })));
+        setUnidades(data.map((u: any) => ({ id: u.id, nome: u.nome, endereco: u.endereco || "", telefone: u.telefone || "", whatsapp: u.whatsapp || "", ativo: u.ativo })));
     } catch (err) {
       console.error("Error loading unidades:", err);
     }
@@ -357,13 +357,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             usuario: f.usuario,
             email: f.email || "",
             cpf: f.cpf || "",
-            telefone: f.telefone || "",
             profissao: f.profissao || "",
-            conselho: f.conselho || "",
-            registro: f.registro || "",
+            tipoConselho: f.tipo_conselho || "",
+            numeroConselho: f.numero_conselho || "",
+            ufConselho: f.uf_conselho || "",
             role: f.role,
             unidadeId: f.unidade_id || "",
+            salaId: f.sala_id || "",
+            setor: f.setor || "",
+            cargo: f.cargo || "",
+            criadoEm: f.criado_em || "",
+            criadoPor: f.criado_por || "",
             tempoAtendimento: f.tempo_atendimento || 30,
+            podeAgendarRetorno: f.pode_agendar_retorno || false,
+            coren: f.coren || "",
             ativo: f.ativo ?? true,
           })),
         );
@@ -771,13 +778,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           usuario: row.usuario,
           email: row.email || "",
           cpf: row.cpf || "",
-          telefone: row.telefone || "",
           profissao: row.profissao || "",
-          conselho: row.conselho || "",
-          registro: row.registro || "",
+          tipoConselho: row.tipo_conselho || "",
+          numeroConselho: row.numero_conselho || "",
+          ufConselho: row.uf_conselho || "",
           role: row.role,
           unidadeId: row.unidade_id || "",
+          salaId: row.sala_id || "",
+          setor: row.setor || "",
+          cargo: row.cargo || "",
+          criadoEm: row.criado_em || "",
+          criadoPor: row.criado_por || "",
           tempoAtendimento: row.tempo_atendimento || 30,
+          podeAgendarRetorno: row.pode_agendar_retorno || false,
+          coren: row.coren || "",
           ativo: row.ativo ?? true,
         }),
       );
@@ -1162,13 +1176,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         usuario: u.usuario,
         email: u.email,
         cpf: u.cpf,
-        telefone: u.telefone,
         profissao: u.profissao,
-        conselho: u.conselho,
-        registro: u.registro,
+        tipo_conselho: u.tipoConselho || "",
+        numero_conselho: u.numeroConselho || "",
+        uf_conselho: u.ufConselho || "",
         role: u.role,
         unidade_id: u.unidadeId,
+        sala_id: u.salaId || "",
+        setor: u.setor || "",
+        cargo: u.cargo || "",
+        criado_por: u.criadoPor || "",
         tempo_atendimento: u.tempoAtendimento,
+        pode_agendar_retorno: u.podeAgendarRetorno || false,
+        coren: u.coren || "",
         ativo: u.ativo,
       } as any);
       if (!error) {
@@ -1186,14 +1206,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.usuario !== undefined) dbData.usuario = data.usuario;
       if (data.email !== undefined) dbData.email = data.email;
       if (data.cpf !== undefined) dbData.cpf = data.cpf;
-      if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.profissao !== undefined) dbData.profissao = data.profissao;
-      if (data.conselho !== undefined) dbData.conselho = data.conselho;
-      if (data.registro !== undefined) dbData.registro = data.registro;
+      if (data.tipoConselho !== undefined) dbData.tipo_conselho = data.tipoConselho;
+      if (data.numeroConselho !== undefined) dbData.numero_conselho = data.numeroConselho;
+      if (data.ufConselho !== undefined) dbData.uf_conselho = data.ufConselho;
       if (data.role !== undefined) dbData.role = data.role;
       if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+      if (data.setor !== undefined) dbData.setor = data.setor;
+      if (data.cargo !== undefined) dbData.cargo = data.cargo;
       if (data.tempoAtendimento !== undefined) dbData.tempo_atendimento = data.tempoAtendimento;
       if (data.ativo !== undefined) dbData.ativo = data.ativo;
+      if (data.podeAgendarRetorno !== undefined) dbData.pode_agendar_retorno = data.podeAgendarRetorno;
+      if (data.coren !== undefined) dbData.coren = data.coren;
       const { error } = await supabase
         .from("funcionarios" as any)
         .update(dbData)
@@ -1291,14 +1316,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id,
         titulo: b.titulo,
         tipo: b.tipo,
-        data_inicio: b.data_inicio,
-        data_fim: b.data_fim,
-        dia_inteiro: b.dia_inteiro,
-        hora_inicio: b.hora_inicio,
-        hora_fim: b.hora_fim,
-        unidade_id: b.unidade_id,
-        profissional_id: b.profissional_id,
-        criado_por: b.criado_por,
+        data_inicio: b.dataInicio,
+        data_fim: b.dataFim,
+        dia_inteiro: b.diaInteiro,
+        hora_inicio: b.horaInicio,
+        hora_fim: b.horaFim,
+        unidade_id: b.unidadeId,
+        profissional_id: b.profissionalId,
+        criado_por: b.criadoPor,
       } as any);
       if (!error) {
         emitDbUpdate();

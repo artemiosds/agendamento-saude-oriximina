@@ -57,47 +57,8 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 
-// Tipos simplificados para o exemplo
-interface Agendamento {
-  id: string;
-  pacienteId: string;
-  pacienteNome: string;
-  unidadeId: string;
-  salaId?: string;
-  setorId?: string;
-  profissionalId: string;
-  profissionalNome: string;
-  data: string;
-  hora: string;
-  status: string;
-  tipo: string;
-  observacoes?: string;
-  origem?: string;
-  googleEventId?: string;
-  syncStatus?: string;
-  criadoEm?: string;
-  criadoPor?: string;
-  hora_chegada?: string;
-  attachment_url?: string;
-  attachmentUrl?: string;
-  attachment_name?: string;
-  attachmentName?: string;
-  attachment_type?: string;
-  attachmentType?: string;
-}
-
-interface Paciente {
-  id: string;
-  nome: string;
-  cpf?: string;
-  cns?: string;
-  telefone?: string;
-  email?: string;
-  dataNascimento?: string;
-  descricaoClinica?: string;
-  cid?: string;
-}
-
+// Use types from DataContext/types
+import type { Agendamento, Paciente } from "@/types";
 interface User {
   id: string;
   role: string;
@@ -198,15 +159,12 @@ const Agenda: React.FC = () => {
     unidades,
     salas,
     addAgendamento,
-    // configuracoes,
-    // addAtendimento,
     logAction,
     refreshAgendamentos,
-    // fila,
-    // disponibilidades,
+    disponibilidades,
     getAvailableSlots,
     getAvailableDates,
-    // bloqueios,
+    bloqueios,
   } = useData();
   // const [lastProntuarios, setLastProntuarios] = React.useState<Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>>({});
   const { user, hasPermission } = useAuth();
@@ -405,9 +363,8 @@ const Agenda: React.FC = () => {
       await supabase
         .from("agendamentos")
         .update({
-          aprovado_por: user?.id || "",
-          aprovado_em: new Date().toISOString(),
-        })
+          observacoes: `Aprovado por ${user?.nome || user?.id || ""}. ${ag.observacoes || ""}`,
+        } as any)
         .eq("id", ag.id);
 
       const paciente = pacientes.find((p) => p.id === ag.pacienteId);
@@ -451,8 +408,8 @@ const Agenda: React.FC = () => {
       await supabase
         .from("agendamentos")
         .update({
-          rejeitado_motivo: rejeicaoMotivo,
-        })
+          observacoes: `Rejeitado: ${rejeicaoMotivo}`,
+        } as any)
         .eq("id", rejeicaoTarget.id);
 
       const paciente = pacientes.find((p) => p.id === rejeicaoTarget.pacienteId);
@@ -493,8 +450,8 @@ const Agenda: React.FC = () => {
       // CORREÇÃO 3: Confirmação de Chegada
       if (newStatus === "confirmado_chegada") {
         await updateAgendamento(agId, {
-          status: "aguardando_triagem", // Regra 3: Sempre para aguardando_triagem
-          hora_chegada: new Date().toISOString(),
+          status: "aguardando_triagem",
+          horaChegada: new Date().toISOString(),
         });
         const ag = agendamentos.find(a => a.id === agId);
         if (ag) {
@@ -511,7 +468,7 @@ const Agenda: React.FC = () => {
         return;
       }
 
-      await updateAgendamento(agId, { status: newStatus });
+      await updateAgendamento(agId, { status: newStatus as Agendamento["status"] });
       const ag = agendamentos.find(a => a.id === agId);
       const paciente = pacientes.find((p) => p.id === ag?.pacienteId || p.nome === ag?.pacienteNome);
       const unidade = unidades.find((u) => u.id === ag?.unidadeId);
@@ -910,9 +867,9 @@ const Agenda: React.FC = () => {
                 audio: "Áudio",
                 outro: "Documento",
               };
-              const anexoUrl = ag.attachment_url || ag.attachmentUrl;
-              const anexoNome = ag.attachment_name || ag.attachmentName;
-              const anexoTipo = ag.attachment_type || ag.attachmentType;
+               const anexoUrl = ag.attachmentUrl;
+              const anexoNome = ag.attachmentName;
+              const anexoTipo = ag.attachmentType;
               return (
                 <Card key={ag.id} className="shadow-card border-0 border-l-4 border-l-warning">
                   <CardContent className="p-4 space-y-3">
@@ -988,8 +945,8 @@ const Agenda: React.FC = () => {
               selectedDate={selectedDate}
               onDateChange={(date) => setSelectedDate(date)}
               agendamentos={agendamentos}
-              // bloqueios={bloqueios}
-              // disponibilidades={disponibilidades}
+              bloqueios={bloqueios}
+              disponibilidades={disponibilidades}
               filterProf={filterProf}
               filterUnit={filterUnit}
               profissionais={profissionais}
@@ -1119,7 +1076,7 @@ const Agenda: React.FC = () => {
                 const paciente = pacientes.find((p) => p.id === ag.pacienteId);
                 // const lastAppt = lastProntuarios[ag.pacienteId];
                 const ehPendenteOnline = ag.origem === "online" && ag.status === "pendente";
-                const anexoUrl = ag.attachment_url || ag.attachmentUrl;
+                const anexoUrl = ag.attachmentUrl;
                 const typeColorBar: Record<string, string> = {
                   Consulta: "border-l-[#3B82F6]",
                   Retorno: "border-l-[#10B981]",
@@ -1570,7 +1527,7 @@ const Agenda: React.FC = () => {
               audio: "Áudio",
               outro: "Documento",
             };
-            const anexoUrl = detalheAg.attachment_url || detalheAg.attachmentUrl;
+            const anexoUrl = detalheAg.attachmentUrl;
             return (
               <>
                 <Secao titulo="Paciente">
