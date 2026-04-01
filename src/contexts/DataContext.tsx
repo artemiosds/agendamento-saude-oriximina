@@ -1206,14 +1206,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.usuario !== undefined) dbData.usuario = data.usuario;
       if (data.email !== undefined) dbData.email = data.email;
       if (data.cpf !== undefined) dbData.cpf = data.cpf;
-      if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.profissao !== undefined) dbData.profissao = data.profissao;
-      if (data.conselho !== undefined) dbData.conselho = data.conselho;
-      if (data.registro !== undefined) dbData.registro = data.registro;
+      if (data.tipoConselho !== undefined) dbData.tipo_conselho = data.tipoConselho;
+      if (data.numeroConselho !== undefined) dbData.numero_conselho = data.numeroConselho;
+      if (data.ufConselho !== undefined) dbData.uf_conselho = data.ufConselho;
       if (data.role !== undefined) dbData.role = data.role;
       if (data.unidadeId !== undefined) dbData.unidade_id = data.unidadeId;
+      if (data.salaId !== undefined) dbData.sala_id = data.salaId;
+      if (data.setor !== undefined) dbData.setor = data.setor;
+      if (data.cargo !== undefined) dbData.cargo = data.cargo;
       if (data.tempoAtendimento !== undefined) dbData.tempo_atendimento = data.tempoAtendimento;
       if (data.ativo !== undefined) dbData.ativo = data.ativo;
+      if (data.podeAgendarRetorno !== undefined) dbData.pode_agendar_retorno = data.podeAgendarRetorno;
+      if (data.coren !== undefined) dbData.coren = data.coren;
       const { error } = await supabase
         .from("funcionarios" as any)
         .update(dbData)
