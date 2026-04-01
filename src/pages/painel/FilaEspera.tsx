@@ -1708,8 +1708,7 @@ const FilaEspera: React.FC = () => {
                       <SelectContent>
                         <SelectItem value="primeira_consulta">Primeira Consulta</SelectItem>
                         <SelectItem value="retorno">Retorno</SelectItem>
-                        <SelectItem value="sessao">Sessão</SelectItem>
-                        <SelectItem value="tratamento">Tratamento</SelectItem>
+                        <SelectItem value="sessao tratamento">Sessão Tratamento</SelectItem>
                         <SelectItem value="urgencia">Urgência</SelectItem>
                         <SelectItem value="procedimento">Procedimento</SelectItem>
                       </SelectContent>
