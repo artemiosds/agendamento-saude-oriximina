@@ -329,7 +329,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { data, error } = await supabase.from("unidades" as any).select("*");
       if (data && !error)
-        setUnidades(data.map((u: any) => ({ id: u.id, nome: u.nome, endereco: u.endereco || "", ativo: u.ativo })));
+        setUnidades(data.map((u: any) => ({ id: u.id, nome: u.nome, endereco: u.endereco || "", telefone: u.telefone || "", whatsapp: u.whatsapp || "", ativo: u.ativo })));
     } catch (err) {
       console.error("Error loading unidades:", err);
     }
