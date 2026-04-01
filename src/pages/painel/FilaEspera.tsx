@@ -522,7 +522,7 @@ const FilaEspera: React.FC = () => {
     return true;
   }, [getNextInQueue, pacientes, unidades, funcionarios, updateFila, logAction, notify]);
 
-  const confirmarEncaixe = useCallback(async (filaId: string, slot: SlotInfo, user?: User) => {
+  const confirmarEncaixe = useCallback(async (filaId: string, slot: SlotInfo, callingUser?: any) => {
     const filaItem = fila.find(f => f.id === filaId);
     if (!filaItem) return;
     const agId = `ag${Date.now()}`;
