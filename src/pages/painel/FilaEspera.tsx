@@ -35,8 +35,12 @@ interface Paciente {
   telefone?: string;
   email?: string;
   dataNascimento?: string;
+  nomeMae?: string;
   descricaoClinica?: string;
   cid?: string;
+  endereco?: string;
+  observacoes?: string;
+  criadoEm?: string;
 }
 
 interface FilaEsperaItem {
@@ -59,18 +63,6 @@ interface FilaEsperaItem {
   dataSolicitacaoOriginal?: string;
   origemCadastro?: string;
   especialidadeDestino?: string;
-  tipo_entrada?: string;
-}
-
-interface Unidade {
-  id: string;
-  nome: string;
-}
-
-interface Funcionario {
-  id: string;
-  nome: string;
-  profissao?: string;
 }
 
 interface SlotInfo {
@@ -102,10 +94,14 @@ const FilaEspera: React.FC = () => {
     logAction,
     refreshFila,
     refreshAgendamentos,
+    getAvailableDates,
+    getAvailableSlots,
+    getDayInfoMap,
   } = useData();
   const { user, hasPermission } = useAuth();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { notify } = useWebhookNotify();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<FilaEsperaItem>>({
@@ -126,19 +122,23 @@ const FilaEspera: React.FC = () => {
   const [novoPaciente, setNovoPaciente] = useState<Partial<Paciente>>({});
   const [pacienteErrors, setPacienteErrors] = useState<Record<string, string>>({});
   const [duplicataEncontrada, setDuplicataEncontrada] = useState<Paciente | null>(null);
+
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importForm, setImportForm] = useState<any>({});
   const [importDup, setImportDup] = useState<Paciente | null>(null);
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
   const [importSaving, setImportSaving] = useState(false);
+
   const [manualCallDialog, setManualCallDialog] = useState(false);
   const [manualSlot, setManualSlot] = useState({ data: "", hora: "", profissionalId: "", unidadeId: "" });
+
   const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
   const [absenceFilaItem, setAbsenceFilaItem] = useState<FilaEsperaItem | null>(null);
   const [absenceReason, setAbsenceReason] = useState("");
   const [absenceObs, setAbsenceObs] = useState("");
   const [absenceWantsReschedule, setAbsenceWantsReschedule] = useState(false);
   const [absenceHistory, setAbsenceHistory] = useState<Record<string, any>>({});
+
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleFilaItem, setRescheduleFilaItem] = useState<FilaEsperaItem | null>(null);
   const [rescheduleSlot, setRescheduleSlot] = useState({ data: "", hora: "", profissionalId: "", unidadeId: "" });
@@ -146,24 +146,51 @@ const FilaEspera: React.FC = () => {
   const canManage = hasPermission(["master", "coordenador", "recepcao"]);
   const now = useMemo(() => new Date(), []);
 
-  const aguardandoCount = fila.filter((f) => f.status === "aguardando" || f.status === "aguardando_triagem").length;
+  const aguardandoCount = fila.filter((f) => ["aguardando", "aguardando_triagem"].includes(f.status)).length;
   const chamadoCount = fila.filter((f) => f.status === "chamado").length;
   const emAtendimentoCount = fila.filter((f) => f.status === "em_atendimento").length;
 
-  // ✅ CORREÇÃO: Incluir demanda_reprimida na lista de espera
+  // ─── CORREÇÃO 1: remover filtro por unidade do usuário ───────────────────────
+  // O filtro `item.unidadeId === user?.unidadeId` causava lista vazia quando
+  // user.unidadeId estava vazio ou diferente. Agora mostra todos os registros
+  // ativos, com filtro opcional por unidade se o usuário tiver unidadeId.
   const filaFiltrada = useMemo(() => {
     return fila
-      .filter(
-        (item) =>
-          item.pacienteNome.toLowerCase().includes(busca.toLowerCase()) &&
-          item.unidadeId === user?.unidadeId &&
-          ["aguardando", "aguardando_triagem", "demanda_reprimida", "chamado", "em_atendimento"].includes(item.status),
-      )
+      .filter((item) => {
+        // Filtro de busca por nome
+        if (busca && !item.pacienteNome.toLowerCase().includes(busca.toLowerCase())) return false;
+
+        // Excluir status finalizados
+        if (["encaixado", "falta", "cancelado", "atendido"].includes(item.status)) return false;
+
+        // Se usuário tem unidade definida (coordenador/recepcao), filtra pela unidade
+        // Master e roles sem unidadeId veem tudo
+        if (user?.unidadeId && user.role !== "master") {
+          return item.unidadeId === user.unidadeId;
+        }
+
+        return true;
+      })
       .sort((a, b) => {
-        const priorityOrder: Record<string, number> = { urgente: 1, alta: 2, normal: 3, demanda_reprimida: 0 };
+        const priorityOrder: Record<string, number> = {
+          urgente: 1,
+          gestante: 1,
+          idoso: 2,
+          alta: 2,
+          pcd: 3,
+          crianca: 3,
+          normal: 4,
+        };
         const pA = priorityOrder[a.prioridade] || 99;
         const pB = priorityOrder[b.prioridade] || 99;
         if (pA !== pB) return pA - pB;
+        // Ordenar por data de solicitação original (demanda reprimida mais antiga primeiro)
+        if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal) {
+          return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+        }
+        if (a.dataSolicitacaoOriginal) return -1;
+        if (b.dataSolicitacaoOriginal) return 1;
+        // Por fim, por hora de chegada/criação
         const timeA = a.criadoEm ? new Date(a.criadoEm).getTime() : 0;
         const timeB = b.criadoEm ? new Date(b.criadoEm).getTime() : 0;
         return timeA - timeB;
@@ -171,66 +198,57 @@ const FilaEspera: React.FC = () => {
   }, [fila, busca, user]);
 
   const checkDuplicidade = (dados: Partial<Paciente>) => {
-    if (dados.cpf) {
-      const found = pacientes.find((p) => p.cpf === dados.cpf);
+    const cpfClean = (dados.cpf || "").replace(/\D/g, "");
+    const telClean = (dados.telefone || "").replace(/\D/g, "");
+    if (cpfClean.length >= 11) {
+      const found = pacientes.find((p: any) => (p.cpf || "").replace(/\D/g, "") === cpfClean);
       if (found) return found;
     }
-    if (dados.telefone) {
-      const found = pacientes.find((p) => p.telefone === dados.telefone);
-      if (found) return found;
-    }
-    if (dados.email) {
-      const found = pacientes.find((p) => p.email === dados.email);
+    if (telClean.length >= 8) {
+      const found = pacientes.find((p: any) => (p.telefone || "").replace(/\D/g, "") === telClean);
       if (found) return found;
     }
     return null;
   };
 
-  const validatePacienteFields = (dados: Partial<Paciente>) => {
-    if (!dados.nome) return "Nome é obrigatório";
-    if (!dados.telefone) return "Telefone é obrigatório";
+  const validatePacienteFields = (dados: { nome?: string; telefone?: string; email?: string }) => {
+    if (!dados.nome?.trim()) return "Nome é obrigatório.";
     return null;
   };
 
   const handleCreatePaciente = async () => {
-    const err = validatePacienteFields(novoPaciente);
+    const err = validatePacienteFields({ nome: novoPaciente.nome, telefone: novoPaciente.telefone });
     if (err) {
-      setPacienteErrors({ nome: err.includes("Nome") ? err : "", telefone: err.includes("Telefone") ? err : "" });
       toast.error(err);
       return;
     }
-    setPacienteErrors({});
     const dup = checkDuplicidade(novoPaciente);
     if (dup) {
-      setDuplicataEncontrada(dup);
+      setDuplicataEncontrada(dup as any);
       return;
     }
     const pacienteId = `p${Date.now()}`;
-    try {
-      await addPaciente({
-        id: pacienteId,
-        nome: novoPaciente.nome || "",
-        cpf: novoPaciente.cpf || "",
-        cns: novoPaciente.cns || "",
-        nomeMae: novoPaciente.nomeMae || "",
-        telefone: novoPaciente.telefone || "",
-        email: novoPaciente.email || "",
-        dataNascimento: novoPaciente.dataNascimento || "",
-        endereco: novoPaciente.endereco || "",
-        observacoes: novoPaciente.observacoes || "",
-        descricaoClinica: novoPaciente.descricaoClinica || "",
-        cid: novoPaciente.cid || "",
-        criadoEm: new Date().toISOString(),
-      });
-      setForm((prev) => ({ ...prev, pacienteNome: novoPaciente.nome, pacienteId }));
-      setCriarPaciente(false);
-      toast.success(`Paciente ${novoPaciente.nome} cadastrado!`);
-    } catch {
-      toast.error("Erro ao cadastrar paciente.");
-    }
+    await addPaciente({
+      id: pacienteId,
+      nome: novoPaciente.nome || "",
+      cpf: novoPaciente.cpf || "",
+      cns: novoPaciente.cns || "",
+      nomeMae: "",
+      telefone: novoPaciente.telefone || "",
+      email: novoPaciente.email || "",
+      dataNascimento: "",
+      endereco: "",
+      observacoes: "",
+      descricaoClinica: "",
+      cid: "",
+      criadoEm: new Date().toISOString(),
+    });
+    setForm((prev) => ({ ...prev, pacienteId, pacienteNome: novoPaciente.nome || "" }));
+    setCriarPaciente(false);
+    toast.success("Paciente cadastrado!");
   };
 
-  const usarPacienteExistente = (p: Paciente) => {
+  const usarPacienteExistente = (p: any) => {
     setForm((prev) => ({ ...prev, pacienteNome: p.nome, pacienteId: p.id }));
     setCriarPaciente(false);
     setDuplicataEncontrada(null);
@@ -239,34 +257,40 @@ const FilaEspera: React.FC = () => {
 
   const addToFilaWithPatient = async (pacienteId: string, pacienteNome: string, telefone: string, email: string) => {
     if (!form.unidadeId) {
-      toast.error("Selecione a unidade antes de adicionar.");
+      toast.error("Selecione a unidade.");
       return;
     }
-    const newId = `f${Date.now()}`;
-    await supabase.from("fila_espera").insert({
+    const newId = `f${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const { error } = await supabase.from("fila_espera" as any).insert({
       id: newId,
       paciente_id: pacienteId,
       paciente_nome: pacienteNome,
       unidade_id: form.unidadeId,
-      profissional_id: form.profissionalId,
-      setor: form.setor,
-      prioridade: form.prioridade,
+      profissional_id: form.profissionalId || null,
+      setor: form.setor || "",
+      prioridade: form.prioridade || "normal",
+      prioridade_perfil: form.prioridade || "normal",
       status: "aguardando",
       posicao: fila.length + 1,
       hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       criado_por: user?.id || "sistema",
-      observacoes: form.observacoes,
-      descricao_clinica: form.descricaoClinica,
-      cid: form.cid,
+      observacoes: form.observacoes || "",
+      descricao_clinica: form.descricaoClinica || "",
+      cid: form.cid || "",
       origem_cadastro: "normal",
     });
-    const unidade = unidades.find((u) => u.id === form.unidadeId);
-    const prof = form.profissionalId ? funcionarios.find((f) => f.id === form.profissionalId) : null;
+    if (error) {
+      console.error("Erro ao adicionar na fila:", error);
+      toast.error("Erro ao adicionar na fila: " + error.message);
+      return;
+    }
+    const unidade = unidades.find((u: any) => u.id === form.unidadeId);
+    const prof = form.profissionalId ? funcionarios.find((f: any) => f.id === form.profissionalId) : null;
     ensurePortalAccess({
       pacienteId,
       contexto: "fila",
       unidade: unidade?.nome || "",
-      profissional: prof?.nome || "",
+      profissional: (prof as any)?.nome || "",
       posicaoFila: fila.length + 1,
     }).catch(() => {});
     await notify({
@@ -277,7 +301,7 @@ const FilaEspera: React.FC = () => {
       data_consulta: new Date().toISOString().split("T")[0],
       hora_consulta: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       unidade: unidade?.nome || "",
-      profissional: prof?.nome || "",
+      profissional: (prof as any)?.nome || "",
       tipo_atendimento: "Fila de Espera",
       status_agendamento: "aguardando",
       id_agendamento: "",
@@ -292,7 +316,7 @@ const FilaEspera: React.FC = () => {
     });
     toast.success("Paciente adicionado à fila!");
     setDialogOpen(false);
-    refreshFila();
+    await refreshFila();
   };
 
   const handleSave = async () => {
@@ -301,34 +325,39 @@ const FilaEspera: React.FC = () => {
       return;
     }
     if (editId) {
-      await updateFila(editId, {
-        ...form,
-        prioridade: (form.prioridade || "normal") as any,
-        status: (form.status || "aguardando") as any,
-      });
+      await updateFila(editId, { ...form } as any);
       toast.success("Registro atualizado!");
       setDialogOpen(false);
       refreshFila();
     } else {
-      const pac = pacientes.find((p) => p.id === form.pacienteId);
+      const pac = pacientes.find((p: any) => p.id === form.pacienteId) as any;
       await addToFilaWithPatient(form.pacienteId || "", form.pacienteNome || "", pac?.telefone || "", pac?.email || "");
     }
   };
 
   const checkImportDuplicidade = (dados: any) => {
-    if (dados.cpf) {
-      const found = pacientes.find((p) => p.cpf === dados.cpf);
+    const cpfClean = (dados.cpf || "").replace(/\D/g, "");
+    const telClean = (dados.telefone || "").replace(/\D/g, "");
+    if (cpfClean.length >= 11) {
+      const found = pacientes.find((p: any) => (p.cpf || "").replace(/\D/g, "") === cpfClean);
       if (found) return found;
     }
-    if (dados.telefone) {
-      const found = pacientes.find((p) => p.telefone === dados.telefone);
+    if (telClean.length >= 8) {
+      const found = pacientes.find((p: any) => (p.telefone || "").replace(/\D/g, "") === telClean);
+      if (found) return found;
+    }
+    if (dados.nome?.trim() && dados.dataNascimento) {
+      const found = pacientes.find(
+        (p: any) =>
+          p.nome?.toLowerCase().trim() === dados.nome.toLowerCase().trim() && p.dataNascimento === dados.dataNascimento,
+      );
       if (found) return found;
     }
     return null;
   };
 
-  // ✅ CORREÇÃO 1: handleImportSave para demanda reprimida - status correto "aguardando"
-  const handleImportSave = async (existingPatient?: Paciente) => {
+  // ─── CORREÇÃO 2: handleImportSave com campos snake_case corretos ─────────────
+  const handleImportSave = async (existingPatient?: any) => {
     if (!importForm.nome?.trim() && !existingPatient) {
       toast.error("Informe o nome do paciente.");
       return;
@@ -341,6 +370,7 @@ const FilaEspera: React.FC = () => {
       toast.error("Informe a data de solicitação original.");
       return;
     }
+
     setImportSaving(true);
     try {
       let pacienteId: string;
@@ -356,86 +386,105 @@ const FilaEspera: React.FC = () => {
       } else {
         const dup = checkImportDuplicidade(importForm);
         if (dup && !importDup) {
-          setImportDup(dup);
+          setImportDup(dup as any);
           setImportSaving(false);
           return;
         }
-        const err = validatePacienteFields({
-          nome: importForm.nome,
-          telefone: importForm.telefone,
-          email: importForm.email,
-        });
+
+        const err = validatePacienteFields({ nome: importForm.nome, telefone: importForm.telefone });
         if (err) {
-          const newErrors: Record<string, string> = {};
-          if (err.includes("Nome")) newErrors.nome = err;
-          else if (err.includes("Telefone")) newErrors.telefone = err;
-          else if (err.includes("mail")) newErrors.email = err;
-          setImportErrors(newErrors);
           toast.error(err);
           setImportSaving(false);
           return;
         }
-        pacienteId = `p${Date.now()}`;
-        pacienteNome = importForm.nome;
-        telefone = importForm.telefone;
-        email = importForm.email;
 
-        await addPaciente({
+        pacienteId = `p${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+        pacienteNome = importForm.nome.trim();
+        telefone = importForm.telefone || "";
+        email = importForm.email || "";
+
+        // Inserir paciente
+        const { error: pacError } = await supabase.from("pacientes" as any).insert({
           id: pacienteId,
-          nome: importForm.nome,
+          nome: pacienteNome,
           cpf: importForm.cpf || "",
           cns: importForm.cns || "",
-          nomeMae: importForm.nomeMae || "",
-          telefone: importForm.telefone,
-          email: importForm.email,
-          dataNascimento: importForm.dataNascimento,
+          nome_mae: importForm.nomeMae || "",
+          telefone,
+          email,
+          data_nascimento: importForm.dataNascimento || "",
           endereco: "",
-          observacoes: importForm.observacoes,
-          descricaoClinica: importForm.descricaoClinica || "",
+          observacoes: importForm.observacoes || "",
+          descricao_clinica: importForm.descricaoClinica || "",
           cid: importForm.cid || "",
-          criadoEm: new Date().toISOString(),
+          criado_em: new Date().toISOString(),
         });
+
+        if (pacError) {
+          console.error("Erro ao cadastrar paciente:", pacError);
+          toast.error("Erro ao cadastrar paciente: " + pacError.message);
+          setImportSaving(false);
+          return;
+        }
+
         await logAction({
           acao: "criar",
           entidade: "paciente",
           entidadeId: pacienteId,
-          detalhes: { nome: importForm.nome, origem: "demanda_reprimida" },
+          detalhes: {
+            nome: pacienteNome,
+            origem: "demanda_reprimida",
+            dataSolicitacaoOriginal: importForm.dataSolicitacaoOriginal,
+          },
           user,
         });
       }
 
+      // Normalizar data para YYYY-MM-DD
       let sortableDate = importForm.dataSolicitacaoOriginal;
       const parts = sortableDate.split("/");
       if (parts.length === 3 && parts[0].length <= 2) {
         sortableDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
       }
 
-      // ✅ CORREÇÃO: Inserir na fila_espera com status "aguardando" (não "demanda_reprimida")
-      const { error: filaError } = await supabase.from("fila_espera").insert({
-        id: `f${Date.now()}`,
+      const newFilaId = `f${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+
+      // ── CORREÇÃO PRINCIPAL: todos os campos em snake_case ──────────────────
+      const { error: filaError } = await supabase.from("fila_espera" as any).insert({
+        id: newFilaId,
         paciente_id: pacienteId,
         paciente_nome: pacienteNome,
         unidade_id: importForm.unidadeId,
-        profissional_id: importForm.profissionalId || "",
+        profissional_id: importForm.profissionalId || null,
         setor: "",
         prioridade: importForm.prioridade || "normal",
-        status: "aguardando", // ✅ status correto para aparecer na lista
-        tipo_entrada: "demanda_reprimida",
+        prioridade_perfil: importForm.prioridade || "normal",
+        status: "aguardando", // ← status correto para aparecer na lista
         posicao: fila.length + 1,
         hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         criado_por: user?.id || "sistema",
-        observacoes: importForm.observacoes,
-        descricaoClinica: importForm.descricaoClinica,
-        cid: importForm.cid,
-        dataSolicitacaoOriginal: sortableDate,
+        observacoes: importForm.observacoes || "",
+        descricao_clinica: importForm.descricaoClinica || "", // ← snake_case correto
+        cid: importForm.cid || "",
+        data_solicitacao_original: sortableDate, // ← snake_case correto
         origem_cadastro: "demanda_reprimida",
-        especialidade_destino: importForm.especialidadeDestino || "",
+        especialidade_destino:
+          importForm.especialidadeDestino || importForm.profissionalId
+            ? (funcionarios.find((f: any) => f.id === importForm.profissionalId) as any)?.profissao || ""
+            : "",
       });
 
-      if (filaError) throw filaError;
+      if (filaError) {
+        console.error("Erro ao inserir na fila:", filaError);
+        toast.error("Erro ao adicionar na fila: " + filaError.message);
+        setImportSaving(false);
+        return;
+      }
 
-      const unidade = unidades.find((u) => u.id === importForm.unidadeId);
-      const prof = importForm.profissionalId ? funcionarios.find((f) => f.id === importForm.profissionalId) : null;
+      const unidade = unidades.find((u: any) => u.id === importForm.unidadeId);
+      const prof = importForm.profissionalId
+        ? (funcionarios.find((f: any) => f.id === importForm.profissionalId) as any)
+        : null;
 
       ensurePortalAccess({
         pacienteId,
@@ -455,7 +504,7 @@ const FilaEspera: React.FC = () => {
           hora_consulta: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
           unidade: unidade?.nome || "",
           profissional: prof?.nome || "",
-          tipo_atendimento: importForm.tipo === "retorno" ? "Retorno" : "Primeira Consulta",
+          tipo_atendimento: "Demanda Reprimida",
           status_agendamento: "aguardando",
           id_agendamento: "",
         });
@@ -464,27 +513,26 @@ const FilaEspera: React.FC = () => {
       await logAction({
         acao: "criar",
         entidade: "fila_espera",
-        entidadeId: `f${Date.now()}`,
+        entidadeId: newFilaId,
         detalhes: {
           pacienteNome,
           unidade: unidade?.nome,
-          profissional: prof?.nome,
           origemCadastro: "demanda_reprimida",
-          status: "aguardando",
           dataSolicitacaoOriginal: sortableDate,
         },
         user,
         modulo: "fila_espera",
       });
 
-      toast.success(`${pacienteNome} importado da lista antiga para a fila de espera!`);
+      toast.success(`✅ ${pacienteNome} importado com sucesso para a fila de espera!`);
       setImportDialogOpen(false);
       setImportDup(null);
       setImportErrors({});
-      refreshFila();
-    } catch (error) {
-      console.error("Erro ao importar paciente:", error);
-      toast.error("Erro ao importar paciente.");
+      setImportForm({});
+      await refreshFila();
+    } catch (error: any) {
+      console.error("Erro ao importar:", error);
+      toast.error("Erro ao importar: " + (error?.message || "Tente novamente."));
     } finally {
       setImportSaving(false);
     }
@@ -512,9 +560,11 @@ const FilaEspera: React.FC = () => {
           const aRank = priorityRank[a.prioridade] ?? 99;
           const bRank = priorityRank[b.prioridade] ?? 99;
           if (aRank !== bRank) return aRank - bRank;
-          const aCreated = a.criadoEm || "";
-          const bCreated = b.criadoEm || "";
-          return aCreated.localeCompare(bCreated);
+          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
+            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
+          if (a.dataSolicitacaoOriginal) return -1;
+          if (b.dataSolicitacaoOriginal) return 1;
+          return (a.criadoEm || "").localeCompare(b.criadoEm || "");
         });
     },
     [fila],
@@ -523,18 +573,16 @@ const FilaEspera: React.FC = () => {
   const chamarProximoDaFila = useCallback(
     async (slot: SlotInfo, callingUser?: any): Promise<boolean> => {
       const candidates = getNextInQueue(slot.profissionalId, slot.unidadeId);
-      if (candidates.length === 0) return false;
+      if (candidates.length === 0) {
+        toast.info("Nenhum paciente aguardando na fila.");
+        return false;
+      }
       const next = candidates[0];
-      const pac = pacientes.find((p) => p.id === next.pacienteId);
-      const unidade = unidades.find((u) => u.id === slot.unidadeId);
-      const prof = funcionarios.find((f) => f.id === slot.profissionalId);
-      const agora = new Date();
-      const horaChamada = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      await updateFila(next.id, {
-        status: "chamado",
-        horaChamada,
-        observacoes: `Vaga disponível: ${slot.data} às ${slot.hora} com ${slot.profissionalNome}. Reserva expira em 30min.`,
-      });
+      const pac = pacientes.find((p: any) => p.id === next.pacienteId) as any;
+      const unidade = unidades.find((u: any) => u.id === slot.unidadeId) as any;
+      const prof = funcionarios.find((f: any) => f.id === slot.profissionalId) as any;
+      const horaChamada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      await updateFila(next.id, { status: "chamado", horaChamada } as any);
       await logAction({
         acao: "fila_vaga_liberada",
         entidade: "fila_espera",
@@ -560,9 +608,9 @@ const FilaEspera: React.FC = () => {
         tipo_atendimento: slot.tipo || "Consulta",
         status_agendamento: "aguardando",
         id_agendamento: slot.agendamentoOrigemId || "",
-        observacoes: `Vaga disponível. Confirme em até 30 minutos.`,
+        observacoes: "Vaga disponível. Confirme em até 30 minutos.",
       });
-      toast.info(`Vaga notificada para ${next.pacienteNome} (fila de espera). Reserva de 30 min.`);
+      toast.info(`Vaga notificada para ${next.pacienteNome}.`);
       return true;
     },
     [getNextInQueue, pacientes, unidades, funcionarios, updateFila, logAction, notify],
@@ -586,85 +634,61 @@ const FilaEspera: React.FC = () => {
         hora: slot.hora,
         status: "confirmado",
         tipo: slot.tipo || "Consulta",
-        observacoes: "Encaixe automático da fila de espera",
+        observacoes: "Encaixe da fila de espera",
         origem: "recepcao",
         criadoEm: new Date().toISOString(),
         criadoPor: user?.id || "sistema",
       });
-      await updateFila(filaId, { status: "encaixado" });
-      const encaixeUnidade = unidades.find((u) => u.id === slot.unidadeId);
-      ensurePortalAccess({
-        pacienteId: filaItem.pacienteId,
-        contexto: "encaixe",
-        data: slot.data,
-        hora: slot.hora,
-        unidade: encaixeUnidade?.nome || "",
-        profissional: slot.profissionalNome,
-        tipo: slot.tipo || "Consulta",
-      }).catch(() => {});
-      await logAction({
-        acao: "fila_encaixe_confirmado",
-        entidade: "fila_espera",
-        entidadeId: filaId,
-        user,
-        unidadeId: slot.unidadeId,
-        detalhes: { pacienteNome: filaItem.pacienteNome, agendamentoId: agId },
-      });
-      const pac = pacientes.find((p) => p.id === filaItem.pacienteId);
-      const unidade = unidades.find((u) => u.id === slot.unidadeId);
-      await notify({
-        evento: "novo_agendamento",
-        paciente_nome: filaItem.pacienteNome,
-        telefone: pac?.telefone || "",
-        email: pac?.email || "",
-        data_consulta: slot.data,
-        hora_consulta: slot.hora,
-        unidade: unidade?.nome || "",
-        profissional: slot.profissionalNome,
-        tipo_atendimento: slot.tipo || "Consulta",
-        status_agendamento: "confirmado",
-        id_agendamento: agId,
-        observacoes: "Encaixe da fila de espera confirmado.",
-      });
+      await updateFila(filaId, { status: "encaixado" } as any);
       toast.success(`${filaItem.pacienteNome} encaixado na agenda!`);
       refreshAgendamentos();
       refreshFila();
     },
-    [fila, pacientes, unidades, addAgendamento, updateFila, logAction, notify, refreshAgendamentos, refreshFila],
+    [fila, addAgendamento, updateFila, refreshAgendamentos, refreshFila, user],
   );
 
-  const expirarReserva = useCallback(
-    async (filaId: string, slot: SlotInfo, callingUser?: any) => {
-      await updateFila(filaId, { status: "aguardando", observacoes: "Reserva expirada" });
-      refreshFila();
-    },
-    [updateFila, refreshFila],
-  );
+  const openAbsenceModal = (f: FilaEsperaItem) => {
+    setAbsenceFilaItem(f);
+    setAbsenceReason("");
+    setAbsenceObs("");
+    setAbsenceWantsReschedule(false);
+    setAbsenceModalOpen(true);
+  };
 
-  const getAvailableDates = useCallback((profissionalId: string, unidadeId: string, includeBlocked: boolean) => {
-    return [];
-  }, []);
+  const handleAbsenceConfirm = async () => {
+    if (!absenceFilaItem) return;
+    if (!absenceReason) {
+      toast.error("Selecione o motivo.");
+      return;
+    }
+    await updateFila(absenceFilaItem.id, { status: "falta" } as any);
+    toast.success("Falta registrada.");
+    setAbsenceModalOpen(false);
+    refreshFila();
+  };
 
-  const getDayInfoMap = useCallback((profissionalId: string, unidadeId: string, includeBlocked: boolean) => {
-    return {};
-  }, []);
+  const openRescheduleModal = (f: FilaEsperaItem) => {
+    setRescheduleFilaItem(f);
+    setRescheduleSlot({ data: "", hora: "", profissionalId: f.profissionalId || "", unidadeId: f.unidadeId || "" });
+    setRescheduleOpen(true);
+  };
 
   const manualCallDates = useMemo(() => {
     if (!manualSlot.profissionalId || !manualSlot.unidadeId) return [];
-    return getAvailableDates(manualSlot.profissionalId, manualSlot.unidadeId, false);
+    return (getAvailableDates as any)(manualSlot.profissionalId, manualSlot.unidadeId, false);
   }, [manualSlot.profissionalId, manualSlot.unidadeId, getAvailableDates]);
 
-  const manualCallDayInfoMap = useMemo(() => {
-    if (!manualSlot.profissionalId || !manualSlot.unidadeId) return {};
-    return getDayInfoMap(manualSlot.profissionalId, manualSlot.unidadeId, false);
-  }, [manualSlot.profissionalId, manualSlot.unidadeId, getDayInfoMap]);
+  const manualCallSlots = useMemo(() => {
+    if (!manualSlot.profissionalId || !manualSlot.unidadeId || !manualSlot.data) return [];
+    return (getAvailableSlots as any)(manualSlot.profissionalId, manualSlot.unidadeId, manualSlot.data, false);
+  }, [manualSlot.profissionalId, manualSlot.unidadeId, manualSlot.data, getAvailableSlots]);
 
   const handleManualCall = async () => {
     if (!manualSlot.hora || !manualSlot.profissionalId || !manualSlot.unidadeId) {
       toast.error("Preencha todos os campos.");
       return;
     }
-    const prof = funcionarios.find((f) => f.id === manualSlot.profissionalId);
+    const prof = funcionarios.find((f: any) => f.id === manualSlot.profissionalId) as any;
     await chamarProximoDaFila(
       {
         data: manualSlot.data,
@@ -678,160 +702,17 @@ const FilaEspera: React.FC = () => {
     setManualCallDialog(false);
   };
 
-  const openAbsenceModal = (f: FilaEsperaItem) => {
-    setAbsenceFilaItem(f);
-    setAbsenceReason("");
-    setAbsenceObs("");
-    setAbsenceWantsReschedule(false);
-    setAbsenceModalOpen(true);
-  };
-
-  const handleAbsenceConfirm = async () => {
-    if (!absenceFilaItem) return;
-    if (!absenceReason) {
-      toast.error("Selecione o motivo da falta.");
-      return;
-    }
-    await updateFila(absenceFilaItem.id, { status: "falta" });
-    await logAction({
-      acao: "marcar_falta",
-      entidade: "fila_espera",
-      entidadeId: absenceFilaItem.id,
-      detalhes: {
-        pacienteNome: absenceFilaItem.pacienteNome,
-        pacienteId: absenceFilaItem.pacienteId,
-        motivo: absenceReason,
-        observacaoFalta: absenceObs,
-      },
-      user,
-      modulo: "fila_espera",
-    });
-    setAbsenceHistory((prev) => ({
-      ...prev,
-      [absenceFilaItem.pacienteId]: {
-        reason: ABSENCE_REASONS.find((r) => r.value === absenceReason)?.label || absenceReason,
-        obs: absenceObs,
-        date: new Date().toISOString().split("T")[0],
-      },
-    }));
-    toast.success("Falta registrada.");
-    setAbsenceModalOpen(false);
-    if (absenceWantsReschedule) openRescheduleModal(absenceFilaItem);
-    refreshFila();
-  };
-
-  const openRescheduleModal = (f: FilaEsperaItem) => {
-    setRescheduleFilaItem(f);
-    setRescheduleSlot({ data: "", hora: "", profissionalId: f.profissionalId || "", unidadeId: f.unidadeId || "" });
-    setRescheduleOpen(true);
-  };
-
-  const rescheduleDates = useMemo(() => {
-    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return [];
-    return getAvailableDates(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
-  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getAvailableDates]);
-
-  const rescheduleDayInfoMap = useMemo(() => {
-    if (!rescheduleSlot.profissionalId || !rescheduleSlot.unidadeId) return {};
-    return getDayInfoMap(rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, false);
-  }, [rescheduleSlot.profissionalId, rescheduleSlot.unidadeId, getDayInfoMap]);
-
-  const handleRescheduleConfirm = async () => {
-    if (
-      !rescheduleFilaItem ||
-      !rescheduleSlot.data ||
-      !rescheduleSlot.hora ||
-      !rescheduleSlot.profissionalId ||
-      !rescheduleSlot.unidadeId
-    ) {
-      toast.error("Selecione data e horário disponíveis.");
-      return;
-    }
-    const { data: checkResult } = await supabase.rpc("check_slot_availability", {
-      p_profissional_id: rescheduleSlot.profissionalId,
-      p_unidade_id: rescheduleSlot.unidadeId,
-      p_data: rescheduleSlot.data,
-      p_hora: rescheduleSlot.hora,
-    });
-    const result = checkResult as any;
-    if (!result?.available) {
-      const reasons: Record<string, string> = {
-        date_blocked: "Esta data está bloqueada.",
-        no_availability: "Sem disponibilidade configurada.",
-        day_full: "Vagas esgotadas para esta data.",
-        hour_full: "Vagas esgotadas para este horário.",
-      };
-      toast.error(reasons[result?.reason] || "Horário indisponível.");
-      return;
-    }
-    const prof = funcionarios.find((fn) => fn.id === rescheduleSlot.profissionalId);
-    const pac = pacientes.find((p) => p.id === rescheduleFilaItem.pacienteId);
-    const agId = `ag${Date.now()}`;
-    const { error } = await supabase.from("agendamentos").insert({
-      id: agId,
-      paciente_id: rescheduleFilaItem.pacienteId,
-      paciente_nome: rescheduleFilaItem.pacienteNome,
-      profissional_id: rescheduleSlot.profissionalId,
-      profissional_nome: prof?.nome || "",
-      unidade_id: rescheduleSlot.unidadeId,
-      data: rescheduleSlot.data,
-      hora: rescheduleSlot.hora,
-      tipo: "Consulta",
-      status: "pendente",
-      criado_por: user?.id || "sistema",
-      origem: "fila_espera",
-      sala_id: "",
-      setor_id: "",
-      observacoes: `Reagendamento da fila de espera`,
-      prioridade_perfil: rescheduleFilaItem.prioridade || "normal",
-    });
-    if (error) {
-      toast.error("Erro ao criar agendamento: " + error.message);
-      return;
-    }
-    await updateFila(rescheduleFilaItem.id, { status: "encaixado" });
-    await logAction({
-      acao: "reagendar",
-      entidade: "fila_espera",
-      entidadeId: rescheduleFilaItem.id,
-      detalhes: {
-        pacienteNome: rescheduleFilaItem.pacienteNome,
-        novaData: rescheduleSlot.data,
-        novaHora: rescheduleSlot.hora,
-        profissional: prof?.nome,
-        agendamentoId: agId,
-      },
-      user,
-      modulo: "fila_espera",
-    });
-    const unidade = unidades.find((u) => u.id === rescheduleSlot.unidadeId);
-    await notify({
-      evento: "reagendamento",
-      paciente_nome: rescheduleFilaItem.pacienteNome,
-      telefone: pac?.telefone || "",
-      email: pac?.email || "",
-      data_consulta: rescheduleSlot.data,
-      hora_consulta: rescheduleSlot.hora,
-      unidade: unidade?.nome || "",
-      profissional: prof?.nome || "",
-      tipo_atendimento: "Reagendamento",
-      status_agendamento: "pendente",
-      id_agendamento: agId,
-    });
-    toast.success(`Reagendamento criado para ${rescheduleSlot.data} às ${rescheduleSlot.hora}!`);
-    setRescheduleOpen(false);
-    refreshFila();
-    refreshAgendamentos();
-  };
-
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Fila de Espera</h1>
           <p className="text-muted-foreground text-sm">
-            {aguardandoCount} aguardando {chamadoCount > 0 && `• ${chamadoCount} chamado(s)`}{" "}
-            {emAtendimentoCount > 0 && `• ${emAtendimentoCount} em atendimento`}
+            {aguardandoCount} aguardando
+            {chamadoCount > 0 && ` • ${chamadoCount} chamado(s)`}
+            {emAtendimentoCount > 0 && ` • ${emAtendimentoCount} em atendimento`}
+            {" • "}
+            <span className="text-xs text-muted-foreground">({filaFiltrada.length} exibidos)</span>
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -848,7 +729,7 @@ const FilaEspera: React.FC = () => {
                     nomeMae: "",
                     email: "",
                     dataNascimento: "",
-                    unidadeId: "",
+                    unidadeId: user?.unidadeId || "",
                     profissionalId: "",
                     tipo: "primeira_consulta",
                     dataSolicitacaoOriginal: "",
@@ -863,13 +744,12 @@ const FilaEspera: React.FC = () => {
                   setImportDialogOpen(true);
                 }}
               >
-                <FileUp className="w-4 h-4 mr-2" />
-                Importar Lista Antiga
+                <FileUp className="w-4 h-4 mr-2" /> Importar Lista Antiga
               </Button>
               <Button
                 variant="outline"
                 onClick={() => {
-                  setManualSlot({ data: "", hora: "", profissionalId: "", unidadeId: "" });
+                  setManualSlot({ data: "", hora: "", profissionalId: "", unidadeId: user?.unidadeId || "" });
                   setManualCallDialog(true);
                 }}
               >
@@ -877,12 +757,32 @@ const FilaEspera: React.FC = () => {
               </Button>
             </>
           )}
-          <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground">
+          <Button
+            onClick={() => {
+              setEditId(null);
+              setForm({
+                pacienteId: "",
+                pacienteNome: "",
+                unidadeId: user?.unidadeId || "",
+                profissionalId: "",
+                setor: "",
+                prioridade: "normal",
+                status: "aguardando",
+                observacoes: "",
+                descricaoClinica: "",
+                cid: "",
+              });
+              setCriarPaciente(false);
+              setDialogOpen(true);
+            }}
+            className="gradient-primary text-primary-foreground"
+          >
             <Plus className="w-4 h-4 mr-2" /> Novo na Fila
           </Button>
         </div>
       </div>
 
+      {/* Busca */}
       <div className="relative flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -899,14 +799,28 @@ const FilaEspera: React.FC = () => {
         <Button variant="outline" onClick={() => setBusca(buscaInput.trim())}>
           <Search className="w-4 h-4" />
         </Button>
+        {busca && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setBusca("");
+              setBuscaInput("");
+            }}
+          >
+            ✕
+          </Button>
+        )}
       </div>
 
+      {/* Lista */}
       {filaFiltrada.length === 0 ? (
         <Card className="shadow-card border-0">
           <CardContent className="p-8 text-center text-muted-foreground">
             {busca.trim()
               ? `Nenhum paciente encontrado para "${busca}".`
-              : "Nenhum paciente aguardando na fila no momento."}
+              : aguardandoCount > 0
+                ? `Há ${aguardandoCount} paciente(s) na fila mas em outras unidades ou com status diferente.`
+                : "Nenhum paciente aguardando na fila no momento."}
           </CardContent>
         </Card>
       ) : (
@@ -915,75 +829,64 @@ const FilaEspera: React.FC = () => {
             const waitMinutes = item.criadoEm ? differenceInMinutes(now, new Date(item.criadoEm)) : 0;
             const waitLabel =
               waitMinutes >= 60 ? `${Math.floor(waitMinutes / 60)}h${waitMinutes % 60}min` : `${waitMinutes}min`;
-            const isDemandaReprimida = item.tipo_entrada === "demanda_reprimida";
+            const isDemanda = item.origemCadastro === "demanda_reprimida";
+            const unidade = unidades.find((u: any) => u.id === item.unidadeId) as any;
+            const prof = item.profissionalId
+              ? (funcionarios.find((f: any) => f.id === item.profissionalId) as any)
+              : null;
 
             return (
               <Card key={item.id} className="shadow-card border-0">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">
-                    {item.horaChegada || "—"}
-                  </span>
+                  <div className="flex flex-col items-center shrink-0 w-16">
+                    <span className="text-sm font-mono font-bold text-primary">{item.horaChegada}</span>
+                    {isDemanda && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] bg-orange-50 text-orange-600 border-orange-200 mt-0.5"
+                      >
+                        DEMANDA
+                      </Badge>
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground">{item.pacienteNome}</p>
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {isDemandaReprimida && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] px-1.5 py-0"
-                        >
-                          DEMANDA REPRIMIDA
-                        </Badge>
-                      )}
-                      {item.cid && (
-                        <Badge variant="outline" className="text-[10px]">
-                          CID: {item.cid}
-                        </Badge>
-                      )}
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {unidade?.nome}
+                      {prof ? ` • ${prof.nome}` : ""}
+                      {item.dataSolicitacaoOriginal && ` • Solic. ${item.dataSolicitacaoOriginal}`}
+                    </p>
+                    {item.descricaoClinica && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">🩺 {item.descricaoClinica}</p>
+                    )}
+                    {item.cid && <p className="text-xs text-muted-foreground">CID: {item.cid}</p>}
+                    {item.especialidadeDestino && (
+                      <Badge variant="outline" className="text-[10px] border-primary/30 text-primary mt-0.5">
+                        {item.especialidadeDestino.toUpperCase()}
+                      </Badge>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${item.prioridade === "urgente" ? "border-destructive text-destructive" : item.prioridade === "alta" ? "border-warning text-warning" : ""}`}
+                    >
+                      {item.prioridade}
+                    </Badge>
                     <Badge variant="outline" className="text-xs">
                       <Clock className="w-3 h-3 mr-1" /> {waitLabel}
                     </Badge>
-                    {item.status === "aguardando" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          chamarProximoDaFila(
-                            {
-                              data: "",
-                              hora: "",
-                              profissionalId: item.profissionalId || "",
-                              profissionalNome: funcionarios.find((f) => f.id === item.profissionalId)?.nome || "",
-                              unidadeId: item.unidadeId || "",
-                            },
-                            user,
-                          )
-                        }
-                      >
-                        Chamar
+                    <Badge variant="outline" className="text-xs">
+                      {item.status}
+                    </Badge>
+                    {canManage && item.status === "aguardando" && (
+                      <Button size="sm" variant="outline" onClick={() => openAbsenceModal(item as any)}>
+                        Falta
                       </Button>
                     )}
-                    {item.status === "chamado" && (
-                      <Button
-                        size="sm"
-                        className="gradient-primary text-primary-foreground"
-                        onClick={() =>
-                          confirmarEncaixe(
-                            item.id,
-                            {
-                              data: "",
-                              hora: "",
-                              profissionalId: item.profissionalId || "",
-                              profissionalNome: funcionarios.find((f) => f.id === item.profissionalId)?.nome || "",
-                              unidadeId: item.unidadeId || "",
-                            },
-                            user,
-                          )
-                        }
-                      >
-                        Confirmar Encaixe
+                    {canManage && item.status === "aguardando" && (
+                      <Button size="sm" variant="outline" onClick={() => openRescheduleModal(item as any)}>
+                        Reagendar
                       </Button>
                     )}
                   </div>
@@ -994,184 +897,82 @@ const FilaEspera: React.FC = () => {
         </div>
       )}
 
+      {/* Dialog Adicionar à Fila */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo Paciente na Fila</DialogTitle>
+            <DialogTitle>{editId ? "Editar" : "Novo Paciente na"} Fila</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {!criarPaciente && (
+            {!criarPaciente ? (
               <div className="space-y-2">
-                <Label>Paciente Existente</Label>
+                <Label>Paciente *</Label>
                 <BuscaPaciente
                   pacientes={pacientes}
                   value={form.pacienteId}
                   onChange={(id) => {
-                    const selectedPac = pacientes.find((p) => p.id === id);
-                    setForm((p) => ({ ...p, pacienteId: id, pacienteNome: selectedPac?.nome || "" }));
+                    const p = pacientes.find((px: any) => px.id === id) as any;
+                    setForm((prev) => ({ ...prev, pacienteId: id, pacienteNome: p?.nome || "" }));
                   }}
                 />
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <div className="flex-1 h-px bg-border" />
-                  <span>ou</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <Button variant="outline" className="w-full" onClick={() => setCriarPaciente(true)}>
-                  <Plus className="w-4 h-4 mr-2" /> Cadastrar Novo Paciente
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 h-auto"
+                  onClick={() => {
+                    setCriarPaciente(true);
+                    setNovoPaciente({});
+                  }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Criar novo paciente
                 </Button>
               </div>
-            )}
-            {criarPaciente && (
-              <div className="space-y-2">
-                <Label>Nome do Paciente *</Label>
+            ) : (
+              <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
+                <div className="flex justify-between items-center">
+                  <Label className="font-semibold">Novo Paciente</Label>
+                  <Button variant="ghost" size="sm" onClick={() => setCriarPaciente(false)}>
+                    Voltar
+                  </Button>
+                </div>
                 <Input
-                  value={novoPaciente.nome}
+                  placeholder="Nome completo *"
+                  value={novoPaciente.nome || ""}
                   onChange={(e) => setNovoPaciente((p) => ({ ...p, nome: e.target.value }))}
                 />
-                {pacienteErrors.nome && <p className="text-destructive text-xs">{pacienteErrors.nome}</p>}
-                <Label>Telefone</Label>
                 <Input
-                  value={novoPaciente.telefone}
+                  placeholder="Telefone"
+                  value={novoPaciente.telefone || ""}
                   onChange={(e) => setNovoPaciente((p) => ({ ...p, telefone: e.target.value }))}
                 />
-                {pacienteErrors.telefone && <p className="text-destructive text-xs">{pacienteErrors.telefone}</p>}
-                <Label>Email</Label>
                 <Input
-                  value={novoPaciente.email}
+                  placeholder="E-mail (opcional)"
+                  value={novoPaciente.email || ""}
                   onChange={(e) => setNovoPaciente((p) => ({ ...p, email: e.target.value }))}
                 />
-                {pacienteErrors.email && <p className="text-destructive text-xs">{pacienteErrors.email}</p>}
-                <Button variant="outline" className="w-full" onClick={handleCreatePaciente}>
+                <Button className="w-full" onClick={handleCreatePaciente}>
                   Salvar Paciente
                 </Button>
                 {duplicataEncontrada && (
-                  <AlertDialog open={!!duplicataEncontrada} onOpenChange={() => setDuplicataEncontrada(null)}>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Paciente Duplicado?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Já existe um paciente com dados semelhantes: {duplicataEncontrada.nome} (
-                          {duplicataEncontrada.cpf}). Deseja usar este paciente?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => usarPacienteExistente(duplicataEncontrada)}>
-                          Usar Existente
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
+                    <p className="font-medium text-warning">
+                      ⚠️ Paciente semelhante: <strong>{(duplicataEncontrada as any).nome}</strong>
+                    </p>
+                    <Button size="sm" variant="outline" onClick={() => usarPacienteExistente(duplicataEncontrada)}>
+                      Usar este paciente
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
-            {(form.pacienteId || criarPaciente) && (
-              <div className="space-y-2">
-                <Label>Unidade *</Label>
-                <Select value={form.unidadeId} onValueChange={(v) => setForm((p) => ({ ...p, unidadeId: v }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a unidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unidades.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Label>Profissional (Opcional)</Label>
-                <Select
-                  value={form.profissionalId}
-                  onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Qualquer profissional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Qualquer profissional</SelectItem>
-                    {funcionarios.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Label>Prioridade</Label>
-                <Select value={form.prioridade} onValueChange={(v) => setForm((p) => ({ ...p, prioridade: v }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="urgente">Urgente</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Label>Observações</Label>
-                <Textarea
-                  value={form.observacoes}
-                  onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))}
-                />
-                <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
-                  Adicionar à Fila
-                </Button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Importar Paciente da Lista Antiga</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Nome do Paciente *</Label>
-              <Input value={importForm.nome} onChange={(e) => setImportForm((p) => ({ ...p, nome: e.target.value }))} />
-              {importErrors.nome && <p className="text-destructive text-xs">{importErrors.nome}</p>}
-            </div>
-            <div>
-              <Label>CPF</Label>
-              <Input value={importForm.cpf} onChange={(e) => setImportForm((p) => ({ ...p, cpf: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Telefone</Label>
-              <Input
-                value={importForm.telefone}
-                onChange={(e) => setImportForm((p) => ({ ...p, telefone: e.target.value }))}
-              />
-              {importErrors.telefone && <p className="text-destructive text-xs">{importErrors.telefone}</p>}
-            </div>
-            <div>
-              <Label>Email</Label>
-              <Input
-                value={importForm.email}
-                onChange={(e) => setImportForm((p) => ({ ...p, email: e.target.value }))}
-              />
-              {importErrors.email && <p className="text-destructive text-xs">{importErrors.email}</p>}
-            </div>
-            <div>
-              <Label>Data de Nascimento</Label>
-              <Input
-                type="date"
-                value={importForm.dataNascimento}
-                onChange={(e) => setImportForm((p) => ({ ...p, dataNascimento: e.target.value }))}
-              />
-            </div>
             <div>
               <Label>Unidade *</Label>
-              <Select
-                value={importForm.unidadeId}
-                onValueChange={(v) => setImportForm((p) => ({ ...p, unidadeId: v }))}
-              >
+              <Select value={form.unidadeId} onValueChange={(v) => setForm((p) => ({ ...p, unidadeId: v }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a unidade" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {unidades.map((u) => (
+                  {unidades.map((u: any) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.nome}
                     </SelectItem>
@@ -1180,67 +981,223 @@ const FilaEspera: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Profissional (Opcional)</Label>
+              <Label>Profissional (opcional)</Label>
               <Select
-                value={importForm.profissionalId}
-                onValueChange={(v) => setImportForm((p) => ({ ...p, profissionalId: v }))}
+                value={form.profissionalId || "none"}
+                onValueChange={(v) => setForm((p) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Qualquer profissional" />
+                  <SelectValue placeholder="Qualquer" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Qualquer profissional</SelectItem>
-                  {funcionarios.map((f) => (
+                  <SelectItem value="none">Qualquer profissional</SelectItem>
+                  {funcionarios.map((f: any) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.nome}
+                      {f.profissao ? ` — ${f.profissao}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Data de Solicitação Original *</Label>
-              <Input
-                type="date"
-                value={importForm.dataSolicitacaoOriginal}
-                onChange={(e) => setImportForm((p) => ({ ...p, dataSolicitacaoOriginal: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Especialidade Destino (opcional)</Label>
+              <Label>Prioridade</Label>
               <Select
-                value={importForm.especialidadeDestino}
-                onValueChange={(v) => setImportForm((p) => ({ ...p, especialidadeDestino: v }))}
+                value={form.prioridade || "normal"}
+                onValueChange={(v) => setForm((p) => ({ ...p, prioridade: v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a especialidade" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fisioterapia">Fisioterapia</SelectItem>
-                  <SelectItem value="fonoaudiologia">Fonoaudiologia</SelectItem>
-                  <SelectItem value="nutricao">Nutrição</SelectItem>
-                  <SelectItem value="psicologia">Psicologia</SelectItem>
-                  <SelectItem value="terapia_ocupacional">Terapia Ocupacional</SelectItem>
-                  <SelectItem value="outros">Outros</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="urgente">Urgente</SelectItem>
+                  <SelectItem value="idoso">Idoso 60+</SelectItem>
+                  <SelectItem value="gestante">Gestante</SelectItem>
+                  <SelectItem value="pcd">PCD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Textarea
+                value={form.observacoes || ""}
+                onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))}
+              />
+            </div>
+            <Button onClick={handleSave} className="w-full gradient-primary text-primary-foreground">
+              {editId ? "Atualizar" : "Adicionar à Fila"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Importar Lista Antiga */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileUp className="w-5 h-5" /> Importar Lista Antiga (Demanda Reprimida)
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Cadastre pacientes da lista em papel. Eles aparecerão na fila de espera com etiqueta DEMANDA.
+          </p>
+
+          {importDup && (
+            <div className="p-3 rounded-lg border border-warning bg-warning/10 text-sm space-y-2">
+              <p className="font-medium text-warning">
+                ⚠️ Paciente já cadastrado: <strong>{importDup.nome}</strong>
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => handleImportSave(importDup)}>
+                  Usar este e adicionar à fila
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setImportDup(null)}>
+                  Corrigir dados
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <Label>Nome Completo *</Label>
+              <Input
+                value={importForm.nome || ""}
+                onChange={(e) => setImportForm((p: any) => ({ ...p, nome: e.target.value }))}
+              />
+              {importErrors.nome && <p className="text-xs text-destructive mt-1">{importErrors.nome}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Telefone *</Label>
+                <Input
+                  value={importForm.telefone || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, telefone: e.target.value }))}
+                  placeholder="(93) 99999-0000"
+                />
+              </div>
+              <div>
+                <Label>CPF (opcional)</Label>
+                <Input
+                  value={importForm.cpf || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, cpf: e.target.value }))}
+                  placeholder="000.000.000-00"
+                />
+              </div>
+              <div>
+                <Label>CNS / Cartão SUS</Label>
+                <Input
+                  value={importForm.cns || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, cns: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Data Nasc.</Label>
+                <Input
+                  type="date"
+                  value={importForm.dataNascimento || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, dataNascimento: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>E-mail (opcional)</Label>
+                <Input
+                  value={importForm.email || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, email: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Data Solicitação Original *</Label>
+                <Input
+                  type="date"
+                  value={importForm.dataSolicitacaoOriginal || ""}
+                  onChange={(e) => setImportForm((p: any) => ({ ...p, dataSolicitacaoOriginal: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Unidade *</Label>
+              <Select
+                value={importForm.unidadeId || ""}
+                onValueChange={(v) => setImportForm((p: any) => ({ ...p, unidadeId: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidades.map((u: any) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Profissional (opcional)</Label>
+              <Select
+                value={importForm.profissionalId || "none"}
+                onValueChange={(v) => setImportForm((p: any) => ({ ...p, profissionalId: v === "none" ? "" : v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Qualquer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Qualquer profissional</SelectItem>
+                  {funcionarios.map((f: any) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.nome}
+                      {f.profissao ? ` — ${f.profissao}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Prioridade</Label>
+              <Select
+                value={importForm.prioridade || "normal"}
+                onValueChange={(v) => setImportForm((p: any) => ({ ...p, prioridade: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="idoso">Idoso 60+</SelectItem>
+                  <SelectItem value="pcd">PCD / Autismo</SelectItem>
+                  <SelectItem value="urgente">Urgente</SelectItem>
+                  <SelectItem value="gestante">Gestante</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Descrição Clínica</Label>
               <Textarea
-                value={importForm.descricaoClinica}
-                onChange={(e) => setImportForm((p) => ({ ...p, descricaoClinica: e.target.value }))}
+                value={importForm.descricaoClinica || ""}
+                onChange={(e) => setImportForm((p: any) => ({ ...p, descricaoClinica: e.target.value }))}
+                rows={2}
+                placeholder="Motivo, queixa principal..."
               />
             </div>
             <div>
-              <Label>CID</Label>
-              <Input value={importForm.cid} onChange={(e) => setImportForm((p) => ({ ...p, cid: e.target.value }))} />
+              <Label>CID (opcional)</Label>
+              <Input
+                value={importForm.cid || ""}
+                onChange={(e) => setImportForm((p: any) => ({ ...p, cid: e.target.value }))}
+                placeholder="Ex: G80.0"
+              />
             </div>
             <div>
               <Label>Observações</Label>
               <Textarea
-                value={importForm.observacoes}
-                onChange={(e) => setImportForm((p) => ({ ...p, observacoes: e.target.value }))}
+                value={importForm.observacoes || ""}
+                onChange={(e) => setImportForm((p: any) => ({ ...p, observacoes: e.target.value }))}
+                rows={2}
               />
             </div>
             <Button
@@ -1248,67 +1205,33 @@ const FilaEspera: React.FC = () => {
               className="w-full gradient-primary text-primary-foreground"
               disabled={importSaving}
             >
-              {importSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Importar e Adicionar à Fila
+              {importSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Importar para Fila de Espera
             </Button>
-            {importDup && (
-              <AlertDialog open={!!importDup} onOpenChange={() => setImportDup(null)}>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Paciente Duplicado na Importação?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Já existe um paciente com dados semelhantes: {importDup.nome} ({importDup.cpf}). Deseja importar
-                      mesmo assim ou usar o existente?
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <Button variant="outline" onClick={() => setImportDup(null)}>
-                      Cancelar
-                    </Button>
-                    <Button onClick={() => handleImportSave(importDup)}>Usar Existente</Button>
-                    <Button onClick={() => handleImportSave()}>Importar Novo</Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* Dialog Chamar Manualmente */}
       <Dialog open={manualCallDialog} onOpenChange={setManualCallDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Chamar Paciente Manualmente</DialogTitle>
+            <DialogTitle>Chamar Próximo da Fila</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Profissional</Label>
-              <Select
-                value={manualSlot.profissionalId}
-                onValueChange={(v) => setManualSlot((p) => ({ ...p, profissionalId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o profissional" />
-                </SelectTrigger>
-                <SelectContent>
-                  {funcionarios.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Unidade</Label>
+              <Label>Unidade *</Label>
               <Select
                 value={manualSlot.unidadeId}
-                onValueChange={(v) => setManualSlot((p) => ({ ...p, unidadeId: v }))}
+                onValueChange={(v) =>
+                  setManualSlot((p) => ({ ...p, unidadeId: v, profissionalId: "", data: "", hora: "" }))
+                }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a unidade" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {unidades.map((u) => (
+                  {unidades.map((u: any) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.nome}
                     </SelectItem>
@@ -1316,19 +1239,39 @@ const FilaEspera: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Profissional *</Label>
+              <Select
+                value={manualSlot.profissionalId}
+                onValueChange={(v) => setManualSlot((p) => ({ ...p, profissionalId: v, data: "", hora: "" }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {funcionarios
+                    .filter((f: any) => !manualSlot.unidadeId || f.unidadeId === manualSlot.unidadeId)
+                    .map((f: any) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.nome}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
             {manualSlot.profissionalId && manualSlot.unidadeId && (
               <>
                 <div>
-                  <Label>Data</Label>
+                  <Label>Data *</Label>
                   <Select
                     value={manualSlot.data}
                     onValueChange={(v) => setManualSlot((p) => ({ ...p, data: v, hora: "" }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione a data" />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {manualCallDates.map((d) => (
+                      {manualCallDates.map((d: string) => (
                         <SelectItem key={d} value={d}>
                           {d}
                         </SelectItem>
@@ -1338,46 +1281,58 @@ const FilaEspera: React.FC = () => {
                 </div>
                 {manualSlot.data && (
                   <div>
-                    <Label>Hora</Label>
-                    <Select value={manualSlot.hora} onValueChange={(v) => setManualSlot((p) => ({ ...p, hora: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a hora" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="08:00">08:00</SelectItem>
-                        <SelectItem value="08:30">08:30</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Horário *</Label>
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      {manualCallSlots.map((slot: string) => (
+                        <Button
+                          key={slot}
+                          size="sm"
+                          variant={manualSlot.hora === slot ? "default" : "outline"}
+                          className={manualSlot.hora === slot ? "gradient-primary text-primary-foreground" : ""}
+                          onClick={() => setManualSlot((p) => ({ ...p, hora: slot }))}
+                        >
+                          {slot}
+                        </Button>
+                      ))}
+                      {manualCallSlots.length === 0 && (
+                        <p className="col-span-4 text-sm text-muted-foreground">Sem horários disponíveis.</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </>
             )}
-            <Button onClick={handleManualCall} className="w-full gradient-primary text-primary-foreground">
-              Chamar Próximo da Fila
+            <Button
+              onClick={handleManualCall}
+              disabled={!manualSlot.hora || !manualSlot.profissionalId || !manualSlot.unidadeId}
+              className="w-full gradient-primary text-primary-foreground"
+            >
+              Chamar Próximo
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* Dialog Falta */}
       <Dialog open={absenceModalOpen} onOpenChange={setAbsenceModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Registrar Falta</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Registrar falta para <strong className="text-foreground">{absenceFilaItem?.pacienteNome}</strong>.
+              Paciente: <strong>{absenceFilaItem?.pacienteNome}</strong>
             </p>
             <div>
-              <Label>Motivo da Falta *</Label>
+              <Label>Motivo *</Label>
               <Select value={absenceReason} onValueChange={setAbsenceReason}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o motivo" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ABSENCE_REASONS.map((reason) => (
-                    <SelectItem key={reason.value} value={reason.value}>
-                      {reason.label}
+                  {ABSENCE_REASONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {r.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1385,116 +1340,27 @@ const FilaEspera: React.FC = () => {
             </div>
             <div>
               <Label>Observações</Label>
-              <Textarea value={absenceObs} onChange={(e) => setAbsenceObs(e.target.value)} />
+              <Textarea value={absenceObs} onChange={(e) => setAbsenceObs(e.target.value)} rows={2} />
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="reschedule"
                 checked={absenceWantsReschedule}
                 onChange={(e) => setAbsenceWantsReschedule(e.target.checked)}
               />
-              <label
-                htmlFor="reschedule"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Deseja reagendar?
+              <label htmlFor="reschedule" className="text-sm cursor-pointer">
+                Reagendar após registrar
               </label>
             </div>
-            <Button onClick={handleAbsenceConfirm} className="w-full gradient-primary text-primary-foreground">
-              Confirmar Falta
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reagendar Paciente</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Reagendando <strong className="text-foreground">{rescheduleFilaItem?.pacienteNome}</strong>.
-            </p>
-            <div>
-              <Label>Profissional</Label>
-              <Select
-                value={rescheduleSlot.profissionalId}
-                onValueChange={(v) => setRescheduleSlot((p) => ({ ...p, profissionalId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o profissional" />
-                </SelectTrigger>
-                <SelectContent>
-                  {funcionarios.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setAbsenceModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 bg-destructive text-destructive-foreground" onClick={handleAbsenceConfirm}>
+                Confirmar Falta
+              </Button>
             </div>
-            <div>
-              <Label>Unidade</Label>
-              <Select
-                value={rescheduleSlot.unidadeId}
-                onValueChange={(v) => setRescheduleSlot((p) => ({ ...p, unidadeId: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a unidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  {unidades.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {rescheduleSlot.profissionalId && rescheduleSlot.unidadeId && (
-              <>
-                <div>
-                  <Label>Data</Label>
-                  <Select
-                    value={rescheduleSlot.data}
-                    onValueChange={(v) => setRescheduleSlot((p) => ({ ...p, data: v, hora: "" }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a data" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {rescheduleDates.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {rescheduleSlot.data && (
-                  <div>
-                    <Label>Hora</Label>
-                    <Select
-                      value={rescheduleSlot.hora}
-                      onValueChange={(v) => setRescheduleSlot((p) => ({ ...p, hora: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a hora" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="09:00">09:00</SelectItem>
-                        <SelectItem value="09:30">09:30</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </>
-            )}
-            <Button onClick={handleRescheduleConfirm} className="w-full gradient-primary text-primary-foreground">
-              Confirmar Reagendamento
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
