@@ -332,9 +332,9 @@ const Triagem: React.FC = () => {
                           {espBadge}
                         </Badge>
                       )}
-                      {item.cid && (
+                      {(item as any).cid && (
                         <Badge variant="outline" className="text-[10px]">
-                          CID: {item.cid}
+                          CID: {(item as any).cid}
                         </Badge>
                       )}
                     </div>
