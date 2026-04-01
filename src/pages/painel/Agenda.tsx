@@ -411,8 +411,8 @@ const Agenda: React.FC = () => {
       await supabase
         .from("agendamentos")
         .update({
-          rejeitado_motivo: rejeicaoMotivo,
-        })
+          observacoes: `Rejeitado: ${rejeicaoMotivo}`,
+        } as any)
         .eq("id", rejeicaoTarget.id);
 
       const paciente = pacientes.find((p) => p.id === rejeicaoTarget.pacienteId);
