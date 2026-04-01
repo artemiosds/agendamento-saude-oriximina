@@ -453,8 +453,8 @@ const Agenda: React.FC = () => {
       // CORREÇÃO 3: Confirmação de Chegada
       if (newStatus === "confirmado_chegada") {
         await updateAgendamento(agId, {
-          status: "aguardando_triagem", // Regra 3: Sempre para aguardando_triagem
-          hora_chegada: new Date().toISOString(),
+          status: "aguardando_triagem",
+          horaChegada: new Date().toISOString(),
         });
         const ag = agendamentos.find(a => a.id === agId);
         if (ag) {
