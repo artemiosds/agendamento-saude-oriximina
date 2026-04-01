@@ -1079,7 +1079,7 @@ const Agenda: React.FC = () => {
                 const paciente = pacientes.find((p) => p.id === ag.pacienteId);
                 // const lastAppt = lastProntuarios[ag.pacienteId];
                 const ehPendenteOnline = ag.origem === "online" && ag.status === "pendente";
-                const anexoUrl = ag.attachment_url || ag.attachmentUrl;
+                const anexoUrl = ag.attachmentUrl;
                 const typeColorBar: Record<string, string> = {
                   Consulta: "border-l-[#3B82F6]",
                   Retorno: "border-l-[#10B981]",
