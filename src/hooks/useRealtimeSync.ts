@@ -54,6 +54,7 @@ export function useRealtimeSync<T = Record<string, unknown>>({
 
     const startPolling = () => {
       if (!pollRef.current || pollingRef.current) return;
+      void pollRef.current?.();
       pollingRef.current = setInterval(() => {
         void pollRef.current?.();
       }, pollIntervalMs);

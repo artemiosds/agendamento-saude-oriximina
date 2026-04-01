@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -133,7 +134,10 @@ const Agenda: React.FC = () => {
     addAtendimento,
     logAction,
     refreshAgendamentos,
+    refreshFila,
     fila,
+    updateFila,
+    addToFila,
     disponibilidades,
     getAvailableSlots,
     getAvailableDates,
@@ -530,7 +534,6 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
-    // Block closing atendimento without prontuário
     if (newStatus === "concluido") {
       try {
         const { count } = await supabase
@@ -547,56 +550,53 @@ const Agenda: React.FC = () => {
       }
     }
 
-    if (newStatus === "confirmado_chegada") {
-      try {
-        const { data: setting } = await (supabase as any)
-          .from("triage_settings")
-          .select("enabled")
-          .or(`unidade_id.eq.${ag.unidadeId},unidade_id.is.null`)
-          .eq("enabled", true)
-          .limit(1)
-          .maybeSingle();
-        if (setting) {
-          const { count } = await supabase
-            .from("funcionarios")
-            .select("*", { count: "exact", head: true })
-            .eq("role", "tecnico")
-            .eq("unidade_id", ag.unidadeId)
-            .eq("ativo", true);
-          if ((count ?? 0) > 0) {
-            await updateAgendamento(agId, { status: "aguardando_triagem" as any });
-            // Also insert into fila_espera so triagem screen can find the patient
-            try {
-              const filaId = `fila_${Date.now()}`;
-              await supabase.from("fila_espera").insert({
-                id: filaId,
-                paciente_id: ag.pacienteId,
-                paciente_nome: ag.pacienteNome,
-                unidade_id: ag.unidadeId,
-                profissional_id: ag.profissionalId,
-                status: "aguardando_triagem",
-                prioridade: "normal",
-                prioridade_perfil: "normal",
-                hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-                setor: "",
-                especialidade_destino: "",
-                criado_por: user?.nome || "recepcao",
-              });
-            } catch (filaErr) {
-              console.error("Error inserting fila_espera for triage:", filaErr);
-            }
-            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
-            return;
-          }
+    try {
+      if (newStatus === "confirmado_chegada") {
+        const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+        await updateAgendamento(agId, { status: "confirmado_chegada" as any, horaChegada } as any);
+
+        const filaExistente = fila.find((item) => item.id === agId);
+        if (filaExistente) {
+          await updateFila(agId, {
+            status: "chegada_confirmada" as any,
+            pacienteId: ag.pacienteId,
+            pacienteNome: ag.pacienteNome,
+            unidadeId: ag.unidadeId,
+            profissionalId: ag.profissionalId,
+            horaChegada,
+          } as any);
+        } else {
+          await addToFila({
+            id: agId,
+            pacienteId: ag.pacienteId,
+            pacienteNome: ag.pacienteNome,
+            unidadeId: ag.unidadeId,
+            profissionalId: ag.profissionalId,
+            setor: "",
+            prioridade: "normal",
+            status: "chegada_confirmada" as any,
+            posicao: fila.length + 1,
+            horaChegada,
+            observacoes: ag.observacoes || "",
+            criadoPor: user?.nome || "recepcao",
+          } as any);
         }
-      } catch (err) {
-        console.error("Error checking triage settings:", err);
+
+        await Promise.all([refreshAgendamentos(), refreshFila()]);
+        toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
+      } else {
+        await updateAgendamento(agId, { status: newStatus as any });
+        await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
+    } catch (err) {
+      console.error("Error updating appointment status:", err);
+      toast.error("Erro ao atualizar status do agendamento.");
+      return;
     }
-    await updateAgendamento(agId, { status: newStatus as any });
+
     const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
     const unidade = unidades.find((u) => u.id === ag.unidadeId);
-    if (newStatus === "confirmado_chegada") toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
     const statusToEvento: Record<string, string> = {
       cancelado: "cancelamento",
       remarcado: "reagendamento",
@@ -642,6 +642,7 @@ const Agenda: React.FC = () => {
         if (newStatus === "cancelado" && configuracoes.googleCalendar.removerCancelar) {
           await gcal.deleteEvent(ag.googleEventId);
           await updateAgendamento(agId, { syncStatus: "ok" });
+          await refreshAgendamentos();
           toast.success("Evento removido do Google Agenda.");
         } else if (newStatus === "remarcado" && configuracoes.googleCalendar.atualizarRemarcar) {
           toast.info("Remarcação registrada.");
@@ -649,6 +650,7 @@ const Agenda: React.FC = () => {
       } catch (err) {
         console.error("Google Calendar sync error:", err);
         await updateAgendamento(agId, { syncStatus: "erro" });
+        await refreshAgendamentos();
       }
     }
   };
@@ -676,23 +678,35 @@ const Agenda: React.FC = () => {
   };
 
   const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0]) => {
+    const statusPermitidos = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
+    if (!statusPermitidos.includes(ag.status)) {
+      toast.error("Este agendamento ainda não está liberado para iniciar atendimento.");
+      return;
+    }
+
     try {
-      const { error: rpcError } = await supabase.rpc("iniciar_atendimento", {
-        p_agendamento_id: ag.id,
-        p_profissional_id: user?.id || "",
-      });
-      if (rpcError) {
-        if (rpcError.message.includes("arrival_not_confirmed"))
-          toast.error("A chegada do paciente ainda não foi confirmada pela recepção.");
-        else if (rpcError.message.includes("not_authorized"))
-          toast.error("Você não tem permissão para este agendamento.");
-        else toast.error("Não foi possível iniciar o atendimento.");
-        return;
+      if (ag.status === "apto_atendimento") {
+        await updateAgendamento(ag.id, { status: "em_atendimento" as any });
+      } else {
+        const { error: rpcError } = await supabase.rpc("iniciar_atendimento", {
+          p_agendamento_id: ag.id,
+          p_profissional_id: user?.id || "",
+        });
+        if (rpcError) {
+          if (rpcError.message.includes("arrival_not_confirmed"))
+            toast.error("A chegada do paciente ainda não foi confirmada pela recepção.");
+          else if (rpcError.message.includes("not_authorized"))
+            toast.error("Você não tem permissão para este agendamento.");
+          else toast.error("Não foi possível iniciar o atendimento.");
+          return;
+        }
       }
     } catch (err) {
       toast.error("Erro ao validar início do atendimento.");
       return;
     }
+
+    await Promise.all([refreshAgendamentos(), refreshFila()]);
 
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -706,7 +720,6 @@ const Agenda: React.FC = () => {
       }),
     );
 
-    await refreshAgendamentos();
     const pac = pacientes.find((p) => p.id === ag.pacienteId);
 
     await addAtendimento({
@@ -1211,7 +1224,7 @@ const Agenda: React.FC = () => {
               </Card>
             ) : (
               filtered.map((ag) => {
-                const ehHoje = ag.data === new Date().toISOString().split("T")[0];
+                const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
                 const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
