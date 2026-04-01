@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer } from "lucide-react";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
+import { openPrintDocument } from "@/lib/printLayout";
 
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
@@ -510,6 +511,182 @@ const Pacientes: React.FC = () => {
       toast.error("Erro ao adicionar à fila.");
     } finally {
       setSavingFila(false);
+    }
+  };
+
+  const handlePrintFicha = async (p: (typeof pacientes)[0]) => {
+    try {
+      // Fetch latest appointment
+      const { data: latestAg } = await supabase
+        .from("agendamentos")
+        .select("id, unidade_id, profissional_id, data, hora, tipo_atendimento")
+        .eq("paciente_id", p.id)
+        .order("data", { ascending: false })
+        .order("hora", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Fetch latest triage record (linked to the latest appointment or just the latest for the patient)
+      let triage: any = null;
+      if (latestAg) {
+        const { data: triageData } = await supabase
+          .from("triage_records")
+          .select("*")
+          .eq("agendamento_id", latestAg.id)
+          .maybeSingle();
+        triage = triageData;
+      }
+
+      const unidade = unidades.find((u) => u.id === (latestAg?.unidade_id || user?.unidadeId));
+      const profissional = funcionarios.find((f) => f.id === (latestAg?.profissional_id || user?.id));
+
+      const html = `
+        <style>
+          .ficha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+          .ficha-section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 15px; }
+          .ficha-section-title { font-weight: 700; font-size: 12px; text-transform: uppercase; color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 10px; }
+          .vitals-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+          .vital-item { border: 1px solid #e2e8f0; padding: 8px; border-radius: 4px; text-align: center; }
+          .vital-label { font-size: 9px; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
+          .vital-value { font-size: 14px; font-weight: 600; color: #1e293b; }
+          .empty-line { border-bottom: 1px solid #cbd5e1; height: 20px; margin-top: 4px; }
+          .evolution-block { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 10px; min-height: 100px; }
+          .evolution-header { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-bottom: 8px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 4px; }
+        </style>
+
+        <div class="ficha-section">
+          <div class="ficha-section-title">Identificação do Paciente</div>
+          <div class="info-grid">
+            <div><div class="info-label">Nome Completo</div><div class="info-value">${p.nome}</div></div>
+            <div><div class="info-label">CPF</div><div class="info-value">${p.cpf || "____________________"}</div></div>
+            <div><div class="info-label">CNS (Cartão SUS)</div><div class="info-value">${p.cns || "____________________"}</div></div>
+            <div><div class="info-label">Data de Nascimento</div><div class="info-value">${p.dataNascimento ? formatarData(p.dataNascimento) : "____/____/____"} (${p.dataNascimento ? calcularIdade(p.dataNascimento) : "__"} anos)</div></div>
+            <div><div class="info-label">Nome da Mãe</div><div class="info-value">${p.nomeMae || "____________________"}</div></div>
+            <div><div class="info-label">Telefone</div><div class="info-value">${p.telefone || "____________________"}</div></div>
+          </div>
+        </div>
+
+        <div class="ficha-grid">
+          <div class="ficha-section">
+            <div class="ficha-section-title">Informações Clínicas</div>
+            <div class="field">
+              <div class="field-label">Prontuário / ID</div>
+              <div class="field-value">${p.id}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">CID-10</div>
+              <div class="field-value">${p.cid || "____________________"}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Tipo de Atendimento</div>
+              <div class="field-value">${latestAg?.tipo_atendimento || "____________________"}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Unidade de Origem</div>
+              <div class="field-value">${(p as any).ubs_origem || "____________________"}</div>
+            </div>
+          </div>
+
+          <div class="ficha-section">
+            <div class="ficha-section-title">Atendimento Atual</div>
+            <div class="field">
+              <div class="field-label">Unidade de Atendimento</div>
+              <div class="field-value">${unidade?.nome || "____________________"}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Data do Atendimento</div>
+              <div class="field-value">${latestAg?.data ? formatarData(latestAg.data) : "____/____/________"}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Profissional Responsável</div>
+              <div class="field-value">${profissional?.nome || "____________________"}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ficha-section">
+          <div class="ficha-section-title">Sinais Vitais (Triagem)</div>
+          <div class="vitals-grid">
+            <div class="vital-item">
+              <div class="vital-label">P.A. (mmHg)</div>
+              <div class="vital-value">${triage?.pressao_arterial || "____ / ____"}</div>
+            </div>
+            <div class="vital-item">
+              <div class="vital-label">F.C. (bpm)</div>
+              <div class="vital-value">${triage?.frequencia_cardiaca || "________"}</div>
+            </div>
+            <div class="vital-item">
+              <div class="vital-label">Temp. (°C)</div>
+              <div class="vital-value">${triage?.temperatura || "________"}</div>
+            </div>
+            <div class="vital-item">
+              <div class="vital-label">Sat. O2 (%)</div>
+              <div class="vital-value">${triage?.saturacao_oxigenio || "________"}</div>
+            </div>
+            <div class="vital-item">
+              <div class="vital-label">Peso (kg)</div>
+              <div class="vital-value">${triage?.peso || "________"}</div>
+            </div>
+            <div class="vital-item">
+              <div class="vital-label">Altura (cm)</div>
+              <div class="vital-value">${triage?.altura || "________"}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ficha-section">
+          <div class="ficha-section-title">Encaminhamento / Conduta</div>
+          <div class="info-grid">
+            <div><div class="info-label">Especialidade Destino</div><div class="info-value">${(p as any).especialidade_destino || "____________________"}</div></div>
+            <div><div class="info-label">Unidade Destino</div><div class="info-value">____________________</div></div>
+          </div>
+          <div class="field" style="margin-top: 10px;">
+            <div class="field-label">Observações de Encaminhamento</div>
+            <div class="empty-line"></div>
+            <div class="empty-line"></div>
+          </div>
+        </div>
+
+        <div class="ficha-section">
+          <div class="ficha-section-title">Evolução Clínica</div>
+          <div class="evolution-block">
+            <div class="evolution-header">
+              <span>Data: ____/____/________</span>
+              <span>Profissional: ________________________________</span>
+            </div>
+          </div>
+          <div class="evolution-block">
+            <div class="evolution-header">
+              <span>Data: ____/____/________</span>
+              <span>Profissional: ________________________________</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="signature" style="margin-top: 40px;">
+          <div class="signature-line"></div>
+          <div class="name">${profissional?.nome || "Assinatura do Profissional"}</div>
+          <div class="role">${profissional?.profissao || "CRM / COREN / Registro Profissional"}</div>
+        </div>
+      `;
+
+      openPrintDocument("Ficha Clínica do Paciente", html, {
+        "Paciente": p.nome,
+        "CPF": p.cpf || "N/A",
+        "Unidade": unidade?.nome || "N/A"
+      });
+
+      await logAction({
+        acao: "imprimir",
+        entidade: "paciente",
+        entidadeId: p.id,
+        detalhes: { nome: p.nome, tipo: "ficha_clinica" },
+        user,
+      });
+
+    } catch (error) {
+      console.error("Erro ao gerar ficha clínica:", error);
+      toast.error("Erro ao gerar ficha clínica para impressão.");
     }
   };
 
