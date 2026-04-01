@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -57,38 +57,6 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 
-// Use types from DataContext/types
-import type { Agendamento, Paciente } from "@/types";
-interface User {
-  id: string;
-  role: string;
-  unidadeId: string;
-  podeAgendarRetorno?: boolean;
-  setor?: string;
-  nome?: string;
-  tempoAtendimento?: number;
-}
-
-interface Unidade {
-  id: string;
-  nome: string;
-}
-
-interface Funcionario {
-  id: string;
-  nome: string;
-  unidadeId?: string;
-  profissao?: string;
-  cargo?: string;
-}
-
-interface Bloqueio {
-  dataInicio: string;
-  dataFim: string;
-  diaInteiro: boolean;
-  titulo: string;
-}
-
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
   { key: "atraso", label: "Atrasou", icon: Clock, color: "bg-warning text-warning-foreground" },
@@ -134,19 +102,19 @@ const statusBadgeClass: Record<string, string> = {
 };
 
 const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {
-  Consulta: { label: "1ª Consulta", class: "bg-success/15 text-success border border-success/30", icon: "??" },
-  Retorno: { label: "Retorno", class: "bg-info/15 text-info border border-info/30", icon: "??" },
-  Exame: { label: "Exame", class: "bg-warning/15 text-warning border border-warning/30", icon: "??" },
+  Consulta: { label: "1ª Consulta", class: "bg-success/15 text-success border border-success/30", icon: "🟢" },
+  Retorno: { label: "Retorno", class: "bg-info/15 text-info border border-info/30", icon: "🔵" },
+  Exame: { label: "Exame", class: "bg-warning/15 text-warning border border-warning/30", icon: "🟡" },
   Procedimento: {
     label: "Procedimento",
     class: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30",
-    icon: "??",
+    icon: "🟣",
   },
-  Urgência: { label: "Urgência", class: "bg-destructive/15 text-destructive border border-destructive/30", icon: "??" },
+  Urgência: { label: "Urgência", class: "bg-destructive/15 text-destructive border border-destructive/30", icon: "🔴" },
   "Sessão de Tratamento": {
     label: "Sessão",
     class: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30",
-    icon: "??",
+    icon: "🟠",
   },
 };
 
@@ -159,20 +127,25 @@ const Agenda: React.FC = () => {
     unidades,
     salas,
     addAgendamento,
+    configuracoes,
+    addAtendimento,
     logAction,
     refreshAgendamentos,
+    fila,
     disponibilidades,
     getAvailableSlots,
     getAvailableDates,
     bloqueios,
   } = useData();
-  // const [lastProntuarios, setLastProntuarios] = React.useState<Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>>({});
+  const [lastProntuarios, setLastProntuarios] = React.useState<
+    Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
+  >({});
   const { user, hasPermission } = useAuth();
   const { can } = usePermissions();
-  const gcal = useGoogleCalendar(); // Assumindo que useGoogleCalendar está definido
-  const { notify } = useWebhookNotify(); // Assumindo que useWebhookNotify está definido
-  const { handleVagaLiberada } = useFilaAutomatica(); // Assumindo que useFilaAutomatica está definido
-  const { ensurePortalAccess } = useEnsurePortalAccess(); // Assumindo que useEnsurePortalAccess está definido
+  const gcal = useGoogleCalendar();
+  const { notify } = useWebhookNotify();
+  const { handleVagaLiberada } = useFilaAutomatica();
+  const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [filterUnit, setFilterUnit] = useState("all");
@@ -190,18 +163,23 @@ const Agenda: React.FC = () => {
     obs: "",
   });
   const [detalheOpen, setDetalheOpen] = useState(false);
-  const [detalheAg, setDetalheAg] = useState<Agendamento | null>(null);
-  const [rejeicaoTarget, setRejeicaoTarget] = useState<Agendamento | null>(null);
-  const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
-  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
-  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
+  const [detalheAg, setDetalheAg] = useState<(typeof agendamentos)[0] | null>(null);
 
+  // NOVO: rejeição com motivo
+  const [rejeicaoTarget, setRejeicaoTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
+
+  // NOVO: aba pendentes / agenda
+  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
+
+  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = hasPermission(["master", "coordenador", "recepcao"]);
-  const profissionais = profissionaisVisiveis; // Usando profissionais filtrados
+  const profissionais = profissionaisVisiveis;
 
-  const agendamentosPendentesOnline = useMemo(() => {
+  // NOVO: agendamentos online pendentes de aprovação
+  const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
       .filter((a) => {
         if (a.origem !== "online" || a.status !== "pendente") return false;
@@ -209,64 +187,92 @@ const Agenda: React.FC = () => {
         if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
         return true;
       })
-      .sort((a, b) => a.criadoEm?.localeCompare(b.criadoEm || '') || 0);
+      .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
   }, [agendamentos, user]);
 
-  const blockedForDate = useMemo(() => {
-    // Lógica de bloqueio de data (mantida como no original)
-    return []; // Simplificado para o exemplo
-  }, [selectedDate, /* bloqueios */]);
+  const blockedForDate = React.useMemo(() => {
+    const dateRef = new Date(`${selectedDate}T00:00:00`).getTime();
+    return bloqueios.filter((b) => {
+      const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
+      const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
+      return dateRef >= ini && dateRef <= fim && b.diaInteiro;
+    });
+  }, [selectedDate, bloqueios]);
 
-  const weekendInfo = useMemo(() => {
-    // Lógica de fim de semana (mantida como no original)
-    return { isWeekend: false, hasAvailability: true }; // Simplificado para o exemplo
-  }, [selectedDate, /* disponibilidades */]);
+  const weekendInfo = React.useMemo(() => {
+    const dateObj = new Date(`${selectedDate}T12:00:00`);
+    const dayOfWeek = dateObj.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    if (!isWeekend) return { isWeekend: false, hasAvailability: true };
+    const hasAvailability = disponibilidades.some(
+      (d) => d.diasSemana.includes(dayOfWeek) && selectedDate >= d.dataInicio && selectedDate <= d.dataFim,
+    );
+    return { isWeekend, hasAvailability };
+  }, [selectedDate, disponibilidades]);
 
-  const newAgSlots = useMemo(() => {
+  const newAgSlots = React.useMemo(() => {
     if (!newAg.profissionalId) return [];
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
     if (!prof?.unidadeId) return [];
     return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
   }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
 
-  const retornoAvailableDates = useMemo(() => {
+  const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
     return getAvailableDates(user.id, user.unidadeId);
   }, [user, retornoDialogOpen, getAvailableDates]);
 
-  const retornoAvailableSlots = useMemo(() => {
+  const retornoAvailableSlots = React.useMemo(() => {
     if (!user || !retornoForm.data) return [];
     return getAvailableSlots(user.id, user.unidadeId, retornoForm.data);
   }, [user, retornoForm.data, getAvailableSlots]);
 
-  const filteredProfissionais = useMemo(() => {
+  const filteredProfissionais = React.useMemo(() => {
     if (filterUnit === "all") return profissionais;
     return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
   }, [profissionais, filterUnit]);
 
-  const filtered = useMemo(() => {
-    return agendamentos
-      .filter((a) => {
-        if (a.data !== selectedDate) return false;
-        if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
-        if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
-        if (isProfissional && user) {
-          if (a.profissionalId !== user.id) return false;
+  const filtered = agendamentos
+    .filter((a) => {
+      if (a.data !== selectedDate) return false;
+      if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
+      if (isProfissional && user) {
+        if (a.profissionalId !== user.id) return false;
+      }
+      if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      return true;
+    })
+    .sort((a, b) => a.hora.localeCompare(b.hora));
+
+  React.useEffect(() => {
+    const pacienteIds = [...new Set(filtered.map((a) => a.pacienteId))];
+    if (pacienteIds.length === 0) return;
+    const loadLast = async () => {
+      const results: typeof lastProntuarios = {};
+      const { data } = await (supabase as any)
+        .from("prontuarios")
+        .select("paciente_id,data_atendimento,profissional_nome,procedimentos_texto,queixa_principal")
+        .in("paciente_id", pacienteIds)
+        .order("data_atendimento", { ascending: false });
+      if (data) {
+        for (const row of data) {
+          if (!results[row.paciente_id]) {
+            results[row.paciente_id] = {
+              data: row.data_atendimento,
+              profissional: row.profissional_nome,
+              procedimentos: row.procedimentos_texto || "",
+              queixa: row.queixa_principal || "",
+              tipo: "",
+            };
+          }
         }
-        if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-        if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-        return true;
-      })
-      .sort((a, b) => a.hora.localeCompare(b.hora));
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user]);
-
-  // const loadLastProntuarios = useCallback(async () => {
-  //   // Lógica de carregamento de prontuários (mantida como no original)
-  // }, [filtered]);
-
-  // useEffect(() => {
-  //   loadLastProntuarios();
-  // }, [loadLastProntuarios]);
+      }
+      setLastProntuarios(results);
+    };
+    loadLast();
+  }, [filtered.map((f) => f.pacienteId).join(",")]); // eslint-disable-line
 
   const changeDate = (days: number) => {
     const d = new Date(selectedDate);
@@ -274,18 +280,65 @@ const Agenda: React.FC = () => {
     setSelectedDate(d.toISOString().split("T")[0]);
   };
 
-  const syncToGoogleCalendar = async (ag: { pacienteNome: string; profissionalNome: string; data: string; hora: string; tipo: string; unidadeId: string; pacienteId?: string; }) => {
-    // Lógica de sincronização com Google Calendar (mantida como no original)
-    return null; // Simplificado para o exemplo
+  const syncToGoogleCalendar = async (ag: {
+    pacienteNome: string;
+    profissionalNome: string;
+    data: string;
+    hora: string;
+    tipo: string;
+    unidadeId: string;
+    pacienteId?: string;
+  }) => {
+    if (!configuracoes.googleCalendar.conectado || !configuracoes.googleCalendar.criarEvento) return null;
+    try {
+      const unidade = unidades.find((u) => u.id === ag.unidadeId);
+      const paciente = pacientes.find((p) => p.nome === ag.pacienteNome || p.id === ag.pacienteId);
+      const startDateTime = `${ag.data}T${ag.hora}:00`;
+      const [h, m] = ag.hora.split(":").map(Number);
+      const endH = m + 30 >= 60 ? h + 1 : h;
+      const endM = (m + 30) % 60;
+      const endDateTime = `${ag.data}T${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}:00`;
+      const description = [
+        `Paciente: ${ag.pacienteNome}`,
+        paciente?.telefone ? `Telefone: ${paciente.telefone}` : "",
+        paciente?.email ? `E-mail: ${paciente.email}` : "",
+        `Profissional: ${ag.profissionalNome}`,
+        `Tipo: ${ag.tipo}`,
+        unidade ? `Unidade: ${unidade.nome}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const attendees = paciente?.email ? [{ email: paciente.email }] : undefined;
+      const result = await gcal.createEvent({
+        summary: `${ag.tipo} - ${ag.pacienteNome}`,
+        description,
+        start: { dateTime: startDateTime, timeZone: "America/Belem" },
+        end: { dateTime: endDateTime, timeZone: "America/Belem" },
+        attendees,
+      });
+      return result?.eventId || null;
+    } catch (err) {
+      console.error("Google Calendar sync failed:", err);
+      return null;
+    }
   };
 
   const handleCreate = async () => {
     const pac = pacientes.find((p) => p.id === newAg.pacienteId);
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
     if (!pac || !prof || !newAg.hora) return;
-
-    // Lógica de verificação de fim de semana (mantida como no original)
-
+    if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
+      if (user?.role === "recepcao") {
+        toast.error("Não é possível agendar em fim de semana sem disponibilidade cadastrada.");
+        return;
+      }
+      if (user && ["master", "coordenador"].includes(user.role)) {
+        const confirmou = window.confirm(
+          "Este dia é fim de semana sem disponibilidade cadastrada. Deseja criar um encaixe mesmo assim?",
+        );
+        if (!confirmou) return;
+      }
+    }
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
@@ -299,15 +352,14 @@ const Agenda: React.FC = () => {
       profissionalNome: prof.nome,
       data: selectedDate,
       hora: newAg.hora,
-      status: "confirmado" as const, // Status inicial como confirmado
+      status: "confirmado" as const,
       tipo: newAg.tipo,
       observacoes: newAg.obs,
       origem: "recepcao" as const,
       criadoEm: new Date().toISOString(),
-      criadoPor: user?.id || "current",
+      criadoPor: "current",
     };
     await addAgendamento(agData);
-
     ensurePortalAccess({
       pacienteId: pac.id,
       contexto: "agendamento",
@@ -322,7 +374,6 @@ const Agenda: React.FC = () => {
           toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
       })
       .catch(() => {});
-
     const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
     if (googleEventId) {
       await updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
@@ -330,7 +381,6 @@ const Agenda: React.FC = () => {
     } else {
       toast.success("Agendamento criado!");
     }
-
     await notify({
       evento: "novo_agendamento",
       paciente_nome: pac.nome,
@@ -345,7 +395,6 @@ const Agenda: React.FC = () => {
       id_agendamento: agId,
       observacoes: newAg.obs,
     });
-
     setDialogOpen(false);
     setNewAg({
       pacienteId: "",
@@ -357,18 +406,21 @@ const Agenda: React.FC = () => {
     });
   };
 
-  const handleAprovar = async (ag: Agendamento) => {
+  // NOVO: aprovar agendamento online
+  const handleAprovar = async (ag: (typeof agendamentos)[0]) => {
     try {
-      await updateAgendamento(ag.id, { status: "confirmado" });
-      await supabase
+      await updateAgendamento(ag.id, { status: "confirmado" } as any);
+      await (supabase as any)
         .from("agendamentos")
         .update({
-          observacoes: `Aprovado por ${user?.nome || user?.id || ""}. ${ag.observacoes || ""}`,
-        } as any)
+          aprovado_por: user?.id || "",
+          aprovado_em: new Date().toISOString(),
+        })
         .eq("id", ag.id);
 
       const paciente = pacientes.find((p) => p.id === ag.pacienteId);
       const unidade = unidades.find((u) => u.id === ag.unidadeId);
+
       await notify({
         evento: "confirmacao",
         paciente_nome: ag.pacienteNome,
@@ -383,6 +435,7 @@ const Agenda: React.FC = () => {
         id_agendamento: ag.id,
         observacoes: "Agendamento aprovado pela recepção.",
       });
+
       await logAction({
         acao: "aprovar_agendamento_online",
         entidade: "agendamento",
@@ -391,6 +444,7 @@ const Agenda: React.FC = () => {
         user,
         detalhes: { paciente: ag.pacienteNome, data: ag.data, hora: ag.hora },
       });
+
       toast.success(`Agendamento de ${ag.pacienteNome} aprovado! E-mail de confirmação enviado.`);
     } catch (err) {
       console.error(err);
@@ -398,22 +452,24 @@ const Agenda: React.FC = () => {
     }
   };
 
+  // NOVO: rejeitar agendamento online
   const handleRejeitar = async () => {
     if (!rejeicaoTarget || !rejeicaoMotivo.trim()) {
       toast.error("Informe o motivo da rejeição.");
       return;
     }
     try {
-      await updateAgendamento(rejeicaoTarget.id, { status: "cancelado" });
-      await supabase
+      await updateAgendamento(rejeicaoTarget.id, { status: "cancelado" } as any);
+      await (supabase as any)
         .from("agendamentos")
         .update({
-          observacoes: `Rejeitado: ${rejeicaoMotivo}`,
-        } as any)
+          rejeitado_motivo: rejeicaoMotivo,
+        })
         .eq("id", rejeicaoTarget.id);
 
       const paciente = pacientes.find((p) => p.id === rejeicaoTarget.pacienteId);
       const unidade = unidades.find((u) => u.id === rejeicaoTarget.unidadeId);
+
       await notify({
         evento: "cancelamento",
         paciente_nome: rejeicaoTarget.pacienteNome,
@@ -426,17 +482,19 @@ const Agenda: React.FC = () => {
         tipo_atendimento: rejeicaoTarget.tipo,
         status_agendamento: "cancelado",
         id_agendamento: rejeicaoTarget.id,
-        observacoes: `Agendamento rejeitado: ${rejeicaoMotivo}`,
+        observacoes: `Motivo da rejeição: ${rejeicaoMotivo}`,
       });
+
       await logAction({
         acao: "rejeitar_agendamento_online",
         entidade: "agendamento",
         entidadeId: rejeicaoTarget.id,
         modulo: "agenda",
         user,
-        detalhes: { paciente: rejeicaoTarget.pacienteNome, data: rejeicaoTarget.data, hora: rejeicaoTarget.hora, motivo: rejeicaoMotivo },
+        detalhes: { paciente: rejeicaoTarget.pacienteNome, motivo: rejeicaoMotivo },
       });
-      toast.success(`Agendamento de ${rejeicaoTarget.pacienteNome} rejeitado.`);
+
+      toast.success("Agendamento rejeitado. Paciente notificado por e-mail.");
       setRejeicaoTarget(null);
       setRejeicaoMotivo("");
     } catch (err) {
@@ -446,80 +504,129 @@ const Agenda: React.FC = () => {
   };
 
   const handleStatusChange = async (agId: string, newStatus: string) => {
-    try {
-      // CORREÇÃO 3: Confirmação de Chegada
-      if (newStatus === "confirmado_chegada") {
-        await updateAgendamento(agId, {
-          status: "aguardando_triagem",
-          horaChegada: new Date().toISOString(),
-        });
-        const ag = agendamentos.find(a => a.id === agId);
-        if (ag) {
-          await logAction({
-            acao: "confirmar_chegada",
-            entidade: "agendamento",
-            entidadeId: agId,
-            modulo: "agenda",
-            user,
-            detalhes: { paciente: ag.pacienteNome, status: "aguardando_triagem" },
-          });
-          toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+    const ag = agendamentos.find((a) => a.id === agId);
+    if (!ag) return;
+
+    // Block closing atendimento without prontuário
+    if (newStatus === "concluido") {
+      try {
+        const { count } = await supabase
+          .from("prontuarios")
+          .select("*", { count: "exact", head: true })
+          .eq("agendamento_id", agId)
+          .not("tipo_registro", "in", '("triagem","avaliacao_enfermagem","avaliacao_multiprofissional")');
+        if (!count || count === 0) {
+          toast.error("⚠️ Não é possível concluir sem registro no prontuário. Preencha o prontuário primeiro.");
+          return;
         }
-        return;
+      } catch (err) {
+        console.error("Error checking prontuário:", err);
       }
+    }
 
-      await updateAgendamento(agId, { status: newStatus as Agendamento["status"] });
-      const ag = agendamentos.find(a => a.id === agId);
-      const paciente = pacientes.find((p) => p.id === ag?.pacienteId || p.nome === ag?.pacienteNome);
-      const unidade = unidades.find((u) => u.id === ag?.unidadeId);
-
-      const statusToEvento: Record<string, string> = {
-        cancelado: "cancelamento",
-        remarcado: "reagendamento",
-        falta: "nao_compareceu",
-        confirmado: "confirmacao",
-        // confirmado_chegada: "confirmacao", // Removido, pois agora vai para aguardando_triagem
-        concluido: "atendimento_finalizado",
-      };
-      const evento = statusToEvento[newStatus];
-      if (evento && ag) {
-        await notify({
-          evento: evento as any,
-          paciente_nome: ag.pacienteNome,
-          telefone: paciente?.telefone || "",
-          email: paciente?.email || "",
-          data_consulta: ag.data,
-          hora_consulta: ag.hora,
-          unidade: unidade?.nome || "",
-          profissional: ag.profissionalNome,
-          tipo_atendimento: ag.tipo,
-          status_agendamento: newStatus,
-          id_agendamento: agId,
-        });
+    if (newStatus === "confirmado_chegada") {
+      try {
+        const { data: setting } = await (supabase as any)
+          .from("triage_settings")
+          .select("enabled")
+          .or(`unidade_id.eq.${ag.unidadeId},unidade_id.is.null`)
+          .eq("enabled", true)
+          .limit(1)
+          .maybeSingle();
+        if (setting) {
+          const { count } = await supabase
+            .from("funcionarios")
+            .select("*", { count: "exact", head: true })
+            .eq("role", "tecnico")
+            .eq("unidade_id", ag.unidadeId)
+            .eq("ativo", true);
+          if ((count ?? 0) > 0) {
+            await updateAgendamento(agId, { status: "aguardando_triagem" as any });
+            // Also insert into fila_espera so triagem screen can find the patient
+            try {
+              const filaId = `fila_${Date.now()}`;
+              await supabase.from("fila_espera").insert({
+                id: filaId,
+                paciente_id: ag.pacienteId,
+                paciente_nome: ag.pacienteNome,
+                unidade_id: ag.unidadeId,
+                profissional_id: ag.profissionalId,
+                status: "aguardando_triagem",
+                prioridade: "normal",
+                prioridade_perfil: "normal",
+                hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                setor: "",
+                especialidade_destino: "",
+                criado_por: user?.nome || "recepcao",
+              });
+            } catch (filaErr) {
+              console.error("Error inserting fila_espera for triage:", filaErr);
+            }
+            toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Error checking triage settings:", err);
       }
-
-      if (newStatus === "cancelado" || newStatus === "falta") {
-        await handleVagaLiberada(
-          {
-            id: agId,
-            data: ag?.data || "",
-            hora: ag?.hora || "",
-            profissionalId: ag?.profissionalId || "",
-            profissionalNome: ag?.profissionalNome || "",
-            unidadeId: ag?.unidadeId || "",
-            salaId: ag?.salaId || "",
-            tipo: ag?.tipo || "",
-          },
-          newStatus === "cancelado" ? "cancelamento" : "falta",
-          user,
-        );
+    }
+    await updateAgendamento(agId, { status: newStatus as any });
+    const paciente = pacientes.find((p) => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
+    const unidade = unidades.find((u) => u.id === ag.unidadeId);
+    if (newStatus === "confirmado_chegada") toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
+    const statusToEvento: Record<string, string> = {
+      cancelado: "cancelamento",
+      remarcado: "reagendamento",
+      falta: "nao_compareceu",
+      confirmado: "confirmacao",
+      confirmado_chegada: "confirmacao",
+      concluido: "atendimento_finalizado",
+    };
+    const evento = statusToEvento[newStatus];
+    if (evento) {
+      await notify({
+        evento: evento as any,
+        paciente_nome: ag.pacienteNome,
+        telefone: paciente?.telefone || "",
+        email: paciente?.email || "",
+        data_consulta: ag.data,
+        hora_consulta: ag.hora,
+        unidade: unidade?.nome || "",
+        profissional: ag.profissionalNome,
+        tipo_atendimento: ag.tipo,
+        status_agendamento: newStatus,
+        id_agendamento: agId,
+      });
+    }
+    if (newStatus === "cancelado" || newStatus === "falta") {
+      await handleVagaLiberada(
+        {
+          id: agId,
+          data: ag.data,
+          hora: ag.hora,
+          profissionalId: ag.profissionalId,
+          profissionalNome: ag.profissionalNome,
+          unidadeId: ag.unidadeId,
+          salaId: ag.salaId,
+          tipo: ag.tipo,
+        },
+        newStatus === "cancelado" ? "cancelamento" : "falta",
+        user,
+      );
+    }
+    if (ag.googleEventId) {
+      try {
+        if (newStatus === "cancelado" && configuracoes.googleCalendar.removerCancelar) {
+          await gcal.deleteEvent(ag.googleEventId);
+          await updateAgendamento(agId, { syncStatus: "ok" });
+          toast.success("Evento removido do Google Agenda.");
+        } else if (newStatus === "remarcado" && configuracoes.googleCalendar.atualizarRemarcar) {
+          toast.info("Remarcação registrada.");
+        }
+      } catch (err) {
+        console.error("Google Calendar sync error:", err);
+        await updateAgendamento(agId, { syncStatus: "erro" });
       }
-
-      // Lógica de sincronização com Google Calendar (mantida como no original)
-
-    } catch (err) {
-      console.error("Error changing status:", err);
-      toast.error("Erro ao alterar status do agendamento.");
     }
   };
 
@@ -529,7 +636,7 @@ const Agenda: React.FC = () => {
       return;
     }
     try {
-      await supabase.from("agendamentos").delete().eq("id", agId);
+      await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
         acao: "excluir",
         entidade: "agendamento",
@@ -538,14 +645,14 @@ const Agenda: React.FC = () => {
         user,
       });
       toast.success("Agendamento excluído!");
-      refreshAgendamentos();
+      await refreshAgendamentos();
     } catch (err) {
       console.error("Error deleting:", err);
       toast.error("Erro ao excluir agendamento.");
     }
   };
 
-  const handleIniciarAtendimento = async (ag: Agendamento) => {
+  const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0]) => {
     try {
       const { error: rpcError } = await supabase.rpc("iniciar_atendimento", {
         p_agendamento_id: ag.id,
@@ -563,6 +670,7 @@ const Agenda: React.FC = () => {
       toast.error("Erro ao validar início do atendimento.");
       return;
     }
+
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     localStorage.setItem(
@@ -574,23 +682,28 @@ const Agenda: React.FC = () => {
         startTimestamp: Date.now(),
       }),
     );
-    // await addAtendimento({
-    //   id: `at${Date.now()}`,
-    //   agendamentoId: ag.id,
-    //   pacienteId: ag.pacienteId,
-    //   pacienteNome: ag.pacienteNome,
-    //   profissionalId: ag.profissionalId,
-    //   profissionalNome: ag.profissionalNome,
-    //   unidadeId: ag.unidadeId,
-    //   salaId: ag.salaId,
-    //   setor: user?.setor || "",
-    //   procedimento: ag.tipo,
-    //   observacoes: "",
-    //   data: ag.data,
-    //   horaInicio,
-    //   horaFim: "",
-    //   status: "em_atendimento",
-    // });
+
+    await refreshAgendamentos();
+    const pac = pacientes.find((p) => p.id === ag.pacienteId);
+
+    await addAtendimento({
+      id: `at${Date.now()}`,
+      agendamentoId: ag.id,
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId,
+      profissionalNome: ag.profissionalNome,
+      unidadeId: ag.unidadeId,
+      salaId: ag.salaId,
+      setor: user?.setor || "",
+      procedimento: ag.tipo,
+      observacoes: "",
+      data: ag.data,
+      horaInicio,
+      horaFim: "",
+      status: "em_atendimento",
+    });
+
     await logAction({
       acao: "atendimento_iniciado",
       entidade: "atendimento",
@@ -599,24 +712,20 @@ const Agenda: React.FC = () => {
       user,
       detalhes: {
         paciente_nome: ag.pacienteNome,
-        // paciente_cpf: pac?.cpf || "",
+        paciente_cpf: pac?.cpf || "",
         hora_inicio: horaInicio,
         unidade: ag.unidadeId,
         sala: ag.salaId || "",
       },
     });
+
     toast.success("Atendimento iniciado!");
-    const prof = funcionarios.find(f => f.id === ag.profissionalId);
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
       pacienteNome: ag.pacienteNome,
       agendamentoId: ag.id,
       horaInicio,
       data: ag.data,
-      tipoAtendimento: ag.tipo || "Consulta",
-      especialidade: prof?.profissao || prof?.cargo || "",
-      profissionalId: ag.profissionalId,
-      origemFluxo: "agenda",
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   };
@@ -634,7 +743,7 @@ const Agenda: React.FC = () => {
       salaId: user.salaId || "",
       setorId: "",
       profissionalId: user.id,
-      profissionalNome: user.nome || "",
+      profissionalNome: user.nome,
       data: retornoForm.data,
       hora: retornoForm.hora,
       status: "confirmado" as const,
@@ -653,7 +762,6 @@ const Agenda: React.FC = () => {
       detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora },
       user,
     });
-
     if (pac) {
       await notify({
         evento: "novo_agendamento",
@@ -663,7 +771,7 @@ const Agenda: React.FC = () => {
         data_consulta: retornoForm.data,
         hora_consulta: retornoForm.hora,
         unidade: unidade?.nome || "",
-        profissional: user.nome || "",
+        profissional: user.nome,
         tipo_atendimento: "Retorno",
         status_agendamento: "confirmado",
         id_agendamento: agId,
@@ -675,7 +783,7 @@ const Agenda: React.FC = () => {
         data: retornoForm.data,
         hora: retornoForm.hora,
         unidade: unidade?.nome || "",
-        profissional: user.nome || "",
+        profissional: user.nome,
         tipo: "Retorno",
       }).catch(() => {});
     }
@@ -696,6 +804,7 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
+            {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
                 variant={abaAtiva === "pendentes" ? "default" : "outline"}
@@ -739,8 +848,8 @@ const Agenda: React.FC = () => {
                         {pacientes.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.nome}
-                            {p.cpf ? `  ${p.cpf}` : ""}
-                            {p.telefone ? `  ${p.telefone}` : ""}
+                            {p.cpf ? ` — ${p.cpf}` : ""}
+                            {p.telefone ? ` — ${p.telefone}` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -841,6 +950,8 @@ const Agenda: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* NOVO: Painel de aprovação */}
       {abaAtiva === "pendentes" && canAprovar && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -867,9 +978,10 @@ const Agenda: React.FC = () => {
                 audio: "Áudio",
                 outro: "Documento",
               };
-               const anexoUrl = ag.attachmentUrl;
-              const anexoNome = ag.attachmentName;
-              const anexoTipo = ag.attachmentType;
+              const anexoUrl = (ag as any).attachment_url || ag.attachmentUrl;
+              const anexoNome = (ag as any).attachment_name || ag.attachmentName;
+              const anexoTipo = (ag as any).attachment_type || ag.attachmentType;
+
               return (
                 <Card key={ag.id} className="shadow-card border-0 border-l-4 border-l-warning">
                   <CardContent className="p-4 space-y-3">
@@ -877,19 +989,21 @@ const Agenda: React.FC = () => {
                       <div>
                         <p className="font-semibold text-foreground">{ag.pacienteNome}</p>
                         <p className="text-sm text-muted-foreground">
-                          {prof?.nome || ag.profissionalNome}  {unidade?.nome}  {ag.tipo}
+                          {prof?.nome || ag.profissionalNome} • {unidade?.nome} • {ag.tipo}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR")} às {ag.hora}
+                          📅 {new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR")} às {ag.hora}
                         </p>
-                        {pac?.telefone && <p className="text-xs text-muted-foreground">{pac.telefone}</p>}
-                        {pac?.email && <p className="text-xs text-muted-foreground">{pac.email}</p>}
-                        {ag.observacoes && <p className="text-xs text-muted-foreground mt-1">{ag.observacoes}</p>}
+                        {pac?.telefone && <p className="text-xs text-muted-foreground">📞 {pac.telefone}</p>}
+                        {pac?.email && <p className="text-xs text-muted-foreground">✉️ {pac.email}</p>}
+                        {ag.observacoes && <p className="text-xs text-muted-foreground mt-1">💬 {ag.observacoes}</p>}
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">
-                        Solicitado {new Date(ag.criadoEm || '').toLocaleDateString("pt-BR")}
+                        Solicitado {new Date(ag.criadoEm).toLocaleDateString("pt-BR")}
                       </span>
                     </div>
+
+                    {/* Documento */}
                     {anexoUrl ? (
                       <div className="flex items-center gap-2 p-2 bg-info/10 border border-info/20 rounded-lg">
                         <Paperclip className="w-4 h-4 text-info shrink-0" />
@@ -911,6 +1025,7 @@ const Agenda: React.FC = () => {
                         <p className="text-xs text-muted-foreground">Nenhum documento anexado</p>
                       </div>
                     )}
+
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -938,9 +1053,12 @@ const Agenda: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
           <div className="flex items-center gap-3 flex-wrap">
+            {/* NOVO: componente de calendário no lugar dos botões e input de data */}
             <CalendarioAgenda
               selectedDate={selectedDate}
               onDateChange={(date) => setSelectedDate(date)}
@@ -954,16 +1072,20 @@ const Agenda: React.FC = () => {
               getAvailableDates={getAvailableDates}
               unidades={unidades}
             />
+
             {!isProfissional && showUnitSelector && (
               <Select
                 value={filterUnit}
-                onValueChange={(v) => setFilterUnit(v)}
+                onValueChange={(v) => {
+                  setFilterUnit(v);
+                  setFilterProf("all");
+                }}
               >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas as Unidades</SelectItem>
+                  <SelectItem value="all">Todas Unidades</SelectItem>
                   {unidadesVisiveis.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.nome}
@@ -972,23 +1094,24 @@ const Agenda: React.FC = () => {
                 </SelectContent>
               </Select>
             )}
-            <Select
-              value={filterProf}
-              onValueChange={(v) => setFilterProf(v)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Profissional" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Profissionais</SelectItem>
-                {filteredProfissionais.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!isProfissional && (
+              <Select value={filterProf} onValueChange={setFilterProf}>
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Profissional" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Profissionais</SelectItem>
+                  {filteredProfissionais.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
+
+          {/* Slot availability summary for selected professional */}
           {filterProf !== "all" && (
             <SlotInfoBadge
               profissionalId={filterProf}
@@ -998,25 +1121,27 @@ const Agenda: React.FC = () => {
               date={selectedDate}
             />
           )}
+
           {blockedForDate.length > 0 && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
               <CardContent className="p-4 flex items-center gap-3">
                 <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-destructive">Data bloqueada para agendamentos</p>
+                  <p className="text-sm font-semibold text-destructive">🚫 Data bloqueada para agendamentos</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {blockedForDate.map((b) => b.titulo).join("  ")}
+                    {blockedForDate.map((b) => b.titulo).join(" • ")}
                   </p>
                 </div>
               </CardContent>
             </Card>
           )}
+
           {weekendInfo.isWeekend && !weekendInfo.hasAvailability && (
             <Card className="shadow-card border-0 bg-destructive/5 ring-1 ring-destructive/20">
               <CardContent className="p-4 flex items-center gap-3">
                 <CalendarOff className="w-5 h-5 text-destructive shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-destructive">Fim de semana  sem atendimento</p>
+                  <p className="text-sm font-semibold text-destructive">🔴 Fim de semana — sem atendimento</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Nenhum profissional possui disponibilidade cadastrada para este dia.
                     {user && ["master", "coordenador"].includes(user.role) && (
@@ -1035,7 +1160,7 @@ const Agenda: React.FC = () => {
                 <CalendarIcon className="w-5 h-5 text-orange-500 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
-                    Fim de semana  com atendimento disponível
+                    🟠 Fim de semana — com atendimento disponível
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Há profissionais com disponibilidade cadastrada para este dia.
@@ -1044,6 +1169,7 @@ const Agenda: React.FC = () => {
               </CardContent>
             </Card>
           )}
+
           <div className="space-y-2">
             {filtered.length === 0 ? (
               <Card className="shadow-card border-0">
@@ -1071,12 +1197,13 @@ const Agenda: React.FC = () => {
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
                   class: "bg-muted text-muted-foreground",
-                  icon: "?",
+                  icon: "⚪",
                 };
                 const paciente = pacientes.find((p) => p.id === ag.pacienteId);
-                // const lastAppt = lastProntuarios[ag.pacienteId];
+                const lastAppt = lastProntuarios[ag.pacienteId];
                 const ehPendenteOnline = ag.origem === "online" && ag.status === "pendente";
-                const anexoUrl = ag.attachmentUrl;
+                const anexoUrl = (ag as any).attachment_url || ag.attachmentUrl;
+
                 const typeColorBar: Record<string, string> = {
                   Consulta: "border-l-[#3B82F6]",
                   Retorno: "border-l-[#10B981]",
@@ -1085,6 +1212,7 @@ const Agenda: React.FC = () => {
                   Urgência: "border-l-[#EF4444]",
                   "Sessão de Tratamento": "border-l-[#F97316]",
                 };
+
                 return (
                   <Card
                     key={ag.id}
@@ -1130,28 +1258,28 @@ const Agenda: React.FC = () => {
                             <p className="text-xs">
                               <strong>Origem:</strong> {ag.origem}
                             </p>
-                            {/* {lastAppt && (
+                            {lastAppt && (
                               <>
                                 <hr className="my-1 border-border" />
                                 <p className="text-xs font-semibold">Último atendimento:</p>
                                 <p className="text-xs">
-                                  {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} {" "}
+                                  {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
                                   {lastAppt.profissional}
                                 </p>
-                                {lastAppt.procedimentos && <p className="text-xs">{lastAppt.procedimentos}</p>}
+                                {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
                                 {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
                               </>
-                            )} */}
+                            )}
                           </TooltipContent>
                         </Tooltip>
                         <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
-                        {/* {lastAppt && isProfissional && (
+                        {lastAppt && isProfissional && (
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} {" "}
+                            📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
                             {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || "sem resumo"}
                           </p>
-                        )} */}
-                        {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">Aguardando aprovação</p>}
+                        )}
+                        {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
                       </div>
                       <ContactActionButton
                         phone={paciente?.telefone}
@@ -1181,10 +1309,11 @@ const Agenda: React.FC = () => {
                                   : "bg-warning/10 text-warning",
                             )}
                           >
-                            {/* Ícone de sincronização */}
+                            📅
                           </span>
                         )}
                       </div>
+
                       <div className="flex gap-1 flex-wrap">
                         <Button
                           size="sm"
@@ -1198,6 +1327,8 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+
+                        {/* NOVO: aprovação inline */}
                         {ehPendenteOnline && canAprovar && (
                           <>
                             <Button
@@ -1222,6 +1353,7 @@ const Agenda: React.FC = () => {
                             </Button>
                           </>
                         )}
+
                         {isProfissional && (
                           <>
                             {(ag.status === "pendente" || ag.status === "confirmado") && ehHoje && (
@@ -1233,7 +1365,7 @@ const Agenda: React.FC = () => {
                                     className="h-8 px-3 text-xs cursor-not-allowed opacity-50"
                                     disabled
                                   >
-                                    Aguardando chegada
+                                    ⏳ Aguardando chegada
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Aguardando confirmação de chegada pela recepção</TooltipContent>
@@ -1248,7 +1380,7 @@ const Agenda: React.FC = () => {
                                     className="h-8 px-3 text-xs cursor-not-allowed opacity-50 border-warning text-warning"
                                     disabled
                                   >
-                                    Em triagem
+                                    🩺 Em triagem
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
@@ -1296,7 +1428,7 @@ const Agenda: React.FC = () => {
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >
-                                Ver prontuário
+                                ✅ Ver prontuário
                               </Button>
                             )}
                             {(ag.status === "falta" || ag.status === "cancelado") && (
@@ -1306,7 +1438,7 @@ const Agenda: React.FC = () => {
                             )}
                             {!ehHoje && !["falta", "cancelado", "concluido"].includes(ag.status) && (
                               <span className="text-xs text-muted-foreground px-2 py-1">
-                                Agendado para{" "}
+                                📅 Agendado para{" "}
                                 {new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR", {
                                   day: "2-digit",
                                   month: "2-digit",
@@ -1387,6 +1519,8 @@ const Agenda: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* NOVO: Dialog de rejeição com motivo */}
       <Dialog
         open={!!rejeicaoTarget}
         onOpenChange={(open) => {
@@ -1437,6 +1571,8 @@ const Agenda: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Retorno Dialog */}
       <Dialog open={retornoDialogOpen} onOpenChange={setRetornoDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -1510,6 +1646,8 @@ const Agenda: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Detalhe Drawer */}
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
         {detalheAg &&
           (() => {
@@ -1527,7 +1665,7 @@ const Agenda: React.FC = () => {
               audio: "Áudio",
               outro: "Documento",
             };
-            const anexoUrl = detalheAg.attachmentUrl;
+            const anexoUrl = (detalheAg as any).attachment_url || detalheAg.attachmentUrl;
             return (
               <>
                 <Secao titulo="Paciente">
@@ -1567,19 +1705,22 @@ const Agenda: React.FC = () => {
                   <Campo
                     label="Profissional"
                     valor={
-                      prof ? `${prof.nome}${prof.profissao ? `  ${prof.profissao}` : ""}` : detalheAg.profissionalNome
+                      prof ? `${prof.nome}${prof.profissao ? ` — ${prof.profissao}` : ""}` : detalheAg.profissionalNome
                     }
                   />
                 </Secao>
+                {/* NOVO: documento */}
                 {anexoUrl && (
                   <Secao titulo="Documento Anexado">
                     <div className="flex items-center gap-2 p-2 bg-info/10 rounded-lg">
                       <Paperclip className="w-4 h-4 text-info shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium">
-                          {tipoAnexoLabel[anexoUrl.split(".").pop() || "outro"] || "Documento"} anexado
+                          {tipoAnexoLabel[(detalheAg as any).attachment_type || detalheAg.attachmentType || "outro"]}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">{anexoUrl.split("/").pop() || "Arquivo"}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {(detalheAg as any).attachment_name || detalheAg.attachmentName}
+                        </p>
                       </div>
                       <a href={anexoUrl} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="outline" className="h-7 text-xs">
@@ -1587,6 +1728,11 @@ const Agenda: React.FC = () => {
                         </Button>
                       </a>
                     </div>
+                  </Secao>
+                )}
+                {detalheAg.observacoes && (
+                  <Secao titulo="Observações">
+                    <p className="text-sm text-foreground">{detalheAg.observacoes}</p>
                   </Secao>
                 )}
               </>
