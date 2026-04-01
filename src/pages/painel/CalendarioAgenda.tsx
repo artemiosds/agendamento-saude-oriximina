@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DiaInfo {
-  date: string;            // YYYY-MM-DD
+  date: string;
   dayNumber: number;
   isToday: boolean;
   isSelected: boolean;
@@ -16,34 +16,37 @@ interface DiaInfo {
 interface CalendarioAgendaProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
-  // Dados brutos
   agendamentos: any[];
   bloqueios: any[];
   disponibilidades: any[];
   filterProf: string;
   filterUnit: string;
   profissionais: any[];
-  // Funções de disponibilidade
   getAvailableSlots: (profId: string, unidadeId: string, date: string) => string[];
   getAvailableDates: (profId: string, unidadeId: string) => string[];
-  // Unidade atual para contexto
   unidades: any[];
 }
 
 export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   selectedDate,
   onDateChange,
-  agendamentos,
-  bloqueios,
-  disponibilidades,
+  agendamentos = [],
+  bloqueios = [],
+  disponibilidades = [],
   filterProf,
   filterUnit,
-  profissionais,
+  profissionais = [],
   getAvailableSlots,
   getAvailableDates,
-  unidades,
+  unidades = [],
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(() => new Date(selectedDate));
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    try {
+      return new Date(selectedDate);
+    } catch {
+      return new Date();
+    }
+  });
 
   const daysInMonth = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -51,17 +54,14 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const days: Date[] = [];
-    // Preenchendo dias do mês
     for (let d = 1; d <= lastDay.getDate(); d++) {
       days.push(new Date(year, month, d));
     }
-    // Adicionar dias anteriores para completar a semana (opcional)
-    const startWeekday = firstDay.getDay(); // 0=domingo
+    const startWeekday = firstDay.getDay();
     const prevDays: Date[] = [];
     for (let i = startWeekday; i > 0; i--) {
       prevDays.push(new Date(year, month, 1 - i));
     }
-    // Adicionar dias seguintes para completar a semana (opcional)
     const endWeekday = lastDay.getDay();
     const nextDays: Date[] = [];
     for (let i = 1; i < 7 - endWeekday; i++) {
@@ -73,10 +73,10 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   const dayInfoMap = useMemo(() => {
     const map = new Map<string, DiaInfo>();
 
-    // Pré-calcular profissionais disponíveis para o filtro
     const profissionaisFiltrados = filterProf !== "all"
-      ? profissionais.filter(p => p.id === filterProf)
+      ? profissionais.filter(p => p && p.id === filterProf)
       : profissionais.filter(p => {
+          if (!p) return false;
           if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
           return true;
         });
@@ -86,69 +86,61 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       const isToday = dateStr === new Date().toISOString().split("T")[0];
       const isSelected = dateStr === selectedDate;
 
-      // 1. Verificar bloqueio global
       const isBlockedGlobal = bloqueios.some(b => {
-        if (!b.diaInteiro) return false;
+        if (!b || !b.diaInteiro) return false;
         const inicio = new Date(b.dataInicio);
         const fim = new Date(b.dataFim);
         const current = new Date(dateStr);
         return current >= inicio && current <= fim;
       });
 
-      // 2. Verificar fim de semana
       const isWeekend = day.getDay() === 0 || day.getDay() === 6;
       let hasWeekendAvailability = true;
       if (isWeekend) {
-        // Verificar se há disponibilidade para esse dia (para algum profissional do filtro)
         hasWeekendAvailability = profissionaisFiltrados.some(prof => {
-          const profUnidade = prof.unidadeId;
-          const profDisponibilidades = disponibilidades.filter(d => d.profissional_id === prof.id);
-          const temDisponibilidade = profDisponibilidades.some(d => {
+          if (!prof) return false;
+          const profDisponibilidades = disponibilidades.filter(d => d && d.profissional_id === prof.id);
+          return profDisponibilidades.some(d => {
+            if (!d) return false;
             const inicio = new Date(d.dataInicio);
             const fim = new Date(d.dataFim);
             const dayInRange = day >= inicio && day <= fim;
             const diasSemana = d.diasSemana || [];
             return dayInRange && diasSemana.includes(day.getDay());
           });
-          return temDisponibilidade;
         });
       }
 
-      // Se bloqueado OU (fim de semana sem disponibilidade)
       const isBlocked = isBlockedGlobal || (isWeekend && !hasWeekendAvailability);
 
-      // 3. Contar agendamentos confirmados para este dia (respeitando filtros)
       let agendamentosConfirmados = 0;
       let totalVagas = 0;
 
       if (filterProf !== "all") {
-        // Visão de um profissional específico
         const prof = profissionaisFiltrados[0];
-        if (prof) {
-          // Contar agendamentos confirmados para esse profissional
+        if (prof && getAvailableSlots) {
           agendamentosConfirmados = agendamentos.filter(a => {
-            if (a.data !== dateStr) return false;
+            if (!a || a.data !== dateStr) return false;
             if (a.profissionalId !== prof.id) return false;
             return a.status !== "cancelado" && a.status !== "falta";
           }).length;
 
-          // Total de vagas = número de slots disponíveis
           const slots = getAvailableSlots(prof.id, prof.unidadeId, dateStr);
           totalVagas = slots.length;
         }
       } else {
-        // Visão consolidada: somar agendamentos de todos os profissionais visíveis
         const profissionaisVisiveis = profissionaisFiltrados;
         agendamentosConfirmados = agendamentos.filter(a => {
-          if (a.data !== dateStr) return false;
-          if (!profissionaisVisiveis.some(p => p.id === a.profissionalId)) return false;
+          if (!a || a.data !== dateStr) return false;
+          if (!profissionaisVisiveis.some(p => p && p.id === a.profissionalId)) return false;
           return a.status !== "cancelado" && a.status !== "falta";
         }).length;
 
-        // Para visão consolidada, totalVagas é a soma das vagas de todos os profissionais
         for (const prof of profissionaisVisiveis) {
-          const slots = getAvailableSlots(prof.id, prof.unidadeId, dateStr);
-          totalVagas += slots.length;
+          if (prof && getAvailableSlots) {
+            const slots = getAvailableSlots(prof.id, prof.unidadeId, dateStr);
+            totalVagas += slots.length;
+          }
         }
       }
 
@@ -243,7 +235,6 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Cabeçalho do mês */}
       <div className="flex items-center justify-between">
         <Button variant="outline" size="icon" onClick={goToPrevMonth}>
           <ChevronLeft className="w-4 h-4" />
@@ -256,14 +247,12 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         </Button>
       </div>
 
-      {/* Grade de dias da semana */}
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
         {weekDays.map((day, i) => (
           <div key={i} className="py-1">{day}</div>
         ))}
       </div>
 
-      {/* Grade de dias */}
       <div className="grid grid-cols-7 gap-1">
         {daysInMonth.map((day, idx) => {
           const dateStr = day.toISOString().split("T")[0];
@@ -310,7 +299,6 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
         })}
       </div>
 
-      {/* Legenda */}
       <div className="flex flex-wrap gap-4 justify-center text-xs text-muted-foreground pt-2 border-t">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-full bg-green-500" />

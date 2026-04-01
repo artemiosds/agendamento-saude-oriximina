@@ -33,7 +33,7 @@ const statusColors: Record<string, string> = {
 };
 
 export const Agenda = () => {
-  const { agendamentos, updateAgendamento, unidades, funcionarios, getAvailableSlots, getAvailableDates, bloqueios, disponibilidades } = useData();
+  const { agendamentos = [], updateAgendamento, unidades = [], funcionarios = [], getAvailableSlots, getAvailableDates, bloqueios = [], disponibilidades = [] } = useData();
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [filterProf, setFilterProf] = useState<string>("all");
@@ -47,15 +47,21 @@ export const Agenda = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredAgendamentos = useMemo(() => {
+    if (!agendamentos || agendamentos.length === 0) return [];
     return agendamentos.filter((ag) => {
-      const matchesDate = isSameDay(parseISO(ag.data), selectedDate);
-      const matchesProf = filterProf === "all" || ag.profissionalId === filterProf;
-      const matchesUnit = filterUnit === "all" || ag.unidadeId === filterUnit;
-      const matchesSearch = searchTerm === "" || 
-        ag.pacienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ag.profissionalNome.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesDate && matchesProf && matchesUnit && matchesSearch;
-    }).sort((a, b) => a.hora.localeCompare(b.hora));
+      if (!ag || !ag.data) return false;
+      try {
+        const matchesDate = isSameDay(parseISO(ag.data), selectedDate);
+        const matchesProf = filterProf === "all" || ag.profissionalId === filterProf;
+        const matchesUnit = filterUnit === "all" || ag.unidadeId === filterUnit;
+        const matchesSearch = searchTerm === "" || 
+          (ag.pacienteNome || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (ag.profissionalNome || "").toLowerCase().includes(searchTerm.toLowerCase());
+        return matchesDate && matchesProf && matchesUnit && matchesSearch;
+      } catch {
+        return false;
+      }
+    }).sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
   }, [agendamentos, selectedDate, filterProf, filterUnit, searchTerm]);
 
   const handleAprovar = async () => {
@@ -160,17 +166,17 @@ export const Agenda = () => {
         <CardContent>
           {viewMode === "calendar" ? (
             <CalendarioAgenda
-              selectedDate={selectedDate.toISOString()} // Convert Date to string
-              onDateChange={(date) => setSelectedDate(new Date(date))} // Convert string to Date
-              agendamentos={agendamentos}
-              bloqueios={bloqueios}
-              disponibilidades={disponibilidades}
+              selectedDate={selectedDate.toISOString()}
+              onDateChange={(date) => setSelectedDate(new Date(date))}
+              agendamentos={agendamentos || []}
+              bloqueios={bloqueios || []}
+              disponibilidades={disponibilidades || []}
               filterProf={filterProf}
               filterUnit={filterUnit}
-              profissionais={funcionarios}
-              getAvailableSlots={getAvailableSlots}
-              getAvailableDates={getAvailableDates}
-              unidades={unidades}
+              profissionais={funcionarios || []}
+              getAvailableSlots={getAvailableSlots || (() => [])}
+              getAvailableDates={getAvailableDates || (() => [])}
+              unidades={unidades || []}
             />
           ) : (
             <div className="space-y-3">
