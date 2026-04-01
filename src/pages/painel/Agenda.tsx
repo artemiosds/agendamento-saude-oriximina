@@ -1190,6 +1190,8 @@ const Agenda: React.FC = () => {
               </Card>
             ) : (
               filtered.map((ag) => {
+                const ehHoje = ag.data === new Date().toISOString().split("T")[0];
+
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
                 const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
                 const isEmAtendimento = ag.status === "em_atendimento";
