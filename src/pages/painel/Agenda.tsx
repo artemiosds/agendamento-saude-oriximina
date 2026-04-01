@@ -1190,12 +1190,8 @@ const Agenda: React.FC = () => {
               </Card>
             ) : (
               filtered.map((ag) => {
-                const canStart =
-                  isProfissional &&
-                  (ag.status === "confirmado_chegada" ||
-                    ag.status === "aguardando_atendimento" ||
-                    ag.status === "apto_atendimento") &&
-                  ehHoje;
+                const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
+                const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
