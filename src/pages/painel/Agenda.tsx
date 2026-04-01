@@ -326,8 +326,29 @@ const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    const pac = pacientes.find((p) => p.id === newAg.pacienteId);
+    let pac = pacientes.find((p) => p.id === newAg.pacienteId);
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
+
+    if (!pac && newAg.pacienteId) {
+      const { data, error } = await (supabase as any)
+        .from("pacientes")
+        .select("id, nome, telefone, email")
+        .eq("id", newAg.pacienteId)
+        .maybeSingle();
+
+      if (error || !data) {
+        toast.error("Paciente selecionado não foi encontrado no banco.");
+        return;
+      }
+
+      pac = {
+        id: data.id,
+        nome: data.nome,
+        telefone: data.telefone || "",
+        email: data.email || "",
+      } as typeof pac;
+    }
+
     if (!pac || !prof || !newAg.hora) return;
     if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
       if (user?.role === "recepcao") {

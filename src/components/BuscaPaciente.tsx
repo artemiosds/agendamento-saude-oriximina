@@ -1,34 +1,129 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import { Paciente } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 interface BuscaPacienteProps {
   pacientes: Paciente[];
-  value: string; // pacienteId
+  value: string;
   onChange: (pacienteId: string, pacienteNome: string) => void;
 }
 
+type PacienteRow = Database['public']['Tables']['pacientes']['Row'];
+
+const mapPaciente = (row: PacienteRow): Paciente => ({
+  id: row.id,
+  nome: row.nome,
+  cpf: row.cpf,
+  cns: row.cns,
+  nomeMae: row.nome_mae,
+  telefone: row.telefone,
+  dataNascimento: row.data_nascimento,
+  email: row.email,
+  endereco: row.endereco,
+  observacoes: row.observacoes,
+  descricaoClinica: row.descricao_clinica,
+  cid: row.cid,
+  criadoEm: row.criado_em || '',
+});
+
+const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
+const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
+
 export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resultados, setResultados] = useState<Paciente[]>([]);
+  const [selectedPaciente, setSelectedPaciente] = useState<Paciente | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selected = value ? pacientes.find(p => p.id === value) : null;
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 250);
 
-  const resultados = React.useMemo(() => {
-    if (query.length < 2) return [];
-    const term = query.toLowerCase().replace(/[.\-/]/g, '');
-    return pacientes
-      .filter(p =>
-        p.nome.toLowerCase().includes(term) ||
-        p.cpf?.replace(/[.\-/]/g, '').includes(term) ||
-        (p as any).cns?.replace(/[.\-/]/g, '').includes(term) ||
-        p.telefone?.replace(/[^\d]/g, '').includes(term.replace(/[^\d]/g, ''))
-      )
-      .slice(0, 8);
-  }, [query, pacientes]);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSelectedPaciente = async () => {
+      if (!value) {
+        setSelectedPaciente(null);
+        return;
+      }
+
+      const localPaciente = pacientes.find((paciente) => paciente.id === value);
+      if (localPaciente) {
+        setSelectedPaciente(localPaciente);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('pacientes')
+        .select(
+          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+        )
+        .eq('id', value)
+        .maybeSingle();
+
+      if (!cancelled) {
+        if (error || !data) {
+          setSelectedPaciente(null);
+          return;
+        }
+
+        setSelectedPaciente(mapPaciente(data));
+      }
+    };
+
+    loadSelectedPaciente();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [value, pacientes]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const term = debouncedQuery.trim();
+
+    if (term.length < 2) {
+      setResultados([]);
+      setLoading(false);
+      return;
+    }
+
+    const searchPatients = async () => {
+      setLoading(true);
+
+      const ilikeTerm = escapeIlikeTerm(term);
+      const { data, error } = await supabase
+        .from('pacientes')
+        .select(
+          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+        )
+        .or(`nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
+        .order('nome', { ascending: true })
+        .limit(10);
+
+      if (!cancelled) {
+        setResultados(error || !data ? [] : data.map(mapPaciente));
+        setLoading(false);
+      }
+    };
+
+    searchPatients();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery]);
 
   useEffect(() => {
     function handleClickFora(e: MouseEvent) {
@@ -36,25 +131,32 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
         setAberto(false);
       }
     }
+
     document.addEventListener('mousedown', handleClickFora);
     return () => document.removeEventListener('mousedown', handleClickFora);
   }, []);
 
-  if (selected) {
+  if (selectedPaciente) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{selected.nome}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {selected.cpf && `CPF: ${selected.cpf} · `}Tel: {selected.telefone}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{selectedPaciente.nome}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {selectedPaciente.cpf ? `CPF: ${selectedPaciente.cpf} · ` : ''}
+            Tel: {selectedPaciente.telefone || 'Não informado'}
           </p>
         </div>
         <button
           type="button"
-          onClick={() => { onChange('', ''); setQuery(''); }}
-          className="text-muted-foreground hover:text-destructive shrink-0"
+          onClick={() => {
+            onChange('', '');
+            setSelectedPaciente(null);
+            setQuery('');
+            setResultados([]);
+          }}
+          className="shrink-0 text-muted-foreground hover:text-destructive"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       </div>
     );
@@ -63,38 +165,46 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Buscar por nome, CPF ou telefone..."
           value={query}
-          onChange={e => { setQuery(e.target.value); setAberto(true); }}
-          onFocus={() => query.length >= 2 && setAberto(true)}
-          className="pl-9"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setAberto(true);
+          }}
+          onFocus={() => {
+            if (query.trim().length >= 2) setAberto(true);
+          }}
+          className="pl-9 pr-9"
           autoComplete="off"
         />
+        {loading && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />}
       </div>
 
-      {aberto && query.length >= 2 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md max-h-64 overflow-y-auto">
-          {resultados.length === 0 ? (
-            <p className="text-sm text-muted-foreground p-3 text-center">
-              Nenhum paciente encontrado para "{query}"
-            </p>
+      {aberto && query.trim().length >= 2 && (
+        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover shadow-md">
+          {loading ? (
+            <p className="p-3 text-center text-sm text-muted-foreground">Buscando pacientes...</p>
+          ) : resultados.length === 0 ? (
+            <p className="p-3 text-center text-sm text-muted-foreground">Nenhum paciente encontrado para "{query}"</p>
           ) : (
-            resultados.map(p => (
+            resultados.map((paciente) => (
               <button
-                key={p.id}
+                key={paciente.id}
                 type="button"
                 onClick={() => {
-                  onChange(p.id, p.nome);
+                  setSelectedPaciente(paciente);
+                  onChange(paciente.id, paciente.nome);
                   setAberto(false);
                   setQuery('');
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-accent border-b border-border last:border-0 transition-colors"
+                className="w-full border-b border-border px-3 py-2 text-left transition-colors last:border-0 hover:bg-accent"
               >
-                <p className="text-sm font-medium">{p.nome}</p>
+                <p className="text-sm font-medium">{paciente.nome}</p>
                 <p className="text-xs text-muted-foreground">
-                  {p.cpf ? `CPF: ${p.cpf} · ` : ''}{(p as any).cns ? `CNS: ${(p as any).cns} · ` : ''}Tel: {p.telefone}
+                  {paciente.cpf ? `CPF: ${paciente.cpf} · ` : ''}
+                  {paciente.telefone ? `Tel: ${paciente.telefone}` : 'Telefone não informado'}
                 </p>
               </button>
             ))
