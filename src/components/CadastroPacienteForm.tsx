@@ -336,7 +336,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             />
           </div>
           <div className="sm:col-span-2">
-            <Label>Justificativa *</Label>
+            <Label>Justificativa</Label>
             <Textarea
               value={form.justificativa}
               onChange={(e) => set("justificativa", e.target.value)}
