@@ -281,7 +281,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <Label>UBS origem *</Label>
+            <Label>UBS origem</Label>
             <Select value={form.ubsOrigem || ""} onValueChange={(v) => set("ubsOrigem", v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a UBS" />
