@@ -3,7 +3,7 @@ import { Search, X, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Paciente } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+
 
 interface BuscaPacienteProps {
   pacientes: Paciente[];
