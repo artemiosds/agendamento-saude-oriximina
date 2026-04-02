@@ -208,7 +208,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
           </div>
           <div>
-            <Label>Município *</Label>
+            <Label>Município</Label>
             <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
