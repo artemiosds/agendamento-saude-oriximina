@@ -297,7 +297,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.ubsOrigem && <p className="text-xs text-destructive mt-1">{errors.ubsOrigem}</p>}
           </div>
           <div>
-            <Label>Profissional solicitante *</Label>
+            <Label>Profissional solicitante</Label>
             <Input
               value={form.profissionalSolicitante}
               onChange={(e) => set("profissionalSolicitante", e.target.value)}
