@@ -323,7 +323,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             </Select>
           </div>
           <div>
-            <Label>CID-10 *</Label>
+            <Label>CID-10</Label>
             <Input value={form.cid} onChange={(e) => set("cid", e.target.value)} placeholder="Ex: G80.0" />
             {errors.cid && <p className="text-xs text-destructive mt-1">{errors.cid}</p>}
           </div>
