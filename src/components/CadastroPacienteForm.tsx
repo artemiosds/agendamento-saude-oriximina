@@ -180,11 +180,11 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
           </div>
           <div>
-            <Label>Data nasc. *</Label>
+            <Label>Data nasc.</Label>
             <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
           </div>
           <div>
-            <Label>CPF *</Label>
+            <Label>CPF</Label>
             <Input value={form.cpf} onChange={(e) => set("cpf", e.target.value)} placeholder="000.000.000-00" />
             {errors.cpf && <p className="text-xs text-destructive mt-1">{errors.cpf}</p>}
           </div>
@@ -194,7 +194,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
           </div>
           <div>
-            <Label>Telefone *</Label>
+            <Label>Telefone</Label>
             <Input
               value={form.telefone}
               onChange={(e) => set("telefone", e.target.value)}
@@ -203,7 +203,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
           </div>
           <div>
-            <Label>Nome da Mãe *</Label>
+            <Label>Nome da Mãe</Label>
             <Input value={form.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} placeholder="Nome da mãe" />
             {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
           </div>
