@@ -1,15 +1,16 @@
 /* ============================================
    FICHA DE ATENDIMENTO CLÍNICO — ESTILOS
+   Layout padrão hospitalar A4
    ============================================ */
 
 .ficha-container {
-  font-family: Arial, sans-serif;
+  font-family: 'Segoe UI', Arial, sans-serif;
   font-size: 11px;
   color: #1e293b;
-  line-height: 1.4;
+  line-height: 1.5;
   max-width: 210mm;
   margin: 0 auto;
-  padding: 12mm;
+  padding: 10mm 12mm;
   background: #fff;
 }
 
@@ -17,10 +18,10 @@
 .ficha-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 10px;
-  margin-bottom: 12px;
-  border-bottom: 2px solid #333;
+  gap: 14px;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  border-bottom: 3px double #1e3a5f;
 }
 
 .header-col {
@@ -32,10 +33,11 @@
 }
 
 .logo-img {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
 }
 
 .header-center {
@@ -43,18 +45,21 @@
 }
 
 .unidade-nome {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .ficha-titulo {
   font-size: 11px;
-  color: #64748b;
+  color: #475569;
   margin: 2px 0 0;
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .header-right {
@@ -64,60 +69,63 @@
 }
 
 .header-info {
-  margin: 2px 0;
+  margin: 1px 0;
 }
 
 /* SEÇÕES */
 .secao {
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
   page-break-inside: avoid;
 }
 
 .secao-titulo {
   font-size: 10px;
   font-weight: 700;
-  color: #0369a1;
+  color: #fff;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 4px;
-  margin: 0 0 8px;
+  letter-spacing: 0.5px;
+  background: #1e3a5f;
+  margin: -8px -10px 8px -10px;
+  padding: 4px 10px;
+  border-radius: 2px 2px 0 0;
 }
 
 /* CAMPOS */
 .campo-linha {
   display: flex;
   align-items: baseline;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .campo-label {
-  font-size: 8px;
-  color: #64748b;
+  font-size: 8.5px;
+  color: #475569;
   text-transform: uppercase;
-  font-weight: 600;
-  margin-right: 6px;
+  font-weight: 700;
+  margin-right: 5px;
   white-space: nowrap;
+  letter-spacing: 0.2px;
 }
 
 .campo-valor {
   font-size: 11px;
   color: #0f172a;
   flex: 1;
+  font-weight: 500;
 }
 
 .campo-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 16px;
-  margin-bottom: 6px;
+  gap: 3px 14px;
+  margin-bottom: 4px;
 }
 
 .linha-tracejada {
-  border-bottom: 1px dashed #94a3b8;
+  border-bottom: 1px dotted #94a3b8;
   min-height: 16px;
   display: inline-block;
   flex: 1;
@@ -129,11 +137,11 @@
 
 .linha-tracejada-multipla .linha-tracejada {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .campo-linha-vertical {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 /* TABELA DE SINAIS VITAIS */
@@ -141,57 +149,61 @@
   font-size: 9px;
   color: #64748b;
   font-style: italic;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .tabela-vitais {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 4px;
+  margin-top: 2px;
   page-break-inside: avoid;
 }
 
 .tabela-vitais td {
-  border: 1px solid #cbd5e1;
-  padding: 8px 10px;
+  border: 1px solid #94a3b8;
+  padding: 6px 8px;
   text-align: left;
   font-size: 10px;
 }
 
 .vitais-label {
-  font-weight: 600;
-  color: #475569;
+  font-weight: 700;
+  color: #334155;
+  font-size: 9px;
+  text-transform: uppercase;
 }
 
 /* EVOLUÇÃO CLÍNICA */
 .bloco-evolucao {
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  border-radius: 3px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
   page-break-inside: avoid;
 }
 
 .bloco-vazio {
-  background: #fafbfc;
+  background: #f8fafc;
 }
 
 .evo-header {
   display: flex;
   align-items: baseline;
   font-size: 10px;
+  gap: 4px;
 }
 
 .evo-observacao {
   margin-top: 4px;
-  min-height: 32px;
+  min-height: 28px;
   font-size: 10px;
   color: #334155;
+  line-height: 1.5;
 }
 
 /* ASSINATURA */
 .secao-assinatura {
-  margin-top: 24px;
+  margin-top: 20px;
   text-align: right;
   page-break-inside: avoid;
 }
@@ -199,13 +211,13 @@
 .assinatura-bloco {
   display: inline-block;
   text-align: center;
-  width: 240px;
+  width: 220px;
 }
 
 .assinatura-linha {
-  border-top: 1px solid #334155;
-  margin-bottom: 4px;
-  padding-top: 24px;
+  border-top: 1px solid #1e293b;
+  margin-bottom: 3px;
+  padding-top: 28px;
 }
 
 .assinatura-label {
@@ -216,19 +228,18 @@
 
 /* RODAPÉ — apenas na impressão */
 .ficha-rodape {
-  margin-top: 20px;
-  padding-top: 8px;
-  border-top: 1px solid #999;
+  margin-top: 16px;
+  padding-top: 6px;
+  border-top: 1px solid #94a3b8;
   text-align: center;
-  font-size: 9px;
-  color: #666;
+  font-size: 8px;
+  color: #94a3b8;
 }
 
 /* ============================================
    PRINT STYLES
    ============================================ */
 @media print {
-  /* Esconder tudo exceto a ficha */
   body * {
     visibility: hidden;
   }
@@ -247,35 +258,34 @@
     margin: 0;
   }
 
-  /* Esconder elementos da interface */
   .no-print {
     display: none !important;
   }
 
-  /* Mostrar apenas na impressão */
   .print-only {
     display: block !important;
   }
 
-  /* Configuração da página A4 */
   @page {
     size: A4 portrait;
-    margin: 15mm 15mm 20mm 15mm;
+    margin: 12mm 12mm 18mm 12mm;
   }
 
-  /* Evitar quebra de página dentro de seções */
   .secao {
     page-break-inside: avoid;
   }
 
-  /* Garantir que tabela de sinais vitais não quebre */
   table {
     page-break-inside: avoid;
   }
 
-  /* Evitar quebra entre assinatura e conteúdo */
   .secao-assinatura {
     page-break-inside: avoid;
+  }
+
+  .ficha-container {
+    padding: 0;
+    max-width: 100%;
   }
 }
 
