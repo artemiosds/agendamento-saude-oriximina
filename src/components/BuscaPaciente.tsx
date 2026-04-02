@@ -11,21 +11,19 @@ interface BuscaPacienteProps {
   onChange: (pacienteId: string, pacienteNome: string) => void;
 }
 
-type PacienteRow = Database['public']['Tables']['pacientes']['Row'];
-
-const mapPaciente = (row: PacienteRow): Paciente => ({
+const mapPaciente = (row: any): Paciente => ({
   id: row.id,
   nome: row.nome,
-  cpf: row.cpf,
-  cns: row.cns,
-  nomeMae: row.nome_mae,
-  telefone: row.telefone,
-  dataNascimento: row.data_nascimento,
-  email: row.email,
-  endereco: row.endereco,
-  observacoes: row.observacoes,
-  descricaoClinica: row.descricao_clinica,
-  cid: row.cid,
+  cpf: row.cpf || '',
+  cns: row.cns || '',
+  nomeMae: row.nome_mae || '',
+  telefone: row.telefone || '',
+  dataNascimento: row.data_nascimento || '',
+  email: row.email || '',
+  endereco: row.endereco || '',
+  observacoes: row.observacoes || '',
+  descricaoClinica: row.descricao_clinica || '',
+  cid: row.cid || '',
   criadoEm: row.criado_em || '',
 });
 

@@ -271,6 +271,12 @@ export interface Configuracoes {
     smtpPort: number;
   };
   canalNotificacao?: "webhook" | "gmail" | "ambos";
+  portalPaciente?: {
+    permitirPortal: boolean;
+    enviarSenhaAutomaticamente: boolean;
+    enviarLinkAcesso: boolean;
+    pacientesBloqueados: string[];
+  };
 }
 
 export interface AuditLog {
