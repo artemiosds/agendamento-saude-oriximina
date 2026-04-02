@@ -267,21 +267,6 @@ const Pacientes: React.FC = () => {
   const handleSave = async () => {
     const newErrors: Record<string, string> = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
-    if (!form.nomeMae.trim()) newErrors.nomeMae = "Nome da mãe é obrigatório";
-    if (!form.dataNascimento) newErrors.dataNascimento = "Data de nascimento é obrigatória";
-    if (!form.cpf.trim()) newErrors.cpf = "CPF é obrigatório";
-    if (!form.telefone.trim()) newErrors.telefone = "Telefone é obrigatório";
-    if (!form.municipio) newErrors.municipio = "Município é obrigatório";
-    if (!form.especialidadeDestino) newErrors.especialidadeDestino = "Especialidade destino é obrigatória";
-    if (!form.ubsOrigem) newErrors.ubsOrigem = "UBS origem é obrigatória";
-    if (!form.profissionalSolicitante.trim())
-      newErrors.profissionalSolicitante = "Profissional solicitante é obrigatório";
-    if (!form.cid.trim()) newErrors.cid = "CID é obrigatório";
-    if (!form.justificativa.trim()) newErrors.justificativa = "Justificativa clínica é obrigatória";
-    if (!form.documentoUrl && !editId) newErrors.documentoUrl = "Documento de encaminhamento é obrigatório";
-    if (form.menorIdade && !form.nomeResponsavel.trim())
-      newErrors.nomeResponsavel = "Nome do responsável é obrigatório";
-    if (form.menorIdade && !form.cpfResponsavel.trim()) newErrors.cpfResponsavel = "CPF do responsável é obrigatório";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -598,10 +583,10 @@ const Pacientes: React.FC = () => {
       });
 
     // C) SINAIS VITAIS — último registro de triagem
-    const sinaisVitaisPromise = supabase
+    const sinaisVitaisPromise = (supabase as any)
       .from("triage_records")
       .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura")
-      .eq("paciente_id", pacienteId)
+      .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
       .order("criado_em", { ascending: false })
       .limit(1)
       .then(({ data, error }) => {

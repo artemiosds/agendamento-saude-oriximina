@@ -152,6 +152,7 @@ export interface Agendamento {
   syncStatus?: "ok" | "pendente" | "erro";
   criadoEm: string;
   criadoPor: string;
+  horaChegada?: string;
   // Campos para agendamento online com anexo
   attachmentUrl?: string;
   attachmentName?: string;
@@ -270,6 +271,12 @@ export interface Configuracoes {
     smtpPort: number;
   };
   canalNotificacao?: "webhook" | "gmail" | "ambos";
+  portalPaciente?: {
+    permitirPortal: boolean;
+    enviarSenhaAutomaticamente: boolean;
+    enviarLinkAcesso: boolean;
+    pacientesBloqueados: string[];
+  };
 }
 
 export interface AuditLog {

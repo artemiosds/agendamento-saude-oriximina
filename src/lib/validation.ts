@@ -11,11 +11,11 @@ export const pacienteSchema = z.object({
   dataNascimento: z.string().optional().default(''),
 });
 
-export function validatePacienteFields(fields: { nome: string; telefone: string; email: string }): string | null {
+export function validatePacienteFields(fields: { nome: string; telefone?: string; email?: string }): string | null {
   if (!fields.nome.trim()) return 'Nome é obrigatório';
-  if (!fields.telefone.trim()) return 'Telefone é obrigatório';
-  if (!telefoneRegex.test(fields.telefone.trim())) return 'Informe um telefone válido. Ex: (93) 99999-0000';
+  // Telefone is optional — only validate format if provided
+  if (fields.telefone?.trim() && !telefoneRegex.test(fields.telefone.trim())) return 'Informe um telefone válido. Ex: (93) 99999-0000';
   // Email is optional — only validate format if provided
-  if (fields.email.trim() && !emailRegex.test(fields.email.trim())) return 'Informe um e-mail válido';
+  if (fields.email?.trim() && !emailRegex.test(fields.email.trim())) return 'Informe um e-mail válido';
   return null;
 }
