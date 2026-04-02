@@ -152,6 +152,7 @@ export interface Agendamento {
   syncStatus?: "ok" | "pendente" | "erro";
   criadoEm: string;
   criadoPor: string;
+  horaChegada?: string;
   // Campos para agendamento online com anexo
   attachmentUrl?: string;
   attachmentName?: string;
