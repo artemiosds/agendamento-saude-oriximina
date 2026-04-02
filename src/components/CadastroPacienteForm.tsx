@@ -260,7 +260,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
 
         {/* ESPECIALIDADE DESTINO — OBRIGATÓRIO */}
         <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-          <Label className="text-base font-semibold text-primary">Especialidade Destino *</Label>
+          <Label className="text-base font-semibold text-primary">Especialidade Destino</Label>
           <p className="text-xs text-muted-foreground mb-2">Define todo o fluxo do paciente no sistema</p>
           <Select value={form.especialidadeDestino || ""} onValueChange={(v) => set("especialidadeDestino", v)}>
             <SelectTrigger className="border-primary/30">
