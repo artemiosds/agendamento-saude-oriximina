@@ -328,7 +328,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.cid && <p className="text-xs text-destructive mt-1">{errors.cid}</p>}
           </div>
           <div className="sm:col-span-2">
-            <Label>Diagnóstico resumido *</Label>
+            <Label>Diagnóstico resumido</Label>
             <Input
               value={form.diagnosticoResumido}
               onChange={(e) => set("diagnosticoResumido", e.target.value)}
