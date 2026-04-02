@@ -346,7 +346,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.justificativa && <p className="text-xs text-destructive mt-1">{errors.justificativa}</p>}
           </div>
           <div>
-            <Label>Data encaminhamento *</Label>
+            <Label>Data encaminhamento</Label>
             <Input
               type="date"
               value={form.dataEncaminhamento}
