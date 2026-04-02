@@ -583,10 +583,10 @@ const Pacientes: React.FC = () => {
       });
 
     // C) SINAIS VITAIS — último registro de triagem
-    const sinaisVitaisPromise = supabase
+    const sinaisVitaisPromise = (supabase as any)
       .from("triage_records")
       .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura")
-      .eq("paciente_id", pacienteId)
+      .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
       .order("criado_em", { ascending: false })
       .limit(1)
       .then(({ data, error }) => {
