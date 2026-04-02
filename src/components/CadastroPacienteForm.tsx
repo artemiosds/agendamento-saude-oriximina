@@ -354,7 +354,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             />
           </div>
           <div>
-            <Label>Documento *</Label>
+            <Label>Documento</Label>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md border border-input bg-background text-sm hover:bg-accent transition-colors">
                 <Upload className="w-4 h-4" />
