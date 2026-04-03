@@ -219,16 +219,9 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const emailClean = (row.email || '').trim().toLowerCase();
       const endereco = (row.endereco || '').trim();
 
-      // Validate required
+      // Validate required (only name is mandatory)
       if (!nome || nome.length < 3 || /^\d+$/.test(nome.replace(/\s/g, ''))) {
         errorRows.push({ linha: lineNum, nome: row.nome, telefone: row.telefone, motivo: 'Nome obrigatório não informado ou inválido (mín. 3 caracteres)' });
-        state.errors++;
-        setProgress({ ...state });
-        continue;
-      }
-
-      if (!phoneClean || phoneClean.length < 8) {
-        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone obrigatório ou inválido (mín. 8 dígitos)' });
         state.errors++;
         setProgress({ ...state });
         continue;
@@ -276,12 +269,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         setProgress({ ...state });
         continue;
       }
-      if (existingPhones.has(phoneClean)) {
-        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone já cadastrado' });
-        state.skipped++;
-        setProgress({ ...state });
-        continue;
-      }
+      // Phone duplicates are allowed - no check needed
       const nameKey = `${nome.toLowerCase().trim()}|${dataNascFormatted}`;
       if (dataNascFormatted && existingNameDob.has(nameKey)) {
         errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Paciente já cadastrado (nome + data nasc.)' });
@@ -323,7 +311,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
             paciente_id: id,
             paciente_nome: nome,
             unidade_id: user?.unidadeId || '',
-            status: 'aguardando_triagem',
+            status: 'aguardando',
             prioridade: 'normal',
             prioridade_perfil: 'normal',
             hora_chegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
