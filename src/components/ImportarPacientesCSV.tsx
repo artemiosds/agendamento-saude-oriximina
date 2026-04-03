@@ -219,16 +219,9 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
       const emailClean = (row.email || '').trim().toLowerCase();
       const endereco = (row.endereco || '').trim();
 
-      // Validate required
+      // Validate required (only name is mandatory)
       if (!nome || nome.length < 3 || /^\d+$/.test(nome.replace(/\s/g, ''))) {
         errorRows.push({ linha: lineNum, nome: row.nome, telefone: row.telefone, motivo: 'Nome obrigatório não informado ou inválido (mín. 3 caracteres)' });
-        state.errors++;
-        setProgress({ ...state });
-        continue;
-      }
-
-      if (!phoneClean || phoneClean.length < 8) {
-        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone obrigatório ou inválido (mín. 8 dígitos)' });
         state.errors++;
         setProgress({ ...state });
         continue;
