@@ -311,7 +311,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
             paciente_id: id,
             paciente_nome: nome,
             unidade_id: user?.unidadeId || '',
-            status: 'aguardando_triagem',
+            status: 'aguardando',
             prioridade: 'normal',
             prioridade_perfil: 'normal',
             hora_chegada: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
