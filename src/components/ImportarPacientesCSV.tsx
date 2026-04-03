@@ -269,12 +269,7 @@ const ImportarPacientesCSV: React.FC<Props> = ({ open, onOpenChange }) => {
         setProgress({ ...state });
         continue;
       }
-      if (existingPhones.has(phoneClean)) {
-        errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Telefone já cadastrado' });
-        state.skipped++;
-        setProgress({ ...state });
-        continue;
-      }
+      // Phone duplicates are allowed - no check needed
       const nameKey = `${nome.toLowerCase().trim()}|${dataNascFormatted}`;
       if (dataNascFormatted && existingNameDob.has(nameKey)) {
         errorRows.push({ linha: lineNum, nome, telefone: row.telefone, motivo: 'Paciente já cadastrado (nome + data nasc.)' });
