@@ -1,0 +1,16 @@
+name: Manter Supabase Ativo Diariamente
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Todo dia às 03:00 UTC
+  workflow_dispatch:       # Permite rodar manualmente para testes
+
+jobs:
+  ping_supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acordando o Banco de Dados
+        run: |
+          curl -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+          -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
