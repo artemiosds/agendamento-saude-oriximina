@@ -10,6 +10,9 @@ interface FichaData {
     data_nascimento: string;
     nome_mae: string;
     telefone: string;
+    endereco?: string;
+    responsavel?: string;
+    sexo?: string;
   };
   dadosClinicos: {
     numero_prontuario: string;
@@ -18,6 +21,8 @@ interface FichaData {
     unidade_origem: string;
     unidade_atendimento: string;
     data_atendimento: string;
+    especialidade?: string;
+    encaminhamento?: string;
   };
   sinaisVitais: {
     pressao_arterial: string;
@@ -26,6 +31,8 @@ interface FichaData {
     saturacao: string;
     peso: string;
     altura: string;
+    glicemia?: string;
+    frequencia_respiratoria?: string;
   };
   profissional: {
     nome: string;
@@ -50,10 +57,23 @@ const formatarData = (data: string): string => {
   }
 };
 
-const campo = (valor: string | undefined): string => {
-  if (!valor || valor.trim() === '') return '________________________';
-  return valor;
+const calcIdade = (dataNasc: string): string => {
+  if (!dataNasc) return '__';
+  try {
+    const d = new Date(dataNasc.length <= 10 ? dataNasc + 'T12:00:00' : dataNasc);
+    if (isNaN(d.getTime())) return '__';
+    const now = new Date();
+    let age = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+    return age >= 0 ? `${age} anos` : '__';
+  } catch {
+    return '__';
+  }
 };
+
+const v = (valor: string | undefined): string => valor?.trim() || '';
+const blank = '________________________';
 
 interface FichaImpressaoProps {
   data: FichaData;
@@ -62,162 +82,101 @@ interface FichaImpressaoProps {
 
 const PRINT_CSS = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: A4 portrait; margin: 12mm; }
   body {
     font-family: Arial, 'Segoe UI', sans-serif;
-    font-size: 11px;
-    color: #1a1a1a;
-    line-height: 1.6;
-    padding: 15mm 15mm 20mm 15mm;
+    font-size: 12px;
+    color: #111;
+    line-height: 1.5;
+    padding: 15mm;
+    width: 210mm;
+    min-height: 297mm;
   }
+
+  /* HEADER */
   .header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 14px;
+    border-bottom: 2px solid #000;
     padding-bottom: 8px;
     margin-bottom: 10px;
-    border-bottom: 3px double #1e3a5f;
   }
-  .header-center { text-align: center; flex: 1; }
-  .header-center h1 {
-    font-size: 14px;
-    font-weight: 700;
-    color: #0f172a;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 0;
-  }
-  .header-center p {
-    font-size: 11px;
-    color: #475569;
-    font-weight: 600;
-    text-transform: uppercase;
-    margin: 2px 0 0;
-  }
-  .header-right {
-    text-align: right;
-    font-size: 9px;
-    color: #64748b;
-  }
-  .secao {
-    border: 1px solid #94a3b8;
-    border-radius: 3px;
-    padding: 8px 10px;
-    margin-bottom: 8px;
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .titulo { text-align: center; }
+  .titulo h1 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin: 0; }
+  .titulo h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 2px 0; color: #333; }
+  .titulo p { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #555; margin: 0; }
+  .info-direita { text-align: right; font-size: 10px; color: #333; line-height: 1.6; }
+
+  /* BLOCOS */
+  .bloco {
+    margin-top: 8px;
+    border: 1px solid #000;
+    padding: 0;
     page-break-inside: avoid;
   }
-  .secao-titulo {
+  .bloco-titulo {
     font-size: 10px;
     font-weight: 700;
-    color: #fff;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     background: #1e3a5f;
-    margin: -8px -10px 8px -10px;
+    color: #fff;
     padding: 4px 10px;
-    border-radius: 2px 2px 0 0;
-  }
-  .campo-linha {
-    display: flex;
-    align-items: baseline;
-    margin-bottom: 4px;
-  }
-  .campo-label {
-    font-size: 8.5px;
-    color: #475569;
-    text-transform: uppercase;
-    font-weight: 700;
-    margin-right: 5px;
-    white-space: nowrap;
-  }
-  .campo-valor {
-    font-size: 11px;
-    color: #0f172a;
-    flex: 1;
-    font-weight: 500;
-  }
-  .campo-grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3px 14px;
-    margin-bottom: 4px;
-  }
-  .tabela-vitais {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 2px;
-  }
-  .tabela-vitais td {
-    border: 1px solid #94a3b8;
-    padding: 6px 8px;
-    text-align: left;
-    font-size: 10px;
-  }
-  .vitais-label {
-    font-weight: 700;
-    color: #334155;
-    font-size: 9px;
-    text-transform: uppercase;
-  }
-  .bloco-evolucao {
-    border: 1px solid #cbd5e1;
-    border-radius: 3px;
-    padding: 6px 8px;
-    margin-bottom: 6px;
-    page-break-inside: avoid;
-  }
-  .bloco-vazio { background: #f8fafc; }
-  .evo-header {
-    display: flex;
-    align-items: baseline;
-    font-size: 10px;
-    gap: 4px;
-  }
-  .evo-observacao {
-    margin-top: 4px;
-    min-height: 28px;
-    font-size: 10px;
-    color: #334155;
-    line-height: 1.5;
-  }
-  .linha-tracejada {
-    border-bottom: 1px dotted #94a3b8;
-    min-height: 16px;
-    display: block;
-    margin-bottom: 14px;
-  }
-  .secao-assinatura {
-    margin-top: 20px;
-    text-align: right;
-    page-break-inside: avoid;
-  }
-  .assinatura-bloco {
-    display: inline-block;
-    text-align: center;
-    width: 220px;
-  }
-  .assinatura-linha {
-    border-top: 1px solid #1e293b;
-    margin-bottom: 3px;
-    padding-top: 28px;
-  }
-  .assinatura-label {
-    font-size: 9px;
-    color: #64748b;
     margin: 0;
   }
+  .bloco-body { padding: 6px 10px; }
+
+  /* GRID */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
+
+  /* CAMPOS */
+  .campo { margin-bottom: 3px; font-size: 11px; }
+  .campo b { font-size: 9px; text-transform: uppercase; color: #333; font-weight: 700; margin-right: 4px; }
+  .campo span { color: #000; font-weight: 500; }
+  .campo-full { grid-column: 1 / -1; }
+
+  /* SINAIS VITAIS TABLE */
+  .vitais-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
+  .vitais-table td {
+    border: 1px solid #999;
+    padding: 5px 8px;
+    font-size: 11px;
+    text-align: left;
+    width: 25%;
+  }
+  .vitais-table td b { font-size: 9px; text-transform: uppercase; color: #333; font-weight: 700; }
+
+  /* BOXES */
+  .box-grande { min-height: 80px; border: 1px solid #999; margin: 4px 0; padding: 4px 6px; font-size: 11px; }
+  .box-evolucao { min-height: 150px; border: 1px solid #999; margin: 4px 0; padding: 4px 6px; font-size: 11px; }
+
+  /* CONDUTA */
+  .linha-conduta { border-bottom: 1px solid #999; min-height: 22px; margin-bottom: 6px; padding: 2px 0; font-size: 11px; }
+
+  /* ASSINATURA */
+  .assinatura-area { margin-top: 24px; text-align: center; page-break-inside: avoid; }
+  .assinatura-traco { border-top: 1px solid #000; width: 250px; margin: 0 auto; padding-top: 4px; }
+  .assinatura-label { font-size: 10px; color: #555; margin: 0; }
+
+  /* RODAPE */
   .rodape {
-    margin-top: 16px;
-    padding-top: 6px;
-    border-top: 1px solid #94a3b8;
+    margin-top: 12px;
+    padding-top: 4px;
+    border-top: 1px solid #999;
     text-align: center;
     font-size: 8px;
-    color: #94a3b8;
+    color: #999;
   }
-  .campo-linha-vertical { margin-bottom: 4px; }
-  @page {
-    size: A4 portrait;
-    margin: 12mm;
-  }
+
+  /* EVOLUCAO PREENCHIDA */
+  .evo-item { border-bottom: 1px solid #ddd; padding: 4px 0; margin-bottom: 2px; }
+  .evo-item:last-child { border-bottom: none; }
+  .evo-meta { font-size: 10px; color: #555; }
+  .evo-text { font-size: 11px; margin-top: 2px; }
 `;
 
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintComplete }) => {
@@ -226,36 +185,18 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
     const now = new Date();
     const dataAtual = formatarData(now.toISOString());
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const idade = calcIdade(data.paciente.data_nascimento);
 
     const evolucaoHTML = data.evoluciones.length > 0
       ? data.evoluciones.map(evo => `
-        <div class="bloco-evolucao">
-          <div class="evo-header">
-            <span class="campo-label">Data:</span> ${formatarData(evo.data)}
-            <span class="campo-label" style="margin-left:16px">Profissional:</span> ${campo(evo.profissional)}
-          </div>
-          <div class="campo-label" style="margin-top:6px">Observação:</div>
-          <div class="evo-observacao">${campo(evo.observacao)}</div>
+        <div class="evo-item">
+          <div class="evo-meta"><b>Data:</b> ${formatarData(evo.data)} &nbsp; <b>Profissional:</b> ${v(evo.profissional) || blank}</div>
+          <div class="evo-text">${v(evo.observacao) || '—'}</div>
         </div>
       `).join('')
       : `
-        <div class="bloco-evolucao bloco-vazio">
-          <div class="evo-header">
-            <span class="campo-label">Data:</span> ___/___/______
-            <span class="campo-label" style="margin-left:16px">Profissional:</span> ________________________
-          </div>
-          <div class="campo-label" style="margin-top:6px">Observação:</div>
-          <div class="linha-tracejada"></div>
-          <div class="linha-tracejada"></div>
-        </div>
-        <div class="bloco-evolucao bloco-vazio">
-          <div class="evo-header">
-            <span class="campo-label">Data:</span> ___/___/______
-            <span class="campo-label" style="margin-left:16px">Profissional:</span> ________________________
-          </div>
-          <div class="campo-label" style="margin-top:6px">Observação:</div>
-          <div class="linha-tracejada"></div>
-          <div class="linha-tracejada"></div>
+        <div style="min-height:140px; color:#aaa; font-style:italic; padding-top:8px;">
+          (Espaço para evolução clínica)
         </div>
       `;
 
@@ -263,151 +204,142 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Ficha de Atendimento - ${campo(data.paciente.nome_completo)}</title>
+  <title>Ficha CER II - ${v(data.paciente.nome_completo)}</title>
   <style>${PRINT_CSS}</style>
 </head>
 <body>
+
   <!-- CABEÇALHO -->
   <div class="header">
-    <div class="header-center">
-      <h1>SECRETARIA MUNICIPAL DE SAÚDE</h1>
-      <p>Ficha de Atendimento Clínico</p>
+    <div class="header-left">
+      <div class="titulo">
+        <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
+        <h2>CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER</h2>
+        <p>FICHA DE ATENDIMENTO / PRONTUÁRIO</p>
+      </div>
     </div>
-    <div class="header-right">
-      <p>Data: ${dataAtual}</p>
-      <p>Hora: ${horaAtual}</p>
+    <div class="info-direita">
+      <p><b>Data:</b> ${dataAtual}</p>
+      <p><b>Hora:</b> ${horaAtual}</p>
+      <p><b>Prontuário:</b> ${v(data.dadosClinicos.numero_prontuario) || '____________'}</p>
     </div>
   </div>
 
-  <!-- IDENTIFICAÇÃO -->
-  <section class="secao">
-    <h2 class="secao-titulo">IDENTIFICAÇÃO DO PACIENTE</h2>
-    <div class="campo-linha">
-      <span class="campo-label">Nome completo:</span>
-      <span class="campo-valor">${campo(data.paciente.nome_completo)}</span>
-    </div>
-    <div class="campo-grid-2">
-      <div class="campo-linha">
-        <span class="campo-label">CPF:</span>
-        <span class="campo-valor">${campo(data.paciente.cpf)}</span>
+  <!-- DADOS DO PACIENTE -->
+  <div class="bloco">
+    <div class="bloco-titulo">DADOS DO PACIENTE</div>
+    <div class="bloco-body">
+      <div class="grid-2">
+        <div class="campo campo-full"><b>Nome:</b> <span>${v(data.paciente.nome_completo) || blank}</span></div>
       </div>
-      <div class="campo-linha">
-        <span class="campo-label">CNS (Cartão SUS):</span>
-        <span class="campo-valor">${campo(data.paciente.cns)}</span>
+      <div class="grid-3">
+        <div class="campo"><b>CPF:</b> <span>${v(data.paciente.cpf) || blank}</span></div>
+        <div class="campo"><b>CNS:</b> <span>${v(data.paciente.cns) || blank}</span></div>
+        <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(data.paciente.data_nascimento)}</span></div>
       </div>
-    </div>
-    <div class="campo-grid-2">
-      <div class="campo-linha">
-        <span class="campo-label">Data de nascimento:</span>
-        <span class="campo-valor">${formatarData(data.paciente.data_nascimento)}</span>
+      <div class="grid-3">
+        <div class="campo"><b>Idade:</b> <span>${idade}</span></div>
+        <div class="campo"><b>Sexo:</b> <span>${v(data.paciente.sexo) || '________'}</span></div>
+        <div class="campo"><b>Telefone:</b> <span>${v(data.paciente.telefone) || blank}</span></div>
       </div>
-      <div class="campo-linha">
-        <span class="campo-label">Telefone:</span>
-        <span class="campo-valor">${campo(data.paciente.telefone)}</span>
+      <div class="grid-2">
+        <div class="campo"><b>Responsável:</b> <span>${v(data.paciente.responsavel) || v(data.paciente.nome_mae) || blank}</span></div>
+        <div class="campo"><b>Endereço:</b> <span>${v(data.paciente.endereco) || blank}</span></div>
       </div>
+      <div class="campo"><b>Unidade de Origem:</b> <span>${v(data.dadosClinicos.unidade_origem) || blank}</span></div>
     </div>
-    <div class="campo-linha">
-      <span class="campo-label">Nome da mãe:</span>
-      <span class="campo-valor">${campo(data.paciente.nome_mae)}</span>
-    </div>
-  </section>
+  </div>
 
-  <!-- INFORMAÇÕES CLÍNICAS -->
-  <section class="secao">
-    <h2 class="secao-titulo">INFORMAÇÕES CLÍNICAS</h2>
-    <div class="campo-grid-2">
-      <div class="campo-linha">
-        <span class="campo-label">Nº Prontuário:</span>
-        <span class="campo-valor">${campo(data.dadosClinicos.numero_prontuario)}</span>
+  <!-- ATENDIMENTO -->
+  <div class="bloco">
+    <div class="bloco-titulo">ATENDIMENTO</div>
+    <div class="bloco-body">
+      <div class="grid-2">
+        <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || blank}</span></div>
+        <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || blank}</span></div>
       </div>
-      <div class="campo-linha">
-        <span class="campo-label">CID:</span>
-        <span class="campo-valor">${campo(data.dadosClinicos.cid)}</span>
+      <div class="grid-2">
+        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || blank}</span></div>
+        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || blank}</span></div>
       </div>
+      <div class="campo"><b>Encaminhamento:</b> <span>${v(data.dadosClinicos.encaminhamento) || blank}</span></div>
     </div>
-    <div class="campo-grid-2">
-      <div class="campo-linha">
-        <span class="campo-label">Tipo de atendimento:</span>
-        <span class="campo-valor">${campo(data.dadosClinicos.tipo_atendimento)}</span>
-      </div>
-      <div class="campo-linha">
-        <span class="campo-label">Unidade de origem:</span>
-        <span class="campo-valor">${campo(data.dadosClinicos.unidade_origem)}</span>
-      </div>
-    </div>
-    <div class="campo-linha">
-      <span class="campo-label">Unidade de atendimento:</span>
-      <span class="campo-valor">${campo(data.dadosClinicos.unidade_atendimento)}</span>
-    </div>
-    <div class="campo-linha">
-      <span class="campo-label">Data do atendimento:</span>
-      <span class="campo-valor">${formatarData(data.dadosClinicos.data_atendimento)}</span>
-    </div>
-  </section>
+  </div>
 
-  <!-- SINAIS VITAIS -->
-  <section class="secao">
-    <h2 class="secao-titulo">SINAIS VITAIS</h2>
-    <table class="tabela-vitais">
-      <tbody>
-        <tr>
-          <td><span class="vitais-label">P.A.:</span> ${campo(data.sinaisVitais.pressao_arterial)}</td>
-          <td><span class="vitais-label">FC:</span> ${campo(data.sinaisVitais.frequencia_cardiaca)} bpm</td>
-          <td><span class="vitais-label">Temp.:</span> ${campo(data.sinaisVitais.temperatura)} °C</td>
-        </tr>
-        <tr>
-          <td><span class="vitais-label">Sat.:</span> ${campo(data.sinaisVitais.saturacao)} %</td>
-          <td><span class="vitais-label">Peso:</span> ${campo(data.sinaisVitais.peso)} kg</td>
-          <td><span class="vitais-label">Altura:</span> ${campo(data.sinaisVitais.altura)} m</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
+  <!-- TRIAGEM / SINAIS VITAIS -->
+  <div class="bloco">
+    <div class="bloco-titulo">TRIAGEM / SINAIS VITAIS</div>
+    <div class="bloco-body">
+      <table class="vitais-table">
+        <tbody>
+          <tr>
+            <td><b>PA:</b> ${v(data.sinaisVitais.pressao_arterial) || '______'}</td>
+            <td><b>Temp:</b> ${v(data.sinaisVitais.temperatura) ? v(data.sinaisVitais.temperatura) + ' °C' : '______'}</td>
+            <td><b>FC:</b> ${v(data.sinaisVitais.frequencia_cardiaca) ? v(data.sinaisVitais.frequencia_cardiaca) + ' bpm' : '______'}</td>
+            <td><b>FR:</b> ${v(data.sinaisVitais.frequencia_respiratoria) || '______'}</td>
+          </tr>
+          <tr>
+            <td><b>SpO₂:</b> ${v(data.sinaisVitais.saturacao) ? v(data.sinaisVitais.saturacao) + ' %' : '______'}</td>
+            <td><b>Peso:</b> ${v(data.sinaisVitais.peso) ? v(data.sinaisVitais.peso) + ' kg' : '______'}</td>
+            <td><b>Altura:</b> ${v(data.sinaisVitais.altura) ? v(data.sinaisVitais.altura) + ' m' : '______'}</td>
+            <td><b>Glicemia:</b> ${v(data.sinaisVitais.glicemia) ? v(data.sinaisVitais.glicemia) + ' mg/dL' : '______'}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-  <!-- ENCAMINHAMENTO -->
-  <section class="secao">
-    <h2 class="secao-titulo">ENCAMINHAMENTO</h2>
-    <div class="campo-linha">
-      <span class="campo-label">Especialidade:</span>
-      <span class="campo-valor">________________________</span>
+  <!-- QUEIXA PRINCIPAL -->
+  <div class="bloco">
+    <div class="bloco-titulo">QUEIXA PRINCIPAL</div>
+    <div class="bloco-body">
+      <div class="box-grande"></div>
     </div>
-    <div class="campo-linha">
-      <span class="campo-label">Destino:</span>
-      <span class="campo-valor">________________________</span>
-    </div>
-    <div class="campo-linha-vertical">
-      <span class="campo-label">Observação:</span>
-      <div class="linha-tracejada"></div>
-      <div class="linha-tracejada"></div>
-    </div>
-  </section>
+  </div>
 
-  <!-- EVOLUÇÃO CLÍNICA -->
-  <section class="secao">
-    <h2 class="secao-titulo">EVOLUÇÃO CLÍNICA</h2>
-    ${evolucaoHTML}
-  </section>
+  <!-- OBSERVAÇÃO CLÍNICA -->
+  <div class="bloco">
+    <div class="bloco-titulo">OBSERVAÇÃO CLÍNICA</div>
+    <div class="bloco-body">
+      <div class="box-grande"></div>
+    </div>
+  </div>
+
+  <!-- EVOLUÇÃO -->
+  <div class="bloco">
+    <div class="bloco-titulo">EVOLUÇÃO</div>
+    <div class="bloco-body">
+      <div class="box-evolucao">
+        ${evolucaoHTML}
+      </div>
+    </div>
+  </div>
+
+  <!-- CONDUTA -->
+  <div class="bloco">
+    <div class="bloco-titulo">CONDUTA</div>
+    <div class="bloco-body">
+      <div class="campo" style="margin-bottom:2px"><b>Diagnóstico:</b></div>
+      <div class="linha-conduta"></div>
+      <div class="campo" style="margin-bottom:2px"><b>Medicação:</b></div>
+      <div class="linha-conduta"></div>
+      <div class="campo" style="margin-bottom:2px"><b>Procedimentos:</b></div>
+      <div class="linha-conduta"></div>
+    </div>
+  </div>
 
   <!-- ASSINATURA -->
-  <section class="secao-assinatura">
-    <div class="assinatura-bloco">
-      <div class="assinatura-linha"></div>
-      <p class="assinatura-label">Assinatura</p>
-    </div>
-    <div class="campo-linha" style="margin-top:12px">
-      <span class="campo-label">Nome:</span>
-      <span class="campo-valor">${campo(data.profissional.nome)}</span>
-    </div>
-    <div class="campo-linha">
-      <span class="campo-label">Registro (CRM / COREN / Matrícula):</span>
-      <span class="campo-valor">${campo(data.profissional.registro)}</span>
-    </div>
-  </section>
+  <div class="assinatura-area">
+    <div class="assinatura-traco"></div>
+    <p class="assinatura-label">Profissional Responsável</p>
+    <p style="font-size:10px; margin-top:2px;">${v(data.profissional.nome) || ''} ${v(data.profissional.registro) ? '— ' + v(data.profissional.registro) : ''}</p>
+  </div>
 
   <!-- RODAPÉ -->
   <div class="rodape">
-    Impresso por: ${campo(data.profissional.nome)} — ${campo(data.profissional.cargo)} — ${dataAtual} às ${horaAtual}
+    SMS Oriximiná — CER II — Impresso em ${dataAtual} às ${horaAtual}
   </div>
+
 </body>
 </html>`;
   }, [data]);
@@ -416,7 +348,6 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
     const html = buildHTML();
     const win = window.open('', '_blank', 'width=800,height=900');
     if (!win) {
-      // Fallback: try without popup
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.top = '-9999px';
@@ -452,54 +383,67 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
     }, 400);
   }, [buildHTML, onPrintComplete]);
 
+  const idade = calcIdade(data.paciente.data_nascimento);
+
   return (
     <div className="flex flex-col items-center gap-6 py-4">
       {/* Preview */}
       <div className="w-full border rounded-lg bg-white p-6 shadow-sm max-h-[60vh] overflow-y-auto">
-        <div className="text-center mb-4 border-b-2 border-[#1e3a5f] pb-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">SECRETARIA MUNICIPAL DE SAÚDE</h2>
-          <p className="text-xs text-muted-foreground uppercase font-semibold">Ficha de Atendimento Clínico</p>
+        {/* Header preview */}
+        <div className="text-center mb-3 border-b-2 border-foreground/20 pb-3">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h2>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground">CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER</p>
+          <p className="text-[10px] uppercase text-muted-foreground">FICHA DE ATENDIMENTO / PRONTUÁRIO</p>
         </div>
 
         <div className="space-y-3 text-sm">
+          {/* Dados do Paciente */}
           <div className="border rounded p-3">
-            <h3 className="text-xs font-bold uppercase text-white bg-[#1e3a5f] -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Identificação do Paciente</h3>
-            <p><span className="text-xs font-bold uppercase text-muted-foreground">Nome:</span> {data.paciente.nome_completo || '—'}</p>
-            <div className="grid grid-cols-2 gap-2 mt-1">
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">CPF:</span> {data.paciente.cpf || '—'}</p>
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">CNS:</span> {data.paciente.cns || '—'}</p>
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Dados do Paciente</h3>
+            <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> {data.paciente.nome_completo || '—'}</p>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CPF:</span> {data.paciente.cpf || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CNS:</span> {data.paciente.cns || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nasc.:</span> {formatarData(data.paciente.data_nascimento)}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-1">
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">Nasc.:</span> {formatarData(data.paciente.data_nascimento)}</p>
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">Tel.:</span> {data.paciente.telefone || '—'}</p>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Idade:</span> {idade}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tel.:</span> {data.paciente.telefone || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Resp.:</span> {data.paciente.responsavel || data.paciente.nome_mae || '—'}</p>
             </div>
-            <p className="mt-1"><span className="text-xs font-bold uppercase text-muted-foreground">Mãe:</span> {data.paciente.nome_mae || '—'}</p>
           </div>
 
+          {/* Atendimento */}
           <div className="border rounded p-3">
-            <h3 className="text-xs font-bold uppercase text-white bg-[#1e3a5f] -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Informações Clínicas</h3>
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Atendimento</h3>
             <div className="grid grid-cols-2 gap-2">
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">CID:</span> {data.dadosClinicos.cid || '—'}</p>
-              <p><span className="text-xs font-bold uppercase text-muted-foreground">Tipo:</span> {data.dadosClinicos.tipo_atendimento || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tipo:</span> {data.dadosClinicos.tipo_atendimento || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CID:</span> {data.dadosClinicos.cid || '—'}</p>
             </div>
-            <p className="mt-1"><span className="text-xs font-bold uppercase text-muted-foreground">Unidade:</span> {data.dadosClinicos.unidade_atendimento || '—'}</p>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Profissional:</span> {data.profissional.nome || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Especialidade:</span> {data.dadosClinicos.especialidade || data.profissional.cargo || '—'}</p>
+            </div>
           </div>
 
+          {/* Sinais Vitais */}
           <div className="border rounded p-3">
-            <h3 className="text-xs font-bold uppercase text-white bg-[#1e3a5f] -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Sinais Vitais</h3>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <p><strong>P.A.:</strong> {data.sinaisVitais.pressao_arterial || '—'}</p>
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Triagem / Sinais Vitais</h3>
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <p><strong>PA:</strong> {data.sinaisVitais.pressao_arterial || '—'}</p>
+              <p><strong>Temp:</strong> {data.sinaisVitais.temperatura || '—'} °C</p>
               <p><strong>FC:</strong> {data.sinaisVitais.frequencia_cardiaca || '—'} bpm</p>
-              <p><strong>Temp.:</strong> {data.sinaisVitais.temperatura || '—'} °C</p>
-              <p><strong>Sat.:</strong> {data.sinaisVitais.saturacao || '—'} %</p>
+              <p><strong>SpO₂:</strong> {data.sinaisVitais.saturacao || '—'} %</p>
               <p><strong>Peso:</strong> {data.sinaisVitais.peso || '—'} kg</p>
               <p><strong>Altura:</strong> {data.sinaisVitais.altura || '—'} m</p>
+              <p><strong>Glicemia:</strong> {data.sinaisVitais.glicemia || '—'}</p>
             </div>
           </div>
 
+          {/* Evolução */}
           {data.evoluciones.length > 0 && (
             <div className="border rounded p-3">
-              <h3 className="text-xs font-bold uppercase text-white bg-[#1e3a5f] -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
+              <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
               {data.evoluciones.map((evo, i) => (
                 <div key={i} className="border-b last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
                   <p className="text-xs text-muted-foreground">{formatarData(evo.data)} — {evo.profissional || '—'}</p>
