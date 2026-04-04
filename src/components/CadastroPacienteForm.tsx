@@ -43,9 +43,9 @@ const UBS_LIST = [
   "UBS Antônio Miléo",
   "Hospital Municipal de Oriximiná",
   "UBS Nossa Sra. das Graças",
-  "UBS Fluvial Manoel Andrade"
-  "UBS Ribeirinho"
-  "Hospital Regional Menino Jesus"
+  "UBS Fluvial Manoel Andrade",
+  "UBS Ribeirinho",
+  "Hospital Regional Menino Jesus",
 ];
 
 const EQUIPAMENTOS_OPTIONS = ["Cadeira de rodas", "Andador", "Muleta", "Órtese", "Prótese", "Sonda", "Outro"];
