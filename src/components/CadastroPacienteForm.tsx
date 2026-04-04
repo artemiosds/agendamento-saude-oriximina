@@ -35,14 +35,17 @@ const MUNICIPIOS = [
 ];
 
 const UBS_LIST = [
-  "UBS Central",
-  "UBS Bairro Novo",
-  "UBS São Francisco",
-  "UBS Cidade Nova",
-  "UBS Santa Terezinha",
-  "UBS Maracanã",
-  "Hospital Municipal",
-  "Outro",
+  "UBS Dr. Lauro Corrêa Pinto",
+  "UBS Penta",
+  "UBS Corino Guerreiro",
+  "UBS Santa Luzia",
+  "UBS Tânia Siqueira da Fonseca",
+  "UBS Antônio Miléo",
+  "Hospital Municipal de Oriximiná",
+  "UBS Nossa Sra. das Graças",
+  "UBS Fluvial Manoel Andrade"
+  "UBS Ribeirinho"
+  "Hospital Regional Menino Jesus"
 ];
 
 const EQUIPAMENTOS_OPTIONS = ["Cadeira de rodas", "Andador", "Muleta", "Órtese", "Prótese", "Sonda", "Outro"];
