@@ -839,8 +839,9 @@ const Pacientes: React.FC = () => {
         </Select>
       </div>
 
+      <p className="text-sm text-muted-foreground mb-2">Mostrando {showing} de {totalItems} pacientes</p>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filtered.map((p) => {
+        {paginatedFiltered.map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
 
