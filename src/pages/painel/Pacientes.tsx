@@ -429,6 +429,15 @@ const Pacientes: React.FC = () => {
     }
     setSavingFila(true);
     try {
+      // Check if patient is already in active queue
+      const alreadyInQueue = fila.some(
+        (f) => f.pacienteId === filaPaciente.id && ["aguardando", "chamado"].includes(f.status),
+      );
+      if (alreadyInQueue) {
+        toast.error("Paciente já está na fila de espera.");
+        setSavingFila(false);
+        return;
+      }
       const newId = `f${Date.now()}`;
       await addToFila({
         id: newId,
