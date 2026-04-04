@@ -320,94 +320,55 @@ const Pacientes: React.FC = () => {
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
-        const duplicateChecks: string[] = [];
-
-        // Check by CPF
+        // 1) CPF duplicate → BLOCK
         if (form.cpf.trim()) {
           const { data: cpfMatch } = await supabase
             .from("pacientes")
             .select("id, nome")
             .eq("cpf", form.cpf.trim())
             .limit(1);
-          if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
-        }
-
-        // Check by CNS
-        if (form.cns.trim()) {
-          const { data: cnsMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("cns", form.cns.trim())
-            .limit(1);
-          if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
-        }
-
-        // Check by name + DOB + mother name
-        if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
-          const { data: nameMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .eq("nome", form.nome.trim())
-            .eq("data_nascimento", form.dataNascimento)
-            .eq("nome_mae", form.nomeMae.trim())
-            .limit(1);
-          if (nameMatch && nameMatch.length > 0)
-            duplicateChecks.push(`Nome + Data Nasc. + Mãe já cadastrado: ${nameMatch[0].nome}`);
-        }
-
-        if (duplicateChecks.length > 0) {
-          const confirmed = window.confirm(
-            `⚠️ Possível duplicidade detectada:\n\n${duplicateChecks.join("\n")}\n\nDeseja continuar com o cadastro mesmo assim?`,
-          );
-          if (!confirmed) {
+          if (cpfMatch && cpfMatch.length > 0) {
             setSaving(false);
+            toast.error(`CPF já cadastrado para: ${cpfMatch[0].nome}. Cadastro bloqueado.`);
             return;
           }
         }
 
+        // 2) Same name (case-insensitive) → WARN but allow
+        if (form.nome.trim()) {
+          const { data: nameMatch } = await supabase
+            .from("pacientes")
+            .select("id, nome")
+            .ilike("nome", form.nome.trim())
+            .limit(5);
+          if (nameMatch && nameMatch.length > 0) {
+            const names = nameMatch.map((m) => m.nome).join(", ");
+            const confirmed = window.confirm(
+              `⚠️ Paciente com nome semelhante já cadastrado:\n${names}\n\nDeseja continuar com o cadastro mesmo assim?`,
+            );
+            if (!confirmed) {
+              setSaving(false);
+              return;
+            }
+          }
+        }
+
+        // Save patient ONLY — do NOT auto-insert into fila_espera
         const id = `p${Date.now()}`;
         await supabase.from("pacientes").insert({ id, ...dbFields });
 
-        // Auto-insert into fila_espera with status "aguardando" (AGUARDANDO TRIAGEM)
-        const filaId = `f${Date.now()}`;
-        const defaultUnidade = unidades.length === 1 ? unidades[0].id : user?.unidadeId || unidades[0]?.id || "";
-        await supabase.from("fila_espera").insert({
-          id: filaId,
-          paciente_id: id,
-          paciente_nome: form.nome,
-          unidade_id: defaultUnidade,
-          profissional_id: "",
-          setor: "",
-          prioridade: "normal",
-          prioridade_perfil: "normal",
-          status: "aguardando",
-          posicao: fila.length + 1,
-          hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-          criado_por: user?.id || "sistema",
-          observacoes: "",
-          descricao_clinica: form.diagnosticoResumido || form.descricaoClinica || "",
-          cid: form.cid,
-          data_solicitacao_original: form.dataEncaminhamento || new Date().toISOString().split("T")[0],
-          origem_cadastro: "normal",
-          especialidade_destino: form.especialidadeDestino,
-        });
-
         await logAction({
           acao: "criar",
-          entidade: "fila_espera",
-          entidadeId: filaId,
-          detalhes: {
-            pacienteNome: form.nome,
-            especialidade: form.especialidadeDestino,
-            origem: "cadastro_automatico",
-          },
+          entidade: "paciente",
+          entidadeId: id,
+          detalhes: { pacienteNome: form.nome, cpf: form.cpf },
           user,
-          modulo: "fila_espera",
+          modulo: "pacientes",
         });
 
         await refreshPacientes();
-        await refreshFila();
-        toast.success("Paciente cadastrado e adicionado à fila de espera!");
+        window.dispatchEvent(new Event("db_update"));
+        toast.success("Paciente cadastrado com sucesso!");
       }
       setDialogOpen(false);
     } catch {
