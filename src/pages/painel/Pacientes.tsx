@@ -164,13 +164,15 @@ const Pacientes: React.FC = () => {
     return pacientes.filter((p) => myPacienteIds.has(p.id));
   }, [pacientes, agendamentos, isProfissional, user]);
 
+  const debouncedSearch = useDebouncedValue(search, 300);
+
   const filtered = useMemo(() => {
     let list = visiblePacientes.filter(
       (p) =>
-        p.nome.toLowerCase().includes(search.toLowerCase()) ||
-        p.cpf.includes(search) ||
-        p.telefone.includes(search) ||
-        (p.cns && p.cns.includes(search)),
+        p.nome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        p.cpf.includes(debouncedSearch) ||
+        p.telefone.includes(debouncedSearch) ||
+        (p.cns && p.cns.includes(debouncedSearch)),
     );
 
     // Filter by fila
@@ -214,7 +216,12 @@ const Pacientes: React.FC = () => {
     }
 
     return list;
-  }, [visiblePacientes, search, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
+  }, [visiblePacientes, debouncedSearch, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
+
+  const { paginatedItems: paginatedFiltered, hasMore, loadMore, resetPage, totalItems, showing } = usePagination(filtered);
+
+  // Reset pagination when filters change
+  useEffect(() => { resetPage(); }, [debouncedSearch, filterFila, sortBy, resetPage]);
 
   const openNew = () => {
     setEditId(null);
