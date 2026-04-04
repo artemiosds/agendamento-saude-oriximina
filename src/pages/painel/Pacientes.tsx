@@ -495,6 +495,8 @@ const Pacientes: React.FC = () => {
         modulo: "fila_espera",
       });
 
+      await refreshFila();
+      window.dispatchEvent(new Event("db_update"));
       toast.success(`${filaPaciente.nome} adicionado à fila de espera!`);
       setFilaDialogOpen(false);
     } catch {
