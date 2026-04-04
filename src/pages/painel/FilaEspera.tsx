@@ -1793,7 +1793,14 @@ const FilaEspera: React.FC = () => {
             <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>
           </Card>
         ) : (
-          filteredFila.map((f, i) => {
+        <p className="text-sm text-muted-foreground mb-2">Mostrando {filaShowing} de {filaTotalItems} registros</p>
+        ) : null}
+        {filteredFila.length === 0 ? (
+          <Card className="shadow-card border-0">
+            <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>
+          </Card>
+        ) : (
+          paginatedFila.map((f, i) => {
             const prof = f.profissionalId ? funcionarios.find((fn) => fn.id === f.profissionalId) : null;
             const unidade = unidades.find((u) => u.id === f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
