@@ -1908,6 +1908,87 @@ const FilaEspera: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  {canManage && (
+                    <div className="flex flex-wrap gap-1 shrink-0">
+                      {f.status === "aguardando" && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => {
+                              setDetalheFila(f);
+                              setDetalheOpen(true);
+                            }}
+                          >
+                            <Eye className="w-3.5 h-3.5 mr-1" /> Ver
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => {
+                              setEditId(f.id);
+                              setForm({
+                                pacienteNome: f.pacienteNome,
+                                pacienteId: f.pacienteId,
+                                unidadeId: f.unidadeId,
+                                profissionalId: f.profissionalId || "",
+                                setor: f.setor,
+                                prioridade: f.prioridade,
+                                observacoes: f.observacoes || "",
+                                descricaoClinica: f.descricaoClinica || "",
+                                cid: f.cid || "",
+                              });
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="outline" className="h-8 text-destructive">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Remover {f.pacienteNome} da fila de espera?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={async () => {
+                                    await removeFromFila(f.id);
+                                    toast.success("Removido da fila!");
+                                  }}
+                                >
+                                  Remover
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+          {filaHasMore && (
+            <div className="flex justify-center mt-4">
+              <Button variant="outline" onClick={filaLoadMore}>
+                Carregar mais registros
+              </Button>
+            </div>
+          )}
+          </>
+        )}
+      </div>
 
       {/* Absence Modal */}
       <Dialog open={absenceModalOpen} onOpenChange={setAbsenceModalOpen}>
