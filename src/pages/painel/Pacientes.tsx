@@ -981,6 +981,13 @@ const Pacientes: React.FC = () => {
           );
         })}
       </div>
+      {hasMore && (
+        <div className="flex justify-center mt-4">
+          <Button variant="outline" onClick={loadMore}>
+            Carregar mais pacientes
+          </Button>
+        </div>
+      )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
 
       {/* Detalhe Drawer - Paciente */}
