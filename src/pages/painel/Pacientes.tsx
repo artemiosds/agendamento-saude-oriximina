@@ -317,6 +317,7 @@ const Pacientes: React.FC = () => {
       if (editId) {
         await supabase.from("pacientes").update(dbFields).eq("id", editId);
         await refreshPacientes();
+        window.dispatchEvent(new Event("db_update"));
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
