@@ -1,6 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { usePagination } from "@/hooks/usePagination";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
@@ -315,8 +313,6 @@ const FilaEspera: React.FC = () => {
     });
   }, [now, reservas, fila, expirarReserva, user]);
 
-  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
-
   const filteredFila = useMemo(() => {
     const prioOrder: Record<string, number> = {
       urgente: 0,
@@ -327,7 +323,7 @@ const FilaEspera: React.FC = () => {
       crianca: 5,
       normal: 6,
     };
-    const query = debouncedSearchQuery.toLowerCase().trim();
+    const query = searchQuery.toLowerCase().trim();
     return [...fila]
       .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
@@ -358,11 +354,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, debouncedSearchQuery]);
-
-  const { paginatedItems: paginatedFila, hasMore: filaHasMore, loadMore: filaLoadMore, resetPage: filaResetPage, totalItems: filaTotalItems, showing: filaShowing } = usePagination(filteredFila);
-
-  useEffect(() => { filaResetPage(); }, [debouncedSearchQuery, filterUnidade, filterProf, filterStatus, sortField, filaResetPage]);
+  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
@@ -1793,9 +1785,7 @@ const FilaEspera: React.FC = () => {
             <CardContent className="p-8 text-center text-muted-foreground">Fila vazia.</CardContent>
           </Card>
         ) : (
-          <>
-            <p className="text-sm text-muted-foreground mb-2">Mostrando {filaShowing} de {filaTotalItems} registros</p>
-            {paginatedFila.map((f, i) => {
+          filteredFila.map((f, i) => {
             const prof = f.profissionalId ? funcionarios.find((fn) => fn.id === f.profissionalId) : null;
             const unidade = unidades.find((u) => u.id === f.unidadeId);
             const reservaTime = getReservaTimeLeft(f.id);
@@ -1908,85 +1898,174 @@ const FilaEspera: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  <ContactActionButton
+                    phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
+                    patientName={f.pacienteNome}
+                    unitName={unidade?.nome}
+                  />
+                  <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
+                    {prioridadeLabel[f.prioridade] || f.prioridade}
+                  </Badge>
+                  <span
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
+                      statusLabels[f.status]?.color,
+                    )}
+                  >
+                    {statusLabels[f.status]?.label}
+                  </span>
                   {canManage && (
-                    <div className="flex flex-wrap gap-1 shrink-0">
-                      {f.status === "aguardando" && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => {
-                              setDetalheFila(f);
-                              setDetalheOpen(true);
-                            }}
-                          >
-                            <Eye className="w-3.5 h-3.5 mr-1" /> Ver
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8"
-                            onClick={() => {
-                              setEditId(f.id);
-                              setForm({
-                                pacienteNome: f.pacienteNome,
-                                pacienteId: f.pacienteId,
-                                unidadeId: f.unidadeId,
-                                profissionalId: f.profissionalId || "",
-                                setor: f.setor,
-                                prioridade: f.prioridade,
-                                observacoes: f.observacoes || "",
-                                descricaoClinica: f.descricaoClinica || "",
-                                cid: f.cid || "",
-                              });
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="outline" className="h-8 text-destructive">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Remover {f.pacienteNome} da fila de espera?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={async () => {
-                                    await removeFromFila(f.id);
-                                    toast.success("Removido da fila!");
-                                  }}
-                                >
-                                  Remover
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
+                    <div className="flex gap-1 shrink-0 flex-wrap">
+                      {isChamado && reservaTime?.slot && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-8 bg-success text-success-foreground hover:bg-success/90"
+                          onClick={() => confirmarEncaixe(f.id, reservaTime.slot, user)}
+                          title="Confirmar Encaixe"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" /> Confirmar
+                        </Button>
                       )}
+                      {isChamado && reservaTime?.slot && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => expirarReserva(f.id, reservaTime.slot, user)}
+                          title="Expirar Reserva / Chamar Próximo"
+                        >
+                          <ArrowRight className="w-4 h-4 mr-1" /> Próximo
+                        </Button>
+                      )}
+                      {!isChamado && f.status === "aguardando" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8"
+                          onClick={async () => {
+                            await updateFila(f.id, {
+                              status: "chamado",
+                              horaChamada: new Date().toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }),
+                            });
+                            const pac = pacientes.find((p) => p.id === f.pacienteId);
+                            const unidadeN = unidades.find((u) => u.id === f.unidadeId);
+                            await notify({
+                              evento: "fila_chamada",
+                              paciente_nome: f.pacienteNome,
+                              telefone: pac?.telefone || "",
+                              email: pac?.email || "",
+                              data_consulta: new Date().toISOString().split("T")[0],
+                              hora_consulta: new Date().toLocaleTimeString("pt-BR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }),
+                              unidade: unidadeN?.nome || "",
+                              profissional: prof?.nome || "",
+                              tipo_atendimento: "Chamada da Fila",
+                              status_agendamento: "chamado",
+                              id_agendamento: "",
+                            });
+                            toast.info("Paciente chamado!");
+                          }}
+                          title="Chamar"
+                        >
+                          <Bell className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {f.status !== "encaixado" &&
+                        f.status !== "atendido" &&
+                        f.status !== "cancelado" &&
+                        !isChamado && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8"
+                              onClick={() => updateFila(f.id, { status: "em_atendimento" })}
+                              title="Iniciar"
+                            >
+                              <Play className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8"
+                              onClick={() => updateFila(f.id, { status: "atendido" })}
+                              title="Finalizar"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8"
+                              onClick={() => openAbsenceModal(f)}
+                              title="Marcar Falta"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8"
+                              onClick={() => openRescheduleModal(f)}
+                              title="Reagendar"
+                            >
+                              <CalendarClock className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8"
+                        onClick={() => {
+                          setDetalheFila(f);
+                          setDetalheOpen(true);
+                        }}
+                        title="Detalhes"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8" onClick={() => openEdit(f)} title="Editar">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-8 text-destructive" title="Remover">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja remover {f.pacienteNome} da fila?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={async () => {
+                                await removeFromFila(f.id);
+                                toast.success("Removido da fila!");
+                              }}
+                            >
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   )}
                 </CardContent>
               </Card>
             );
-          })}
-          {filaHasMore && (
-            <div className="flex justify-center mt-4">
-              <Button variant="outline" onClick={filaLoadMore}>
-                Carregar mais registros
-              </Button>
-            </div>
-          )}
-          </>
+          })
         )}
       </div>
 

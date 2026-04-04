@@ -1,6 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { usePagination } from "@/hooks/usePagination";
+import React, { useState, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -164,15 +162,13 @@ const Pacientes: React.FC = () => {
     return pacientes.filter((p) => myPacienteIds.has(p.id));
   }, [pacientes, agendamentos, isProfissional, user]);
 
-  const debouncedSearch = useDebouncedValue(search, 300);
-
   const filtered = useMemo(() => {
     let list = visiblePacientes.filter(
       (p) =>
-        p.nome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        p.cpf.includes(debouncedSearch) ||
-        p.telefone.includes(debouncedSearch) ||
-        (p.cns && p.cns.includes(debouncedSearch)),
+        p.nome.toLowerCase().includes(search.toLowerCase()) ||
+        p.cpf.includes(search) ||
+        p.telefone.includes(search) ||
+        (p.cns && p.cns.includes(search)),
     );
 
     // Filter by fila
@@ -216,12 +212,7 @@ const Pacientes: React.FC = () => {
     }
 
     return list;
-  }, [visiblePacientes, debouncedSearch, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
-
-  const { paginatedItems: paginatedFiltered, hasMore, loadMore, resetPage, totalItems, showing } = usePagination(filtered);
-
-  // Reset pagination when filters change
-  useEffect(() => { resetPage(); }, [debouncedSearch, filterFila, sortBy, resetPage]);
+  }, [visiblePacientes, search, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
 
   const openNew = () => {
     setEditId(null);
@@ -326,59 +317,97 @@ const Pacientes: React.FC = () => {
       if (editId) {
         await supabase.from("pacientes").update(dbFields).eq("id", editId);
         await refreshPacientes();
-        window.dispatchEvent(new Event("db_update"));
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
-        // 1) CPF duplicate → BLOCK
+        const duplicateChecks: string[] = [];
+
+        // Check by CPF
         if (form.cpf.trim()) {
           const { data: cpfMatch } = await supabase
             .from("pacientes")
             .select("id, nome")
             .eq("cpf", form.cpf.trim())
             .limit(1);
-          if (cpfMatch && cpfMatch.length > 0) {
+          if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
+        }
+
+        // Check by CNS
+        if (form.cns.trim()) {
+          const { data: cnsMatch } = await supabase
+            .from("pacientes")
+            .select("id, nome")
+            .eq("cns", form.cns.trim())
+            .limit(1);
+          if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
+        }
+
+        // Check by name + DOB + mother name
+        if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
+          const { data: nameMatch } = await supabase
+            .from("pacientes")
+            .select("id, nome")
+            .eq("nome", form.nome.trim())
+            .eq("data_nascimento", form.dataNascimento)
+            .eq("nome_mae", form.nomeMae.trim())
+            .limit(1);
+          if (nameMatch && nameMatch.length > 0)
+            duplicateChecks.push(`Nome + Data Nasc. + Mãe já cadastrado: ${nameMatch[0].nome}`);
+        }
+
+        if (duplicateChecks.length > 0) {
+          const confirmed = window.confirm(
+            `⚠️ Possível duplicidade detectada:\n\n${duplicateChecks.join("\n")}\n\nDeseja continuar com o cadastro mesmo assim?`,
+          );
+          if (!confirmed) {
             setSaving(false);
-            toast.error(`CPF já cadastrado para: ${cpfMatch[0].nome}. Cadastro bloqueado.`);
             return;
           }
         }
 
-        // 2) Same name (case-insensitive) → WARN but allow
-        if (form.nome.trim()) {
-          const { data: nameMatch } = await supabase
-            .from("pacientes")
-            .select("id, nome")
-            .ilike("nome", form.nome.trim())
-            .limit(5);
-          if (nameMatch && nameMatch.length > 0) {
-            const names = nameMatch.map((m) => m.nome).join(", ");
-            const confirmed = window.confirm(
-              `⚠️ Paciente com nome semelhante já cadastrado:\n${names}\n\nDeseja continuar com o cadastro mesmo assim?`,
-            );
-            if (!confirmed) {
-              setSaving(false);
-              return;
-            }
-          }
-        }
-
-        // Save patient ONLY — do NOT auto-insert into fila_espera
         const id = `p${Date.now()}`;
         await supabase.from("pacientes").insert({ id, ...dbFields });
 
+        // Auto-insert into fila_espera with status "aguardando" (AGUARDANDO TRIAGEM)
+        const filaId = `f${Date.now()}`;
+        const defaultUnidade = unidades.length === 1 ? unidades[0].id : user?.unidadeId || unidades[0]?.id || "";
+        await supabase.from("fila_espera").insert({
+          id: filaId,
+          paciente_id: id,
+          paciente_nome: form.nome,
+          unidade_id: defaultUnidade,
+          profissional_id: "",
+          setor: "",
+          prioridade: "normal",
+          prioridade_perfil: "normal",
+          status: "aguardando",
+          posicao: fila.length + 1,
+          hora_chegada: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          criado_por: user?.id || "sistema",
+          observacoes: "",
+          descricao_clinica: form.diagnosticoResumido || form.descricaoClinica || "",
+          cid: form.cid,
+          data_solicitacao_original: form.dataEncaminhamento || new Date().toISOString().split("T")[0],
+          origem_cadastro: "normal",
+          especialidade_destino: form.especialidadeDestino,
+        });
+
         await logAction({
           acao: "criar",
-          entidade: "paciente",
-          entidadeId: id,
-          detalhes: { pacienteNome: form.nome, cpf: form.cpf },
+          entidade: "fila_espera",
+          entidadeId: filaId,
+          detalhes: {
+            pacienteNome: form.nome,
+            especialidade: form.especialidadeDestino,
+            origem: "cadastro_automatico",
+          },
           user,
-          modulo: "pacientes",
+          modulo: "fila_espera",
         });
 
         await refreshPacientes();
-        window.dispatchEvent(new Event("db_update"));
-        toast.success("Paciente cadastrado com sucesso!");
+        await refreshFila();
+        toast.success("Paciente cadastrado e adicionado à fila de espera!");
       }
       setDialogOpen(false);
     } catch {
@@ -438,15 +467,6 @@ const Pacientes: React.FC = () => {
     }
     setSavingFila(true);
     try {
-      // Check if patient is already in active queue
-      const alreadyInQueue = fila.some(
-        (f) => f.pacienteId === filaPaciente.id && ["aguardando", "chamado"].includes(f.status),
-      );
-      if (alreadyInQueue) {
-        toast.error("Paciente já está na fila de espera.");
-        setSavingFila(false);
-        return;
-      }
       const newId = `f${Date.now()}`;
       await addToFila({
         id: newId,
@@ -513,8 +533,6 @@ const Pacientes: React.FC = () => {
         modulo: "fila_espera",
       });
 
-      await refreshFila();
-      window.dispatchEvent(new Event("db_update"));
       toast.success(`${filaPaciente.nome} adicionado à fila de espera!`);
       setFilaDialogOpen(false);
     } catch {
@@ -839,9 +857,8 @@ const Pacientes: React.FC = () => {
         </Select>
       </div>
 
-      <p className="text-sm text-muted-foreground mb-2">Mostrando {showing} de {totalItems} pacientes</p>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {paginatedFiltered.map((p) => {
+        {filtered.map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
 
@@ -981,13 +998,6 @@ const Pacientes: React.FC = () => {
           );
         })}
       </div>
-      {hasMore && (
-        <div className="flex justify-center mt-4">
-          <Button variant="outline" onClick={loadMore}>
-            Carregar mais pacientes
-          </Button>
-        </div>
-      )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
 
       {/* Detalhe Drawer - Paciente */}
