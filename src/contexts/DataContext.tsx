@@ -15,13 +15,13 @@ import {
 } from "@/types";
 
 const inlineSetores = [
-  { id: "st1", nome: "Clínica Geral" },
+  { id: "st1", nome: "Cl�nica Geral" },
   { id: "st2", nome: "Pediatria" },
   { id: "st3", nome: "Odontologia" },
   { id: "st4", nome: "Enfermagem" },
   { id: "st5", nome: "Fisioterapia" },
   { id: "st6", nome: "Psicologia" },
-  { id: "st7", nome: "Nutrição" },
+  { id: "st7", nome: "Nutri��o" },
 ];
 
 import { supabase } from "@/integrations/supabase/client";
@@ -69,8 +69,8 @@ const defaultConfiguracoes: Configuracoes = {
   filaEspera: { modoEncaixe: "assistido" },
   templates: {
     confirmacao:
-      "Olá {nome}! Sua consulta foi agendada para {data} às {hora} na {unidade}. Profissional: {profissional}.",
-    lembrete: "Lembrete: Sua consulta é em {data} às {hora} na {unidade} com {profissional}.",
+      "Ol� {nome}! Sua consulta foi agendada para {data} �s {hora} na {unidade}. Profissional: {profissional}.",
+    lembrete: "Lembrete: Sua consulta � em {data} �s {hora} na {unidade} com {profissional}.",
   },
   webhook: {
     ativo: true,
@@ -154,8 +154,6 @@ interface DataContextType {
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
-  // NOVO: carrega histórico completo para relatórios
-  loadAgendamentosCompleto: () => Promise<Agendamento[]>;
   logAction: (input: {
     acao: string;
     entidade: string;
@@ -216,29 +214,6 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
   };
 };
 
-// Helper para mapear linha do banco -> Agendamento
-const mapAgendamento = (a: any): Agendamento => ({
-  id: a.id,
-  pacienteId: a.paciente_id,
-  pacienteNome: a.paciente_nome,
-  unidadeId: a.unidade_id,
-  salaId: a.sala_id || "",
-  setorId: a.setor_id || "",
-  profissionalId: a.profissional_id,
-  profissionalNome: a.profissional_nome,
-  data: a.data,
-  hora: a.hora,
-  status: a.status,
-  tipo: a.tipo,
-  observacoes: a.observacoes || "",
-  origem: a.origem || "recepcao",
-  googleEventId: a.google_event_id || "",
-  syncStatus: a.sync_status || "",
-  criadoEm: a.criado_em || "",
-  criadoPor: a.criado_por || "",
-  horaChegada: a.hora_chegada || "",
-});
-
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
@@ -253,6 +228,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
+  // Invalidate TanStack Query cache for the given entity keys
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
       keys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
@@ -301,6 +277,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [],
   );
+
+  const emitDbUpdate = useCallback(() => {
+    try {
+      window.dispatchEvent(new Event("db_update"));
+    } catch {
+      /* SSR */
+    }
+  }, []);
 
   const isSlotBlocked = useCallback(
     (profissionalId: string, unidadeId: string, date: string, time?: string) => {
@@ -477,34 +461,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // CORRIGIDO: busca apenas janela operacional (6 meses atrás + 3 meses à frente)
   const loadAgendamentos = useCallback(async () => {
-    try {
-      const hoje = new Date();
-      const dataInicio = new Date(hoje);
-      dataInicio.setMonth(dataInicio.getMonth() - 6);
-      const dataFim = new Date(hoje);
-      dataFim.setMonth(dataFim.getMonth() + 3);
-
-      const { data, error } = await supabase
-        .from("agendamentos" as any)
-        .select(
-          "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por,hora_chegada",
-        )
-        .gte("data", dataInicio.toISOString().split("T")[0])
-        .lte("data", dataFim.toISOString().split("T")[0])
-        .order("data", { ascending: false });
-
-      if (data && !error) {
-        setAgendamentos(data.map(mapAgendamento));
-      }
-    } catch (err) {
-      console.error("Error loading agendamentos:", err);
-    }
-  }, []);
-
-  // NOVO: carrega histórico completo para relatórios (chamado sob demanda)
-  const loadAgendamentosCompleto = useCallback(async (): Promise<Agendamento[]> => {
     try {
       let allData: any[] = [];
       let from = 0;
@@ -513,7 +470,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data, error } = await supabase
           .from("agendamentos" as any)
           .select(
-            "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por,hora_chegada",
+            "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
           )
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
@@ -522,10 +479,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.length < PAGE) break;
         from += PAGE;
       }
-      return allData.map(mapAgendamento);
+      if (allData.length > 0) {
+        setAgendamentos(
+          (allData as any[]).map((a: any) => ({
+            id: a.id,
+            pacienteId: a.paciente_id,
+            pacienteNome: a.paciente_nome,
+            unidadeId: a.unidade_id,
+            salaId: a.sala_id || "",
+            setorId: a.setor_id || "",
+            profissionalId: a.profissional_id,
+            profissionalNome: a.profissional_nome,
+            data: a.data,
+            hora: a.hora,
+            status: a.status,
+            tipo: a.tipo,
+            observacoes: a.observacoes || "",
+            origem: a.origem || "recepcao",
+            googleEventId: a.google_event_id || "",
+            syncStatus: a.sync_status || "",
+            criadoEm: a.criado_em || "",
+            criadoPor: a.criado_por || "",
+            horaChegada: a.hora_chegada || "",
+          })),
+        );
+      }
     } catch (err) {
-      console.error("Error loading agendamentos completo:", err);
-      return [];
+      console.error("Error loading agendamentos:", err);
     }
   }, []);
 
@@ -598,33 +578,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // CORRIGIDO: carrega essencial primeiro, secundário em background sem bloquear UI
   const loadAll = useCallback(async () => {
-    // Fase 1 — essencial para a UI funcionar (aguarda)
-    await Promise.all([loadUnidades(), loadFuncionarios(), loadPacientes(), loadFila()]);
-
-    // Fase 2 — secundário em background (não bloqueia)
-    Promise.all([loadAgendamentos(), loadDisponibilidades(), loadBloqueios(), loadSalas(), loadConfiguracoes()]).catch(
-      (err) => console.error("Background load error:", err),
-    );
+    await Promise.all([
+      loadConfiguracoes(),
+      loadUnidades(),
+      loadSalas(),
+      loadFuncionarios(),
+      loadDisponibilidades(),
+      loadPacientes(),
+      loadAgendamentos(),
+      loadFila(),
+      loadBloqueios(),
+    ]);
   }, [
-    loadUnidades,
-    loadFuncionarios,
-    loadPacientes,
-    loadFila,
-    loadAgendamentos,
-    loadDisponibilidades,
-    loadBloqueios,
-    loadSalas,
     loadConfiguracoes,
+    loadUnidades,
+    loadSalas,
+    loadFuncionarios,
+    loadDisponibilidades,
+    loadPacientes,
+    loadAgendamentos,
+    loadFila,
+    loadBloqueios,
   ]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  // REMOVIDO: listener db_update que disparava loadAll completo após cada ação
-  // O Realtime do Supabase (useRealtimeSync) já cuida da sincronização
+  const dbUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const handler = () => {
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+      dbUpdateTimerRef.current = setTimeout(() => {
+        loadAll();
+      }, 500);
+    };
+    window.addEventListener("db_update", handler);
+    return () => {
+      window.removeEventListener("db_update", handler);
+      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
+    };
+  }, [loadAll]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -645,7 +640,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      setAgendamentos((prev) => upsertById(prev, mapAgendamento(row)));
+      setAgendamentos((prev) =>
+        upsertById(prev, {
+          id: row.id,
+          pacienteId: row.paciente_id,
+          pacienteNome: row.paciente_nome,
+          unidadeId: row.unidade_id,
+          salaId: row.sala_id || "",
+          setorId: row.setor_id || "",
+          profissionalId: row.profissional_id,
+          profissionalNome: row.profissional_nome,
+          data: row.data,
+          hora: row.hora,
+          status: row.status,
+          tipo: row.tipo,
+          observacoes: row.observacoes || "",
+          origem: row.origem || "recepcao",
+          googleEventId: row.google_event_id || "",
+          syncStatus: row.sync_status || "",
+          criadoEm: row.criado_em || "",
+          criadoPor: row.criado_por || "",
+          horaChegada: row.hora_chegada || "",
+        }),
+      );
     },
     poll: loadAgendamentos,
   });
@@ -841,15 +858,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prioridade_perfil: "normal",
       } as any);
       if (!error) {
-        // Atualiza estado local imediatamente — sem reload do banco
-        setAgendamentos((prev) => [ag, ...prev]);
-        invalidateCache(queryKeys.agendamentos.all);
-      } else {
-        console.error("Error adding agendamento:", error);
-        toast.error("Erro ao criar agendamento.");
-      }
+        setAgendamentos((prev) => [...prev, ag]);
+        await logAction({
+          acao: "criar",
+          entidade: "agendamento",
+          entidadeId: ag.id,
+          unidadeId: ag.unidadeId,
+          detalhes: { data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId },
+        });
+        invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
+        emitDbUpdate();
+      } else console.error("Error adding agendamento:", error);
     },
-    [invalidateCache],
+    [logAction, emitDbUpdate, invalidateCache],
   );
 
   const updateAgendamento = useCallback(
@@ -862,7 +883,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.googleEventId !== undefined) dbData.google_event_id = data.googleEventId;
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
-      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
+      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada; // Regra 3
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
@@ -872,15 +893,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        // Atualiza estado local imediatamente — sem reload do banco
         setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+        await logAction({
+          acao: "editar",
+          entidade: "agendamento",
+          entidadeId: id,
+          detalhes: data as Record<string, unknown>,
+        });
         invalidateCache(queryKeys.agendamentos.all);
+        emitDbUpdate();
       } else {
         console.error("Error updating agendamento:", error);
         toast.error("Erro ao atualizar agendamento");
       }
     },
-    [invalidateCache],
+    [logAction, emitDbUpdate, invalidateCache],
   );
 
   const cancelAgendamento = useCallback(
@@ -897,9 +924,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, status: "cancelado" as const } : a)));
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
+      emitDbUpdate();
       return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
     },
-    [agendamentos, invalidateCache],
+    [agendamentos, emitDbUpdate, invalidateCache],
   );
 
   const addPaciente = useCallback(
@@ -922,9 +950,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => [p, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
+        emitDbUpdate();
       } else console.error("Error adding paciente:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updatePaciente = useCallback(
@@ -948,9 +977,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
         invalidateCache(queryKeys.pacientes.all);
+        emitDbUpdate();
       } else console.error("Error updating paciente:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addToFila = useCallback(
@@ -977,10 +1007,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setFila((prev) => [...prev, f]);
+        await logAction({
+          acao: "criar",
+          entidade: "fila_espera",
+          entidadeId: f.id,
+          unidadeId: f.unidadeId,
+          detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
+        });
         invalidateCache(queryKeys.fila.all);
+        emitDbUpdate();
       } else console.error("Error adding to fila:", error);
     },
-    [invalidateCache],
+    [logAction, emitDbUpdate, invalidateCache],
   );
 
   const updateFila = useCallback(
@@ -1007,10 +1045,17 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
+        await logAction({
+          acao: "editar",
+          entidade: "fila_espera",
+          entidadeId: id,
+          detalhes: data as Record<string, unknown>,
+        });
         invalidateCache(queryKeys.fila.all);
+        emitDbUpdate();
       } else console.error("Error updating fila:", error);
     },
-    [invalidateCache],
+    [logAction, emitDbUpdate, invalidateCache],
   );
 
   const removeFromFila = useCallback(
@@ -1021,10 +1066,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setFila((prev) => prev.filter((f) => f.id !== id));
+        await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
         invalidateCache(queryKeys.fila.all);
+        emitDbUpdate();
       } else console.error("Error removing from fila:", error);
     },
-    [invalidateCache],
+    [logAction, emitDbUpdate, invalidateCache],
   );
 
   const addAtendimento = useCallback(
@@ -1053,36 +1100,37 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setAtendimentos((prev) => [...prev, a]);
       invalidateCache(queryKeys.atendimentos.all);
+      emitDbUpdate();
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateAtendimento = useCallback(
     (id: string, data: Partial<Atendimento>) => {
       setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
       invalidateCache(queryKeys.atendimentos.all);
+      emitDbUpdate();
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addUnidade = useCallback(
     async (u: Unidade) => {
-      const { error } = await supabase
-        .from("unidades" as any)
-        .insert({
-          id: u.id,
-          nome: u.nome,
-          endereco: u.endereco,
-          telefone: u.telefone,
-          whatsapp: u.whatsapp,
-          ativo: u.ativo,
-        } as any);
+      const { error } = await supabase.from("unidades" as any).insert({
+        id: u.id,
+        nome: u.nome,
+        endereco: u.endereco,
+        telefone: u.telefone,
+        whatsapp: u.whatsapp,
+        ativo: u.ativo,
+      } as any);
       if (!error) {
-        setUnidades((prev) => [...prev, u]);
         invalidateCache(queryKeys.unidades.all);
+        emitDbUpdate();
+        setUnidades((prev) => [...prev, u]);
       } else console.error("Error adding unidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateUnidade = useCallback(
@@ -1098,11 +1146,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
         invalidateCache(queryKeys.unidades.all);
+        emitDbUpdate();
+        setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
       } else console.error("Error updating unidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const deleteUnidade = useCallback(
@@ -1112,11 +1161,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
-        setUnidades((prev) => prev.filter((u) => u.id !== id));
         invalidateCache(queryKeys.unidades.all);
+        emitDbUpdate();
+        setUnidades((prev) => prev.filter((u) => u.id !== id));
       } else console.error("Error deleting unidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addSala = useCallback(
@@ -1125,11 +1175,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from("salas" as any)
         .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
       if (!error) {
-        setSalas((prev) => [...prev, s]);
         invalidateCache(queryKeys.salas.all);
+        emitDbUpdate();
+        setSalas((prev) => [...prev, s]);
       } else console.error("Error adding sala:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateSala = useCallback(
@@ -1143,11 +1194,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
         invalidateCache(queryKeys.salas.all);
+        emitDbUpdate();
+        setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
       } else console.error("Error updating sala:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const deleteSala = useCallback(
@@ -1157,11 +1209,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
-        setSalas((prev) => prev.filter((s) => s.id !== id));
         invalidateCache(queryKeys.salas.all);
+        emitDbUpdate();
+        setSalas((prev) => prev.filter((s) => s.id !== id));
       } else console.error("Error deleting sala:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addFuncionario = useCallback(
@@ -1189,11 +1242,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ativo: u.ativo,
       } as any);
       if (!error) {
-        setFuncionarios((prev) => [...prev, u]);
         invalidateCache(queryKeys.funcionarios.all);
+        emitDbUpdate();
+        setFuncionarios((prev) => [...prev, u]);
       } else console.error("Error adding funcionario:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateFuncionario = useCallback(
@@ -1221,11 +1275,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        setFuncionarios((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
         invalidateCache(queryKeys.funcionarios.all);
+        emitDbUpdate();
+        setFuncionarios((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
       } else console.error("Error updating funcionario:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const deleteFuncionario = useCallback(
@@ -1235,11 +1290,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
-        setFuncionarios((prev) => prev.filter((f) => f.id !== id));
         invalidateCache(queryKeys.funcionarios.all);
+        emitDbUpdate();
+        setFuncionarios((prev) => prev.filter((f) => f.id !== id));
       } else console.error("Error deleting funcionario:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addDisponibilidade = useCallback(
@@ -1259,11 +1315,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         duracao_consulta: d.duracaoConsulta,
       } as any);
       if (!error) {
-        setDisponibilidades((prev) => [...prev, d]);
         invalidateCache(queryKeys.disponibilidades.all);
+        emitDbUpdate();
+        setDisponibilidades((prev) => [...prev, d]);
       } else console.error("Error adding disponibilidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateDisponibilidade = useCallback(
@@ -1285,11 +1342,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        setDisponibilidades((prev) => prev.map((disp) => (disp.id === id ? { ...disp, ...data } : disp)));
         invalidateCache(queryKeys.disponibilidades.all);
+        emitDbUpdate();
+        setDisponibilidades((prev) => prev.map((disp) => (disp.id === id ? { ...disp, ...data } : disp)));
       } else console.error("Error updating disponibilidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const deleteDisponibilidade = useCallback(
@@ -1299,11 +1357,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
-        setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
         invalidateCache(queryKeys.disponibilidades.all);
+        emitDbUpdate();
+        setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
       } else console.error("Error deleting disponibilidade:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const addBloqueio = useCallback(
@@ -1323,11 +1382,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: b.criadoPor,
       } as any);
       if (!error) {
-        setBloqueios((prev) => [{ ...b, id }, ...prev]);
         invalidateCache(queryKeys.bloqueios.all);
+        emitDbUpdate();
+        setBloqueios((prev) => [{ ...b, id }, ...prev]);
       } else console.error("Error adding bloqueio:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateBloqueio = useCallback(
@@ -1347,11 +1407,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
-        setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
         invalidateCache(queryKeys.bloqueios.all);
+        emitDbUpdate();
+        setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
       } else console.error("Error updating bloqueio:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const deleteBloqueio = useCallback(
@@ -1361,11 +1422,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
-        setBloqueios((prev) => prev.filter((b) => b.id !== id));
         invalidateCache(queryKeys.bloqueios.all);
+        emitDbUpdate();
+        setBloqueios((prev) => prev.filter((b) => b.id !== id));
       } else console.error("Error deleting bloqueio:", error);
     },
-    [invalidateCache],
+    [emitDbUpdate, invalidateCache],
   );
 
   const updateConfiguracoes = useCallback(
@@ -1376,9 +1438,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update({ config_json: newConfigs as any })
         .eq("id", "default");
       if (!error) setConfiguracoes(newConfigs);
-      else await supabase.from("configuracoes" as any).insert({ id: "default", config_json: newConfigs as any });
+      else
+        await supabase.from("configuracoes" as any).insert({
+          id: "default",
+          config_json: newConfigs as any,
+        });
     },
-    [configuracoes],
+    [configuracoes, invalidateCache],
   );
 
   const checkFilaForSlot = useCallback(
@@ -1574,7 +1640,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (disp) {
             const key = `${profissionalId}|${unidadeId}|${dateStr}`;
             const dayCount = appointmentCountsByKey.get(key) || 0;
-            if (dayCount > 0) map[dateStr] = { dateStr, status: "full", label: "Lotado — sem vagas restantes" };
+            if (dayCount > 0) map[dateStr] = { dateStr, status: "full", label: "Lotado � sem vagas restantes" };
           }
         }
       }
@@ -1670,7 +1736,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshPacientes,
       refreshFila,
       refreshBloqueios,
-      loadAgendamentosCompleto,
       logAction,
     }),
     [
@@ -1724,7 +1789,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshPacientes,
       refreshFila,
       refreshBloqueios,
-      loadAgendamentosCompleto,
       logAction,
     ],
   );
