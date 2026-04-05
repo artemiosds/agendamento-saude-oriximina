@@ -924,6 +924,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       if (!error) {
         setPacientes((prev) => [p, ...prev]);
+        invalidateCache(queryKeys.pacientes.all);
         emitDbUpdate();
       } else console.error("Error adding paciente:", error);
     },
@@ -950,6 +951,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq("id", id);
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+        invalidateCache(queryKeys.pacientes.all);
         emitDbUpdate();
       } else console.error("Error updating paciente:", error);
     },
@@ -987,6 +989,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unidadeId: f.unidadeId,
           detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
         });
+        invalidateCache(queryKeys.fila.all);
         emitDbUpdate();
       } else console.error("Error adding to fila:", error);
     },
@@ -1023,6 +1026,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           entidadeId: id,
           detalhes: data as Record<string, unknown>,
         });
+        invalidateCache(queryKeys.fila.all);
         emitDbUpdate();
       } else console.error("Error updating fila:", error);
     },
@@ -1038,6 +1042,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setFila((prev) => prev.filter((f) => f.id !== id));
         await logAction({ acao: "excluir", entidade: "fila_espera", entidadeId: id });
+        invalidateCache(queryKeys.fila.all);
         emitDbUpdate();
       } else console.error("Error removing from fila:", error);
     },
@@ -1069,6 +1074,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error("Error adding atendimento:", err);
       }
       setAtendimentos((prev) => [...prev, a]);
+      invalidateCache(queryKeys.atendimentos.all);
       emitDbUpdate();
     },
     [emitDbUpdate],
@@ -1077,6 +1083,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateAtendimento = useCallback(
     (id: string, data: Partial<Atendimento>) => {
       setAtendimentos((prev) => prev.map((a) => (a.id === id ? { ...a, ...data } : a)));
+      invalidateCache(queryKeys.atendimentos.all);
       emitDbUpdate();
     },
     [emitDbUpdate],
@@ -1095,6 +1102,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ativo: u.ativo,
         } as any);
       if (!error) {
+        invalidateCache(queryKeys.unidades.all);
         emitDbUpdate();
         setUnidades((prev) => [...prev, u]);
       } else console.error("Error adding unidade:", error);
@@ -1115,6 +1123,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.unidades.all);
         emitDbUpdate();
         setUnidades((prev) => prev.map((u) => (u.id === id ? { ...u, ...data } : u)));
       } else console.error("Error updating unidade:", error);
@@ -1129,6 +1138,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.unidades.all);
         emitDbUpdate();
         setUnidades((prev) => prev.filter((u) => u.id !== id));
       } else console.error("Error deleting unidade:", error);
@@ -1142,6 +1152,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from("salas" as any)
         .insert({ id: s.id, nome: s.nome, unidade_id: s.unidadeId, ativo: s.ativo } as any);
       if (!error) {
+        invalidateCache(queryKeys.salas.all);
         emitDbUpdate();
         setSalas((prev) => [...prev, s]);
       } else console.error("Error adding sala:", error);
@@ -1160,6 +1171,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.salas.all);
         emitDbUpdate();
         setSalas((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
       } else console.error("Error updating sala:", error);
@@ -1174,6 +1186,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.salas.all);
         emitDbUpdate();
         setSalas((prev) => prev.filter((s) => s.id !== id));
       } else console.error("Error deleting sala:", error);
@@ -1206,6 +1219,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ativo: u.ativo,
       } as any);
       if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
         emitDbUpdate();
         setFuncionarios((prev) => [...prev, u]);
       } else console.error("Error adding funcionario:", error);
@@ -1238,6 +1252,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
         emitDbUpdate();
         setFuncionarios((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
       } else console.error("Error updating funcionario:", error);
@@ -1252,6 +1267,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.funcionarios.all);
         emitDbUpdate();
         setFuncionarios((prev) => prev.filter((f) => f.id !== id));
       } else console.error("Error deleting funcionario:", error);
@@ -1276,6 +1292,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         duracao_consulta: d.duracaoConsulta,
       } as any);
       if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
         emitDbUpdate();
         setDisponibilidades((prev) => [...prev, d]);
       } else console.error("Error adding disponibilidade:", error);
@@ -1302,6 +1319,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
         emitDbUpdate();
         setDisponibilidades((prev) => prev.map((disp) => (disp.id === id ? { ...disp, ...data } : disp)));
       } else console.error("Error updating disponibilidade:", error);
@@ -1316,6 +1334,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.disponibilidades.all);
         emitDbUpdate();
         setDisponibilidades((prev) => prev.filter((d) => d.id !== id));
       } else console.error("Error deleting disponibilidade:", error);
@@ -1340,6 +1359,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         criado_por: b.criadoPor,
       } as any);
       if (!error) {
+        invalidateCache(queryKeys.bloqueios.all);
         emitDbUpdate();
         setBloqueios((prev) => [{ ...b, id }, ...prev]);
       } else console.error("Error adding bloqueio:", error);
@@ -1364,6 +1384,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .update(dbData)
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.bloqueios.all);
         emitDbUpdate();
         setBloqueios((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
       } else console.error("Error updating bloqueio:", error);
@@ -1378,6 +1399,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .delete()
         .eq("id", id);
       if (!error) {
+        invalidateCache(queryKeys.bloqueios.all);
         emitDbUpdate();
         setBloqueios((prev) => prev.filter((b) => b.id !== id));
       } else console.error("Error deleting bloqueio:", error);
