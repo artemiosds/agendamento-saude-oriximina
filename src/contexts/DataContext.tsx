@@ -419,7 +419,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("pacientes" as any).select("*");
+      const { data, error } = await supabase.from("pacientes" as any).select("id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em");
       if (data && !error) {
         setPacientes(
           data.map((p: any) => ({
