@@ -28,6 +28,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface BloqueioAgenda {
   id: string;
@@ -217,6 +219,7 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [fila, setFila] = useState<FilaEspera[]>([]);
@@ -228,6 +231,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [disponibilidades, setDisponibilidades] = useState<Disponibilidade[]>([]);
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
+
+  // Invalidate TanStack Query cache for the given entity keys
+  const invalidateCache = useCallback(
+    (...keys: (readonly string[])[]) => {
+      keys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
+    },
+    [queryClient],
+  );
 
   const logAction = useCallback(
     async (input: {
