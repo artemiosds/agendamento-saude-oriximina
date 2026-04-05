@@ -132,6 +132,8 @@ const Dashboard: React.FC = () => {
 
   const totalAtendimentos = atendimentosDB.filter(a => a.status === 'finalizado').length;
 
+  if (loading) return <DashboardSkeleton />;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
