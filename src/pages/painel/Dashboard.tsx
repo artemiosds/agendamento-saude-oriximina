@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { DashboardSkeleton } from '@/components/skeletons';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(38, 92%, 50%)', 'hsl(280, 60%, 50%)', 'hsl(0, 72%, 51%)'];
 
@@ -41,11 +42,12 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false }).limit(1000);
+        let query = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
         if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
         if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
         if (user?.role === 'profissional' && user.id) query = query.eq('profissional_id', user.id);
@@ -53,10 +55,12 @@ const Dashboard: React.FC = () => {
         if (data) setAtendimentosDB(data);
       } catch (err) {
         console.error('Error loading atendimentos for dashboard:', err);
+      } finally {
+        setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [user]);
 
   const today = new Date().toISOString().split('T')[0];
 
