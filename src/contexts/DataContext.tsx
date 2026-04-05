@@ -358,7 +358,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("funcionarios" as any).select("*");
+      const { data, error } = await supabase.from("funcionarios" as any).select("id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo");
       if (data && !error) {
         setFuncionarios(
           data.map((f: any) => ({
@@ -393,7 +393,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadDisponibilidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("disponibilidades" as any).select("*");
+      const { data, error } = await supabase.from("disponibilidades" as any).select("id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta");
       if (data && !error) {
         setDisponibilidades(
           data.map((d: any) => ({
