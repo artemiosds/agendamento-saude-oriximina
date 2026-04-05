@@ -329,7 +329,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadConfiguracoes = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("system_config").select("*").single();
+      const { data, error } = await supabase.from("system_config").select("configuracoes").single();
       if (data && !error) setConfiguracoes(safeConfigMerge((data as any).configuracoes));
     } catch (err) {
       console.error("Error loading configs:", err);
@@ -338,7 +338,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUnidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("unidades" as any).select("*");
+      const { data, error } = await supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
       if (data && !error)
         setUnidades(data.map((u: any) => ({ id: u.id, nome: u.nome, endereco: u.endereco || "", telefone: u.telefone || "", whatsapp: u.whatsapp || "", ativo: u.ativo })));
     } catch (err) {
@@ -348,7 +348,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadSalas = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("salas" as any).select("*");
+      const { data, error } = await supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
       if (data && !error)
         setSalas(data.map((s: any) => ({ id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo })));
     } catch (err) {
