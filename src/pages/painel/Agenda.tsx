@@ -80,7 +80,7 @@ const statusLabels: Record<string, string> = {
   aguardando_atendimento: "Aguard. Atendimento",
   aguardando_enfermagem: "Aguard. Enfermagem",
   apto_agendamento: "Apto p/ Agendamento",
-  apto_atendimento: "Apto p/ Atendimento", // NOVO
+  apto_atendimento: "Apto p/ Atendimento",
   aguardando_multiprofissional: "Aguard. Multiprofissional",
   indeferido: "Indeferido",
 };
@@ -99,7 +99,7 @@ const statusBadgeClass: Record<string, string> = {
   aguardando_atendimento: "bg-emerald-500/10 text-emerald-600",
   aguardando_enfermagem: "bg-orange-500/10 text-orange-600",
   apto_agendamento: "bg-success/10 text-success",
-  apto_atendimento: "bg-green-500/10 text-green-600", // NOVO
+  apto_atendimento: "bg-green-500/10 text-green-600",
   aguardando_multiprofissional: "bg-purple-500/10 text-purple-600",
   indeferido: "bg-destructive/10 text-destructive",
 };
@@ -143,6 +143,7 @@ const Agenda: React.FC = () => {
     getAvailableDates,
     bloqueios,
   } = useData();
+
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
@@ -170,12 +171,8 @@ const Agenda: React.FC = () => {
   });
   const [detalheOpen, setDetalheOpen] = useState(false);
   const [detalheAg, setDetalheAg] = useState<(typeof agendamentos)[0] | null>(null);
-
-  // NOVO: rejeição com motivo
   const [rejeicaoTarget, setRejeicaoTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
-
-  // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
   const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
@@ -184,7 +181,6 @@ const Agenda: React.FC = () => {
   const canAprovar = hasPermission(["master", "coordenador", "recepcao"]);
   const profissionais = profissionaisVisiveis;
 
-  // NOVO: agendamentos online pendentes de aprovação
   const agendamentosPendentesOnline = React.useMemo(() => {
     return agendamentos
       .filter((a) => {
@@ -339,18 +335,11 @@ const Agenda: React.FC = () => {
         .select("id, nome, telefone, email")
         .eq("id", newAg.pacienteId)
         .maybeSingle();
-
       if (error || !data) {
         toast.error("Paciente selecionado não foi encontrado no banco.");
         return;
       }
-
-      pac = {
-        id: data.id,
-        nome: data.nome,
-        telefone: data.telefone || "",
-        email: data.email || "",
-      } as typeof pac;
+      pac = { id: data.id, nome: data.nome, telefone: data.telefone || "", email: data.email || "" } as typeof pac;
     }
 
     if (!pac || !prof || !newAg.hora) return;
@@ -366,6 +355,7 @@ const Agenda: React.FC = () => {
         if (!confirmou) return;
       }
     }
+
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
@@ -386,7 +376,11 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
+
+    // CORRIGIDO: addAgendamento já atualiza estado local — sem refresh adicional
     await addAgendamento(agData);
+
+    // Portal access em background — não bloqueia o fechamento do dialog
     ensurePortalAccess({
       pacienteId: pac.id,
       contexto: "agendamento",
@@ -398,17 +392,20 @@ const Agenda: React.FC = () => {
     })
       .then((result) => {
         if (result.created)
-          toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
+          toast.info(`Acesso ao portal criado para ${pac!.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
       })
       .catch(() => {});
-    const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
-    if (googleEventId) {
-      await updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
-      toast.success("Agendamento criado e sincronizado com Google Agenda!");
-    } else {
-      toast.success("Agendamento criado!");
-    }
-    await notify({
+
+    // Google Calendar em background — não bloqueia o fechamento do dialog
+    syncToGoogleCalendar({ ...agData, pacienteId: pac.id }).then(async (googleEventId) => {
+      if (googleEventId) {
+        await updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
+        toast.success("Sincronizado com Google Agenda!");
+      }
+    });
+
+    // Notificação em background
+    notify({
       evento: "novo_agendamento",
       paciente_nome: pac.nome,
       telefone: pac.telefone,
@@ -421,7 +418,11 @@ const Agenda: React.FC = () => {
       status_agendamento: "confirmado",
       id_agendamento: agId,
       observacoes: newAg.obs,
-    });
+    }).catch(() => {});
+
+    toast.success("Agendamento criado!");
+
+    // Fecha o dialog imediatamente — sem aguardar callbacks
     setDialogOpen(false);
     setNewAg({
       pacienteId: "",
@@ -433,22 +434,19 @@ const Agenda: React.FC = () => {
     });
   };
 
-  // NOVO: aprovar agendamento online
   const handleAprovar = async (ag: (typeof agendamentos)[0]) => {
     try {
+      // CORRIGIDO: updateAgendamento já atualiza estado local — sem refresh
       await updateAgendamento(ag.id, { status: "confirmado" } as any);
       await (supabase as any)
         .from("agendamentos")
-        .update({
-          aprovado_por: user?.id || "",
-          aprovado_em: new Date().toISOString(),
-        })
+        .update({ aprovado_por: user?.id || "", aprovado_em: new Date().toISOString() })
         .eq("id", ag.id);
 
       const paciente = pacientes.find((p) => p.id === ag.pacienteId);
       const unidade = unidades.find((u) => u.id === ag.unidadeId);
 
-      await notify({
+      notify({
         evento: "confirmacao",
         paciente_nome: ag.pacienteNome,
         telefone: paciente?.telefone || "",
@@ -461,43 +459,41 @@ const Agenda: React.FC = () => {
         status_agendamento: "confirmado",
         id_agendamento: ag.id,
         observacoes: "Agendamento aprovado pela recepção.",
-      });
+      }).catch(() => {});
 
-      await logAction({
+      logAction({
         acao: "aprovar_agendamento_online",
         entidade: "agendamento",
         entidadeId: ag.id,
         modulo: "agenda",
         user,
         detalhes: { paciente: ag.pacienteNome, data: ag.data, hora: ag.hora },
-      });
+      }).catch(() => {});
 
-      toast.success(`Agendamento de ${ag.pacienteNome} aprovado! E-mail de confirmação enviado.`);
+      toast.success(`Agendamento de ${ag.pacienteNome} aprovado!`);
     } catch (err) {
       console.error(err);
       toast.error("Erro ao aprovar agendamento.");
     }
   };
 
-  // NOVO: rejeitar agendamento online
   const handleRejeitar = async () => {
     if (!rejeicaoTarget || !rejeicaoMotivo.trim()) {
       toast.error("Informe o motivo da rejeição.");
       return;
     }
     try {
+      // CORRIGIDO: updateAgendamento já atualiza estado local — sem refresh
       await updateAgendamento(rejeicaoTarget.id, { status: "cancelado" } as any);
       await (supabase as any)
         .from("agendamentos")
-        .update({
-          rejeitado_motivo: rejeicaoMotivo,
-        })
+        .update({ rejeitado_motivo: rejeicaoMotivo })
         .eq("id", rejeicaoTarget.id);
 
       const paciente = pacientes.find((p) => p.id === rejeicaoTarget.pacienteId);
       const unidade = unidades.find((u) => u.id === rejeicaoTarget.unidadeId);
 
-      await notify({
+      notify({
         evento: "cancelamento",
         paciente_nome: rejeicaoTarget.pacienteNome,
         telefone: paciente?.telefone || "",
@@ -510,18 +506,18 @@ const Agenda: React.FC = () => {
         status_agendamento: "cancelado",
         id_agendamento: rejeicaoTarget.id,
         observacoes: `Motivo da rejeição: ${rejeicaoMotivo}`,
-      });
+      }).catch(() => {});
 
-      await logAction({
+      logAction({
         acao: "rejeitar_agendamento_online",
         entidade: "agendamento",
         entidadeId: rejeicaoTarget.id,
         modulo: "agenda",
         user,
         detalhes: { paciente: rejeicaoTarget.pacienteNome, motivo: rejeicaoMotivo },
-      });
+      }).catch(() => {});
 
-      toast.success("Agendamento rejeitado. Paciente notificado por e-mail.");
+      toast.success("Agendamento rejeitado.");
       setRejeicaoTarget(null);
       setRejeicaoMotivo("");
     } catch (err) {
@@ -542,7 +538,7 @@ const Agenda: React.FC = () => {
           .eq("agendamento_id", agId)
           .not("tipo_registro", "in", '("triagem","avaliacao_enfermagem","avaliacao_multiprofissional")');
         if (!count || count === 0) {
-          toast.error("⚠️ Não é possível concluir sem registro no prontuário. Preencha o prontuário primeiro.");
+          toast.error("⚠️ Não é possível concluir sem registro no prontuário.");
           return;
         }
       } catch (err) {
@@ -554,6 +550,7 @@ const Agenda: React.FC = () => {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
+        // CORRIGIDO: updateAgendamento já atualiza estado local
         await updateAgendamento(agId, { status: "confirmado_chegada" as any });
 
         const filaExistente = fila.find(
@@ -591,11 +588,11 @@ const Agenda: React.FC = () => {
           } as any);
         }
 
-        await Promise.all([refreshAgendamentos(), refreshFila()]);
+        // CORRIGIDO: removidos refreshAgendamentos() e refreshFila() — Realtime cuida disso
         toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
       } else {
+        // CORRIGIDO: updateAgendamento já atualiza estado local — sem refresh
         await updateAgendamento(agId, { status: newStatus as any });
-        await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
     } catch (err) {
       console.error("Error updating appointment status:", err);
@@ -615,7 +612,7 @@ const Agenda: React.FC = () => {
     };
     const evento = statusToEvento[newStatus];
     if (evento) {
-      await notify({
+      notify({
         evento: evento as any,
         paciente_nome: ag.pacienteNome,
         telefone: paciente?.telefone || "",
@@ -627,10 +624,11 @@ const Agenda: React.FC = () => {
         tipo_atendimento: ag.tipo,
         status_agendamento: newStatus,
         id_agendamento: agId,
-      });
+      }).catch(() => {});
     }
+
     if (newStatus === "cancelado" || newStatus === "falta") {
-      await handleVagaLiberada(
+      handleVagaLiberada(
         {
           id: agId,
           data: ag.data,
@@ -643,14 +641,14 @@ const Agenda: React.FC = () => {
         },
         newStatus === "cancelado" ? "cancelamento" : "falta",
         user,
-      );
+      ).catch(() => {});
     }
+
     if (ag.googleEventId) {
       try {
         if (newStatus === "cancelado" && configuracoes.googleCalendar.removerCancelar) {
           await gcal.deleteEvent(ag.googleEventId);
           await updateAgendamento(agId, { syncStatus: "ok" });
-          await refreshAgendamentos();
           toast.success("Evento removido do Google Agenda.");
         } else if (newStatus === "remarcado" && configuracoes.googleCalendar.atualizarRemarcar) {
           toast.info("Remarcação registrada.");
@@ -658,7 +656,6 @@ const Agenda: React.FC = () => {
       } catch (err) {
         console.error("Google Calendar sync error:", err);
         await updateAgendamento(agId, { syncStatus: "erro" });
-        await refreshAgendamentos();
       }
     }
   };
@@ -670,15 +667,16 @@ const Agenda: React.FC = () => {
     }
     try {
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
-      await logAction({
+      // Atualiza estado local imediatamente — Realtime propagará para outras abas
+      await refreshAgendamentos();
+      logAction({
         acao: "excluir",
         entidade: "agendamento",
         entidadeId: agId,
         detalhes: { acao: "exclusão de agendamento" },
         user,
-      });
+      }).catch(() => {});
       toast.success("Agendamento excluído!");
-      await refreshAgendamentos();
     } catch (err) {
       console.error("Error deleting:", err);
       toast.error("Erro ao excluir agendamento.");
@@ -714,8 +712,7 @@ const Agenda: React.FC = () => {
       return;
     }
 
-    await Promise.all([refreshAgendamentos(), refreshFila()]);
-
+    // CORRIGIDO: removidos refreshAgendamentos() e refreshFila() — updateAgendamento já atualizou o estado
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     localStorage.setItem(
@@ -730,7 +727,7 @@ const Agenda: React.FC = () => {
 
     const pac = pacientes.find((p) => p.id === ag.pacienteId);
 
-    await addAtendimento({
+    addAtendimento({
       id: `at${Date.now()}`,
       agendamentoId: ag.id,
       pacienteId: ag.pacienteId,
@@ -746,9 +743,9 @@ const Agenda: React.FC = () => {
       horaInicio,
       horaFim: "",
       status: "em_atendimento",
-    });
+    }).catch(() => {});
 
-    await logAction({
+    logAction({
       acao: "atendimento_iniciado",
       entidade: "atendimento",
       entidadeId: ag.id,
@@ -761,7 +758,7 @@ const Agenda: React.FC = () => {
         unidade: ag.unidadeId,
         sala: ag.salaId || "",
       },
-    });
+    }).catch(() => {});
 
     toast.success("Atendimento iniciado!");
     const params = new URLSearchParams({
@@ -797,17 +794,21 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: user.id,
     };
+
+    // CORRIGIDO: addAgendamento já atualiza estado local
     await addAgendamento(agData);
-    await logAction({
+
+    logAction({
       acao: "agendar_retorno",
       entidade: "agendamento",
       entidadeId: agId,
       modulo: "agendamento",
       detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora },
       user,
-    });
+    }).catch(() => {});
+
     if (pac) {
-      await notify({
+      notify({
         evento: "novo_agendamento",
         paciente_nome: pac.nome,
         telefone: pac.telefone,
@@ -820,7 +821,8 @@ const Agenda: React.FC = () => {
         status_agendamento: "confirmado",
         id_agendamento: agId,
         observacoes: "Retorno agendado pelo profissional",
-      });
+      }).catch(() => {});
+
       ensurePortalAccess({
         pacienteId: pac.id,
         contexto: "agendamento",
@@ -831,6 +833,7 @@ const Agenda: React.FC = () => {
         tipo: "Retorno",
       }).catch(() => {});
     }
+
     toast.success("Retorno agendado com sucesso!");
     setRetornoDialogOpen(false);
     setRetornoAg(null);
@@ -848,7 +851,6 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
-            {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
                 variant={abaAtiva === "pendentes" ? "default" : "outline"}
@@ -995,7 +997,7 @@ const Agenda: React.FC = () => {
         )}
       </div>
 
-      {/* NOVO: Painel de aprovação */}
+      {/* Painel de aprovação */}
       {abaAtiva === "pendentes" && canAprovar && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -1046,8 +1048,6 @@ const Agenda: React.FC = () => {
                         Solicitado {new Date(ag.criadoEm).toLocaleDateString("pt-BR")}
                       </span>
                     </div>
-
-                    {/* Documento */}
                     {anexoUrl ? (
                       <div className="flex items-center gap-2 p-2 bg-info/10 border border-info/20 rounded-lg">
                         <Paperclip className="w-4 h-4 text-info shrink-0" />
@@ -1069,7 +1069,6 @@ const Agenda: React.FC = () => {
                         <p className="text-xs text-muted-foreground">Nenhum documento anexado</p>
                       </div>
                     )}
-
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -1102,7 +1101,6 @@ const Agenda: React.FC = () => {
       {abaAtiva === "agenda" && (
         <>
           <div className="flex items-center gap-3 flex-wrap">
-            {/* NOVO: componente de calendário no lugar dos botões e input de data */}
             <CalendarioAgenda
               selectedDate={selectedDate}
               onDateChange={(date) => setSelectedDate(date)}
@@ -1116,7 +1114,6 @@ const Agenda: React.FC = () => {
               getAvailableDates={getAvailableDates}
               unidades={unidades}
             />
-
             {!isProfissional && showUnitSelector && (
               <Select
                 value={filterUnit}
@@ -1155,7 +1152,6 @@ const Agenda: React.FC = () => {
             )}
           </div>
 
-          {/* Slot availability summary for selected professional */}
           {filterProf !== "all" && (
             <SlotInfoBadge
               profissionalId={filterProf}
@@ -1233,7 +1229,6 @@ const Agenda: React.FC = () => {
             ) : (
               filtered.map((ag) => {
                 const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
-
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
                 const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
                 const isEmAtendimento = ag.status === "em_atendimento";
@@ -1371,7 +1366,6 @@ const Agenda: React.FC = () => {
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
 
-                        {/* NOVO: aprovação inline */}
                         {ehPendenteOnline && canAprovar && (
                           <>
                             <Button
@@ -1563,7 +1557,7 @@ const Agenda: React.FC = () => {
         </>
       )}
 
-      {/* NOVO: Dialog de rejeição com motivo */}
+      {/* Dialog de rejeição */}
       <Dialog
         open={!!rejeicaoTarget}
         onOpenChange={(open) => {
@@ -1752,7 +1746,6 @@ const Agenda: React.FC = () => {
                     }
                   />
                 </Secao>
-                {/* NOVO: documento */}
                 {anexoUrl && (
                   <Secao titulo="Documento Anexado">
                     <div className="flex items-center gap-2 p-2 bg-info/10 rounded-lg">
