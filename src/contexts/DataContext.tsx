@@ -841,6 +841,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unidadeId: ag.unidadeId,
           detalhes: { data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId },
         });
+        invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
         emitDbUpdate();
       } else console.error("Error adding agendamento:", error);
     },
