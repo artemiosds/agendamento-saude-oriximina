@@ -875,6 +875,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           entidadeId: id,
           detalhes: data as Record<string, unknown>,
         });
+        invalidateCache(queryKeys.agendamentos.all);
         emitDbUpdate();
       } else {
         console.error("Error updating agendamento:", error);
@@ -897,6 +898,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error("Erro ao cancelar agendamento.");
       }
       setAgendamentos((prev) => prev.map((a) => (a.id === id ? { ...a, status: "cancelado" as const } : a)));
+      invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
       emitDbUpdate();
       return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
     },
