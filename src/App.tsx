@@ -41,11 +41,19 @@ const NotFound                    = React.lazy(() => import("./pages/NotFound"))
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,
+      staleTime: 1000 * 60 * 1, // 1 minute — avoids repeated requests but stays fresh
+      gcTime: 1000 * 60 * 10,   // 10 minutes garbage collection
       refetchOnWindowFocus: false,
+      retry: 1,
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });
+
+// Export for use in hooks/contexts that need to invalidate queries
+export { queryClient };
 
 // ─── LOADERS ──────────────────────────────────────────────────────────────────
 const PageLoader = () => (
