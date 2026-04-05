@@ -530,7 +530,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadBloqueios = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("bloqueios" as any).select("*");
+      const { data, error } = await supabase.from("bloqueios" as any).select("id,titulo,tipo,data_inicio,data_fim,dia_inteiro,hora_inicio,hora_fim,unidade_id,profissional_id,criado_por");
       if (data && !error) {
         setBloqueios(
           data.map((b: any) => ({
