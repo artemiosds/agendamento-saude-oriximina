@@ -169,12 +169,13 @@ const Pacientes: React.FC = () => {
   }, [pacientes, agendamentos, isProfissional, user]);
 
   const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     let list = visiblePacientes.filter(
       (p) =>
-        p.nome.toLowerCase().includes(search.toLowerCase()) ||
-        p.cpf.includes(search) ||
-        p.telefone.includes(search) ||
-        (p.cns && p.cns.includes(search)),
+        p.nome.toLowerCase().includes(q) ||
+        p.cpf.includes(debouncedSearch) ||
+        p.telefone.includes(debouncedSearch) ||
+        (p.cns && p.cns.includes(debouncedSearch)),
     );
 
     // Filter by fila
