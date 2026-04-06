@@ -329,7 +329,7 @@ const FilaEspera: React.FC = () => {
       crianca: 5,
       normal: 6,
     };
-    const query = searchQuery.toLowerCase().trim();
+    const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
       .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
