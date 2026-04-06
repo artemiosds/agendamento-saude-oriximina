@@ -115,7 +115,6 @@ const AgendarOnline: React.FC = () => {
         const key = `${a.profissional_id}|${a.unidade_id}|${a.data}`;
         map.set(key, (map.get(key) || 0) + 1);
       }
-      currentDate = addDaysToDateStr(currentDate, 1);
     }
     return map;
   }, [agendamentos]);

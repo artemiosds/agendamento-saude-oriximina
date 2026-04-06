@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn, dateStrToUtcDate, isoDayOfWeek, localDateStr, todayLocalStr } from "@/lib/utils";
@@ -70,6 +70,35 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     return [...prevDays, ...days, ...nextDays];
   }, [currentMonth]);
 
+  // Pre-index agendamentos by date for O(1) lookup instead of filtering per day
+  const agendamentosByDate = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const a of agendamentos) {
+      if (a.status === "cancelado" || a.status === "falta") continue;
+      const profKey = a.profissionalId;
+      let dateMap = map.get(a.data);
+      if (!dateMap) {
+        dateMap = new Map();
+        map.set(a.data, dateMap);
+      }
+      dateMap.set(profKey, (dateMap.get(profKey) || 0) + 1);
+    }
+    return map;
+  }, [agendamentos]);
+
+  // Pre-index disponibilidades for fast lookup
+  const dispIndex = useMemo(() => {
+    const arr = disponibilidades.map((d: any) => ({
+      profissionalId: d.profissionalId,
+      unidadeId: d.unidadeId,
+      dataInicio: d.dataInicio,
+      dataFim: d.dataFim,
+      diasSemana: d.diasSemana || [],
+      vagasPorDia: d.vagasPorDia || 25,
+    }));
+    return arr;
+  }, [disponibilidades]);
+
   const dayInfoMap = useMemo(() => {
     const map = new Map<string, DiaInfo>();
     const todayStr = todayLocalStr();
@@ -89,6 +118,10 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       return isGlobal || isUnitLevel || isProfLevel;
     };
 
+    // Only call getAvailableSlots when a specific professional is selected
+    // For "all" mode, use a fast heuristic based on availability counts
+    const useDetailedSlots = filterProf !== "all" && profissionaisFiltrados.length === 1;
+
     for (const day of daysInMonth) {
       const dateStr = localDateStr(day);
       const dayOfWeek = day.getUTCDay();
@@ -101,65 +134,67 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       let hasDisponibilidade = false;
       let allBlocked = profissionaisFiltrados.length > 0;
 
-      if (filterProf !== "all") {
+      const dateAgMap = agendamentosByDate.get(dateStr);
+
+      if (useDetailedSlots) {
+        // Single professional — use detailed slot calculation (fast for 1 prof)
         const prof = profissionaisFiltrados[0];
         if (prof) {
           const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio) => {
+          const isBlocked = bloqueios.some((bloqueio: any) => {
             if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
             return matchesBlock(bloqueio, prof.id, profUnit);
           });
           allBlocked = isBlocked;
-          hasDisponibilidade = disponibilidades.some((disp) => (
+          hasDisponibilidade = dispIndex.some((disp) => (
             disp.profissionalId === prof.id &&
             disp.unidadeId === profUnit &&
             dateStr >= disp.dataInicio &&
             dateStr <= disp.dataFim &&
-            (disp.diasSemana || []).includes(dayOfWeek)
+            disp.diasSemana.includes(dayOfWeek)
           ));
 
-          if (!isBlocked && profUnit) {
-            agendamentosConfirmados = agendamentos.filter((agendamento) => (
-              agendamento.data === dateStr &&
-              agendamento.profissionalId === prof.id &&
-              agendamento.status !== "cancelado" &&
-              agendamento.status !== "falta"
-            )).length;
-
+          if (!isBlocked && profUnit && !isPast) {
+            agendamentosConfirmados = dateAgMap?.get(prof.id) || 0;
             const slots = getAvailableSlots(prof.id, profUnit, dateStr);
             totalVagas = slots.length + agendamentosConfirmados;
           }
         }
       } else {
+        // Multiple professionals — use fast heuristic (no getAvailableSlots per prof)
         for (const prof of profissionaisFiltrados) {
           const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          const isBlocked = bloqueios.some((bloqueio) => {
+          const isBlocked = bloqueios.some((bloqueio: any) => {
             if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
             return matchesBlock(bloqueio, prof.id, profUnit);
           });
           allBlocked = allBlocked && isBlocked;
 
-          const profHasDisponibilidade = disponibilidades.some((disp) => (
+          const profHasDisponibilidade = dispIndex.some((disp) => (
             disp.profissionalId === prof.id &&
             disp.unidadeId === profUnit &&
             dateStr >= disp.dataInicio &&
             dateStr <= disp.dataFim &&
-            (disp.diasSemana || []).includes(dayOfWeek)
+            disp.diasSemana.includes(dayOfWeek)
           ));
           hasDisponibilidade = hasDisponibilidade || profHasDisponibilidade;
 
-          if (isBlocked || !profUnit) continue;
+          if (isBlocked || !profUnit || isPast) continue;
 
-          const profAgendamentos = agendamentos.filter((agendamento) => (
-            agendamento.data === dateStr &&
-            agendamento.profissionalId === prof.id &&
-            agendamento.status !== "cancelado" &&
-            agendamento.status !== "falta"
-          )).length;
-          agendamentosConfirmados += profAgendamentos;
+          const profAgCount = dateAgMap?.get(prof.id) || 0;
+          agendamentosConfirmados += profAgCount;
 
-          const slots = getAvailableSlots(prof.id, profUnit, dateStr);
-          totalVagas += slots.length + profAgendamentos;
+          // Use vagasPorDia from disponibilidade as totalVagas estimate
+          const profDisp = dispIndex.find((disp) => (
+            disp.profissionalId === prof.id &&
+            disp.unidadeId === profUnit &&
+            dateStr >= disp.dataInicio &&
+            dateStr <= disp.dataFim &&
+            disp.diasSemana.includes(dayOfWeek)
+          ));
+          if (profDisp) {
+            totalVagas += profDisp.vagasPorDia;
+          }
         }
       }
 
@@ -190,10 +225,10 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
     return map;
   }, [
-    agendamentos,
+    agendamentosByDate,
     bloqueios,
     daysInMonth,
-    disponibilidades,
+    dispIndex,
     filterProf,
     filterUnit,
     getAvailableSlots,

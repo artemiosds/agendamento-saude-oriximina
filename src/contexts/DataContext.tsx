@@ -452,6 +452,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
+      // Only load agendamentos from 30 days ago onwards to reduce payload
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      const cutoff = localDateStr(cutoffDate);
+
       let allData: any[] = [];
       let from = 0;
       const PAGE = 1000;
@@ -461,6 +466,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select(
             "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
           )
+          .gte("data", cutoff)
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
         if (error || !data || data.length === 0) break;
@@ -468,31 +474,29 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.length < PAGE) break;
         from += PAGE;
       }
-      if (allData.length > 0) {
-        setAgendamentos(
-          (allData as any[]).map((a: any) => ({
-            id: a.id,
-            pacienteId: a.paciente_id,
-            pacienteNome: a.paciente_nome,
-            unidadeId: a.unidade_id,
-            salaId: a.sala_id || "",
-            setorId: a.setor_id || "",
-            profissionalId: a.profissional_id,
-            profissionalNome: a.profissional_nome,
-            data: a.data,
-            hora: a.hora,
-            status: a.status,
-            tipo: a.tipo,
-            observacoes: a.observacoes || "",
-            origem: a.origem || "recepcao",
-            googleEventId: a.google_event_id || "",
-            syncStatus: a.sync_status || "",
-            criadoEm: a.criado_em || "",
-            criadoPor: a.criado_por || "",
-            horaChegada: a.hora_chegada || "",
-          })),
-        );
-      }
+      setAgendamentos(
+        allData.map((a: any) => ({
+          id: a.id,
+          pacienteId: a.paciente_id,
+          pacienteNome: a.paciente_nome,
+          unidadeId: a.unidade_id,
+          salaId: a.sala_id || "",
+          setorId: a.setor_id || "",
+          profissionalId: a.profissional_id,
+          profissionalNome: a.profissional_nome,
+          data: a.data,
+          hora: a.hora,
+          status: a.status,
+          tipo: a.tipo,
+          observacoes: a.observacoes || "",
+          origem: a.origem || "recepcao",
+          googleEventId: a.google_event_id || "",
+          syncStatus: a.sync_status || "",
+          criadoEm: a.criado_em || "",
+          criadoPor: a.criado_por || "",
+          horaChegada: a.hora_chegada || "",
+        })),
+      );
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
