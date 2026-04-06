@@ -246,17 +246,27 @@ const Agenda: React.FC = () => {
     })
     .sort((a, b) => a.hora.localeCompare(b.hora));
 
+  const filteredPacienteKey = React.useMemo(
+    () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
+    [filtered],
+  );
+
   React.useEffect(() => {
-    const pacienteIds = [...new Set(filtered.map((a) => a.pacienteId))];
-    if (pacienteIds.length === 0) return;
+    const pacienteIds = filteredPacienteKey.split(",").filter(Boolean);
+    if (pacienteIds.length === 0) {
+      setLastProntuarios({});
+      return;
+    }
+    let cancelled = false;
     const loadLast = async () => {
       const results: typeof lastProntuarios = {};
       const { data } = await (supabase as any)
         .from("prontuarios")
         .select("paciente_id,data_atendimento,profissional_nome,procedimentos_texto,queixa_principal")
         .in("paciente_id", pacienteIds)
-        .order("data_atendimento", { ascending: false });
-      if (data) {
+        .order("data_atendimento", { ascending: false })
+        .limit(pacienteIds.length * 2);
+      if (!cancelled && data) {
         for (const row of data) {
           if (!results[row.paciente_id]) {
             results[row.paciente_id] = {
@@ -268,11 +278,12 @@ const Agenda: React.FC = () => {
             };
           }
         }
+        setLastProntuarios(results);
       }
-      setLastProntuarios(results);
     };
     loadLast();
-  }, [filtered.map((f) => f.pacienteId).join(",")]); // eslint-disable-line
+    return () => { cancelled = true; };
+  }, [filteredPacienteKey]); // eslint-disable-line
 
   const changeDate = (days: number) => {
     setSelectedDate((prev) => addDaysToDateStr(prev, days));
