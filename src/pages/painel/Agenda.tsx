@@ -394,6 +394,7 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
+    addAgendamento(agData);
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
     setNewAg({
