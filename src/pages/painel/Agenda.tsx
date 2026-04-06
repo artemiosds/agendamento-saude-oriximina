@@ -232,7 +232,7 @@ const Agenda: React.FC = () => {
     return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
   }, [profissionais, filterUnit]);
 
-  const filtered = agendamentos
+  const filtered = React.useMemo(() => agendamentos
     .filter((a) => {
       if (a.data !== selectedDate) return false;
       if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
@@ -244,7 +244,8 @@ const Agenda: React.FC = () => {
       if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
       return true;
     })
-    .sort((a, b) => a.hora.localeCompare(b.hora));
+    .sort((a, b) => a.hora.localeCompare(b.hora)),
+    [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
