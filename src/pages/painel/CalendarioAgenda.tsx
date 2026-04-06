@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, todayLocalStr } from "@/lib/utils";
 
 interface DiaInfo {
   date: string;            // YYYY-MM-DD
@@ -66,7 +66,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
   const dayInfoMap = useMemo(() => {
     const map = new Map<string, DiaInfo>();
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = todayLocalStr();
 
     const profissionaisFiltrados = filterProf !== "all"
       ? profissionais.filter(p => p.id === filterProf)

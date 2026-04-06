@@ -30,6 +30,7 @@ import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
+import { localDateStr, todayLocalStr } from "@/lib/utils";
 
 interface BloqueioAgenda {
   id: string;
@@ -1459,7 +1460,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         while (current <= end) {
           const dayOfWeek = current.getDay();
           if (disp.diasSemana.includes(dayOfWeek)) {
-            const dateStr = current.toISOString().split("T")[0];
+            const dateStr = localDateStr(current);
             const key = `${profissionalId}|${unidadeId}|${dateStr}`;
             const dayCount = appointmentCountsByKey.get(key) || 0;
             if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
@@ -1518,7 +1519,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const prof = funcionarios.find((f) => f.id === profissionalId);
       const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
       const agora = new Date();
-      const ehHoje = date === agora.toISOString().split("T")[0];
+      const ehHoje = date === todayLocalStr();
       const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
       let h = startHour;
       let m = startMin;
@@ -1573,7 +1574,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       for (let i = 0; i < 90; i++) {
         const current = new Date(today);
         current.setDate(current.getDate() + i);
-        const dateStr = current.toISOString().split("T")[0];
+        const dateStr = localDateStr(current);
         const dayOfWeek = current.getDay();
         const hasDisp = disps.some(
           (d) => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim,

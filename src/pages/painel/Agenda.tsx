@@ -57,6 +57,7 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
+import { todayLocalStr } from "@/lib/utils";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -153,7 +154,7 @@ const Agenda: React.FC = () => {
   const { handleVagaLiberada } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
