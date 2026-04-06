@@ -1804,7 +1804,89 @@ const Agenda: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Detalhe Drawer */}
+      {/* EDITAR agendamento dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) { setEditDialogOpen(false); setEditAg(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Editar Agendamento</DialogTitle>
+          </DialogHeader>
+          {editAg && (
+            <div className="space-y-4">
+              <div>
+                <Label>Tipo de Atendimento</Label>
+                <Select value={editAg.tipo} onValueChange={(v) => setEditAg((p) => p ? { ...p, tipo: v } : p)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                    <SelectItem value="Retorno">Retorno</SelectItem>
+                    <SelectItem value="Exame">Exame</SelectItem>
+                    <SelectItem value="Procedimento">Procedimento</SelectItem>
+                    <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                    <SelectItem value="Urgência">Urgência</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={editAg.data}
+                  min={todayLocalStr()}
+                  onChange={(e) => setEditAg((p) => p ? { ...p, data: e.target.value, hora: "" } : p)}
+                />
+              </div>
+              <div>
+                <Label>Profissional</Label>
+                <Select value={editAg.profissionalId} onValueChange={(v) => setEditAg((p) => p ? { ...p, profissionalId: v, hora: "" } : p)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Horário</Label>
+                {editAvailableSlots.length === 0 ? (
+                  <p className="text-sm text-warning mt-1">Sem horários disponíveis para esta data/profissional.</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 mt-2">
+                    {editAvailableSlots.map((slot) => (
+                      <Button
+                        key={slot}
+                        variant={editAg.hora === slot ? "default" : "outline"}
+                        className={editAg.hora === slot ? "gradient-primary text-primary-foreground" : ""}
+                        size="sm"
+                        onClick={() => setEditAg((p) => p ? { ...p, hora: slot } : p)}
+                      >
+                        {slot}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={editAg.observacoes}
+                  onChange={(e) => setEditAg((p) => p ? { ...p, observacoes: e.target.value } : p)}
+                  rows={2}
+                />
+              </div>
+              <Button
+                onClick={handleSaveEdit}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!editAg.hora || !editAg.profissionalId}
+              >
+                Salvar Alterações
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
         {detalheAg &&
           (() => {
