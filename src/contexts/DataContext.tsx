@@ -15,13 +15,13 @@ import {
 } from "@/types";
 
 const inlineSetores = [
-  { id: "st1", nome: "Cl�nica Geral" },
+  { id: "st1", nome: "Clínica Geral" },
   { id: "st2", nome: "Pediatria" },
   { id: "st3", nome: "Odontologia" },
   { id: "st4", nome: "Enfermagem" },
   { id: "st5", nome: "Fisioterapia" },
   { id: "st6", nome: "Psicologia" },
-  { id: "st7", nome: "Nutri��o" },
+  { id: "st7", nome: "Nutrição" },
 ];
 
 import { supabase } from "@/integrations/supabase/client";
@@ -70,8 +70,8 @@ const defaultConfiguracoes: Configuracoes = {
   filaEspera: { modoEncaixe: "assistido" },
   templates: {
     confirmacao:
-      "Ol� {nome}! Sua consulta foi agendada para {data} �s {hora} na {unidade}. Profissional: {profissional}.",
-    lembrete: "Lembrete: Sua consulta � em {data} �s {hora} na {unidade} com {profissional}.",
+      "Olá {nome}! Sua consulta foi agendada para {data} às {hora} na {unidade}. Profissional: {profissional}.",
+    lembrete: "Lembrete: Sua consulta é em {data} às {hora} na {unidade} com {profissional}.",
   },
   webhook: {
     ativo: true,
@@ -215,6 +215,8 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
   };
 };
 
+const statusOcupaVaga = (status: string) => !["cancelado", "falta"].includes(status);
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
@@ -229,7 +231,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>(defaultConfiguracoes);
 
-  // Invalidate TanStack Query cache for the given entity keys
+  const agendamentosRef = useRef(agendamentos);
+  agendamentosRef.current = agendamentos;
+  const disponibilidadesRef = useRef(disponibilidades);
+  disponibilidadesRef.current = disponibilidades;
+  const bloqueiosRef = useRef(bloqueios);
+  bloqueiosRef.current = bloqueios;
+  const filaRef = useRef(fila);
+  filaRef.current = fila;
+  const funcionariosRef = useRef(funcionarios);
+  funcionariosRef.current = funcionarios;
+  const configuracoesRef = useRef(configuracoes);
+  configuracoesRef.current = configuracoes;
+
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
       keys.forEach((key) => queryClient.invalidateQueries({ queryKey: key }));
@@ -279,11 +293,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [],
   );
 
-  // emitDbUpdate removed — realtime sync + optimistic updates handle all synchronization
-
   const isSlotBlocked = useCallback(
     (profissionalId: string, unidadeId: string, date: string, time?: string) => {
-      return bloqueios.some((b) => {
+      return bloqueiosRef.current.some((b) => {
         if (date < b.dataInicio || date > b.dataFim) return false;
         const isGlobal = (!b.unidadeId || b.unidadeId === "") && (!b.profissionalId || b.profissionalId === "");
         const isUnitLevel = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === "");
@@ -295,12 +307,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return time >= start && time < end;
       });
     },
-    [bloqueios],
+    [],
   );
 
   const getBlockingInfo = useCallback(
     (profissionalId: string, unidadeId: string, date: string) => {
-      const b = bloqueios.find((bloqueio) => {
+      const b = bloqueiosRef.current.find((bloqueio) => {
         if (date < bloqueio.dataInicio || date > bloqueio.dataFim) return false;
         const isGlobal = (!bloqueio.unidadeId || bloqueio.unidadeId === "") && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
         const isUnitLevel = bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
@@ -309,7 +321,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       return b ? { blocked: true, type: b.tipo, label: b.titulo } : { blocked: false };
     },
-    [bloqueios],
+    [],
   );
 
   const loadConfiguracoes = useCallback(async () => {
@@ -452,7 +464,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      // Only load agendamentos from 30 days ago onwards to reduce payload
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 30);
       const cutoff = localDateStr(cutoffDate);
@@ -598,9 +609,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     loadAll();
   }, [loadAll]);
-
-  // db_update events are kept for external consumers but no longer trigger loadAll
-  // Realtime sync + optimistic local updates handle all data synchronization
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -863,7 +871,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.googleEventId !== undefined) dbData.google_event_id = data.googleEventId;
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
-      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada; // Regra 3
+      if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
@@ -891,7 +899,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const cancelAgendamento = useCallback(
     async (id: string): Promise<FilaEspera[]> => {
-      const ag = agendamentos.find((a) => a.id === id);
+      const ag = agendamentosRef.current.find((a) => a.id === id);
       if (!ag) return [];
       const { error } = await supabase
         .from("agendamentos" as any)
@@ -905,7 +913,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
       return checkFilaForSlot(ag.profissionalId, ag.unidadeId, ag.data, ag.hora);
     },
-    [agendamentos, invalidateCache],
+    [invalidateCache],
   );
 
   const addPaciente = useCallback(
@@ -1388,7 +1396,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateConfiguracoes = useCallback(
     async (data: Partial<Configuracoes>) => {
-      const newConfigs = safeConfigMerge({ ...configuracoes, ...data });
+      const newConfigs = safeConfigMerge({ ...configuracoesRef.current, ...data });
       const { error } = await supabase
         .from("configuracoes" as any)
         .update({ config_json: newConfigs as any })
@@ -1400,12 +1408,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           config_json: newConfigs as any,
         });
     },
-    [configuracoes, invalidateCache],
+    [invalidateCache],
   );
 
   const checkFilaForSlot = useCallback(
     (profissionalId: string, unidadeId: string, _data: string, _hora: string): FilaEspera[] => {
-      return fila
+      return filaRef.current
         .filter(
           (f) =>
             f.status === "aguardando" &&
@@ -1419,7 +1427,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return a.horaChegada.localeCompare(b.horaChegada);
         });
     },
-    [fila],
+    [],
   );
 
   const encaixarDaFila = useCallback(
@@ -1431,8 +1439,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [addAgendamento, updateFila],
   );
 
-  const statusOcupaVaga = useCallback((status: string) => !["cancelado", "falta"].includes(status), []);
-
   const appointmentCountsByKey = useMemo(() => {
     const counts = new Map<string, number>();
     for (const a of agendamentos) {
@@ -1442,35 +1448,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     return counts;
-  }, [agendamentos, statusOcupaVaga]);
-
-  const getAvailableDatesInternal = useCallback(
-    (profissionalId: string, unidadeId: string): string[] => {
-      const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
-      if (disps.length === 0) return [];
-
-      const dates: string[] = [];
-      const todayStr = todayLocalStr();
-
-      for (const disp of disps) {
-        let currentDate = disp.dataInicio > todayStr ? disp.dataInicio : todayStr;
-        while (currentDate <= disp.dataFim) {
-          const dayOfWeek = isoDayOfWeek(currentDate);
-          if (disp.diasSemana.includes(dayOfWeek)) {
-            const key = `${profissionalId}|${unidadeId}|${currentDate}`;
-            const dayCount = appointmentCountsByKey.get(key) || 0;
-            if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
-              if (!dates.includes(currentDate)) dates.push(currentDate);
-            }
-          }
-          currentDate = addDaysToDateStr(currentDate, 1);
-        }
-      }
-
-      return dates.sort();
-    },
-    [addDaysToDateStr, appointmentCountsByKey, disponibilidades, isSlotBlocked],
-  );
+  }, [agendamentos]);
 
   const appointmentsByDateProfUnit = useMemo(() => {
     const map = new Map<string, typeof agendamentos>();
@@ -1483,7 +1461,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     return map;
-  }, [agendamentos, statusOcupaVaga]);
+  }, [agendamentos]);
+
+  const appointmentCountsByKeyRef = useRef(appointmentCountsByKey);
+  appointmentCountsByKeyRef.current = appointmentCountsByKey;
+  const appointmentsByDateProfUnitRef = useRef(appointmentsByDateProfUnit);
+  appointmentsByDateProfUnitRef.current = appointmentsByDateProfUnit;
 
   const getAvailableSlots = useCallback(
     (profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
@@ -1491,7 +1474,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (date < todayStr) return [];
 
       const dayOfWeek = isoDayOfWeek(date);
-      const disp = disponibilidades.find(
+      const disps = disponibilidadesRef.current;
+      const disp = disps.find(
         (d) =>
           d.profissionalId === profissionalId &&
           d.unidadeId === unidadeId &&
@@ -1507,7 +1491,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const endHour = parseInt(disp.horaFim.split(":")[0]);
       const endMin = parseInt(disp.horaFim.split(":")[1] || "0");
       const key = `${profissionalId}|${unidadeId}|${date}`;
-      const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
       if (dayAppointments.length >= disp.vagasPorDia) return [];
 
       const hourCounts = new Map<string, number>();
@@ -1518,7 +1502,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
       }
 
-      const prof = funcionarios.find((f) => f.id === profissionalId);
+      const funcs = funcionariosRef.current;
+      const prof = funcs.find((f) => f.id === profissionalId);
       const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
       const ehHoje = date === todayStr;
       const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
@@ -1557,7 +1542,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return slots;
     },
-    [disponibilidades, appointmentsByDateProfUnit, funcionarios, isSlotBlocked],
+    [isSlotBlocked],
+  );
+
+  const getAvailableDatesInternal = useCallback(
+    (profissionalId: string, unidadeId: string): string[] => {
+      const disps = disponibilidadesRef.current;
+      const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
+      if (filteredDisps.length === 0) return [];
+
+      const dates: string[] = [];
+      const todayStr = todayLocalStr();
+
+      for (const disp of filteredDisps) {
+        let currentDate = disp.dataInicio > todayStr ? disp.dataInicio : todayStr;
+        while (currentDate <= disp.dataFim) {
+          const dayOfWeek = isoDayOfWeek(currentDate);
+          if (disp.diasSemana.includes(dayOfWeek)) {
+            const key = `${profissionalId}|${unidadeId}|${currentDate}`;
+            const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
+            if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
+              if (!dates.includes(currentDate)) dates.push(currentDate);
+            }
+          }
+          currentDate = addDaysToDateStr(currentDate, 1);
+        }
+      }
+
+      return dates.sort();
+    },
+    [isSlotBlocked],
   );
 
   const getAvailableDates = useCallback(
@@ -1572,13 +1586,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getDayInfoMap = useCallback(
     (profissionalId: string, unidadeId: string, isPublic = false): Record<string, any> => {
       const map: Record<string, any> = {};
-      const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
-      if (disps.length === 0) return map;
+      const disps = disponibilidadesRef.current;
+      const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
+      if (filteredDisps.length === 0) return map;
 
       let currentDate = todayLocalStr();
       for (let i = 0; i < 90; i++) {
         const dayOfWeek = isoDayOfWeek(currentDate);
-        const hasDisp = disps.some(
+        const hasDisp = filteredDisps.some(
           (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
         );
         if (hasDisp) {
@@ -1594,7 +1609,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const slots = getAvailableSlots(profissionalId, unidadeId, currentDate, isPublic);
             if (slots.length === 0) {
               const key = `${profissionalId}|${unidadeId}|${currentDate}`;
-              const dayCount = appointmentCountsByKey.get(key) || 0;
+              const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
               if (dayCount > 0) {
                 map[currentDate] = { dateStr: currentDate, status: "full", label: "Lotado — sem vagas restantes" };
               }
@@ -1605,7 +1620,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return map;
     },
-    [addDaysToDateStr, appointmentCountsByKey, disponibilidades, getAvailableSlots, getBlockingInfo],
+    [getAvailableSlots, getBlockingInfo],
   );
 
   const getNextAvailableSlots = useCallback(
@@ -1643,8 +1658,93 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await loadBloqueios();
   }, [loadBloqueios]);
 
-  const contextValue = useMemo<DataContextType>(
-    () => ({
+  const stableFunctions = useRef({
+    addAgendamento,
+    updateAgendamento,
+    cancelAgendamento,
+    addPaciente,
+    updatePaciente,
+    addToFila,
+    updateFila,
+    removeFromFila,
+    addAtendimento,
+    updateAtendimento,
+    addUnidade,
+    updateUnidade,
+    deleteUnidade,
+    addSala,
+    updateSala,
+    deleteSala,
+    addFuncionario,
+    updateFuncionario,
+    deleteFuncionario,
+    addDisponibilidade,
+    updateDisponibilidade,
+    deleteDisponibilidade,
+    addBloqueio,
+    updateBloqueio,
+    deleteBloqueio,
+    getAvailableSlots,
+    getAvailableDates,
+    getNextAvailableSlots,
+    getBlockingInfo,
+    getDayInfoMap,
+    updateConfiguracoes,
+    checkFilaForSlot,
+    encaixarDaFila,
+    refreshFuncionarios,
+    refreshDisponibilidades,
+    refreshAgendamentos,
+    refreshPacientes,
+    refreshFila,
+    refreshBloqueios,
+    logAction,
+  });
+  stableFunctions.current = {
+    addAgendamento,
+    updateAgendamento,
+    cancelAgendamento,
+    addPaciente,
+    updatePaciente,
+    addToFila,
+    updateFila,
+    removeFromFila,
+    addAtendimento,
+    updateAtendimento,
+    addUnidade,
+    updateUnidade,
+    deleteUnidade,
+    addSala,
+    updateSala,
+    deleteSala,
+    addFuncionario,
+    updateFuncionario,
+    deleteFuncionario,
+    addDisponibilidade,
+    updateDisponibilidade,
+    deleteDisponibilidade,
+    addBloqueio,
+    updateBloqueio,
+    deleteBloqueio,
+    getAvailableSlots,
+    getAvailableDates,
+    getNextAvailableSlots,
+    getBlockingInfo,
+    getDayInfoMap,
+    updateConfiguracoes,
+    checkFilaForSlot,
+    encaixarDaFila,
+    refreshFuncionarios,
+    refreshDisponibilidades,
+    refreshAgendamentos,
+    refreshPacientes,
+    refreshFila,
+    refreshBloqueios,
+    logAction,
+  };
+
+  const contextValue = useMemo(
+    (): DataContextType => ({
       agendamentos,
       pacientes,
       fila,
@@ -1656,46 +1756,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       disponibilidades,
       bloqueios,
       configuracoes,
-      addAgendamento,
-      updateAgendamento,
-      cancelAgendamento,
-      addPaciente,
-      updatePaciente,
-      addToFila,
-      updateFila,
-      removeFromFila,
-      addAtendimento,
-      updateAtendimento,
-      addUnidade,
-      updateUnidade,
-      deleteUnidade,
-      addSala,
-      updateSala,
-      deleteSala,
-      addFuncionario,
-      updateFuncionario,
-      deleteFuncionario,
-      addDisponibilidade,
-      updateDisponibilidade,
-      deleteDisponibilidade,
-      addBloqueio,
-      updateBloqueio,
-      deleteBloqueio,
-      getAvailableSlots,
-      getAvailableDates,
-      getNextAvailableSlots,
-      getBlockingInfo,
-      getDayInfoMap,
-      updateConfiguracoes,
-      checkFilaForSlot,
-      encaixarDaFila,
-      refreshFuncionarios,
-      refreshDisponibilidades,
-      refreshAgendamentos,
-      refreshPacientes,
-      refreshFila,
-      refreshBloqueios,
-      logAction,
+      ...stableFunctions.current,
     }),
     [
       agendamentos,
@@ -1709,46 +1770,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       disponibilidades,
       bloqueios,
       configuracoes,
-      addAgendamento,
-      updateAgendamento,
-      cancelAgendamento,
-      addPaciente,
-      updatePaciente,
-      addToFila,
-      updateFila,
-      removeFromFila,
-      addAtendimento,
-      updateAtendimento,
-      addUnidade,
-      updateUnidade,
-      deleteUnidade,
-      addSala,
-      updateSala,
-      deleteSala,
-      addFuncionario,
-      updateFuncionario,
-      deleteFuncionario,
-      addDisponibilidade,
-      updateDisponibilidade,
-      deleteDisponibilidade,
-      addBloqueio,
-      updateBloqueio,
-      deleteBloqueio,
-      getAvailableSlots,
-      getAvailableDates,
-      getNextAvailableSlots,
-      getBlockingInfo,
-      getDayInfoMap,
-      updateConfiguracoes,
-      checkFilaForSlot,
-      encaixarDaFila,
-      refreshFuncionarios,
-      refreshDisponibilidades,
-      refreshAgendamentos,
-      refreshPacientes,
-      refreshFila,
-      refreshBloqueios,
-      logAction,
     ],
   );
 
