@@ -67,15 +67,19 @@ export function printFichaPaciente(data: FichaPacienteData): void {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
 
+  const now = new Date();
+  const dataAtual = now.toLocaleDateString('pt-BR');
+  const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
   const historicoRows = (data.historicoAtendimentos || [])
-    .slice(0, 8)
+    .slice(0, 10)
     .map(
       (h) => `
       <tr>
-        <td style="padding:4px 6px;border:1px solid #ccc;font-size:10px">${formatarData(h.data)}</td>
-        <td style="padding:4px 6px;border:1px solid #ccc;font-size:10px">${h.tipo || '—'}</td>
-        <td style="padding:4px 6px;border:1px solid #ccc;font-size:10px">${h.profissional || '—'}</td>
-        <td style="padding:4px 6px;border:1px solid #ccc;font-size:10px">${h.observacao || '—'}</td>
+        <td>${formatarData(h.data)}</td>
+        <td>${h.tipo || '—'}</td>
+        <td>${h.profissional || '—'}</td>
+        <td>${h.observacao || '—'}</td>
       </tr>`,
     )
     .join('');
@@ -86,252 +90,341 @@ export function printFichaPaciente(data: FichaPacienteData): void {
   <meta charset="UTF-8" />
   <title>Ficha do Paciente — ${data.paciente.nome}</title>
   <style>
-    @page { size: A4; margin: 12mm 10mm; }
+    @page { size: A4 portrait; margin: 10mm 12mm 14mm 12mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; font-size: 10px; line-height: 1.4; }
-
-    /* HEADER */
-    .header {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 14px; margin-bottom: 8px;
-      border: 1px solid #cbd5e1; border-radius: 6px;
-      background: #f8fafc;
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #1a1a1a;
+      font-size: 11px;
+      line-height: 1.45;
     }
-    .header img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; }
-    .header-text { flex: 1; }
-    .header-text h1 { font-size: 13px; font-weight: 700; color: #0f172a; }
-    .header-text .subtitle { font-size: 9px; color: #64748b; margin-top: 1px; }
-    .header-text .unidade { font-size: 11px; font-weight: 600; color: #0369a1; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 9px; color: #64748b; }
 
-    /* SECTIONS */
-    .section {
-      border: 1px solid #cbd5e1; border-radius: 5px;
-      margin-bottom: 6px; padding: 8px 10px;
+    /* ===== HEADER ===== */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 8px;
+      margin-bottom: 6px;
+      border-bottom: 3px solid #0c4a6e;
+    }
+    .header img {
+      width: 54px;
+      height: 54px;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+    .header-center {
+      flex: 1;
+      text-align: center;
+    }
+    .header-center h1 {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #0c4a6e;
+    }
+    .header-center h2 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #334155;
+      margin-top: 2px;
+    }
+    .header-center .tipo {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+    .header-right {
+      text-align: right;
+      font-size: 10px;
+      color: #475569;
+      line-height: 1.7;
+      min-width: 130px;
+    }
+    .header-right b { color: #1e293b; }
+
+    /* ===== SECTIONS ===== */
+    .bloco {
+      margin-top: 7px;
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      overflow: hidden;
       page-break-inside: avoid;
     }
-    .section-title {
-      font-size: 10px; font-weight: 700; color: #0369a1;
-      text-transform: uppercase; letter-spacing: 0.3px;
-      border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 6px;
+    .bloco-titulo {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      background: linear-gradient(135deg, #0c4a6e, #0369a1);
+      color: #fff;
+      padding: 5px 12px;
+    }
+    .bloco-body { padding: 8px 12px; }
+
+    /* ===== GRIDS ===== */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px 14px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 10px; }
+
+    .campo { margin-bottom: 2px; font-size: 11px; }
+    .campo b {
+      font-size: 8.5px;
+      text-transform: uppercase;
+      color: #475569;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+    .campo span { color: #0f172a; font-weight: 500; }
+    .campo-full { grid-column: 1 / -1; }
+
+    /* ===== VITALS ===== */
+    .vitais-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
+    }
+    .vitais-table td {
+      border: 1px solid #cbd5e1;
+      padding: 6px 10px;
+      font-size: 11px;
+      text-align: center;
+      background: #f8fafc;
+    }
+    .vitais-table td b {
+      display: block;
+      font-size: 8px;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .vitais-table td span {
+      font-weight: 600;
+      color: #0f172a;
+      font-size: 12px;
     }
 
-    /* GRID FIELDS */
-    .fields-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
-    }
-    .field { display: flex; flex-direction: column; }
-    .field-label { font-size: 8px; color: #64748b; text-transform: uppercase; font-weight: 600; }
-    .field-value { font-size: 10px; color: #0f172a; min-height: 14px; }
-
-    /* VITAL SIGNS TABLE */
-    .vitals-table {
-      width: 100%; border-collapse: collapse; margin-top: 4px;
-    }
-    .vitals-table th {
-      background: #f1f5f9; font-size: 8px; font-weight: 600; color: #475569;
-      padding: 4px 6px; border: 1px solid #cbd5e1; text-align: center;
-    }
-    .vitals-table td {
-      padding: 6px; border: 1px solid #cbd5e1; text-align: center;
-      height: 22px; font-size: 10px;
+    /* ===== DESCRIPTION ===== */
+    .desc-box {
+      margin-top: 4px;
+      padding: 6px 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 3px;
+      font-size: 10px;
+      line-height: 1.5;
     }
 
-    /* EVOLUTION TABLE */
-    .evo-table {
-      width: 100%; border-collapse: collapse; margin-top: 4px;
+    /* ===== HISTORY TABLE ===== */
+    .hist-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 4px;
     }
-    .evo-table th {
-      background: #f1f5f9; font-size: 8px; font-weight: 600; color: #475569;
-      padding: 4px 6px; border: 1px solid #cbd5e1; text-align: left;
+    .hist-table th {
+      background: #f1f5f9;
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      text-align: left;
     }
-    .evo-table td {
-      padding: 4px 6px; border: 1px solid #cbd5e1; font-size: 10px; vertical-align: top;
+    .hist-table td {
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 10px;
+      vertical-align: top;
+    }
+    .hist-table tr:nth-child(even) td { background: #fafbfc; }
+
+    /* ===== EMPTY LINES ===== */
+    .write-line {
+      border-bottom: 1px solid #cbd5e1;
+      height: 26px;
+    }
+    .write-line:nth-child(odd) { background: #fafbfc; }
+
+    /* ===== SIGNATURE ===== */
+    .assinatura-area {
+      margin-top: 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      page-break-inside: avoid;
+    }
+    .assinatura-bloco {
+      text-align: center;
+      width: 240px;
+    }
+    .assinatura-traco {
+      border-top: 1px solid #1e293b;
+      padding-top: 24px;
+    }
+    .assinatura-label {
+      font-size: 9px;
+      color: #64748b;
+    }
+    .assinatura-data {
+      font-size: 10px;
+      color: #475569;
     }
 
-    /* REFERRAL */
-    .referral-box {
-      border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px 8px;
-      background: #fafbfc;
+    /* ===== FOOTER ===== */
+    .rodape {
+      margin-top: 14px;
+      padding-top: 5px;
+      border-top: 1px solid #cbd5e1;
+      text-align: center;
+      font-size: 8px;
+      color: #94a3b8;
+      letter-spacing: 0.3px;
     }
-    .referral-row { display: flex; gap: 12px; margin-bottom: 4px; }
-    .referral-item { flex: 1; }
 
-    /* SIGNATURE */
-    .signature-area {
-      margin-top: 16px; display: flex; justify-content: flex-end;
-    }
-    .signature-block {
-      text-align: center; width: 220px;
-    }
-    .signature-line {
-      border-top: 1px solid #334155; margin-bottom: 4px; padding-top: 20px;
-    }
-    .signature-name { font-size: 10px; font-weight: 600; }
-    .signature-reg { font-size: 9px; color: #64748b; }
-
-    /* PRINT */
     @media print {
-      body { font-size: 9px; }
-      .section { break-inside: avoid; }
+      .bloco { break-inside: avoid; }
+      .assinatura-area { break-inside: avoid; }
     }
   </style>
 </head>
 <body>
+
   <!-- HEADER -->
   <div class="header">
     <img src="${logo}" alt="Logo SMS" />
-    <div class="header-text">
-      <h1>Secretaria Municipal de Saúde</h1>
-      <div class="subtitle">Ficha de Atendimento do Paciente</div>
-      ${data.unidadeAtual ? `<div class="unidade">${data.unidadeAtual}</div>` : ''}
+    <div class="header-center">
+      <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
+      <h2>Centro Especializado em Reabilitação II &mdash; CER II</h2>
+      <div class="tipo">Ficha de Atendimento do Paciente</div>
     </div>
     <div class="header-right">
-      <div>Prontuário: <strong>${data.paciente.id}</strong></div>
-      <div>Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+      <div><b>Prontuário:</b> ${data.paciente.id}</div>
+      <div><b>Emissão:</b> ${dataAtual} — ${horaAtual}</div>
     </div>
   </div>
 
   <!-- IDENTIFICAÇÃO -->
-  <div class="section">
-    <div class="section-title">Identificação do Paciente</div>
-    <div class="fields-grid">
-      <div class="field" style="grid-column: span 2">
-        <span class="field-label">Nome Completo</span>
-        <span class="field-value" style="font-weight:600">${data.paciente.nome}</span>
+  <div class="bloco">
+    <div class="bloco-titulo">Identificação do Paciente</div>
+    <div class="bloco-body">
+      <div class="campo campo-full" style="margin-bottom:4px"><b>Nome Completo:</b> <span style="font-size:12px;font-weight:700">${data.paciente.nome}</span></div>
+      <div class="grid-3">
+        <div class="campo"><b>CPF:</b> <span>${data.paciente.cpf || '—'}</span></div>
+        <div class="campo"><b>CNS:</b> <span>${data.paciente.cns || '—'}</span></div>
+        <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(data.paciente.dataNascimento)}</span></div>
       </div>
-      <div class="field">
-        <span class="field-label">CPF</span>
-        <span class="field-value">${data.paciente.cpf || '—'}</span>
+      <div class="grid-3">
+        <div class="campo"><b>Idade:</b> <span>${calcularIdade(data.paciente.dataNascimento)}</span></div>
+        <div class="campo"><b>Telefone:</b> <span>${data.paciente.telefone || '—'}</span></div>
+        <div class="campo"><b>E-mail:</b> <span>${data.paciente.email || '—'}</span></div>
       </div>
-      <div class="field">
-        <span class="field-label">CNS (Cartão SUS)</span>
-        <span class="field-value">${data.paciente.cns || '—'}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">Data de Nascimento</span>
-        <span class="field-value">${formatarData(data.paciente.dataNascimento)}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">Idade</span>
-        <span class="field-value">${calcularIdade(data.paciente.dataNascimento)}</span>
-      </div>
-      <div class="field" style="grid-column: span 2">
-        <span class="field-label">Nome da Mãe</span>
-        <span class="field-value">${data.paciente.nomeMae || '—'}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">Telefone</span>
-        <span class="field-value">${data.paciente.telefone || '—'}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">E-mail</span>
-        <span class="field-value">${data.paciente.email || '—'}</span>
+      <div class="grid-2">
+        <div class="campo"><b>Nome da Mãe:</b> <span>${data.paciente.nomeMae || '—'}</span></div>
+        <div class="campo"><b>Endereço:</b> <span>${data.paciente.endereco || '—'}</span></div>
       </div>
     </div>
   </div>
 
   <!-- INFORMAÇÕES CLÍNICAS -->
-  <div class="section">
-    <div class="section-title">Informações Clínicas</div>
-    <div class="fields-grid">
-      <div class="field">
-        <span class="field-label">CID</span>
-        <span class="field-value">${data.paciente.cid || '—'}</span>
+  <div class="bloco">
+    <div class="bloco-titulo">Informações Clínicas</div>
+    <div class="bloco-body">
+      <div class="grid-4">
+        <div class="campo"><b>CID:</b> <span>${data.paciente.cid || '—'}</span></div>
+        <div class="campo"><b>Tipo:</b> <span>${data.tipoAtendimento || '—'}</span></div>
+        <div class="campo"><b>Unidade Origem:</b> <span>${data.unidadeOrigem || '—'}</span></div>
+        <div class="campo"><b>Data Atend.:</b> <span>${data.dataAtendimento ? formatarData(data.dataAtendimento) : '—'}</span></div>
       </div>
-      <div class="field">
-        <span class="field-label">Tipo de Atendimento</span>
-        <span class="field-value">${data.tipoAtendimento || '—'}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">Unidade de Origem</span>
-        <span class="field-value">${data.unidadeOrigem || '—'}</span>
-      </div>
-      <div class="field">
-        <span class="field-label">Data do Atendimento</span>
-        <span class="field-value">${data.dataAtendimento ? formatarData(data.dataAtendimento) : '—'}</span>
-      </div>
+      ${data.paciente.descricaoClinica ? `
+      <div style="margin-top:6px">
+        <div class="campo"><b>Descrição Clínica:</b></div>
+        <div class="desc-box">${data.paciente.descricaoClinica}</div>
+      </div>` : ''}
     </div>
-    ${data.paciente.descricaoClinica ? `
-    <div style="margin-top:6px">
-      <span class="field-label">Descrição Clínica</span>
-      <div style="font-size:10px;margin-top:2px;padding:4px 6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:3px">${data.paciente.descricaoClinica}</div>
-    </div>` : ''}
   </div>
 
   <!-- SINAIS VITAIS -->
-  <div class="section">
-    <div class="section-title">Sinais Vitais</div>
-    <table class="vitals-table">
-      <thead>
-        <tr>
-          <th>Pressão Arterial</th>
-          <th>Freq. Cardíaca</th>
-          <th>Temperatura</th>
-          <th>Saturação O₂</th>
-          <th>Peso (kg)</th>
-          <th>Altura (cm)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td></td><td></td><td></td><td></td><td></td><td></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- ENCAMINHAMENTO -->
-  <div class="section">
-    <div class="section-title">Encaminhamento</div>
-    <div class="referral-box">
-      <div class="referral-row">
-        <div class="referral-item">
-          <span class="field-label">Especialidade</span>
-          <div style="border-bottom:1px solid #cbd5e1;height:18px;margin-top:2px"></div>
-        </div>
-        <div class="referral-item">
-          <span class="field-label">Destino</span>
-          <div style="border-bottom:1px solid #cbd5e1;height:18px;margin-top:2px"></div>
-        </div>
-      </div>
-      <div style="margin-top:6px">
-        <span class="field-label">Observação</span>
-        <div style="border-bottom:1px solid #cbd5e1;height:18px;margin-top:2px"></div>
-      </div>
+  <div class="bloco">
+    <div class="bloco-titulo">Sinais Vitais</div>
+    <div class="bloco-body">
+      <table class="vitais-table">
+        <tbody>
+          <tr>
+            <td><b>PA</b><span></span></td>
+            <td><b>FC</b><span></span></td>
+            <td><b>FR</b><span></span></td>
+            <td><b>Temp</b><span></span></td>
+            <td><b>SpO₂</b><span></span></td>
+            <td><b>Peso</b><span></span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
+  ${data.ultimoAtendimento ? `
+  <!-- ÚLTIMO ATENDIMENTO -->
+  <div class="bloco">
+    <div class="bloco-titulo">Último Atendimento</div>
+    <div class="bloco-body">
+      <div class="grid-4">
+        <div class="campo"><b>Data:</b> <span>${formatarData(data.ultimoAtendimento.data)}</span></div>
+        <div class="campo"><b>Tipo:</b> <span>${data.ultimoAtendimento.tipo || '—'}</span></div>
+        <div class="campo"><b>Profissional:</b> <span>${data.ultimoAtendimento.profissional || '—'}</span></div>
+        <div class="campo"><b>Procedimentos:</b> <span>${data.ultimoAtendimento.procedimentos || '—'}</span></div>
+      </div>
+      ${data.ultimoAtendimento.queixa ? `<div class="campo" style="margin-top:4px"><b>Queixa:</b> <span>${data.ultimoAtendimento.queixa}</span></div>` : ''}
+    </div>
+  </div>` : ''}
+
   <!-- EVOLUÇÃO CLÍNICA -->
-  <div class="section">
-    <div class="section-title">Evolução Clínica</div>
-    ${historicoRows ? `
-    <table class="evo-table">
-      <thead>
-        <tr>
-          <th style="width:80px">Data</th>
-          <th style="width:90px">Tipo</th>
-          <th style="width:120px">Profissional</th>
-          <th>Observação</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${historicoRows}
-      </tbody>
-    </table>` : `
-    <div style="border:1px solid #cbd5e1;border-radius:4px;padding:8px;text-align:center;color:#94a3b8;font-size:9px">
-      Nenhum registro de evolução clínica encontrado.
-    </div>`}
+  <div class="bloco">
+    <div class="bloco-titulo">Evolução Clínica / Histórico</div>
+    <div class="bloco-body">
+      ${historicoRows ? `
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th style="width:75px">Data</th>
+            <th style="width:80px">Tipo</th>
+            <th style="width:120px">Profissional</th>
+            <th>Observação</th>
+          </tr>
+        </thead>
+        <tbody>${historicoRows}</tbody>
+      </table>` : `
+      <div style="color:#94a3b8;font-size:9px;font-style:italic;margin-bottom:6px">
+        Nenhum registro de evolução clínica encontrado.
+      </div>`}
+      <div style="margin-top:8px">
+        ${Array.from({ length: 6 }, () => '<div class="write-line"></div>').join('')}
+      </div>
+    </div>
   </div>
 
   <!-- ASSINATURA -->
-  <div class="signature-area">
-    <div class="signature-block">
-      <div class="signature-line"></div>
-      <div class="signature-name">Nome do Profissional</div>
-      <div class="signature-reg">CRM / COREN / Registro</div>
+  <div class="assinatura-area">
+    <div class="assinatura-data">Oriximiná &mdash; PA, ____/____/________</div>
+    <div class="assinatura-bloco">
+      <div class="assinatura-traco"></div>
+      <div style="font-size:10px;font-weight:600">Profissional Responsável</div>
+      <div class="assinatura-label">CRM / COREN / Registro</div>
     </div>
   </div>
+
+  <!-- RODAPÉ -->
+  <div class="rodape">
+    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
+  </div>
+
 </body>
 </html>`;
 
