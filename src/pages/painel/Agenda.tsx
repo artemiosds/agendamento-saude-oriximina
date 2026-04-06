@@ -1473,6 +1473,17 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+                        {canEdit && !["cancelado", "concluido"].includes(ag.status) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => handleOpenEdit(ag)}
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
 
                         {/* NOVO: aprovação inline */}
                         {ehPendenteOnline && canAprovar && (
