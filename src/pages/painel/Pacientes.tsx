@@ -103,9 +103,14 @@ const Pacientes: React.FC = () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search), 300);
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setVisibleCount(PAGE_SIZE); // reset pagination on search
+    }, 300);
     return () => window.clearTimeout(t);
   }, [search]);
   const [importOpen, setImportOpen] = useState(false);
@@ -124,6 +129,11 @@ const Pacientes: React.FC = () => {
   // Filter state
   const [filterFila, setFilterFila] = useState("all");
   const [sortBy, setSortBy] = useState("nome");
+
+  // Reset pagination when filter/sort changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filterFila, sortBy]);
 
   // Fila dialog
   const [filaDialogOpen, setFilaDialogOpen] = useState(false);
@@ -830,7 +840,7 @@ const Pacientes: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filtered.map((p) => {
+        {filtered.slice(0, visibleCount).map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
 
@@ -970,6 +980,16 @@ const Pacientes: React.FC = () => {
           );
         })}
       </div>
+      {visibleCount < filtered.length && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+          >
+            Carregar mais ({filtered.length - visibleCount} restantes)
+          </Button>
+        </div>
+      )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
 
       {/* Detalhe Drawer - Paciente */}

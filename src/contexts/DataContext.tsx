@@ -581,11 +581,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loadAll = useCallback(async () => {
+    // Critical data first (needed for navigation/permissions)
     await Promise.all([
       loadConfiguracoes(),
       loadUnidades(),
       loadSalas(),
       loadFuncionarios(),
+    ]);
+    // Secondary data (can load after UI is interactive)
+    Promise.all([
       loadDisponibilidades(),
       loadPacientes(),
       loadAgendamentos(),
