@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
+import logoSms from '@/assets/logo-sms.jpeg';
 
 interface FichaData {
   paciente: {
@@ -73,115 +74,239 @@ const calcIdade = (dataNasc: string): string => {
 };
 
 const v = (valor: string | undefined): string => valor?.trim() || '';
-const blank = '________________________';
 
 interface FichaImpressaoProps {
   data: FichaData;
   onPrintComplete?: () => void;
 }
 
+const resolveLogoUrl = (): string => {
+  if (logoSms.startsWith('http') || logoSms.startsWith('/')) return logoSms;
+  return logoSms;
+};
+
 const PRINT_CSS = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page { size: A4 portrait; margin: 12mm; }
+  @page { size: A4 portrait; margin: 10mm 12mm 14mm 12mm; }
   body {
-    font-family: Arial, 'Segoe UI', sans-serif;
-    font-size: 12px;
-    color: #111;
-    line-height: 1.5;
-    padding: 15mm;
-    width: 210mm;
-    min-height: 297mm;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #1a1a1a;
+    line-height: 1.45;
+    padding: 0;
+    width: 100%;
   }
 
-  /* HEADER */
+  /* ===== HEADER ===== */
   .header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid #000;
+    gap: 14px;
     padding-bottom: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
+    border-bottom: 3px solid #0c4a6e;
   }
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .titulo { text-align: center; }
-  .titulo h1 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin: 0; }
-  .titulo h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; margin: 2px 0; color: #333; }
-  .titulo p { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #555; margin: 0; }
-  .info-direita { text-align: right; font-size: 10px; color: #333; line-height: 1.6; }
+  .header-logo img {
+    width: 54px;
+    height: 54px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+  .header-center {
+    flex: 1;
+    text-align: center;
+  }
+  .header-center h1 {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #0c4a6e;
+    margin: 0;
+  }
+  .header-center h2 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #334155;
+    margin: 2px 0 0;
+  }
+  .header-center .ficha-tipo {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .header-right {
+    text-align: right;
+    font-size: 10px;
+    color: #475569;
+    line-height: 1.7;
+    min-width: 130px;
+  }
+  .header-right b { color: #1e293b; }
 
-  /* BLOCOS */
+  /* ===== SECTIONS ===== */
   .bloco {
-    margin-top: 8px;
-    border: 1px solid #000;
-    padding: 0;
+    margin-top: 7px;
+    border: 1px solid #94a3b8;
+    border-radius: 4px;
+    overflow: hidden;
     page-break-inside: avoid;
   }
   .bloco-titulo {
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: #1e3a5f;
+    letter-spacing: 0.6px;
+    background: linear-gradient(135deg, #0c4a6e, #0369a1);
     color: #fff;
-    padding: 4px 10px;
+    padding: 5px 12px;
     margin: 0;
   }
-  .bloco-body { padding: 6px 10px; }
+  .bloco-body {
+    padding: 8px 12px;
+  }
 
-  /* GRID */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 12px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
+  /* ===== FIELD GRIDS ===== */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px 14px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 10px; }
 
-  /* CAMPOS */
-  .campo { margin-bottom: 3px; font-size: 11px; }
-  .campo b { font-size: 9px; text-transform: uppercase; color: #333; font-weight: 700; margin-right: 4px; }
-  .campo span { color: #000; font-weight: 500; }
+  .campo { margin-bottom: 2px; font-size: 11px; }
+  .campo b {
+    font-size: 8.5px;
+    text-transform: uppercase;
+    color: #475569;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    margin-right: 4px;
+  }
+  .campo span { color: #0f172a; font-weight: 500; }
   .campo-full { grid-column: 1 / -1; }
 
-  /* SINAIS VITAIS TABLE */
-  .vitais-table { width: 100%; border-collapse: collapse; margin-top: 2px; }
-  .vitais-table td {
-    border: 1px solid #999;
-    padding: 5px 8px;
-    font-size: 11px;
-    text-align: left;
-    width: 25%;
+  /* ===== VITALS TABLE ===== */
+  .vitais-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
   }
-  .vitais-table td b { font-size: 9px; text-transform: uppercase; color: #333; font-weight: 700; }
+  .vitais-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px 10px;
+    font-size: 11px;
+    text-align: center;
+    background: #f8fafc;
+  }
+  .vitais-table td b {
+    display: block;
+    font-size: 8px;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .vitais-table td span {
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 12px;
+  }
 
-  /* BOXES */
-  .box-grande { min-height: 80px; border: 1px solid #999; margin: 4px 0; padding: 4px 6px; font-size: 11px; }
-  .box-evolucao { min-height: 150px; border: 1px solid #999; margin: 4px 0; padding: 4px 6px; font-size: 11px; }
+  /* ===== EVOLUTION LINES ===== */
+  .evo-area {
+    min-height: 180px;
+    position: relative;
+  }
+  .evo-line {
+    border-bottom: 1px solid #cbd5e1;
+    height: 26px;
+    line-height: 26px;
+    padding: 0 4px;
+    font-size: 11px;
+  }
+  .evo-line:nth-child(odd) { background: #fafbfc; }
 
-  /* CONDUTA */
-  .linha-conduta { border-bottom: 1px solid #999; min-height: 22px; margin-bottom: 6px; padding: 2px 0; font-size: 11px; }
+  .evo-item {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px 4px;
+  }
+  .evo-item:last-child { border-bottom: none; }
+  .evo-meta { font-size: 9px; color: #64748b; font-weight: 600; }
+  .evo-text { font-size: 11px; margin-top: 3px; color: #1e293b; line-height: 1.5; }
 
-  /* ASSINATURA */
-  .assinatura-area { margin-top: 24px; text-align: center; page-break-inside: avoid; }
-  .assinatura-traco { border-top: 1px solid #000; width: 250px; margin: 0 auto; padding-top: 4px; }
-  .assinatura-label { font-size: 10px; color: #555; margin: 0; }
+  /* ===== CONDUTA ===== */
+  .conduta-campo {
+    margin-bottom: 3px;
+  }
+  .conduta-campo b {
+    font-size: 9px;
+    text-transform: uppercase;
+    color: #475569;
+    font-weight: 700;
+  }
+  .conduta-linha {
+    border-bottom: 1px solid #cbd5e1;
+    min-height: 24px;
+    margin-bottom: 8px;
+  }
 
-  /* RODAPE */
+  /* ===== SIGNATURE ===== */
+  .assinatura-area {
+    margin-top: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    page-break-inside: avoid;
+  }
+  .assinatura-bloco {
+    text-align: center;
+    width: 240px;
+  }
+  .assinatura-traco {
+    border-top: 1px solid #1e293b;
+    padding-top: 24px;
+  }
+  .assinatura-label {
+    font-size: 9px;
+    color: #64748b;
+    margin: 2px 0 0;
+  }
+  .assinatura-nome {
+    font-size: 10px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .assinatura-data {
+    text-align: left;
+    font-size: 10px;
+    color: #475569;
+  }
+  .assinatura-data b { color: #1e293b; }
+
+  /* ===== FOOTER ===== */
   .rodape {
-    margin-top: 12px;
-    padding-top: 4px;
-    border-top: 1px solid #999;
+    margin-top: 14px;
+    padding-top: 5px;
+    border-top: 1px solid #cbd5e1;
     text-align: center;
     font-size: 8px;
-    color: #999;
+    color: #94a3b8;
+    letter-spacing: 0.3px;
   }
 
-  /* EVOLUCAO PREENCHIDA */
-  .evo-item { border-bottom: 1px solid #ddd; padding: 4px 0; margin-bottom: 2px; }
-  .evo-item:last-child { border-bottom: none; }
-  .evo-meta { font-size: 10px; color: #555; }
-  .evo-text { font-size: 11px; margin-top: 2px; }
+  @media print {
+    body { padding: 0; }
+    .bloco { break-inside: avoid; }
+    .assinatura-area { break-inside: avoid; }
+  }
 `;
 
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintComplete }) => {
-
   const buildHTML = useCallback(() => {
+    const logo = resolveLogoUrl();
     const now = new Date();
     const dataAtual = formatarData(now.toISOString());
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -190,15 +315,11 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
     const evolucaoHTML = data.evoluciones.length > 0
       ? data.evoluciones.map(evo => `
         <div class="evo-item">
-          <div class="evo-meta"><b>Data:</b> ${formatarData(evo.data)} &nbsp; <b>Profissional:</b> ${v(evo.profissional) || blank}</div>
+          <div class="evo-meta">${formatarData(evo.data)} &mdash; ${v(evo.profissional) || '—'}</div>
           <div class="evo-text">${v(evo.observacao) || '—'}</div>
         </div>
       `).join('')
-      : `
-        <div style="min-height:140px; color:#aaa; font-style:italic; padding-top:8px;">
-          (Espaço para evolução clínica)
-        </div>
-      `;
+      : Array.from({ length: 8 }, () => '<div class="evo-line"></div>').join('');
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -211,78 +332,75 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
 
   <!-- CABEÇALHO -->
   <div class="header">
-    <div class="header-left">
-      <div class="titulo">
-        <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
-        <h2>CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER</h2>
-        <p>FICHA DE ATENDIMENTO / PRONTUÁRIO</p>
-      </div>
+    <div class="header-logo">
+      <img src="${logo}" alt="Logo SMS" />
     </div>
-    <div class="info-direita">
-      <p><b>Data:</b> ${dataAtual}</p>
-      <p><b>Hora:</b> ${horaAtual}</p>
-      <p><b>Prontuário:</b> ${v(data.dadosClinicos.numero_prontuario) || '____________'}</p>
+    <div class="header-center">
+      <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
+      <h2>Centro Especializado em Reabilitação II &mdash; CER II</h2>
+      <div class="ficha-tipo">Ficha de Atendimento / Prontuário</div>
+    </div>
+    <div class="header-right">
+      <div><b>Data:</b> ${dataAtual}</div>
+      <div><b>Hora:</b> ${horaAtual}</div>
+      <div><b>Prontuário:</b> ${v(data.dadosClinicos.numero_prontuario) || '____________'}</div>
     </div>
   </div>
 
   <!-- DADOS DO PACIENTE -->
   <div class="bloco">
-    <div class="bloco-titulo">DADOS DO PACIENTE</div>
+    <div class="bloco-titulo">Identificação do Paciente</div>
     <div class="bloco-body">
-      <div class="grid-2">
-        <div class="campo campo-full"><b>Nome:</b> <span>${v(data.paciente.nome_completo) || blank}</span></div>
-      </div>
+      <div class="campo campo-full" style="margin-bottom:4px"><b>Nome Completo:</b> <span style="font-size:12px;font-weight:700">${v(data.paciente.nome_completo) || '—'}</span></div>
       <div class="grid-3">
-        <div class="campo"><b>CPF:</b> <span>${v(data.paciente.cpf) || blank}</span></div>
-        <div class="campo"><b>CNS:</b> <span>${v(data.paciente.cns) || blank}</span></div>
+        <div class="campo"><b>CPF:</b> <span>${v(data.paciente.cpf) || '—'}</span></div>
+        <div class="campo"><b>CNS:</b> <span>${v(data.paciente.cns) || '—'}</span></div>
         <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(data.paciente.data_nascimento)}</span></div>
       </div>
-      <div class="grid-3">
+      <div class="grid-4">
         <div class="campo"><b>Idade:</b> <span>${idade}</span></div>
-        <div class="campo"><b>Sexo:</b> <span>${v(data.paciente.sexo) || '________'}</span></div>
-        <div class="campo"><b>Telefone:</b> <span>${v(data.paciente.telefone) || blank}</span></div>
+        <div class="campo"><b>Sexo:</b> <span>${v(data.paciente.sexo) || '—'}</span></div>
+        <div class="campo"><b>Telefone:</b> <span>${v(data.paciente.telefone) || '—'}</span></div>
+        <div class="campo"><b>Responsável:</b> <span>${v(data.paciente.responsavel) || v(data.paciente.nome_mae) || '—'}</span></div>
       </div>
       <div class="grid-2">
-        <div class="campo"><b>Responsável:</b> <span>${v(data.paciente.responsavel) || v(data.paciente.nome_mae) || blank}</span></div>
-        <div class="campo"><b>Endereço:</b> <span>${v(data.paciente.endereco) || blank}</span></div>
+        <div class="campo"><b>Endereço:</b> <span>${v(data.paciente.endereco) || '—'}</span></div>
+        <div class="campo"><b>Unidade de Origem:</b> <span>${v(data.dadosClinicos.unidade_origem) || '—'}</span></div>
       </div>
-      <div class="campo"><b>Unidade de Origem:</b> <span>${v(data.dadosClinicos.unidade_origem) || blank}</span></div>
     </div>
   </div>
 
   <!-- ATENDIMENTO -->
   <div class="bloco">
-    <div class="bloco-titulo">ATENDIMENTO</div>
+    <div class="bloco-titulo">Dados do Atendimento</div>
     <div class="bloco-body">
-      <div class="grid-2">
-        <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || blank}</span></div>
-        <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || blank}</span></div>
+      <div class="grid-4">
+        <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || '—'}</span></div>
+        <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || '—'}</span></div>
+        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || '—'}</span></div>
+        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || '—'}</span></div>
       </div>
-      <div class="grid-2">
-        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || blank}</span></div>
-        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || blank}</span></div>
-      </div>
-      <div class="campo"><b>Encaminhamento:</b> <span>${v(data.dadosClinicos.encaminhamento) || blank}</span></div>
+      <div class="campo"><b>Encaminhamento:</b> <span>${v(data.dadosClinicos.encaminhamento) || '—'}</span></div>
     </div>
   </div>
 
   <!-- TRIAGEM / SINAIS VITAIS -->
   <div class="bloco">
-    <div class="bloco-titulo">TRIAGEM / SINAIS VITAIS</div>
+    <div class="bloco-titulo">Triagem / Sinais Vitais</div>
     <div class="bloco-body">
       <table class="vitais-table">
         <tbody>
           <tr>
-            <td><b>PA:</b> ${v(data.sinaisVitais.pressao_arterial) || '______'}</td>
-            <td><b>Temp:</b> ${v(data.sinaisVitais.temperatura) ? v(data.sinaisVitais.temperatura) + ' °C' : '______'}</td>
-            <td><b>FC:</b> ${v(data.sinaisVitais.frequencia_cardiaca) ? v(data.sinaisVitais.frequencia_cardiaca) + ' bpm' : '______'}</td>
-            <td><b>FR:</b> ${v(data.sinaisVitais.frequencia_respiratoria) || '______'}</td>
+            <td><b>PA</b><span>${v(data.sinaisVitais.pressao_arterial) || '___'}</span></td>
+            <td><b>FC</b><span>${v(data.sinaisVitais.frequencia_cardiaca) ? v(data.sinaisVitais.frequencia_cardiaca) + ' bpm' : '___'}</span></td>
+            <td><b>FR</b><span>${v(data.sinaisVitais.frequencia_respiratoria) || '___'}</span></td>
+            <td><b>Temp</b><span>${v(data.sinaisVitais.temperatura) ? v(data.sinaisVitais.temperatura) + ' °C' : '___'}</span></td>
           </tr>
           <tr>
-            <td><b>SpO₂:</b> ${v(data.sinaisVitais.saturacao) ? v(data.sinaisVitais.saturacao) + ' %' : '______'}</td>
-            <td><b>Peso:</b> ${v(data.sinaisVitais.peso) ? v(data.sinaisVitais.peso) + ' kg' : '______'}</td>
-            <td><b>Altura:</b> ${v(data.sinaisVitais.altura) ? v(data.sinaisVitais.altura) + ' m' : '______'}</td>
-            <td><b>Glicemia:</b> ${v(data.sinaisVitais.glicemia) ? v(data.sinaisVitais.glicemia) + ' mg/dL' : '______'}</td>
+            <td><b>SpO₂</b><span>${v(data.sinaisVitais.saturacao) ? v(data.sinaisVitais.saturacao) + ' %' : '___'}</span></td>
+            <td><b>Peso</b><span>${v(data.sinaisVitais.peso) ? v(data.sinaisVitais.peso) + ' kg' : '___'}</span></td>
+            <td><b>Altura</b><span>${v(data.sinaisVitais.altura) ? v(data.sinaisVitais.altura) + ' m' : '___'}</span></td>
+            <td><b>Glicemia</b><span>${v(data.sinaisVitais.glicemia) ? v(data.sinaisVitais.glicemia) + ' mg/dL' : '___'}</span></td>
           </tr>
         </tbody>
       </table>
@@ -291,25 +409,21 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
 
   <!-- QUEIXA PRINCIPAL -->
   <div class="bloco">
-    <div class="bloco-titulo">QUEIXA PRINCIPAL</div>
+    <div class="bloco-titulo">Queixa Principal</div>
     <div class="bloco-body">
-      <div class="box-grande"></div>
+      <div class="evo-area" style="min-height:60px">
+        <div class="evo-line"></div>
+        <div class="evo-line"></div>
+        <div class="evo-line"></div>
+      </div>
     </div>
   </div>
 
-  <!-- OBSERVAÇÃO CLÍNICA -->
+  <!-- EVOLUÇÃO CLÍNICA -->
   <div class="bloco">
-    <div class="bloco-titulo">OBSERVAÇÃO CLÍNICA</div>
+    <div class="bloco-titulo">Evolução Clínica</div>
     <div class="bloco-body">
-      <div class="box-grande"></div>
-    </div>
-  </div>
-
-  <!-- EVOLUÇÃO -->
-  <div class="bloco">
-    <div class="bloco-titulo">EVOLUÇÃO</div>
-    <div class="bloco-body">
-      <div class="box-evolucao">
+      <div class="evo-area">
         ${evolucaoHTML}
       </div>
     </div>
@@ -317,27 +431,34 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
 
   <!-- CONDUTA -->
   <div class="bloco">
-    <div class="bloco-titulo">CONDUTA</div>
+    <div class="bloco-titulo">Conduta / Prescrição</div>
     <div class="bloco-body">
-      <div class="campo" style="margin-bottom:2px"><b>Diagnóstico:</b></div>
-      <div class="linha-conduta"></div>
-      <div class="campo" style="margin-bottom:2px"><b>Medicação:</b></div>
-      <div class="linha-conduta"></div>
-      <div class="campo" style="margin-bottom:2px"><b>Procedimentos:</b></div>
-      <div class="linha-conduta"></div>
+      <div class="conduta-campo"><b>Diagnóstico:</b></div>
+      <div class="conduta-linha"></div>
+      <div class="conduta-campo"><b>Medicação / Prescrição:</b></div>
+      <div class="conduta-linha"></div>
+      <div class="conduta-campo"><b>Procedimentos:</b></div>
+      <div class="conduta-linha"></div>
+      <div class="conduta-campo"><b>Retorno:</b></div>
+      <div class="conduta-linha"></div>
     </div>
   </div>
 
   <!-- ASSINATURA -->
   <div class="assinatura-area">
-    <div class="assinatura-traco"></div>
-    <p class="assinatura-label">Profissional Responsável</p>
-    <p style="font-size:10px; margin-top:2px;">${v(data.profissional.nome) || ''} ${v(data.profissional.registro) ? '— ' + v(data.profissional.registro) : ''}</p>
+    <div class="assinatura-data">
+      <div>Oriximiná &mdash; PA, ____/____/________</div>
+    </div>
+    <div class="assinatura-bloco">
+      <div class="assinatura-traco"></div>
+      <div class="assinatura-nome">${v(data.profissional.nome) || 'Profissional Responsável'}</div>
+      <p class="assinatura-label">${v(data.profissional.registro) || 'Registro Profissional'}</p>
+    </div>
   </div>
 
   <!-- RODAPÉ -->
   <div class="rodape">
-    SMS Oriximiná — CER II — Impresso em ${dataAtual} às ${horaAtual}
+    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
   </div>
 
 </body>
@@ -387,17 +508,14 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
 
   return (
     <div className="flex flex-col items-center gap-6 py-4">
-      {/* Preview */}
       <div className="w-full border rounded-lg bg-white p-6 shadow-sm max-h-[60vh] overflow-y-auto">
-        {/* Header preview */}
         <div className="text-center mb-3 border-b-2 border-foreground/20 pb-3">
           <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h2>
-          <p className="text-[10px] uppercase font-bold text-muted-foreground">CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER</p>
+          <p className="text-[10px] uppercase font-bold text-muted-foreground">CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER II</p>
           <p className="text-[10px] uppercase text-muted-foreground">FICHA DE ATENDIMENTO / PRONTUÁRIO</p>
         </div>
 
         <div className="space-y-3 text-sm">
-          {/* Dados do Paciente */}
           <div className="border rounded p-3">
             <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Dados do Paciente</h3>
             <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> {data.paciente.nome_completo || '—'}</p>
@@ -413,7 +531,6 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
             </div>
           </div>
 
-          {/* Atendimento */}
           <div className="border rounded p-3">
             <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Atendimento</h3>
             <div className="grid grid-cols-2 gap-2">
@@ -426,21 +543,20 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintCom
             </div>
           </div>
 
-          {/* Sinais Vitais */}
           <div className="border rounded p-3">
             <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Triagem / Sinais Vitais</h3>
             <div className="grid grid-cols-4 gap-2 text-xs">
               <p><strong>PA:</strong> {data.sinaisVitais.pressao_arterial || '—'}</p>
-              <p><strong>Temp:</strong> {data.sinaisVitais.temperatura || '—'} °C</p>
               <p><strong>FC:</strong> {data.sinaisVitais.frequencia_cardiaca || '—'} bpm</p>
+              <p><strong>Temp:</strong> {data.sinaisVitais.temperatura || '—'} °C</p>
               <p><strong>SpO₂:</strong> {data.sinaisVitais.saturacao || '—'} %</p>
               <p><strong>Peso:</strong> {data.sinaisVitais.peso || '—'} kg</p>
               <p><strong>Altura:</strong> {data.sinaisVitais.altura || '—'} m</p>
               <p><strong>Glicemia:</strong> {data.sinaisVitais.glicemia || '—'}</p>
+              <p><strong>FR:</strong> {data.sinaisVitais.frequencia_respiratoria || '—'}</p>
             </div>
           </div>
 
-          {/* Evolução */}
           {data.evoluciones.length > 0 && (
             <div className="border rounded p-3">
               <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
