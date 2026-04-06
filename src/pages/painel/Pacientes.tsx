@@ -130,6 +130,11 @@ const Pacientes: React.FC = () => {
   const [filterFila, setFilterFila] = useState("all");
   const [sortBy, setSortBy] = useState("nome");
 
+  // Reset pagination when filter/sort changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filterFila, sortBy]);
+
   // Fila dialog
   const [filaDialogOpen, setFilaDialogOpen] = useState(false);
   const [filaPaciente, setFilaPaciente] = useState<(typeof pacientes)[0] | null>(null);
