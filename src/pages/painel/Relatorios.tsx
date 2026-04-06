@@ -81,8 +81,8 @@ const Relatorios: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        let qAt = supabase.from('atendimentos').select('*');
-        let qFila = supabase.from('fila_espera').select('*');
+        let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
+        let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
         let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
         if (user?.role === 'coordenador' && user.unidadeId) {
           qAt = qAt.eq('unidade_id', user.unidadeId);
@@ -99,14 +99,45 @@ const Relatorios: React.FC = () => {
         if (user?.role === 'tecnico' && user.id) {
           qTriage = qTriage.eq('tecnico_id', user.id);
         }
-        const [{ data: atData }, { data: filaData }, { data: triageData }] = await Promise.all([qAt, qFila, qTriage]);
+
+        let qProc = (supabase as any).from('prontuario_procedimentos')
+          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+
+        let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
+        let qSessions = supabase.from('treatment_sessions').select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type');
+        if (user?.role === 'profissional') {
+          qCycles = qCycles.eq('professional_id', user.id);
+          qSessions = qSessions.eq('professional_id', user.id);
+        }
+        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+          qCycles = qCycles.eq('unit_id', user.unidadeId);
+        }
+
+        const [
+          { data: atData },
+          { data: filaData },
+          { data: triageData },
+          { data: procData },
+          { data: cyclesData },
+          { data: sessionsData },
+          { data: nursingData },
+          { data: multiData },
+          { data: ptsDataResult },
+        ] = await Promise.all([
+          qAt,
+          qFila,
+          qTriage,
+          qProc,
+          qCycles,
+          qSessions,
+          supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
+          supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
+          supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+        ]);
+
         if (atData) setAtendimentosDB(atData);
         if (filaData) setFilaDB(filaData);
         if (triageData) setTriagensDB(triageData as TriagemDB[]);
-
-        // Load procedure stats from prontuario_procedimentos joined with prontuarios and procedimentos
-        const { data: procData } = await (supabase as any).from('prontuario_procedimentos')
-          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
         if (procData) {
           setProcedimentosDB(procData.map((r: any) => ({
             prontuario_id: r.prontuario_id,
@@ -117,27 +148,8 @@ const Relatorios: React.FC = () => {
             data: r.prontuarios?.data_atendimento || '',
           })));
         }
-
-        // Load treatment data for treatment reports
-        let qCycles = supabase.from('treatment_cycles').select('*');
-        let qSessions = supabase.from('treatment_sessions').select('*');
-        if (user?.role === 'profissional') {
-          qCycles = qCycles.eq('professional_id', user.id);
-          qSessions = qSessions.eq('professional_id', user.id);
-        }
-        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
-          qCycles = qCycles.eq('unit_id', user.unidadeId);
-        }
-        const [{ data: cyclesData }, { data: sessionsData }] = await Promise.all([qCycles, qSessions]);
         if (cyclesData) setTreatmentCycles(cyclesData);
         if (sessionsData) setTreatmentSessions(sessionsData);
-
-        // Load nursing evaluations, multiprofessional evaluations, PTS
-        const [{ data: nursingData }, { data: multiData }, { data: ptsDataResult }] = await Promise.all([
-          supabase.from('nursing_evaluations').select('*'),
-          supabase.from('multiprofessional_evaluations').select('*'),
-          supabase.from('pts').select('*'),
-        ]);
         if (nursingData) setNursingEvals(nursingData);
         if (multiData) setMultiEvals(multiData);
         if (ptsDataResult) setPtsData(ptsDataResult);
