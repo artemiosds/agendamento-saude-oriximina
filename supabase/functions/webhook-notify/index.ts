@@ -66,6 +66,11 @@ async function sendWithRetry(url: string, payload: Record<string, unknown>, retr
       if (res.ok) {
         return { ok: true, status: res.status, body };
       }
+      // Don't retry on 4xx — these are client/validation errors from the remote service
+      if (res.status >= 400 && res.status < 500) {
+        console.error(`Webhook rejected [${res.status}]: ${body}`);
+        return { ok: false, status: res.status, body };
+      }
       console.error(`Webhook attempt ${attempt}/${retries} failed [${res.status}]: ${body}`);
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS * attempt));
@@ -171,15 +176,14 @@ serve(async (req) => {
       erro: result.ok ? "" : `HTTP ${result.status}`,
     });
 
-    if (!result.ok) {
-      return new Response(
-        JSON.stringify({ error: `Webhook failed after ${MAX_RETRIES} attempts`, status: result.status }),
-        { status: 502, headers: corsHeaders }
-      );
-    }
-
+    // Always return 200 to the caller — webhook delivery is best-effort
+    // The notification_logs table already records success/failure for auditing
     return new Response(
-      JSON.stringify({ success: true, status: result.status }),
+      JSON.stringify({
+        success: result.ok,
+        status: result.status,
+        ...(result.ok ? {} : { warning: `Webhook delivery failed: ${result.body}` }),
+      }),
       { status: 200, headers: corsHeaders }
     );
   } catch (err) {
