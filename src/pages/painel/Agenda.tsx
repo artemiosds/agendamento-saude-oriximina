@@ -44,6 +44,8 @@ import {
   XCircle,
   Paperclip,
   Bell,
+  Search,
+  Pencil,
 } from "lucide-react";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
