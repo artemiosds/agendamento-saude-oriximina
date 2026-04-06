@@ -30,7 +30,7 @@ import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
-import { localDateStr, todayLocalStr } from "@/lib/utils";
+import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 
 interface BloqueioAgenda {
   id: string;
@@ -283,11 +283,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isSlotBlocked = useCallback(
     (profissionalId: string, unidadeId: string, date: string, time?: string) => {
-      const dateRef = new Date(`${date}T00:00:00`).getTime();
       return bloqueios.some((b) => {
-        const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
-        const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
-        if (dateRef < ini || dateRef > fim) return false;
+        if (date < b.dataInicio || date > b.dataFim) return false;
         const isGlobal = (!b.unidadeId || b.unidadeId === "") && (!b.profissionalId || b.profissionalId === "");
         const isUnitLevel = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === "");
         const isProfLevel = b.profissionalId === profissionalId;
@@ -303,14 +300,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getBlockingInfo = useCallback(
     (profissionalId: string, unidadeId: string, date: string) => {
-      const dateRef = new Date(`${date}T00:00:00`).getTime();
-      const b = bloqueios.find((b) => {
-        const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
-        const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
-        if (dateRef < ini || dateRef > fim) return false;
-        const isGlobal = (!b.unidadeId || b.unidadeId === "") && (!b.profissionalId || b.profissionalId === "");
-        const isUnitLevel = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === "");
-        const isProfLevel = b.profissionalId === profissionalId;
+      const b = bloqueios.find((bloqueio) => {
+        if (date < bloqueio.dataInicio || date > bloqueio.dataFim) return false;
+        const isGlobal = (!bloqueio.unidadeId || bloqueio.unidadeId === "") && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+        const isUnitLevel = bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+        const isProfLevel = bloqueio.profissionalId === profissionalId;
         return isGlobal || isUnitLevel || isProfLevel;
       });
       return b ? { blocked: true, type: b.tipo, label: b.titulo } : { blocked: false };
@@ -1450,29 +1444,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (profissionalId: string, unidadeId: string): string[] => {
       const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
       if (disps.length === 0) return [];
+
       const dates: string[] = [];
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayStr = todayLocalStr();
+
       for (const disp of disps) {
-        const start = new Date(`${disp.dataInicio}T00:00:00`);
-        const end = new Date(`${disp.dataFim}T00:00:00`);
-        const current = new Date(Math.max(start.getTime(), today.getTime()));
-        while (current <= end) {
-          const dayOfWeek = current.getDay();
+        let currentDate = disp.dataInicio > todayStr ? disp.dataInicio : todayStr;
+        while (currentDate <= disp.dataFim) {
+          const dayOfWeek = isoDayOfWeek(currentDate);
           if (disp.diasSemana.includes(dayOfWeek)) {
-            const dateStr = localDateStr(current);
-            const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+            const key = `${profissionalId}|${unidadeId}|${currentDate}`;
             const dayCount = appointmentCountsByKey.get(key) || 0;
-            if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
-              if (!dates.includes(dateStr)) dates.push(dateStr);
+            if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
+              if (!dates.includes(currentDate)) dates.push(currentDate);
             }
           }
-          current.setDate(current.getDate() + 1);
+          currentDate = addDaysToDateStr(currentDate, 1);
         }
       }
+
       return dates.sort();
     },
-    [disponibilidades, appointmentCountsByKey, isSlotBlocked],
+    [addDaysToDateStr, appointmentCountsByKey, disponibilidades, isSlotBlocked],
   );
 
   const appointmentsByDateProfUnit = useMemo(() => {
@@ -1490,8 +1483,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const getAvailableSlots = useCallback(
     (profissionalId: string, unidadeId: string, date: string, isPublic = false): string[] => {
-      const dateObj = new Date(`${date}T00:00:00`);
-      const dayOfWeek = dateObj.getDay();
+      const todayStr = todayLocalStr();
+      if (date < todayStr) return [];
+
+      const dayOfWeek = isoDayOfWeek(date);
       const disp = disponibilidades.find(
         (d) =>
           d.profissionalId === profissionalId &&
@@ -1501,6 +1496,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           date <= d.dataFim,
       );
       if (!disp) return [];
+
       const slots: string[] = [];
       const startHour = parseInt(disp.horaInicio.split(":")[0]);
       const startMin = parseInt(disp.horaInicio.split(":")[1] || "0");
@@ -1509,6 +1505,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const key = `${profissionalId}|${unidadeId}|${date}`;
       const dayAppointments = appointmentsByDateProfUnit.get(key) || [];
       if (dayAppointments.length >= disp.vagasPorDia) return [];
+
       const hourCounts = new Map<string, number>();
       const slotCounts = new Map<string, number>();
       for (const a of dayAppointments) {
@@ -1516,11 +1513,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
         slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
       }
+
       const prof = funcionarios.find((f) => f.id === profissionalId);
       const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
-      const agora = new Date();
-      const ehHoje = date === todayLocalStr();
-      const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
+      const ehHoje = date === todayStr;
+      const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
+
       let h = startHour;
       let m = startMin;
       while (h < endHour || (h === endHour && m < endMin)) {
@@ -1533,6 +1531,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           continue;
         }
+
         const hourStr = `${String(h).padStart(2, "0")}:`;
         const hourCount = hourCounts.get(hourStr) || 0;
         const slotCount = slotCounts.get(timeStr) || 0;
@@ -1540,16 +1539,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!blocked && hourCount < disp.vagasPorHora) {
           if (isPublic) {
             if (slotCount === 0) slots.push(timeStr);
-          } else {
-            if (slotCount < disp.vagasPorHora) slots.push(timeStr);
+          } else if (slotCount < disp.vagasPorHora) {
+            slots.push(timeStr);
           }
         }
+
         m += intervalMinutes;
         while (m >= 60) {
           m -= 60;
           h++;
         }
       }
+
       return slots;
     },
     [disponibilidades, appointmentsByDateProfUnit, funcionarios, isSlotBlocked],
@@ -1569,42 +1570,38 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const map: Record<string, any> = {};
       const disps = disponibilidades.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
       if (disps.length === 0) return map;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+
+      let currentDate = todayLocalStr();
       for (let i = 0; i < 90; i++) {
-        const current = new Date(today);
-        current.setDate(current.getDate() + i);
-        const dateStr = localDateStr(current);
-        const dayOfWeek = current.getDay();
+        const dayOfWeek = isoDayOfWeek(currentDate);
         const hasDisp = disps.some(
-          (d) => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim,
+          (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
         );
-        if (!hasDisp) continue;
-        const blockInfo = getBlockingInfo(profissionalId, unidadeId, dateStr);
-        if (blockInfo.blocked) {
-          const isHoliday = blockInfo.type === "feriado";
-          map[dateStr] = {
-            dateStr,
-            status: isHoliday ? "holiday" : "blocked",
-            label: blockInfo.label || (isHoliday ? "Feriado" : "Bloqueado"),
-          };
-          continue;
-        }
-        const slots = getAvailableSlots(profissionalId, unidadeId, dateStr, isPublic);
-        if (slots.length === 0) {
-          const disp = disps.find(
-            (d) => d.diasSemana.includes(dayOfWeek) && dateStr >= d.dataInicio && dateStr <= d.dataFim,
-          );
-          if (disp) {
-            const key = `${profissionalId}|${unidadeId}|${dateStr}`;
-            const dayCount = appointmentCountsByKey.get(key) || 0;
-            if (dayCount > 0) map[dateStr] = { dateStr, status: "full", label: "Lotado � sem vagas restantes" };
+        if (hasDisp) {
+          const blockInfo = getBlockingInfo(profissionalId, unidadeId, currentDate);
+          if (blockInfo.blocked) {
+            const isHoliday = blockInfo.type === "feriado";
+            map[currentDate] = {
+              dateStr: currentDate,
+              status: isHoliday ? "holiday" : "blocked",
+              label: blockInfo.label || (isHoliday ? "Feriado" : "Bloqueado"),
+            };
+          } else {
+            const slots = getAvailableSlots(profissionalId, unidadeId, currentDate, isPublic);
+            if (slots.length === 0) {
+              const key = `${profissionalId}|${unidadeId}|${currentDate}`;
+              const dayCount = appointmentCountsByKey.get(key) || 0;
+              if (dayCount > 0) {
+                map[currentDate] = { dateStr: currentDate, status: "full", label: "Lotado — sem vagas restantes" };
+              }
+            }
           }
         }
+        currentDate = addDaysToDateStr(currentDate, 1);
       }
       return map;
     },
-    [disponibilidades, appointmentCountsByKey, getAvailableSlots, getBlockingInfo],
+    [addDaysToDateStr, appointmentCountsByKey, disponibilidades, getAvailableSlots, getBlockingInfo],
   );
 
   const getNextAvailableSlots = useCallback(

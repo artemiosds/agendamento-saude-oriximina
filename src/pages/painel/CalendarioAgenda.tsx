@@ -1,14 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn, todayLocalStr } from "@/lib/utils";
+import { cn, dateStrToUtcDate, isoDayOfWeek, localDateStr, todayLocalStr } from "@/lib/utils";
 
 interface DiaInfo {
-  date: string;            // YYYY-MM-DD
+  date: string;
   dayNumber: number;
   isToday: boolean;
   isSelected: boolean;
-  status: "blocked" | "full" | "almostFull" | "available" | "empty";
+  status: "blocked" | "past" | "full" | "almostFull" | "available" | "empty";
   agendamentosCount: number;
   totalVagas: number;
 }
@@ -37,30 +37,36 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   filterUnit,
   profissionais,
   getAvailableSlots,
-  getAvailableDates,
-  unidades,
 }) => {
-  const [currentMonth, setCurrentMonth] = useState(() => new Date(selectedDate));
+  const [currentMonth, setCurrentMonth] = useState(() => dateStrToUtcDate(selectedDate));
+
+  useEffect(() => {
+    setCurrentMonth(dateStrToUtcDate(selectedDate));
+  }, [selectedDate]);
 
   const daysInMonth = useMemo(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
+    const year = currentMonth.getUTCFullYear();
+    const month = currentMonth.getUTCMonth();
+    const firstDay = new Date(Date.UTC(year, month, 1, 12, 0, 0));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0, 12, 0, 0));
+
     const days: Date[] = [];
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      days.push(new Date(year, month, d));
+    for (let day = 1; day <= lastDay.getUTCDate(); day++) {
+      days.push(new Date(Date.UTC(year, month, day, 12, 0, 0)));
     }
-    const startWeekday = firstDay.getDay();
+
+    const startWeekday = firstDay.getUTCDay();
     const prevDays: Date[] = [];
     for (let i = startWeekday; i > 0; i--) {
-      prevDays.push(new Date(year, month, 1 - i));
+      prevDays.push(new Date(Date.UTC(year, month, 1 - i, 12, 0, 0)));
     }
-    const endWeekday = lastDay.getDay();
+
+    const endWeekday = lastDay.getUTCDay();
     const nextDays: Date[] = [];
     for (let i = 1; i < 7 - endWeekday; i++) {
-      nextDays.push(new Date(year, month + 1, i));
+      nextDays.push(new Date(Date.UTC(year, month + 1, i, 12, 0, 0)));
     }
+
     return [...prevDays, ...days, ...nextDays];
   }, [currentMonth]);
 
@@ -69,107 +75,111 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     const todayStr = todayLocalStr();
 
     const profissionaisFiltrados = filterProf !== "all"
-      ? profissionais.filter(p => p.id === filterProf)
-      : profissionais.filter(p => {
-          if (filterUnit !== "all" && p.unidadeId !== filterUnit) return false;
+      ? profissionais.filter((prof) => prof.id === filterProf)
+      : profissionais.filter((prof) => {
+          if (filterUnit !== "all" && prof.unidadeId !== filterUnit) return false;
           return true;
         });
 
-    for (const day of daysInMonth) {
-      const year = day.getFullYear();
-      const month = String(day.getMonth() + 1).padStart(2, "0");
-      const dayNum = String(day.getDate()).padStart(2, "0");
-      const dateStr = `${year}-${month}-${dayNum}`;
+    const matchesBlock = (bloqueio: any, profissionalId: string, unidadeId: string) => {
+      if (!bloqueio.diaInteiro) return false;
+      const isGlobal = (!bloqueio.unidadeId || bloqueio.unidadeId === "") && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+      const isUnitLevel = unidadeId && bloqueio.unidadeId === unidadeId && (!bloqueio.profissionalId || bloqueio.profissionalId === "");
+      const isProfLevel = profissionalId && bloqueio.profissionalId === profissionalId;
+      return isGlobal || isUnitLevel || isProfLevel;
+    };
 
+    for (const day of daysInMonth) {
+      const dateStr = localDateStr(day);
+      const dayOfWeek = day.getUTCDay();
       const isToday = dateStr === todayStr;
       const isSelected = dateStr === selectedDate;
+      const isPast = dateStr < todayStr;
 
-      // 1. Check global block
-      const isBlockedGlobal = bloqueios.some(b => {
-        if (!b.diaInteiro) return false;
-        return dateStr >= b.dataInicio && dateStr <= b.dataFim;
-      });
-
-      // 2. Check weekend availability using camelCase field names
-      const dayOfWeek = day.getDay();
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      let hasWeekendAvailability = true;
-      if (isWeekend) {
-        hasWeekendAvailability = profissionaisFiltrados.some(prof => {
-          return disponibilidades.some(d => {
-            const matchProf = d.profissionalId === prof.id;
-            const inRange = dateStr >= d.dataInicio && dateStr <= d.dataFim;
-            const matchDay = (d.diasSemana || []).includes(dayOfWeek);
-            return matchProf && inRange && matchDay;
-          });
-        });
-      }
-
-      const isBlocked = isBlockedGlobal || (isWeekend && !hasWeekendAvailability);
-
-      // 3. Count appointments and total slots
       let agendamentosConfirmados = 0;
       let totalVagas = 0;
+      let hasDisponibilidade = false;
+      let allBlocked = profissionaisFiltrados.length > 0;
 
       if (filterProf !== "all") {
         const prof = profissionaisFiltrados[0];
         if (prof) {
-          agendamentosConfirmados = agendamentos.filter(a => {
-            if (a.data !== dateStr) return false;
-            if (a.profissionalId !== prof.id) return false;
-            return a.status !== "cancelado" && a.status !== "falta";
-          }).length;
-
           const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
-          if (profUnit) {
+          const isBlocked = bloqueios.some((bloqueio) => {
+            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
+            return matchesBlock(bloqueio, prof.id, profUnit);
+          });
+          allBlocked = isBlocked;
+          hasDisponibilidade = disponibilidades.some((disp) => (
+            disp.profissionalId === prof.id &&
+            disp.unidadeId === profUnit &&
+            dateStr >= disp.dataInicio &&
+            dateStr <= disp.dataFim &&
+            (disp.diasSemana || []).includes(dayOfWeek)
+          ));
+
+          if (!isBlocked && profUnit) {
+            agendamentosConfirmados = agendamentos.filter((agendamento) => (
+              agendamento.data === dateStr &&
+              agendamento.profissionalId === prof.id &&
+              agendamento.status !== "cancelado" &&
+              agendamento.status !== "falta"
+            )).length;
+
             const slots = getAvailableSlots(prof.id, profUnit, dateStr);
             totalVagas = slots.length + agendamentosConfirmados;
           }
         }
       } else {
         for (const prof of profissionaisFiltrados) {
-          const profAgendamentos = agendamentos.filter(a => {
-            if (a.data !== dateStr) return false;
-            if (a.profissionalId !== prof.id) return false;
-            return a.status !== "cancelado" && a.status !== "falta";
-          }).length;
+          const profUnit = filterUnit !== "all" ? filterUnit : prof.unidadeId;
+          const isBlocked = bloqueios.some((bloqueio) => {
+            if (dateStr < bloqueio.dataInicio || dateStr > bloqueio.dataFim) return false;
+            return matchesBlock(bloqueio, prof.id, profUnit);
+          });
+          allBlocked = allBlocked && isBlocked;
+
+          const profHasDisponibilidade = disponibilidades.some((disp) => (
+            disp.profissionalId === prof.id &&
+            disp.unidadeId === profUnit &&
+            dateStr >= disp.dataInicio &&
+            dateStr <= disp.dataFim &&
+            (disp.diasSemana || []).includes(dayOfWeek)
+          ));
+          hasDisponibilidade = hasDisponibilidade || profHasDisponibilidade;
+
+          if (isBlocked || !profUnit) continue;
+
+          const profAgendamentos = agendamentos.filter((agendamento) => (
+            agendamento.data === dateStr &&
+            agendamento.profissionalId === prof.id &&
+            agendamento.status !== "cancelado" &&
+            agendamento.status !== "falta"
+          )).length;
           agendamentosConfirmados += profAgendamentos;
 
-          const profUnit = prof.unidadeId;
-          if (profUnit) {
-            const slots = getAvailableSlots(prof.id, profUnit, dateStr);
-            totalVagas += slots.length + profAgendamentos;
-          }
+          const slots = getAvailableSlots(prof.id, profUnit, dateStr);
+          totalVagas += slots.length + profAgendamentos;
         }
       }
 
       let status: DiaInfo["status"] = "empty";
-      if (isBlocked) {
+      if (isPast) {
+        status = "past";
+      } else if (allBlocked) {
         status = "blocked";
       } else if (totalVagas > 0) {
         const percent = (agendamentosConfirmados / totalVagas) * 100;
-        if (agendamentosConfirmados >= totalVagas) {
-          status = "full";
-        } else if (percent >= 70) {
-          status = "almostFull";
-        } else {
-          status = "available";
-        }
-      } else {
-        // Check if any disponibilidade covers this day (even if all slots are past/taken)
-        const hasDisp = profissionaisFiltrados.some(prof => {
-          return disponibilidades.some(d => {
-            return d.profissionalId === prof.id &&
-              dateStr >= d.dataInicio && dateStr <= d.dataFim &&
-              (d.diasSemana || []).includes(dayOfWeek);
-          });
-        });
-        status = hasDisp ? "full" : "empty";
+        if (agendamentosConfirmados >= totalVagas) status = "full";
+        else if (percent >= 70) status = "almostFull";
+        else status = "available";
+      } else if (hasDisponibilidade) {
+        status = "full";
       }
 
       map.set(dateStr, {
         date: dateStr,
-        dayNumber: day.getDate(),
+        dayNumber: day.getUTCDate(),
         isToday,
         isSelected,
         status,
@@ -180,15 +190,15 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
     return map;
   }, [
-    daysInMonth,
-    selectedDate,
     agendamentos,
     bloqueios,
+    daysInMonth,
     disponibilidades,
     filterProf,
     filterUnit,
-    profissionais,
     getAvailableSlots,
+    profissionais,
+    selectedDate,
   ]);
 
   const monthNames = [
@@ -199,23 +209,29 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
   const goToPrevMonth = () => {
     const newDate = new Date(currentMonth);
-    newDate.setMonth(newDate.getMonth() - 1);
+    newDate.setUTCMonth(newDate.getUTCMonth() - 1);
     setCurrentMonth(newDate);
   };
 
   const goToNextMonth = () => {
     const newDate = new Date(currentMonth);
-    newDate.setMonth(newDate.getMonth() + 1);
+    newDate.setUTCMonth(newDate.getUTCMonth() + 1);
     setCurrentMonth(newDate);
   };
 
   const getDotClass = (status: DiaInfo["status"]) => {
     switch (status) {
-      case "blocked": return "bg-red-500";
-      case "full": return "bg-gray-600";
-      case "almostFull": return "bg-yellow-500";
-      case "available": return "bg-green-500";
-      default: return "bg-muted-foreground/30";
+      case "past":
+      case "blocked":
+        return "bg-muted-foreground/60";
+      case "full":
+        return "bg-primary";
+      case "almostFull":
+        return "bg-warning";
+      case "available":
+        return "bg-success";
+      default:
+        return "bg-muted-foreground/30";
     }
   };
 
@@ -226,7 +242,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
           <ChevronLeft className="w-4 h-4" />
         </Button>
         <h3 className="text-base font-medium">
-          {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          {monthNames[currentMonth.getUTCMonth()]} {currentMonth.getUTCFullYear()}
         </h3>
         <Button variant="outline" size="icon" onClick={goToNextMonth}>
           <ChevronRight className="w-4 h-4" />
@@ -234,47 +250,49 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       </div>
 
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-        {weekDays.map((day, i) => (
-          <div key={i} className="py-1">{day}</div>
+        {weekDays.map((day, index) => (
+          <div key={index} className="py-1">{day}</div>
         ))}
       </div>
 
       <div className="grid grid-cols-7 gap-1">
-        {daysInMonth.map((day, idx) => {
-          const year = day.getFullYear();
-          const month = String(day.getMonth() + 1).padStart(2, "0");
-          const dayNum = String(day.getDate()).padStart(2, "0");
-          const dateStr = `${year}-${month}-${dayNum}`;
+        {daysInMonth.map((day, index) => {
+          const dateStr = localDateStr(day);
           const info = dayInfoMap.get(dateStr);
           if (!info) return null;
 
           const isCurrentMonth =
-            day.getMonth() === currentMonth.getMonth() &&
-            day.getFullYear() === currentMonth.getFullYear();
+            day.getUTCMonth() === currentMonth.getUTCMonth() &&
+            day.getUTCFullYear() === currentMonth.getUTCFullYear();
+
+          const isDisabled = info.status === "blocked" || info.status === "past";
 
           return (
             <button
-              key={idx}
-              onClick={() => onDateChange(info.date)}
+              key={index}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => !isDisabled && onDateChange(info.date)}
               className={cn(
-                "relative flex flex-col items-center justify-center py-2 rounded-md transition-colors",
-                !isCurrentMonth && "opacity-40",
-                info.isSelected && "bg-primary text-primary-foreground shadow-sm",
-                !info.isSelected && "hover:bg-muted/50"
+                'relative flex flex-col items-center justify-center py-2 rounded-md transition-colors',
+                !isCurrentMonth && 'opacity-40',
+                info.isSelected && 'bg-primary text-primary-foreground shadow-sm',
+                !info.isSelected && !isDisabled && 'hover:bg-muted/50',
+                isDisabled && 'cursor-not-allowed'
               )}
             >
               <span className="text-sm font-medium">{info.dayNumber}</span>
               {info.agendamentosCount > 0 && (
                 <span
                   className={cn(
-                    "absolute top-1 right-1 text-[10px] font-semibold",
-                    info.isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
+                    'absolute top-1 right-1 text-[10px] font-semibold',
+                    info.isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
                   )}
                 >
                   {info.agendamentosCount}
                 </span>
               )}
-              <div className={cn("w-1.5 h-1.5 rounded-full mt-1", getDotClass(info.status))} />
+              <div className={cn('w-1.5 h-1.5 rounded-full mt-1', getDotClass(info.status))} />
             </button>
           );
         })}
@@ -282,20 +300,20 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
       <div className="flex flex-wrap gap-4 justify-center text-xs text-muted-foreground pt-2 border-t">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <div className="w-2 h-2 rounded-full bg-success" />
           <span>Com vagas</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-yellow-500" />
+          <div className="w-2 h-2 rounded-full bg-warning" />
           <span>Quase cheio</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-gray-600" />
+          <div className="w-2 h-2 rounded-full bg-primary" />
           <span>Lotado</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-red-500" />
-          <span>Bloqueado</span>
+          <div className="w-2 h-2 rounded-full bg-muted-foreground/60" />
+          <span>Bloqueado / passado</span>
         </div>
       </div>
     </div>

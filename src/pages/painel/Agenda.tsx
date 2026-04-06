@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
-import { cn } from "@/lib/utils";
+import { addDaysToDateStr, cn, isoDayOfWeek, todayLocalStr } from "@/lib/utils";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,7 +57,6 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
-import { todayLocalStr } from "@/lib/utils";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -198,17 +197,11 @@ const Agenda: React.FC = () => {
   }, [agendamentos, user]);
 
   const blockedForDate = React.useMemo(() => {
-    const dateRef = new Date(`${selectedDate}T00:00:00`).getTime();
-    return bloqueios.filter((b) => {
-      const ini = new Date(`${b.dataInicio}T00:00:00`).getTime();
-      const fim = new Date(`${b.dataFim}T00:00:00`).getTime();
-      return dateRef >= ini && dateRef <= fim && b.diaInteiro;
-    });
+    return bloqueios.filter((b) => selectedDate >= b.dataInicio && selectedDate <= b.dataFim && b.diaInteiro);
   }, [selectedDate, bloqueios]);
 
   const weekendInfo = React.useMemo(() => {
-    const dateObj = new Date(`${selectedDate}T12:00:00`);
-    const dayOfWeek = dateObj.getDay();
+    const dayOfWeek = isoDayOfWeek(selectedDate);
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     if (!isWeekend) return { isWeekend: false, hasAvailability: true };
     const hasAvailability = disponibilidades.some(
@@ -282,9 +275,7 @@ const Agenda: React.FC = () => {
   }, [filtered.map((f) => f.pacienteId).join(",")]); // eslint-disable-line
 
   const changeDate = (days: number) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + days);
-    setSelectedDate(d.toISOString().split("T")[0]);
+    setSelectedDate((prev) => addDaysToDateStr(prev, days));
   };
 
   const syncToGoogleCalendar = async (ag: {
@@ -355,6 +346,10 @@ const Agenda: React.FC = () => {
     }
 
     if (!pac || !prof || !newAg.hora) return;
+    if (selectedDate < todayLocalStr()) {
+      toast.error("Não é possível agendar em data passada.");
+      return;
+    }
     if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
       if (user?.role === "recepcao") {
         toast.error("Não é possível agendar em fim de semana sem disponibilidade cadastrada.");

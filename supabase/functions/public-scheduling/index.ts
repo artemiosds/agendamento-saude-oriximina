@@ -8,6 +8,9 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+const BRAZIL_TIMEZONE = "America/Sao_Paulo";
+const todayBrazilStr = () => new Intl.DateTimeFormat("sv-SE", { timeZone: BRAZIL_TIMEZONE }).format(new Date());
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -20,26 +23,24 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     let action = url.searchParams.get("action");
-    
-    // Support action in POST body as fallback
+
     if (!action && req.method === "POST") {
       try {
         const cloned = req.clone();
         const bodyJson = await cloned.json();
         if (bodyJson?.action) action = bodyJson.action;
-      } catch { /* no body or invalid JSON */ }
+      } catch {
+      }
     }
-    
-    // Default to "data" for GET requests without action
+
     if (!action && req.method === "GET") action = "data";
 
     if (req.method === "GET" && action === "data") {
-      // Return public scheduling data with minimal fields
       const [unidadesRes, profRes, dispRes, bloqueiosRes, agendRes] = await Promise.all([
         supabase.from("unidades").select("id, nome, endereco, telefone, whatsapp, ativo").eq("ativo", true),
         supabase.from("funcionarios").select("id, nome, setor, unidade_id, sala_id, role, ativo, profissao, tempo_atendimento, pode_agendar_retorno").eq("role", "profissional").eq("ativo", true),
-        supabase.from("disponibilidades").select("*"),
-        supabase.from("bloqueios").select("*"),
+        supabase.from("disponibilidades").select("id, profissional_id, unidade_id, data_inicio, data_fim, dias_semana, hora_inicio, hora_fim, vagas_por_hora, vagas_por_dia, duracao_consulta"),
+        supabase.from("bloqueios").select("id, data_inicio, data_fim, dia_inteiro, hora_inicio, hora_fim, profissional_id, unidade_id, tipo, titulo"),
         supabase.from("agendamentos").select("id, profissional_id, unidade_id, data, hora, status").not("status", "in", "(cancelado,falta)"),
       ]);
 
@@ -58,7 +59,7 @@ serve(async (req) => {
       if (cpf) orFilters.push(`cpf.eq.${cpf}`);
       if (telefone) orFilters.push(`telefone.eq.${telefone}`);
       if (email) orFilters.push(`email.ilike.${email}`);
-      
+
       if (orFilters.length === 0) {
         return new Response(JSON.stringify({ found: false }), { headers: corsHeaders });
       }
@@ -96,6 +97,12 @@ serve(async (req) => {
       if (!ag.id || !ag.paciente_id || !ag.profissional_id || !ag.data || !ag.hora) {
         return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400, headers: corsHeaders });
       }
+
+      const todayStr = todayBrazilStr();
+      if (ag.data <= todayStr) {
+        return new Response(JSON.stringify({ error: "Online scheduling only allows future dates" }), { status: 400, headers: corsHeaders });
+      }
+
       const { error } = await supabase.from("agendamentos").insert({
         id: ag.id,
         paciente_id: ag.paciente_id,
