@@ -182,7 +182,13 @@ const FilaEspera: React.FC = () => {
   const [sortField, setSortField] = useState<"prioridade" | "tempo" | "entrada" | "solicitacao">("prioridade");
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
 
   const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
   const [absenceFilaItem, setAbsenceFilaItem] = useState<(typeof fila)[0] | null>(null);
