@@ -219,7 +219,7 @@ const Pacientes: React.FC = () => {
     }
 
     return list;
-  }, [visiblePacientes, search, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
+  }, [visiblePacientes, debouncedSearch, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
 
   const openNew = () => {
     setEditId(null);
