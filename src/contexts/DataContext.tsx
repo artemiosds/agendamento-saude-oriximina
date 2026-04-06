@@ -252,7 +252,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const logAction = useCallback(
-    async (input: {
+    (input: {
       acao: string;
       entidade: string;
       entidadeId?: string;
@@ -263,16 +263,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status?: string;
       erro?: string;
     }) => {
-      try {
-        const actor = input.user;
-        const ip = await getPublicIp();
-        const dispositivo = getDeviceInfo();
-        const detalhes = {
-          ...(input.detalhes || {}),
-          usuario_cpf: actor?.cpf || "",
-          dispositivo,
-        };
-        await supabase.from("action_logs" as any).insert({
+      const actor = input.user;
+      const dispositivo = getDeviceInfo();
+      const detalhes = {
+        ...(input.detalhes || {}),
+        usuario_cpf: actor?.cpf || "",
+        dispositivo,
+      };
+      // Fire-and-forget: don't block the UI waiting for IP + insert
+      getPublicIp().then((ip) => {
+        supabase.from("action_logs" as any).insert({
           user_id: actor?.id || "",
           user_nome: actor?.nome || "sistema",
           role: actor?.role || "sistema",
@@ -285,10 +285,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: input.status || "sucesso",
           erro: input.erro || "",
           ip,
-        } as any);
-      } catch (err) {
-        console.error("Error writing action log:", err);
-      }
+        } as any).then(null, (err: any) => console.error("Error writing action log:", err));
+      });
     },
     [],
   );
@@ -787,6 +785,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useRealtimeSync({
     table: "funcionarios",
+    debounceMs: 1000,
+    pollIntervalMs: 120000,
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
         const id = String((payload.old as any)?.id || "");
@@ -1398,15 +1398,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (data: Partial<Configuracoes>) => {
       const newConfigs = safeConfigMerge({ ...configuracoesRef.current, ...data });
       const { error } = await supabase
-        .from("configuracoes" as any)
-        .update({ config_json: newConfigs as any })
+        .from("system_config" as any)
+        .update({ configuracoes: newConfigs as any })
         .eq("id", "default");
-      if (!error) setConfiguracoes(newConfigs);
-      else
-        await supabase.from("configuracoes" as any).insert({
+      if (!error) {
+        setConfiguracoes(newConfigs);
+        invalidateCache(queryKeys.configuracoes.all);
+      } else {
+        await supabase.from("system_config" as any).insert({
           id: "default",
-          config_json: newConfigs as any,
-        });
+          configuracoes: newConfigs as any,
+        } as any);
+        setConfiguracoes(newConfigs);
+      }
     },
     [invalidateCache],
   );
