@@ -606,20 +606,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadAll();
   }, [loadAll]);
 
-  const dbUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const handler = () => {
-      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
-      dbUpdateTimerRef.current = setTimeout(() => {
-        loadAll();
-      }, 500);
-    };
-    window.addEventListener("db_update", handler);
-    return () => {
-      window.removeEventListener("db_update", handler);
-      if (dbUpdateTimerRef.current) clearTimeout(dbUpdateTimerRef.current);
-    };
-  }, [loadAll]);
+  // db_update events are kept for external consumers but no longer trigger loadAll
+  // Realtime sync + optimistic local updates handle all data synchronization
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
