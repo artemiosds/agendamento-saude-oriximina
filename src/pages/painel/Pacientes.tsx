@@ -322,14 +322,17 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        await supabase.from("pacientes").update(dbFields).eq("id", editId);
-        await refreshPacientes();
+        // Close dialog immediately (optimistic)
+        setDialogOpen(false);
+        setSaving(false);
+        supabase.from("pacientes").update(dbFields).eq("id", editId).then(() => {
+          refreshPacientes();
+        });
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
         const duplicateChecks: string[] = [];
 
-        // Check by CPF
         if (form.cpf.trim()) {
           const { data: cpfMatch } = await supabase
             .from("pacientes")
@@ -339,7 +342,6 @@ const Pacientes: React.FC = () => {
           if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
         }
 
-        // Check by CNS
         if (form.cns.trim()) {
           const { data: cnsMatch } = await supabase
             .from("pacientes")
@@ -349,7 +351,6 @@ const Pacientes: React.FC = () => {
           if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
         }
 
-        // Check by name + DOB + mother name
         if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
           const { data: nameMatch } = await supabase
             .from("pacientes")
@@ -373,12 +374,14 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
-        await supabase.from("pacientes").insert({ id, ...dbFields });
-
-        await refreshPacientes();
+        // Close dialog immediately (optimistic)
+        setDialogOpen(false);
+        setSaving(false);
+        supabase.from("pacientes").insert({ id, ...dbFields }).then(() => {
+          refreshPacientes();
+        });
         toast.success("Paciente cadastrado com sucesso!");
       }
-      setDialogOpen(false);
     } catch {
       toast.error("Erro ao salvar paciente.");
     } finally {
