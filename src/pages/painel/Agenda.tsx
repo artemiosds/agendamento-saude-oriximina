@@ -880,6 +880,56 @@ const Agenda: React.FC = () => {
     setRetornoForm({ data: "", hora: "" });
   };
 
+  // EDITAR agendamento
+  const editAvailableSlots = useMemo(() => {
+    if (!editAg?.profissionalId) return [];
+    const prof = profissionais.find((p) => p.id === editAg.profissionalId);
+    if (!prof?.unidadeId) return [];
+    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data);
+  }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots]);
+
+  const handleOpenEdit = useCallback((ag: (typeof agendamentos)[0]) => {
+    setEditAg({
+      id: ag.id,
+      tipo: ag.tipo,
+      data: ag.data,
+      hora: ag.hora,
+      profissionalId: ag.profissionalId,
+      observacoes: ag.observacoes || "",
+    });
+    setEditDialogOpen(true);
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editAg) return;
+    try {
+      const prof = profissionais.find((p) => p.id === editAg.profissionalId);
+      await updateAgendamento(editAg.id, {
+        tipo: editAg.tipo,
+        data: editAg.data,
+        hora: editAg.hora,
+        profissionalId: editAg.profissionalId,
+        profissionalNome: prof?.nome || "",
+        observacoes: editAg.observacoes,
+      } as any);
+      await logAction({
+        acao: "editar_agendamento",
+        entidade: "agendamento",
+        entidadeId: editAg.id,
+        modulo: "agenda",
+        user,
+        detalhes: { tipo: editAg.tipo, data: editAg.data, hora: editAg.hora, profissional: prof?.nome },
+      });
+      toast.success("Agendamento atualizado!");
+      setEditDialogOpen(false);
+      setEditAg(null);
+      await refreshAgendamentos();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao editar agendamento.");
+    }
+  }, [editAg, profissionais, updateAgendamento, logAction, user, refreshAgendamentos]);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
