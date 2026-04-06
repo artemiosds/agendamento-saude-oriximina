@@ -165,7 +165,7 @@ interface DataContextType {
     modulo?: string;
     status?: string;
     erro?: string;
-  }) => Promise<void>;
+  }) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
