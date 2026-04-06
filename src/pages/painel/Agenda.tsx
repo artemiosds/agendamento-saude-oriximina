@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -44,6 +44,8 @@ import {
   XCircle,
   Paperclip,
   Bell,
+  Search,
+  Pencil,
 } from "lucide-react";
 import DetalheDrawer, { Secao, Campo, StatusBadge, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import ContactActionButton from "@/components/ContactActionButton";
@@ -178,6 +180,26 @@ const Agenda: React.FC = () => {
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
+  // BUSCA na agenda
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  // EDIÇÃO de agendamento
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editAg, setEditAg] = useState<{
+    id: string;
+    tipo: string;
+    data: string;
+    hora: string;
+    profissionalId: string;
+    observacoes: string;
+  } | null>(null);
+  const canEdit = hasPermission(["master", "coordenador", "recepcao", "gestao"]);
+
   const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
@@ -232,20 +254,31 @@ const Agenda: React.FC = () => {
     return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
   }, [profissionais, filterUnit]);
 
-  const filtered = React.useMemo(() => agendamentos
-    .filter((a) => {
-      if (a.data !== selectedDate) return false;
-      if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
-      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
-      if (isProfissional && user) {
-        if (a.profissionalId !== user.id) return false;
-      }
-      if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-      return true;
-    })
-    .sort((a, b) => a.hora.localeCompare(b.hora)),
-    [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user]);
+  const filtered = useMemo(() => {
+    const base = agendamentos
+      .filter((a) => {
+        if (a.data !== selectedDate) return false;
+        if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+        if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
+        if (isProfissional && user) {
+          if (a.profissionalId !== user.id) return false;
+        }
+        if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        return true;
+      })
+      .sort((a, b) => a.hora.localeCompare(b.hora));
+
+    if (!debouncedSearch) return base;
+
+    return base.filter((a) => {
+      const pac = pacientes.find((p) => p.id === a.pacienteId);
+      const nome = a.pacienteNome.toLowerCase();
+      const cpf = pac?.cpf?.toLowerCase() || "";
+      const cns = pac?.cns?.toLowerCase() || "";
+      return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
+    });
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -847,6 +880,56 @@ const Agenda: React.FC = () => {
     setRetornoForm({ data: "", hora: "" });
   };
 
+  // EDITAR agendamento
+  const editAvailableSlots = useMemo(() => {
+    if (!editAg?.profissionalId) return [];
+    const prof = profissionais.find((p) => p.id === editAg.profissionalId);
+    if (!prof?.unidadeId) return [];
+    return getAvailableSlots(editAg.profissionalId, prof.unidadeId, editAg.data);
+  }, [editAg?.profissionalId, editAg?.data, profissionais, getAvailableSlots]);
+
+  const handleOpenEdit = useCallback((ag: (typeof agendamentos)[0]) => {
+    setEditAg({
+      id: ag.id,
+      tipo: ag.tipo,
+      data: ag.data,
+      hora: ag.hora,
+      profissionalId: ag.profissionalId,
+      observacoes: ag.observacoes || "",
+    });
+    setEditDialogOpen(true);
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editAg) return;
+    try {
+      const prof = profissionais.find((p) => p.id === editAg.profissionalId);
+      await updateAgendamento(editAg.id, {
+        tipo: editAg.tipo,
+        data: editAg.data,
+        hora: editAg.hora,
+        profissionalId: editAg.profissionalId,
+        profissionalNome: prof?.nome || "",
+        observacoes: editAg.observacoes,
+      } as any);
+      await logAction({
+        acao: "editar_agendamento",
+        entidade: "agendamento",
+        entidadeId: editAg.id,
+        modulo: "agenda",
+        user,
+        detalhes: { tipo: editAg.tipo, data: editAg.data, hora: editAg.hora, profissional: prof?.nome },
+      });
+      toast.success("Agendamento atualizado!");
+      setEditDialogOpen(false);
+      setEditAg(null);
+      await refreshAgendamentos();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao editar agendamento.");
+    }
+  }, [editAg, profissionais, updateAgendamento, logAction, user, refreshAgendamentos]);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -1163,6 +1246,16 @@ const Agenda: React.FC = () => {
                 </SelectContent>
               </Select>
             )}
+            {/* BUSCA na agenda */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar paciente, CPF, CNS..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9"
+              />
+            </div>
           </div>
 
           {/* Slot availability summary for selected professional */}
@@ -1380,6 +1473,17 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+                        {canEdit && !["cancelado", "concluido"].includes(ag.status) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => handleOpenEdit(ag)}
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
 
                         {/* NOVO: aprovação inline */}
                         {ehPendenteOnline && canAprovar && (
@@ -1700,7 +1804,89 @@ const Agenda: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Detalhe Drawer */}
+      {/* EDITAR agendamento dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) { setEditDialogOpen(false); setEditAg(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display">Editar Agendamento</DialogTitle>
+          </DialogHeader>
+          {editAg && (
+            <div className="space-y-4">
+              <div>
+                <Label>Tipo de Atendimento</Label>
+                <Select value={editAg.tipo} onValueChange={(v) => setEditAg((p) => p ? { ...p, tipo: v } : p)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                    <SelectItem value="Retorno">Retorno</SelectItem>
+                    <SelectItem value="Exame">Exame</SelectItem>
+                    <SelectItem value="Procedimento">Procedimento</SelectItem>
+                    <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                    <SelectItem value="Urgência">Urgência</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={editAg.data}
+                  min={todayLocalStr()}
+                  onChange={(e) => setEditAg((p) => p ? { ...p, data: e.target.value, hora: "" } : p)}
+                />
+              </div>
+              <div>
+                <Label>Profissional</Label>
+                <Select value={editAg.profissionalId} onValueChange={(v) => setEditAg((p) => p ? { ...p, profissionalId: v, hora: "" } : p)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {profissionais.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Horário</Label>
+                {editAvailableSlots.length === 0 ? (
+                  <p className="text-sm text-warning mt-1">Sem horários disponíveis para esta data/profissional.</p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 mt-2">
+                    {editAvailableSlots.map((slot) => (
+                      <Button
+                        key={slot}
+                        variant={editAg.hora === slot ? "default" : "outline"}
+                        className={editAg.hora === slot ? "gradient-primary text-primary-foreground" : ""}
+                        size="sm"
+                        onClick={() => setEditAg((p) => p ? { ...p, hora: slot } : p)}
+                      >
+                        {slot}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={editAg.observacoes}
+                  onChange={(e) => setEditAg((p) => p ? { ...p, observacoes: e.target.value } : p)}
+                  rows={2}
+                />
+              </div>
+              <Button
+                onClick={handleSaveEdit}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!editAg.hora || !editAg.profissionalId}
+              >
+                Salvar Alterações
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
         {detalheAg &&
           (() => {
