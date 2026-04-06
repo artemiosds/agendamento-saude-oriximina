@@ -278,13 +278,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [],
   );
 
-  const emitDbUpdate = useCallback(() => {
-    try {
-      window.dispatchEvent(new Event("db_update"));
-    } catch {
-      /* SSR */
-    }
-  }, []);
+  // emitDbUpdate removed — realtime sync + optimistic updates handle all synchronization
 
   const isSlotBlocked = useCallback(
     (profissionalId: string, unidadeId: string, date: string, time?: string) => {
