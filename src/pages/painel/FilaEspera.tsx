@@ -182,7 +182,13 @@ const FilaEspera: React.FC = () => {
   const [sortField, setSortField] = useState<"prioridade" | "tempo" | "entrada" | "solicitacao">("prioridade");
   const [reservas, setReservas] = useState<Record<string, ReservaInfo>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
 
   const [absenceModalOpen, setAbsenceModalOpen] = useState(false);
   const [absenceFilaItem, setAbsenceFilaItem] = useState<(typeof fila)[0] | null>(null);
@@ -323,7 +329,7 @@ const FilaEspera: React.FC = () => {
       crianca: 5,
       normal: 6,
     };
-    const query = searchQuery.toLowerCase().trim();
+    const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
       .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
@@ -354,7 +360,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, sortField, now, searchQuery]);
+  }, [fila, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;

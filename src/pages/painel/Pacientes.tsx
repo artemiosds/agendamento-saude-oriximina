@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -101,7 +101,13 @@ const Pacientes: React.FC = () => {
   const profissionais = profissionaisVisiveis;
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
   const [importOpen, setImportOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<PacienteFormData>(emptyPacienteForm);
@@ -163,12 +169,13 @@ const Pacientes: React.FC = () => {
   }, [pacientes, agendamentos, isProfissional, user]);
 
   const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     let list = visiblePacientes.filter(
       (p) =>
-        p.nome.toLowerCase().includes(search.toLowerCase()) ||
-        p.cpf.includes(search) ||
-        p.telefone.includes(search) ||
-        (p.cns && p.cns.includes(search)),
+        p.nome.toLowerCase().includes(q) ||
+        p.cpf.includes(debouncedSearch) ||
+        p.telefone.includes(debouncedSearch) ||
+        (p.cns && p.cns.includes(debouncedSearch)),
     );
 
     // Filter by fila
@@ -212,7 +219,7 @@ const Pacientes: React.FC = () => {
     }
 
     return list;
-  }, [visiblePacientes, search, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
+  }, [visiblePacientes, debouncedSearch, filterFila, sortBy, pacientesNaFila, filaEntryMap]);
 
   const openNew = () => {
     setEditId(null);
@@ -315,14 +322,17 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        await supabase.from("pacientes").update(dbFields).eq("id", editId);
-        await refreshPacientes();
+        // Close dialog immediately (optimistic)
+        setDialogOpen(false);
+        setSaving(false);
+        supabase.from("pacientes").update(dbFields).eq("id", editId).then(() => {
+          refreshPacientes();
+        });
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
         const duplicateChecks: string[] = [];
 
-        // Check by CPF
         if (form.cpf.trim()) {
           const { data: cpfMatch } = await supabase
             .from("pacientes")
@@ -332,7 +342,6 @@ const Pacientes: React.FC = () => {
           if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
         }
 
-        // Check by CNS
         if (form.cns.trim()) {
           const { data: cnsMatch } = await supabase
             .from("pacientes")
@@ -342,7 +351,6 @@ const Pacientes: React.FC = () => {
           if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
         }
 
-        // Check by name + DOB + mother name
         if (form.nome.trim() && form.dataNascimento && form.nomeMae.trim()) {
           const { data: nameMatch } = await supabase
             .from("pacientes")
@@ -366,12 +374,14 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
-        await supabase.from("pacientes").insert({ id, ...dbFields });
-
-        await refreshPacientes();
+        // Close dialog immediately (optimistic)
+        setDialogOpen(false);
+        setSaving(false);
+        supabase.from("pacientes").insert({ id, ...dbFields }).then(() => {
+          refreshPacientes();
+        });
         toast.success("Paciente cadastrado com sucesso!");
       }
-      setDialogOpen(false);
     } catch {
       toast.error("Erro ao salvar paciente.");
     } finally {

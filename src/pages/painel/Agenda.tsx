@@ -394,7 +394,20 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    await addAgendamento(agData);
+    addAgendamento(agData);
+    // Close dialog immediately (optimistic)
+    setDialogOpen(false);
+    setNewAg({
+      pacienteId: "",
+      profissionalId: filterProf !== "all" ? filterProf : "",
+      salaId: "",
+      hora: "",
+      tipo: "Consulta",
+      obs: "",
+    });
+    toast.success("Agendamento criado!");
+
+    // Background tasks (portal, gcal, notification)
     ensurePortalAccess({
       pacienteId: pac.id,
       contexto: "agendamento",
@@ -409,14 +422,12 @@ const Agenda: React.FC = () => {
           toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
       })
       .catch(() => {});
-    const googleEventId = await syncToGoogleCalendar({ ...agData, pacienteId: pac.id });
-    if (googleEventId) {
-      await updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
-      toast.success("Agendamento criado e sincronizado com Google Agenda!");
-    } else {
-      toast.success("Agendamento criado!");
-    }
-    await notify({
+    syncToGoogleCalendar({ ...agData, pacienteId: pac.id }).then((googleEventId) => {
+      if (googleEventId) {
+        updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
+      }
+    });
+    notify({
       evento: "novo_agendamento",
       paciente_nome: pac.nome,
       telefone: pac.telefone,
@@ -429,15 +440,6 @@ const Agenda: React.FC = () => {
       status_agendamento: "confirmado",
       id_agendamento: agId,
       observacoes: newAg.obs,
-    });
-    setDialogOpen(false);
-    setNewAg({
-      pacienteId: "",
-      profissionalId: filterProf !== "all" ? filterProf : "",
-      salaId: "",
-      hora: "",
-      tipo: "Consulta",
-      obs: "",
     });
   };
 
