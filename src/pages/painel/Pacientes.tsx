@@ -103,9 +103,14 @@ const Pacientes: React.FC = () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(search), 300);
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search);
+      setVisibleCount(PAGE_SIZE); // reset pagination on search
+    }, 300);
     return () => window.clearTimeout(t);
   }, [search]);
   const [importOpen, setImportOpen] = useState(false);
