@@ -254,20 +254,31 @@ const Agenda: React.FC = () => {
     return profissionais.filter((p) => p.unidadeId === filterUnit || !p.unidadeId);
   }, [profissionais, filterUnit]);
 
-  const filtered = React.useMemo(() => agendamentos
-    .filter((a) => {
-      if (a.data !== selectedDate) return false;
-      if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
-      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
-      if (isProfissional && user) {
-        if (a.profissionalId !== user.id) return false;
-      }
-      if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-      return true;
-    })
-    .sort((a, b) => a.hora.localeCompare(b.hora)),
-    [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user]);
+  const filtered = useMemo(() => {
+    const base = agendamentos
+      .filter((a) => {
+        if (a.data !== selectedDate) return false;
+        if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+        if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
+        if (isProfissional && user) {
+          if (a.profissionalId !== user.id) return false;
+        }
+        if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        return true;
+      })
+      .sort((a, b) => a.hora.localeCompare(b.hora));
+
+    if (!debouncedSearch) return base;
+
+    return base.filter((a) => {
+      const pac = pacientes.find((p) => p.id === a.pacienteId);
+      const nome = a.pacienteNome.toLowerCase();
+      const cpf = pac?.cpf?.toLowerCase() || "";
+      const cns = pac?.cns?.toLowerCase() || "";
+      return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
+    });
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
