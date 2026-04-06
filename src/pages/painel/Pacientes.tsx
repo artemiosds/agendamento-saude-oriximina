@@ -835,7 +835,7 @@ const Pacientes: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filtered.map((p) => {
+        {filtered.slice(0, visibleCount).map((p) => {
           const naFila = pacientesNaFila.has(p.id);
           const filaEntry = filaEntryMap.get(p.id);
 
@@ -975,6 +975,16 @@ const Pacientes: React.FC = () => {
           );
         })}
       </div>
+      {visibleCount < filtered.length && (
+        <div className="flex justify-center pt-2">
+          <Button
+            variant="outline"
+            onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+          >
+            Carregar mais ({filtered.length - visibleCount} restantes)
+          </Button>
+        </div>
+      )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
 
       {/* Detalhe Drawer - Paciente */}
