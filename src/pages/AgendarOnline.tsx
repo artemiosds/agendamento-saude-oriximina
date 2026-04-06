@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
-import { localDateStr, todayLocalStr } from '@/lib/utils';
+import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from '@/lib/utils';
 
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
@@ -95,11 +95,8 @@ const AgendarOnline: React.FC = () => {
 
   // Availability calculation (replicated from DataContext for public use)
   const isSlotBlocked = useCallback((profissionalId: string, unidadeId: string, date: string, time?: string) => {
-    const dateRef = new Date(`${date}T00:00:00`).getTime();
     return bloqueios.some(b => {
-      const ini = new Date(`${b.data_inicio}T00:00:00`).getTime();
-      const fim = new Date(`${b.data_fim}T00:00:00`).getTime();
-      if (dateRef < ini || dateRef > fim) return false;
+      if (date < b.data_inicio || date > b.data_fim) return false;
       const isGlobal = (!b.unidade_id || b.unidade_id === '') && (!b.profissional_id || b.profissional_id === '');
       const isUnitLevel = b.unidade_id === unidadeId && (!b.profissional_id || b.profissional_id === '');
       const isProfLevel = b.profissional_id === profissionalId;
@@ -118,6 +115,7 @@ const AgendarOnline: React.FC = () => {
         const key = `${a.profissional_id}|${a.unidade_id}|${a.data}`;
         map.set(key, (map.get(key) || 0) + 1);
       }
+      currentDate = addDaysToDateStr(currentDate, 1);
     }
     return map;
   }, [agendamentos]);
@@ -135,8 +133,10 @@ const AgendarOnline: React.FC = () => {
   }, [agendamentos]);
 
   const getAvailableSlots = useCallback((profissionalId: string, unidadeId: string, date: string): string[] => {
-    const dateObj = new Date(`${date}T00:00:00`);
-    const dayOfWeek = dateObj.getDay();
+    const todayStr = todayLocalStr();
+    if (date < todayStr) return [];
+
+    const dayOfWeek = isoDayOfWeek(date);
     const disp = disponibilidades.find(d =>
       d.profissional_id === profissionalId && d.unidade_id === unidadeId &&
       d.dias_semana.includes(dayOfWeek) && date >= d.data_inicio && date <= d.data_fim
@@ -163,14 +163,17 @@ const AgendarOnline: React.FC = () => {
 
     const prof = profissionais.find(f => f.id === profissionalId);
     const intervalMinutes = Math.max(15, prof?.tempo_atendimento || 30);
-    const agora = new Date();
-    const ehHoje = date === todayLocalStr();
-    const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
+    const ehHoje = date === todayStr;
+    const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
 
     let h = startHour, m = startMin;
     while (h < endHour || (h === endHour && m < endMin)) {
       const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      if (ehHoje && h * 60 + m <= limiteMinutos) { m += intervalMinutes; while (m >= 60) { m -= 60; h++; } continue; }
+      if (ehHoje && h * 60 + m <= limiteMinutos) {
+        m += intervalMinutes;
+        while (m >= 60) { m -= 60; h++; }
+        continue;
+      }
       const hourStr = `${String(h).padStart(2, '0')}:`;
       const hourCount = hourCounts.get(hourStr) || 0;
       const slotCount = slotCounts.get(timeStr) || 0;
@@ -185,34 +188,31 @@ const AgendarOnline: React.FC = () => {
   const getAvailableDates = useCallback((profissionalId: string, unidadeId: string): string[] => {
     const disps = disponibilidades.filter(d => d.profissional_id === profissionalId && d.unidade_id === unidadeId);
     if (disps.length === 0) return [];
+
     const dates: string[] = [];
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayStr = todayLocalStr();
+
     for (const disp of disps) {
-      const start = new Date(`${disp.data_inicio}T00:00:00`);
-      const end = new Date(`${disp.data_fim}T00:00:00`);
-      const current = new Date(Math.max(start.getTime(), today.getTime()));
-      while (current <= end) {
-        const dayOfWeek = current.getDay();
+      let currentDate = disp.data_inicio > todayStr ? disp.data_inicio : todayStr;
+      while (currentDate <= disp.data_fim) {
+        const dayOfWeek = isoDayOfWeek(currentDate);
         if (disp.dias_semana.includes(dayOfWeek)) {
-          const dateStr = localDateStr(current);
-          const key = `${profissionalId}|${unidadeId}|${dateStr}`;
+          const key = `${profissionalId}|${unidadeId}|${currentDate}`;
           const dayCount = appointmentCountsByKey.get(key) || 0;
-          if (dayCount < disp.vagas_por_dia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
-            if (!dates.includes(dateStr)) dates.push(dateStr);
+          if (dayCount < disp.vagas_por_dia && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
+            if (!dates.includes(currentDate)) dates.push(currentDate);
           }
         }
-        current.setDate(current.getDate() + 1);
+        currentDate = addDaysToDateStr(currentDate, 1);
       }
     }
+
     return dates.sort().filter(d => getAvailableSlots(profissionalId, unidadeId, d).length > 0);
   }, [disponibilidades, appointmentCountsByKey, isSlotBlocked, getAvailableSlots]);
 
   const getBlockingInfo = useCallback((profissionalId: string, unidadeId: string, date: string) => {
-    const dateRef = new Date(`${date}T00:00:00`).getTime();
     for (const b of bloqueios) {
-      const ini = new Date(`${b.data_inicio}T00:00:00`).getTime();
-      const fim = new Date(`${b.data_fim}T00:00:00`).getTime();
-      if (dateRef < ini || dateRef > fim) continue;
+      if (date < b.data_inicio || date > b.data_fim) continue;
       const isGlobal = (!b.unidade_id || b.unidade_id === '') && (!b.profissional_id || b.profissional_id === '');
       const isUnitLevel = b.unidade_id === unidadeId && (!b.profissional_id || b.profissional_id === '');
       const isProfLevel = b.profissional_id === profissionalId;
@@ -238,10 +238,7 @@ const AgendarOnline: React.FC = () => {
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
     const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
-    const amanha = new Date();
-    amanha.setDate(amanha.getDate() + 1);
-    amanha.setHours(0, 0, 0, 0);
-    const amanhaStr = localDateStr(amanha);
+    const amanhaStr = addDaysToDateStr(todayLocalStr(), 1);
     return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
@@ -250,11 +247,10 @@ const AgendarOnline: React.FC = () => {
     const map: Record<string, DayInfo> = {};
     const disps = disponibilidades.filter(d => d.profissional_id === form.profissionalId && d.unidade_id === form.unidadeId);
     if (disps.length === 0) return map;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let currentDate = todayLocalStr();
     for (let i = 0; i < 90; i++) {
-      const current = new Date(today); current.setDate(current.getDate() + i);
-      const dateStr = localDateStr(current);
-      const dayOfWeek = current.getDay();
+      const dateStr = currentDate;
+      const dayOfWeek = isoDayOfWeek(dateStr);
       const hasDisp = disps.some(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
       if (!hasDisp) continue;
       const blockInfo = getBlockingInfo(form.profissionalId, form.unidadeId, dateStr);
