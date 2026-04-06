@@ -180,6 +180,26 @@ const Agenda: React.FC = () => {
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
+  // BUSCA na agenda
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  // EDIÇÃO de agendamento
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editAg, setEditAg] = useState<{
+    id: string;
+    tipo: string;
+    data: string;
+    hora: string;
+    profissionalId: string;
+    observacoes: string;
+  } | null>(null);
+  const canEdit = hasPermission(["master", "coordenador", "recepcao", "gestao"]);
+
   const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
