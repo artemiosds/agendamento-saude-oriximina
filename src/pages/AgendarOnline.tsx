@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { validatePacienteFields } from '@/lib/validation';
 import { supabase } from '@/integrations/supabase/client';
 import type { DayInfo } from '@/components/CalendarioDisponibilidade';
+import { localDateStr, todayLocalStr } from '@/lib/utils';
 
 const applyDateMask = (value: string): string => {
   const digits = value.replace(/\D/g, '');
@@ -163,7 +164,7 @@ const AgendarOnline: React.FC = () => {
     const prof = profissionais.find(f => f.id === profissionalId);
     const intervalMinutes = Math.max(15, prof?.tempo_atendimento || 30);
     const agora = new Date();
-    const ehHoje = date === agora.toISOString().split('T')[0];
+    const ehHoje = date === todayLocalStr();
     const limiteMinutos = ehHoje ? agora.getHours() * 60 + agora.getMinutes() + 30 : -1;
 
     let h = startHour, m = startMin;
@@ -193,7 +194,7 @@ const AgendarOnline: React.FC = () => {
       while (current <= end) {
         const dayOfWeek = current.getDay();
         if (disp.dias_semana.includes(dayOfWeek)) {
-          const dateStr = current.toISOString().split('T')[0];
+          const dateStr = localDateStr(current);
           const key = `${profissionalId}|${unidadeId}|${dateStr}`;
           const dayCount = appointmentCountsByKey.get(key) || 0;
           if (dayCount < disp.vagas_por_dia && !isSlotBlocked(profissionalId, unidadeId, dateStr)) {
@@ -237,8 +238,10 @@ const AgendarOnline: React.FC = () => {
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
     const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
-    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(0, 0, 0, 0);
-    const amanhaStr = amanha.toISOString().split('T')[0];
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(0, 0, 0, 0);
+    const amanhaStr = localDateStr(amanha);
     return allDates.filter(d => d >= amanhaStr);
   }, [form.profissionalId, form.unidadeId, getAvailableDates]);
 
@@ -250,7 +253,7 @@ const AgendarOnline: React.FC = () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     for (let i = 0; i < 90; i++) {
       const current = new Date(today); current.setDate(current.getDate() + i);
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = localDateStr(current);
       const dayOfWeek = current.getDay();
       const hasDisp = disps.some(d => d.dias_semana.includes(dayOfWeek) && dateStr >= d.data_inicio && dateStr <= d.data_fim);
       if (!hasDisp) continue;
