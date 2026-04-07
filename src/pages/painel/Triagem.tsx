@@ -76,6 +76,7 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
 const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user } = useAuth();
+  const resolvePaciente = usePacienteNomeResolver();
 
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");

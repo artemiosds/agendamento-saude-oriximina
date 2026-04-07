@@ -156,6 +156,7 @@ const Agenda: React.FC = () => {
   const { handleVagaLiberada } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
+  const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
