@@ -410,6 +410,25 @@ const AgendarOnline: React.FC = () => {
     );
   }
 
+  if (!onlineConfig.habilitado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="shadow-elevated border-0 max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-warning" />
+            </div>
+            <h2 className="text-xl font-bold font-display text-foreground mb-2">Agendamento Online Indisponível</h2>
+            <p className="text-muted-foreground mb-6">
+              O agendamento online está temporariamente desabilitado. Entre em contato com a unidade de saúde para agendar presencialmente.
+            </p>
+            <Link to="/"><Button variant="outline" className="w-full">Voltar ao Início</Button></Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (done) {
     const prof = profissionais.find(f => f.id === form.profissionalId);
     const unidade = unidades.find(u => u.id === form.unidadeId);
