@@ -2241,6 +2241,44 @@ const Agenda: React.FC = () => {
             );
           })()}
       </DetalheDrawer>
+
+      {/* Dialog de Cancelamento com Motivo */}
+      <Dialog open={!!cancelTarget} onOpenChange={(o) => { if (!o) { setCancelTarget(null); setCancelMotivo(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Agendamento</DialogTitle>
+          </DialogHeader>
+          {cancelTarget && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p><strong>{cancelTarget.pacienteNome}</strong></p>
+                <p className="text-muted-foreground">{cancelTarget.data} às {cancelTarget.hora} — {cancelTarget.profissionalNome}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Motivo do cancelamento *</Label>
+                <Select value={cancelMotivo} onValueChange={setCancelMotivo}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+                  <SelectContent>
+                    {cancelConfig.motivos.map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => { setCancelTarget(null); setCancelMotivo(''); }}>Voltar</Button>
+                <Button
+                  className="flex-1 bg-destructive text-destructive-foreground"
+                  disabled={!cancelMotivo || cancelLoading}
+                  onClick={handleCancelarAgendamento}
+                >
+                  {cancelLoading ? "Cancelando..." : "Confirmar Cancelamento"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
