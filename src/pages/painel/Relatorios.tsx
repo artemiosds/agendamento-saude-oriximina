@@ -74,6 +74,7 @@ const Relatorios: React.FC = () => {
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
+  const [mapaProf, setMapaProf] = useState('all');
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -812,23 +813,29 @@ ${dataRows}
     if (!mapaDateFrom || !mapaDateTo) return;
     setMapaLoading(true);
     try {
-      const { data: atendimentos } = await supabase
-        .from('atendimentos')
-        .select('paciente_id, paciente_nome, profissional_nome, data, setor, procedimento, status')
+      let query = supabase
+        .from('agendamentos')
+        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id')
         .eq('status', 'concluido')
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
         .order('data', { ascending: true })
         .limit(2000);
 
-      if (!atendimentos || atendimentos.length === 0) {
+      if (mapaProf !== 'all') {
+        query = query.eq('profissional_id', mapaProf);
+      }
+
+      const { data: agend } = await query;
+
+      if (!agend || agend.length === 0) {
         setMapaData([]);
         setMapaGenerated(true);
         setMapaLoading(false);
         return;
       }
 
-      const pacienteIds = [...new Set(atendimentos.map(a => a.paciente_id))];
+      const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
         .select('id, cns, telefone, cid')
@@ -836,18 +843,23 @@ ${dataRows}
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
 
-      const rows = atendimentos.map((a, i) => {
+      // Get profissional specialties from funcionarios
+      const profIds = [...new Set(agend.map(a => a.profissional_id).filter(Boolean))];
+      const profMap = new Map(funcionarios.filter(f => profIds.includes(f.id)).map(f => [f.id, f]));
+
+      const rows = agend.map((a, i) => {
         const pac = pacMap.get(a.paciente_id);
+        const prof = profMap.get(a.profissional_id);
         return {
           num: i + 1,
-          paciente_nome: a.paciente_nome,
+          paciente_nome: a.paciente_nome || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
           data: a.data,
-          profissional_nome: a.profissional_nome,
-          especialidade: a.setor || '',
+          profissional_nome: a.profissional_nome || '',
+          especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
           cid: pac?.cid || '',
-          tipo: a.procedimento || '',
+          tipo: a.tipo || '',
         };
       });
 
@@ -858,7 +870,7 @@ ${dataRows}
     } finally {
       setMapaLoading(false);
     }
-  }, [mapaDateFrom, mapaDateTo]);
+  }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
 
   const formatDateBR = (d: string) => {
     if (!d) return '';
@@ -1967,6 +1979,16 @@ ${dataRows}
                 <div>
                   <Label className="text-xs">Data Final *</Label>
                   <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <div>
+                  <Label className="text-xs">Profissional</Label>
+                  <Select value={mapaProf} onValueChange={v => { setMapaProf(v); setMapaGenerated(false); }}>
+                    <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
