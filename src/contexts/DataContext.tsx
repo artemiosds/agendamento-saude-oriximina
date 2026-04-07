@@ -966,6 +966,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
         invalidateCache(queryKeys.pacientes.all);
+        // Also invalidate agendamentos/fila so components using resolvePaciente re-render
+        invalidateCache(queryKeys.agendamentos.all);
+        invalidateCache(queryKeys.fila.all);
       } else console.error("Error updating paciente:", error);
     },
     [invalidateCache],
