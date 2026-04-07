@@ -32,27 +32,55 @@ serve(async (req) => {
         );
       }
 
-      // Check if email already exists in auth.users
-      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-      if (!listError && existingUsers?.users) {
-        const emailExists = existingUsers.users.some(u => u.email === email);
-        if (emailExists) {
-          return new Response(
-            JSON.stringify({ error: "Este e-mail já está registrado no sistema." }),
-            { status: 200, headers: corsHeaders }
-          );
-        }
+      if (typeof senha !== 'string' || senha.length < 6) {
+        return new Response(
+          JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres." }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // Check if email already exists in funcionarios table
+      const { data: existingFunc } = await supabaseAdmin
+        .from("funcionarios")
+        .select("id")
+        .eq("email", email.trim().toLowerCase());
+
+      if (existingFunc && existingFunc.length > 0) {
+        return new Response(
+          JSON.stringify({ error: "Este e-mail já está registrado no sistema." }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      // Check if usuario already exists
+      const { data: existingUser } = await supabaseAdmin
+        .from("funcionarios")
+        .select("id")
+        .eq("usuario", usuario.trim());
+
+      if (existingUser && existingUser.length > 0) {
+        return new Response(
+          JSON.stringify({ error: "Este nome de usuário já está em uso." }),
+          { status: 200, headers: corsHeaders }
+        );
       }
 
       // Create auth user
       const { data: authUser, error: authErr } =
         await supabaseAdmin.auth.admin.createUser({
-          email,
+          email: email.trim().toLowerCase(),
           password: senha,
           email_confirm: true,
         });
 
       if (authErr) {
+        // If user already exists in auth but not in funcionarios, try to find and link
+        if (authErr.message?.includes("already been registered")) {
+          return new Response(
+            JSON.stringify({ error: "Este e-mail já está registrado na autenticação. Contate o administrador." }),
+            { status: 200, headers: corsHeaders }
+          );
+        }
         return new Response(
           JSON.stringify({ error: "Erro ao criar acesso: " + authErr.message }),
           { status: 200, headers: corsHeaders }
@@ -65,8 +93,8 @@ serve(async (req) => {
         .insert({
           auth_user_id: authUser.user.id,
           nome,
-          usuario,
-          email,
+          usuario: usuario.trim(),
+          email: email.trim().toLowerCase(),
           setor: setor || "",
           unidade_id: unidade_id || "",
           sala_id: sala_id || "",
@@ -101,47 +129,146 @@ serve(async (req) => {
     }
 
     if (action === "update") {
-      const { id, senha, ...fields } = body;
-      delete fields.action;
+      const { id, senha } = body;
+
+      if (!id) {
+        return new Response(
+          JSON.stringify({ error: "ID do funcionário é obrigatório." }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
 
       // Get current record
-      const { data: current } = await supabaseAdmin
+      const { data: current, error: fetchErr } = await supabaseAdmin
         .from("funcionarios")
-        .select("auth_user_id, email")
+        .select("auth_user_id, email, usuario")
         .eq("id", id)
         .single();
 
-      if (!current) {
+      if (fetchErr || !current) {
         return new Response(
           JSON.stringify({ error: "Funcionário não encontrado." }),
           { status: 200, headers: corsHeaders }
         );
       }
 
-      // Update DB
+      // Build DB update fields (exclude non-DB fields)
+      const dbFields: Record<string, any> = {};
+      const allowedFields = [
+        'nome', 'usuario', 'email', 'cpf', 'setor', 'unidade_id', 'sala_id',
+        'cargo', 'role', 'ativo', 'tempo_atendimento', 'profissao',
+        'tipo_conselho', 'numero_conselho', 'uf_conselho', 'pode_agendar_retorno', 'coren'
+      ];
+
+      for (const key of allowedFields) {
+        if (body[key] !== undefined) {
+          dbFields[key] = body[key];
+        }
+      }
+
+      // Normalize email
+      if (dbFields.email) {
+        dbFields.email = dbFields.email.trim().toLowerCase();
+      }
+      if (dbFields.usuario) {
+        dbFields.usuario = dbFields.usuario.trim();
+      }
+
+      // Check for email uniqueness if email is changing
+      const newEmail = dbFields.email;
+      if (newEmail && newEmail !== current.email?.trim().toLowerCase()) {
+        const { data: emailCheck } = await supabaseAdmin
+          .from("funcionarios")
+          .select("id")
+          .eq("email", newEmail)
+          .neq("id", id);
+
+        if (emailCheck && emailCheck.length > 0) {
+          return new Response(
+            JSON.stringify({ error: "Este e-mail já está em uso por outro funcionário." }),
+            { status: 200, headers: corsHeaders }
+          );
+        }
+      }
+
+      // Check for usuario uniqueness if usuario is changing
+      const newUsuario = dbFields.usuario;
+      if (newUsuario && newUsuario !== current.usuario) {
+        const { data: userCheck } = await supabaseAdmin
+          .from("funcionarios")
+          .select("id")
+          .eq("usuario", newUsuario)
+          .neq("id", id);
+
+        if (userCheck && userCheck.length > 0) {
+          return new Response(
+            JSON.stringify({ error: "Este nome de usuário já está em uso." }),
+            { status: 200, headers: corsHeaders }
+          );
+        }
+      }
+
+      // FIRST: Update auth user (source of truth) BEFORE updating DB
+      if (current.auth_user_id) {
+        const authUpdate: Record<string, any> = {};
+        
+        if (senha && typeof senha === 'string' && senha.length >= 6) {
+          authUpdate.password = senha;
+        }
+        if (newEmail && newEmail !== current.email?.trim().toLowerCase()) {
+          authUpdate.email = newEmail;
+          authUpdate.email_confirm = true; // Auto-confirm email change
+        }
+
+        if (Object.keys(authUpdate).length > 0) {
+          const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
+            current.auth_user_id,
+            authUpdate
+          );
+
+          if (authErr) {
+            console.error("Auth update error:", authErr);
+            return new Response(
+              JSON.stringify({ error: "Erro ao atualizar credenciais de acesso: " + authErr.message }),
+              { status: 200, headers: corsHeaders }
+            );
+          }
+        }
+      } else {
+        // Funcionario has no auth link - create one if password is provided
+        if (senha && dbFields.email) {
+          const { data: newAuth, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+            email: dbFields.email || current.email,
+            password: senha,
+            email_confirm: true,
+          });
+
+          if (createErr) {
+            console.error("Auth create error:", createErr);
+            return new Response(
+              JSON.stringify({ error: "Erro ao criar credenciais: " + createErr.message }),
+              { status: 200, headers: corsHeaders }
+            );
+          }
+
+          dbFields.auth_user_id = newAuth.user.id;
+        }
+      }
+
+      // THEN: Update DB
       const { data: func, error: dbErr } = await supabaseAdmin
         .from("funcionarios")
-        .update(fields)
+        .update(dbFields)
         .eq("id", id)
         .select()
         .single();
 
       if (dbErr) {
+        console.error("DB update error:", dbErr);
         return new Response(
           JSON.stringify({ error: "Erro ao atualizar: " + dbErr.message }),
           { status: 200, headers: corsHeaders }
         );
-      }
-
-      // Update auth user if password or email changed
-      if (current.auth_user_id) {
-        const authUpdate: Record<string, string> = {};
-        if (senha) authUpdate.password = senha;
-        if (fields.email && fields.email !== current.email) authUpdate.email = fields.email;
-
-        if (Object.keys(authUpdate).length > 0) {
-          await supabaseAdmin.auth.admin.updateUserById(current.auth_user_id, authUpdate);
-        }
       }
 
       return new Response(JSON.stringify({ success: true, funcionario: func }), {
