@@ -241,6 +241,12 @@ const Configuracoes: React.FC = () => {
             <Bell className="w-4 h-4 hidden sm:block" />
             Notificações
           </TabsTrigger>
+          {isMaster && (
+            <TabsTrigger value="admin" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
+              <ShieldAlert className="w-4 h-4 hidden sm:block" />
+              Administração
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ═══ ABA INTEGRAÇÕES ═══ */}
