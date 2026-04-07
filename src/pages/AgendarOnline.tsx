@@ -242,9 +242,10 @@ const AgendarOnline: React.FC = () => {
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
     const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
-    const amanhaStr = addDaysToDateStr(todayLocalStr(), 1);
-    return allDates.filter(d => d >= amanhaStr);
-  }, [form.profissionalId, form.unidadeId, getAvailableDates]);
+    const minDate = addDaysToDateStr(todayLocalStr(), onlineConfig.antecedencia_minima_dias);
+    const maxDate = addDaysToDateStr(todayLocalStr(), onlineConfig.antecedencia_maxima_dias);
+    return allDates.filter(d => d >= minDate && d <= maxDate);
+  }, [form.profissionalId, form.unidadeId, getAvailableDates, onlineConfig]);
 
   const dayInfoMap = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return {};
