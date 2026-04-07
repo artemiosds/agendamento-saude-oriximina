@@ -1265,6 +1265,22 @@ const ProntuarioPage: React.FC = () => {
               </Select>
             </div>
 
+            {/* Solicitação de Exames */}
+            <SolicitacaoExames
+              profissionalId={user?.id || ""}
+              value={listaExames}
+              onChange={setListaExames}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
+              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+            />
+
             {/* Decisão Clínica: PTS / Tratamento */}
             {!editId && form.paciente_id && (
               <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
