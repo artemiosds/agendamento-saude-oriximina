@@ -368,6 +368,7 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     setSelectedProcIds([]);
     setEpisodios([]);
+    setListaExames([]);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0] });
     setDialogOpen(true);
   };
