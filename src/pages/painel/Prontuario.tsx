@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
