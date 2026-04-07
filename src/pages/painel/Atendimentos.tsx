@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 
 interface AtendimentoDB {
   id: string;
+  paciente_id: string;
   paciente_nome: string;
   profissional_nome: string;
   unidade_id: string;
