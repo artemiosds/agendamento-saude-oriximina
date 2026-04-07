@@ -894,7 +894,7 @@ const Configuracoes: React.FC = () => {
                 )}
 
                 {reativarProfId && !reativarBuscando && reativarAgendamentos.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4">Nenhum agendamento pendente encontrado para este profissional.</p>
+                  <p className="text-sm text-muted-foreground py-4">Nenhum agendamento encontrado para este profissional.</p>
                 )}
 
                 {reativarProfId && !reativarBuscando && reativarAgendamentos.length > 0 && (
@@ -1013,7 +1013,7 @@ const Configuracoes: React.FC = () => {
                 )}
 
                 {transferProfOrigem && !transferBuscando && transferAgendamentos.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-4">Nenhum agendamento ativo encontrado para este profissional.</p>
+                  <p className="text-sm text-muted-foreground py-4">Nenhum agendamento encontrado para este profissional.</p>
                 )}
 
                 {transferProfOrigem && !transferBuscando && transferAgendamentos.length > 0 && (
