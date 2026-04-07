@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info, FileText } from 'lucide-react';
+import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -267,6 +268,12 @@ const Configuracoes: React.FC = () => {
             <Bell className="w-4 h-4 hidden sm:block" />
             Notificações
           </TabsTrigger>
+          {isMaster && (
+            <TabsTrigger value="prontuario" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
+              <FileText className="w-4 h-4 hidden sm:block" />
+              Prontuário
+            </TabsTrigger>
+          )}
           {isMaster && (
             <TabsTrigger value="admin" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
               <ShieldAlert className="w-4 h-4 hidden sm:block" />
