@@ -1002,6 +1002,34 @@ const Agenda: React.FC = () => {
     if (!editAg) return;
     try {
       const prof = profissionais.find((p) => p.id === editAg.profissionalId);
+      const originalAg = agendamentos.find((a) => a.id === editAg.id);
+      const dateOrHourChanged =
+        originalAg && (originalAg.data !== editAg.data || originalAg.hora !== editAg.hora || originalAg.profissionalId !== editAg.profissionalId);
+
+      if (dateOrHourChanged && prof?.unidadeId) {
+        const canOverride = user && ["master", "coordenador"].includes(user.role);
+        const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
+          p_profissional_id: editAg.profissionalId,
+          p_unidade_id: prof.unidadeId,
+          p_data: editAg.data,
+          p_hora: editAg.hora,
+        });
+        if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
+          const reason = (slotCheck as any).reason;
+          const reasonMsg =
+            reason === "date_blocked" ? "Data bloqueada." :
+            reason === "day_full" ? "Vagas do dia esgotadas." :
+            reason === "hour_full" ? "Vagas deste horário esgotadas." :
+            "Sem disponibilidade.";
+          if (!canOverride) {
+            toast.error(`Não é possível reagendar: ${reasonMsg}`);
+            return;
+          }
+          const confirmou = window.confirm(`${reasonMsg} Deseja forçar como ${user?.role}?`);
+          if (!confirmou) return;
+        }
+      }
+
       await updateAgendamento(editAg.id, {
         tipo: editAg.tipo,
         data: editAg.data,
@@ -1026,7 +1054,7 @@ const Agenda: React.FC = () => {
       console.error(err);
       toast.error("Erro ao editar agendamento.");
     }
-  }, [editAg, profissionais, updateAgendamento, logAction, user, refreshAgendamentos]);
+  }, [editAg, profissionais, agendamentos, updateAgendamento, logAction, user, refreshAgendamentos]);
 
   return (
     <div className="space-y-4 animate-fade-in">
