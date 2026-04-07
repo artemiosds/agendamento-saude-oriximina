@@ -829,6 +829,164 @@ const Configuracoes: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ═══ ABA ADMINISTRAÇÃO (MASTER) ═══ */}
+        {isMaster && (
+          <TabsContent value="admin" className="space-y-4 mt-4">
+            {/* CONFIG 1 — Reativar Iniciar Atendimento */}
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+                    <RefreshCw className="w-5 h-5 text-warning" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold font-display text-foreground">Reativar Botão "Iniciar Atendimento"</h3>
+                    <p className="text-sm text-muted-foreground">Corrige status do agendamento quando o botão foi perdido</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Profissional</Label>
+                    <Select value={reativarProfId} onValueChange={v => { setReativarProfId(v); setReativarAgId(''); buscarAgendamentosReativar(v); }}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
+                      <SelectContent>
+                        {profissionaisAtivos.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {reativarBuscando && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Buscando agendamentos...</div>}
+
+                  {reativarProfId && !reativarBuscando && reativarAgendamentos.length === 0 && (
+                    <p className="text-sm text-muted-foreground">Nenhum agendamento pendente encontrado para este profissional.</p>
+                  )}
+
+                  {reativarAgendamentos.length > 0 && (
+                    <div>
+                      <Label>Agendamento</Label>
+                      <Select value={reativarAgId} onValueChange={setReativarAgId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o agendamento" /></SelectTrigger>
+                        <SelectContent>
+                          {reativarAgendamentos.map(ag => (
+                            <SelectItem key={ag.id} value={ag.id}>
+                              {ag.paciente_nome} — {ag.data} {ag.hora} ({ag.status})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <Button
+                    className="gradient-primary text-primary-foreground w-full"
+                    disabled={!reativarAgId || reativarLoading}
+                    onClick={executarReativar}
+                  >
+                    {reativarLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Reativar Atendimento
+                  </Button>
+
+                  <p className="text-xs text-muted-foreground">
+                    Altera o status do agendamento para "apto_atendimento", permitindo que o profissional inicie o atendimento normalmente.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* CONFIG 2 — Transferir Paciente */}
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+                    <ArrowRightLeft className="w-5 h-5 text-info" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold font-display text-foreground">Transferir Paciente de Profissional</h3>
+                    <p className="text-sm text-muted-foreground">Reatribui agendamento para outro profissional</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Profissional de origem</Label>
+                    <Select value={transferProfOrigem} onValueChange={v => { setTransferProfOrigem(v); setTransferAgId(''); buscarAgendamentosTransferir(v); }}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o profissional atual" /></SelectTrigger>
+                      <SelectContent>
+                        {profissionaisAtivos.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {transferBuscando && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Buscando agendamentos...</div>}
+
+                  {transferProfOrigem && !transferBuscando && transferAgendamentos.length === 0 && (
+                    <p className="text-sm text-muted-foreground">Nenhum agendamento ativo encontrado para este profissional.</p>
+                  )}
+
+                  {transferAgendamentos.length > 0 && (
+                    <div>
+                      <Label>Agendamento do paciente</Label>
+                      <Select value={transferAgId} onValueChange={setTransferAgId}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o agendamento" /></SelectTrigger>
+                        <SelectContent>
+                          {transferAgendamentos.map(ag => (
+                            <SelectItem key={ag.id} value={ag.id}>
+                              {ag.paciente_nome} — {ag.data} {ag.hora} ({ag.status})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {transferAgId && (
+                    <>
+                      <div>
+                        <Label>Novo profissional</Label>
+                        <Select value={transferNovoProfId} onValueChange={setTransferNovoProfId}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o novo profissional" /></SelectTrigger>
+                          <SelectContent>
+                            {profissionaisAtivos.filter(p => p.id !== transferProfOrigem).map(p => (
+                              <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label>Motivo da transferência <span className="text-destructive">*</span></Label>
+                        <Input
+                          placeholder="Ex: Profissional de férias, erro no agendamento..."
+                          value={transferMotivo}
+                          onChange={e => setTransferMotivo(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <Button
+                    className="gradient-primary text-primary-foreground w-full"
+                    disabled={!transferAgId || !transferNovoProfId || !transferMotivo.trim() || transferLoading}
+                    onClick={executarTransferencia}
+                  >
+                    {transferLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                    Transferir Paciente
+                  </Button>
+
+                  <p className="text-xs text-muted-foreground">
+                    O motivo será registrado nas observações do agendamento para fins de auditoria.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
