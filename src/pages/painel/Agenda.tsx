@@ -597,45 +597,102 @@ const Agenda: React.FC = () => {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-        await updateAgendamento(agId, { status: "confirmado_chegada" as any });
+        // Check per-professional triage setting
+        let triagemHabilitada = true; // default: triage enabled
+        try {
+          const { data: profSetting } = await supabase
+            .from('triage_settings')
+            .select('enabled')
+            .eq('profissional_id', ag.profissionalId)
+            .maybeSingle();
+          if (profSetting) {
+            triagemHabilitada = profSetting.enabled;
+          }
+        } catch {}
 
-        const filaExistente = fila.find(
-          (item) =>
-            item.id === agId ||
-            (item.pacienteId === ag.pacienteId &&
-              item.unidadeId === ag.unidadeId &&
-              !["atendido", "cancelado", "falta"].includes(item.status)),
-        );
+        if (triagemHabilitada) {
+          // Normal flow: go to triage
+          await updateAgendamento(agId, { status: "confirmado_chegada" as any });
 
-        if (filaExistente) {
-          await updateFila(filaExistente.id, {
-            status: "chegada_confirmada" as any,
-            pacienteId: ag.pacienteId,
-            pacienteNome: ag.pacienteNome,
-            unidadeId: ag.unidadeId,
-            profissionalId: ag.profissionalId,
-            horaChegada,
-            observacoes: ag.observacoes || "",
-          } as any);
+          const filaExistente = fila.find(
+            (item) =>
+              item.id === agId ||
+              (item.pacienteId === ag.pacienteId &&
+                item.unidadeId === ag.unidadeId &&
+                !["atendido", "cancelado", "falta"].includes(item.status)),
+          );
+
+          if (filaExistente) {
+            await updateFila(filaExistente.id, {
+              status: "chegada_confirmada" as any,
+              pacienteId: ag.pacienteId,
+              pacienteNome: ag.pacienteNome,
+              unidadeId: ag.unidadeId,
+              profissionalId: ag.profissionalId,
+              horaChegada,
+              observacoes: ag.observacoes || "",
+            } as any);
+          } else {
+            await addToFila({
+              id: agId,
+              pacienteId: ag.pacienteId,
+              pacienteNome: ag.pacienteNome,
+              unidadeId: ag.unidadeId,
+              profissionalId: ag.profissionalId,
+              setor: "",
+              prioridade: "normal",
+              status: "chegada_confirmada" as any,
+              posicao: fila.length + 1,
+              horaChegada,
+              observacoes: ag.observacoes || "",
+              criadoPor: user?.nome || "recepcao",
+            } as any);
+          }
+
+          await Promise.all([refreshAgendamentos(), refreshFila()]);
+          toast.success(`Chegada de ${ag.pacienteNome} confirmada! Encaminhado para triagem.`);
         } else {
-          await addToFila({
-            id: agId,
-            pacienteId: ag.pacienteId,
-            pacienteNome: ag.pacienteNome,
-            unidadeId: ag.unidadeId,
-            profissionalId: ag.profissionalId,
-            setor: "",
-            prioridade: "normal",
-            status: "chegada_confirmada" as any,
-            posicao: fila.length + 1,
-            horaChegada,
-            observacoes: ag.observacoes || "",
-            criadoPor: user?.nome || "recepcao",
-          } as any);
-        }
+          // Triage disabled for this professional: skip triage
+          await updateAgendamento(agId, { status: "apto_atendimento" as any });
 
-        await Promise.all([refreshAgendamentos(), refreshFila()]);
-        toast.success(`Chegada de ${ag.pacienteNome} confirmada!`);
+          const filaExistente = fila.find(
+            (item) =>
+              item.id === agId ||
+              (item.pacienteId === ag.pacienteId &&
+                item.unidadeId === ag.unidadeId &&
+                !["atendido", "cancelado", "falta"].includes(item.status)),
+          );
+
+          if (filaExistente) {
+            await updateFila(filaExistente.id, {
+              status: "apto_atendimento" as any,
+              pacienteId: ag.pacienteId,
+              pacienteNome: ag.pacienteNome,
+              unidadeId: ag.unidadeId,
+              profissionalId: ag.profissionalId,
+              horaChegada,
+              observacoes: ag.observacoes || "",
+            } as any);
+          } else {
+            await addToFila({
+              id: agId,
+              pacienteId: ag.pacienteId,
+              pacienteNome: ag.pacienteNome,
+              unidadeId: ag.unidadeId,
+              profissionalId: ag.profissionalId,
+              setor: "",
+              prioridade: "normal",
+              status: "apto_atendimento" as any,
+              posicao: fila.length + 1,
+              horaChegada,
+              observacoes: ag.observacoes || "",
+              criadoPor: user?.nome || "recepcao",
+            } as any);
+          }
+
+          await Promise.all([refreshAgendamentos(), refreshFila()]);
+          toast.success(`Triagem desabilitada para este profissional. ${ag.pacienteNome} liberado para atendimento direto.`);
+        }
       } else {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
