@@ -1252,7 +1252,7 @@ const FilaEspera: React.FC = () => {
                   .slice(0, 3)
                   .map((f, i) => (
                     <p key={f.id} className="ml-5 text-muted-foreground">
-                      {i + 1}. {f.pacienteNome} ({prioridadeLabel[f.prioridade] || f.prioridade})
+                      {i + 1}. {resolvePaciente(f.pacienteId, f.pacienteNome)} ({prioridadeLabel[f.prioridade] || f.prioridade})
                     </p>
                   ))}
                 {getNextInQueue(manualSlot.profissionalId, manualSlot.unidadeId).length === 0 && (
@@ -1837,7 +1837,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                      <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
                       {f.origemCadastro === "demanda_reprimida" && (
                         <Badge
                           variant="outline"
