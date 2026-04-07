@@ -203,10 +203,11 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       }
 
       let status: DiaInfo["status"] = "empty";
-      if (isPast) {
-        status = "past";
-      } else if (allBlocked) {
+      if (allBlocked) {
         status = "blocked";
+      } else if (isPast) {
+        // Past dates: show as "past" but still clickable with appointment counts
+        status = agendamentosConfirmados > 0 ? "past" : "past";
       } else if (totalVagas > 0) {
         const percent = (agendamentosConfirmados / totalVagas) * 100;
         if (agendamentosConfirmados >= totalVagas) status = "full";
