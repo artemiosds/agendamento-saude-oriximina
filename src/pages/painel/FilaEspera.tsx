@@ -2052,7 +2052,7 @@ const FilaEspera: React.FC = () => {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Tem certeza que deseja remover {f.pacienteNome} da fila?
+                              Tem certeza que deseja remover {resolvePaciente(f.pacienteId, f.pacienteNome)} da fila?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -2088,7 +2088,7 @@ const FilaEspera: React.FC = () => {
           {absenceFilaItem && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Paciente: <strong>{absenceFilaItem.pacienteNome}</strong>
+                Paciente: <strong>{resolvePaciente(absenceFilaItem.pacienteId, absenceFilaItem.pacienteNome)}</strong>
               </p>
               <div>
                 <Label>Motivo da Falta *</Label>
@@ -2153,7 +2153,7 @@ const FilaEspera: React.FC = () => {
           {rescheduleFilaItem && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Reagendando <strong>{rescheduleFilaItem.pacienteNome}</strong>
+                Reagendando <strong>{resolvePaciente(rescheduleFilaItem.pacienteId, rescheduleFilaItem.pacienteNome)}</strong>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
