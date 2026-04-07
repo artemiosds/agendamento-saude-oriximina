@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ const menuItems: {
   { to: '/painel/regulacao',        label: 'Regulação CER',          icon: ClipboardListIcon,  modulo: 'encaminhamento' },
   { to: '/painel/prontuario',       label: 'Prontuário',             icon: Stethoscope,        modulo: 'prontuario' },
   { to: '/painel/triagem',          label: 'Triagem',                icon: HeartPulse,         modulo: 'triagem' },
+  { to: '/painel/historico-triagem', label: 'Histórico Triagem',      icon: History,            modulo: 'triagem' },
   { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
   { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
   { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },

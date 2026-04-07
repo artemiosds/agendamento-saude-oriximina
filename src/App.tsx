@@ -36,6 +36,7 @@ const AvaliacaoEnfermagem         = React.lazy(() => import("./pages/painel/Aval
 const AvaliacaoMultiprofissional  = React.lazy(() => import("./pages/painel/AvaliacaoMultiprofissional"));
 const PTSPage                     = React.lazy(() => import("./pages/painel/PTS"));
 const Permissoes                  = React.lazy(() => import("./pages/painel/Permissoes"));
+const HistoricoTriagem            = React.lazy(() => import("./pages/painel/HistoricoTriagem"));
 const NotFound                    = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -195,6 +196,11 @@ const App = () => (
                     <Route path="triagem" element={
                       <ModuleRoute modulo="triagem">
                         <Triagem />
+                      </ModuleRoute>
+                    } />
+                    <Route path="historico-triagem" element={
+                      <ModuleRoute modulo="triagem">
+                        <HistoricoTriagem />
                       </ModuleRoute>
                     } />
                     <Route path="bloqueios" element={
