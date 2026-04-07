@@ -1182,7 +1182,9 @@ const Agenda: React.FC = () => {
                       <p className="text-sm text-warning mt-1">
                         {!newAg.profissionalId
                           ? "Selecione um profissional."
-                          : "Não há horários disponíveis para hoje. Selecione outro dia."}
+                          : selectedDate === todayLocalStr()
+                            ? "Não há horários livres restantes para hoje. Selecione outro dia."
+                            : "Não há horários livres nesta data. Selecione outro dia."}
                       </p>
                     ) : (
                       <div className="grid grid-cols-4 gap-2 mt-2">
