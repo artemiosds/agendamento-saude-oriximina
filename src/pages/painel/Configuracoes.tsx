@@ -16,6 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info, FileText } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
+import ModelosDocumentos from '@/components/ModelosDocumentos';
+import { Stamp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -272,6 +274,12 @@ const Configuracoes: React.FC = () => {
             <TabsTrigger value="prontuario" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
               <FileText className="w-4 h-4 hidden sm:block" />
               Prontuário
+            </TabsTrigger>
+          )}
+          {isMaster && (
+            <TabsTrigger value="documentos" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
+              <Stamp className="w-4 h-4 hidden sm:block" />
+              Documentos
             </TabsTrigger>
           )}
           {isMaster && (
@@ -867,6 +875,13 @@ const Configuracoes: React.FC = () => {
         {isMaster && (
           <TabsContent value="prontuario" className="space-y-4 mt-4">
             <EditorProntuarioConfig />
+          </TabsContent>
+        )}
+
+        {/* ═══ ABA DOCUMENTOS (MASTER) ═══ */}
+        {isMaster && (
+          <TabsContent value="documentos" className="space-y-4 mt-4">
+            <ModelosDocumentos />
           </TabsContent>
         )}
 
