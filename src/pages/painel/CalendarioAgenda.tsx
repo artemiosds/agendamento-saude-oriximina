@@ -154,10 +154,14 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
             disp.diasSemana.includes(dayOfWeek)
           ));
 
-          if (!isBlocked && profUnit && !isPast) {
+          if (!isBlocked && profUnit) {
             agendamentosConfirmados = dateAgMap?.get(prof.id) || 0;
-            const slots = getAvailableSlots(prof.id, profUnit, dateStr);
-            totalVagas = slots.length + agendamentosConfirmados;
+            if (!isPast) {
+              const slots = getAvailableSlots(prof.id, profUnit, dateStr);
+              totalVagas = slots.length + agendamentosConfirmados;
+            } else {
+              totalVagas = agendamentosConfirmados || 1; // past days: show count
+            }
           }
         }
       } else {
@@ -179,7 +183,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
           ));
           hasDisponibilidade = hasDisponibilidade || profHasDisponibilidade;
 
-          if (isBlocked || !profUnit || isPast) continue;
+          if (isBlocked || !profUnit) continue;
 
           const profAgCount = dateAgMap?.get(prof.id) || 0;
           agendamentosConfirmados += profAgCount;
@@ -199,10 +203,11 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
       }
 
       let status: DiaInfo["status"] = "empty";
-      if (isPast) {
-        status = "past";
-      } else if (allBlocked) {
+      if (allBlocked) {
         status = "blocked";
+      } else if (isPast) {
+        // Past dates: show as "past" but still clickable with appointment counts
+        status = agendamentosConfirmados > 0 ? "past" : "past";
       } else if (totalVagas > 0) {
         const percent = (agendamentosConfirmados / totalVagas) * 100;
         if (agendamentosConfirmados >= totalVagas) status = "full";
@@ -300,7 +305,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
             day.getUTCMonth() === currentMonth.getUTCMonth() &&
             day.getUTCFullYear() === currentMonth.getUTCFullYear();
 
-          const isDisabled = info.status === "blocked" || info.status === "past";
+          const isDisabled = info.status === "blocked";
 
           return (
             <button
