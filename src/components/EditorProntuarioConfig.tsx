@@ -72,14 +72,22 @@ const DEFAULT_SECTIONS: ProntuarioSection[] = [
     fields: [
       { id: 'f_conduta', key: 'conduta', label: 'Conduta', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 0 },
       { id: 'f_prescricao', key: 'prescricao', label: 'Prescrição / Orientações', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 1 },
-      { id: 'f_exames', key: 'solicitacao_exames', label: 'Solicitação de Exames', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 2 },
+    ],
+  },
+  {
+    id: 'sec_exames_solicitacao',
+    title: 'Solicitação de Exames',
+    enabled: true,
+    order: 3,
+    fields: [
+      { id: 'f_exames_solicitacao', key: 'solicitacao_exames', label: 'Exames Solicitados', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 0 },
     ],
   },
   {
     id: 'sec_evolucao',
     title: 'Evolução e Observações',
     enabled: true,
-    order: 3,
+    order: 4,
     fields: [
       { id: 'f_evolucao', key: 'evolucao', label: 'Evolução', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 0 },
       { id: 'f_obs', key: 'observacoes', label: 'Observações Gerais', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 1 },
@@ -90,7 +98,7 @@ const DEFAULT_SECTIONS: ProntuarioSection[] = [
     id: 'sec_soap',
     title: 'SOAP (Sessão)',
     enabled: true,
-    order: 4,
+    order: 5,
     fields: [
       { id: 'f_soap_s', key: 'soap_subjetivo', label: 'S — Subjetivo', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 0 },
       { id: 'f_soap_o', key: 'soap_objetivo', label: 'O — Objetivo', type: 'textarea', required: false, enabled: true, isBuiltin: true, order: 1 },
