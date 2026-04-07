@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { toast } from 'sonner';
 
 interface AtendimentoDB {
   id: string;
+  paciente_id: string;
   paciente_nome: string;
   profissional_nome: string;
   unidade_id: string;
@@ -26,6 +28,7 @@ interface AtendimentoDB {
 const Atendimentos: React.FC = () => {
   const { user, hasPermission } = useAuth();
   const { unidades, logAction } = useData();
+  const resolvePaciente = usePacienteNomeResolver();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
   const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
@@ -89,7 +92,7 @@ const Atendimentos: React.FC = () => {
                     {at.data} {at.hora_inicio}
                   </span>
                   <div className="flex-1">
-                    <p className="font-semibold text-foreground">{at.paciente_nome}</p>
+                    <p className="font-semibold text-foreground">{resolvePaciente(at.paciente_id, at.paciente_nome)}</p>
                     <p className="text-sm text-muted-foreground">{at.profissional_nome} • {at.procedimento}</p>
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
                   </div>
@@ -115,7 +118,7 @@ const Atendimentos: React.FC = () => {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Excluir atendimento?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Excluir o atendimento de {at.paciente_nome}? Esta ação será registrada em log.
+                              Excluir o atendimento de {resolvePaciente(at.paciente_id, at.paciente_nome)}? Esta ação será registrada em log.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

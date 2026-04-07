@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -155,6 +156,7 @@ const Agenda: React.FC = () => {
   const { handleVagaLiberada } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
+  const resolvePaciente = usePacienteNomeResolver();
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
@@ -283,7 +285,7 @@ const Agenda: React.FC = () => {
 
     return base.filter((a) => {
       const pac = pacientes.find((p) => p.id === a.pacienteId);
-      const nome = a.pacienteNome.toLowerCase();
+      const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
       const cpf = pac?.cpf?.toLowerCase() || "";
       const cns = pac?.cns?.toLowerCase() || "";
       return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
@@ -1503,13 +1505,13 @@ const Agenda: React.FC = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <p className="font-semibold text-foreground cursor-default">
-                              {tipoInfo.icon} {ag.pacienteNome}
+                              {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                               {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                             </p>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs">
                             <p className="text-xs">
-                              <strong>Paciente:</strong> {ag.pacienteNome}
+                              <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                             </p>
                             {paciente?.telefone && (
                               <p className="text-xs">

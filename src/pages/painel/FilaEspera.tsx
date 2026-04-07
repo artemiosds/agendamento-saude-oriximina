@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
@@ -165,6 +166,7 @@ const FilaEspera: React.FC = () => {
   } = useData();
   const { user, hasPermission } = useAuth();
   const [detalheOpen, setDetalheOpen] = useState(false);
+  const resolvePaciente = usePacienteNomeResolver();
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
@@ -331,7 +333,7 @@ const FilaEspera: React.FC = () => {
     };
     const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
-      .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
+      .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
       .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
       .filter((f) => filterStatus === "all" || f.status === filterStatus)
@@ -1250,7 +1252,7 @@ const FilaEspera: React.FC = () => {
                   .slice(0, 3)
                   .map((f, i) => (
                     <p key={f.id} className="ml-5 text-muted-foreground">
-                      {i + 1}. {f.pacienteNome} ({prioridadeLabel[f.prioridade] || f.prioridade})
+                      {i + 1}. {resolvePaciente(f.pacienteId, f.pacienteNome)} ({prioridadeLabel[f.prioridade] || f.prioridade})
                     </p>
                   ))}
                 {getNextInQueue(manualSlot.profissionalId, manualSlot.unidadeId).length === 0 && (
@@ -1835,7 +1837,7 @@ const FilaEspera: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground">{f.pacienteNome}</p>
+                      <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
                       {f.origemCadastro === "demanda_reprimida" && (
                         <Badge
                           variant="outline"
@@ -2050,7 +2052,7 @@ const FilaEspera: React.FC = () => {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Remover da fila?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Tem certeza que deseja remover {f.pacienteNome} da fila?
+                              Tem certeza que deseja remover {resolvePaciente(f.pacienteId, f.pacienteNome)} da fila?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -2086,7 +2088,7 @@ const FilaEspera: React.FC = () => {
           {absenceFilaItem && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Paciente: <strong>{absenceFilaItem.pacienteNome}</strong>
+                Paciente: <strong>{resolvePaciente(absenceFilaItem.pacienteId, absenceFilaItem.pacienteNome)}</strong>
               </p>
               <div>
                 <Label>Motivo da Falta *</Label>
@@ -2151,7 +2153,7 @@ const FilaEspera: React.FC = () => {
           {rescheduleFilaItem && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Reagendando <strong>{rescheduleFilaItem.pacienteNome}</strong>
+                Reagendando <strong>{resolvePaciente(rescheduleFilaItem.pacienteId, rescheduleFilaItem.pacienteNome)}</strong>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>

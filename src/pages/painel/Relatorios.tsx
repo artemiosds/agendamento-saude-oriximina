@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,6 +44,7 @@ interface TriagemDB {
 
 const Relatorios: React.FC = () => {
   const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
+  const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
@@ -1654,7 +1656,7 @@ ${dataRows}
                         <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 px-2 text-foreground">{a.data}</td>
                           <td className="py-2 px-2 text-foreground">{a.hora}</td>
-                          <td className="py-2 px-3 text-foreground font-medium">{a.pacienteNome}</td>
+                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
                           <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
                           <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
                           <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>

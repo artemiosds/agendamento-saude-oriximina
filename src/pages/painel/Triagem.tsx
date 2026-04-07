@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,6 +76,7 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
 const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user } = useAuth();
+  const resolvePaciente = usePacienteNomeResolver();
 
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
@@ -381,7 +383,7 @@ const Triagem: React.FC = () => {
                 <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center">
                   <span className="w-16 shrink-0 text-lg font-bold font-mono text-primary">{item.hora}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground">{item.pacienteNome}</p>
+                    <p className="font-semibold text-foreground">{resolvePaciente(item.pacienteId, item.pacienteNome)}</p>
                     <div className="mt-0.5 flex flex-wrap gap-1">
                       {espBadge && (
                         <Badge variant="outline" className="border-primary/30 text-[10px] text-primary">

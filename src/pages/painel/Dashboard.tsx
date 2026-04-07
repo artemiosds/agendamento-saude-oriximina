@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +40,7 @@ interface AtendimentoDB {
 
 const Dashboard: React.FC = () => {
   const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
+  const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
@@ -238,7 +240,7 @@ const Dashboard: React.FC = () => {
                   <div key={ag.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                     <span className="text-sm font-mono font-medium text-foreground w-14">{ag.hora}</span>
                     <span className="text-sm" title={ag.tipo}>{tipoLabel}</span>
-                    <span className="text-sm text-foreground flex-1">{ag.pacienteNome}</span>
+                    <span className="text-sm text-foreground flex-1">{resolvePaciente(ag.pacienteId, ag.pacienteNome)}</span>
                     <span className="text-xs text-muted-foreground">{ag.profissionalNome}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       ag.status === 'confirmado' || ag.status === 'confirmado_chegada' ? 'bg-success/10 text-success' :
