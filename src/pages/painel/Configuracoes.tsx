@@ -56,6 +56,32 @@ const Configuracoes: React.FC = () => {
   const [transferProfOrigem, setTransferProfOrigem] = useState('');
   const [transferBuscando, setTransferBuscando] = useState(false);
 
+  // Config Agendamento Online
+  const [agOnline, setAgOnline] = useState({
+    habilitado: false,
+    antecedencia_minima_dias: 1,
+    antecedencia_maxima_dias: 30,
+    limite_por_dia_profissional: 5,
+    mensagem_confirmacao: 'Seu agendamento foi confirmado com sucesso!',
+    exigir_confirmacao_sms: false,
+    profissionais_bloqueados: [] as string[],
+  });
+  const [agOnlineLoading, setAgOnlineLoading] = useState(true);
+  const [agOnlineSaving, setAgOnlineSaving] = useState(false);
+
+  // Config Cancelamentos
+  const [cancelConfig, setCancelConfig] = useState({
+    prazo_minimo_horas: 24,
+    limite_cancelamentos_mes: 3,
+    dias_bloqueio_apos_limite: 7,
+    motivos: ['Compromisso pessoal', 'Problema de saúde', 'Falta de transporte', 'Horário incompatível', 'Outro'] as string[],
+    notificar_profissional: true,
+    liberar_vaga_automaticamente: true,
+  });
+  const [cancelLoading, setCancelLoading] = useState(true);
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const [novoMotivo, setNovoMotivo] = useState('');
+
   const isMaster = user?.role === 'master';
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
