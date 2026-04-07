@@ -45,7 +45,8 @@ interface PublicUnit { id: string; nome: string; endereco: string; telefone: str
 interface PublicProf { id: string; nome: string; setor: string; unidade_id: string; sala_id: string; role: string; ativo: boolean; profissao: string; tempo_atendimento: number; pode_agendar_retorno: boolean }
 interface PublicDisp { id: string; profissional_id: string; unidade_id: string; data_inicio: string; data_fim: string; dias_semana: number[]; hora_inicio: string; hora_fim: string; vagas_por_hora: number; vagas_por_dia: number; duracao_consulta: number }
 interface PublicBloqueio { id: string; data_inicio: string; data_fim: string; dia_inteiro: boolean; hora_inicio: string; hora_fim: string; profissional_id: string; unidade_id: string; tipo: string; titulo: string }
-interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string }
+interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string; origem?: string }
+interface OnlineConfig { habilitado: boolean; antecedencia_minima_dias: number; antecedencia_maxima_dias: number; limite_por_dia_profissional: number; mensagem_confirmacao: string; exigir_confirmacao_sms: boolean }
 
 const statusOcupaVaga = (s: string) => !['cancelado','falta'].includes(s);
 
@@ -62,6 +63,7 @@ const AgendarOnline: React.FC = () => {
   const [disponibilidades, setDisponibilidades] = useState<PublicDisp[]>([]);
   const [bloqueios, setBloqueios] = useState<PublicBloqueio[]>([]);
   const [agendamentos, setAgendamentos] = useState<PublicAg[]>([]);
+  const [onlineConfig, setOnlineConfig] = useState<OnlineConfig>({ habilitado: true, antecedencia_minima_dias: 1, antecedencia_maxima_dias: 30, limite_por_dia_profissional: 99, mensagem_confirmacao: '', exigir_confirmacao_sms: false });
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
@@ -83,6 +85,9 @@ const AgendarOnline: React.FC = () => {
       setDisponibilidades(json.disponibilidades || []);
       setBloqueios(json.bloqueios || []);
       setAgendamentos(json.agendamentos || []);
+      if (json.config_agendamento_online) {
+        setOnlineConfig(json.config_agendamento_online);
+      }
     } catch (err) {
       console.error('Failed to load public scheduling data:', err);
       toast.error('Erro ao carregar dados de agendamento.');
@@ -237,9 +242,10 @@ const AgendarOnline: React.FC = () => {
   const availableDates = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return [];
     const allDates = getAvailableDates(form.profissionalId, form.unidadeId);
-    const amanhaStr = addDaysToDateStr(todayLocalStr(), 1);
-    return allDates.filter(d => d >= amanhaStr);
-  }, [form.profissionalId, form.unidadeId, getAvailableDates]);
+    const minDate = addDaysToDateStr(todayLocalStr(), onlineConfig.antecedencia_minima_dias);
+    const maxDate = addDaysToDateStr(todayLocalStr(), onlineConfig.antecedencia_maxima_dias);
+    return allDates.filter(d => d >= minDate && d <= maxDate);
+  }, [form.profissionalId, form.unidadeId, getAvailableDates, onlineConfig]);
 
   const dayInfoMap = useMemo(() => {
     if (!form.profissionalId || !form.unidadeId) return {};
@@ -404,6 +410,25 @@ const AgendarOnline: React.FC = () => {
     );
   }
 
+  if (!onlineConfig.habilitado) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="shadow-elevated border-0 max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-warning" />
+            </div>
+            <h2 className="text-xl font-bold font-display text-foreground mb-2">Agendamento Online Indisponível</h2>
+            <p className="text-muted-foreground mb-6">
+              O agendamento online está temporariamente desabilitado. Entre em contato com a unidade de saúde para agendar presencialmente.
+            </p>
+            <Link to="/"><Button variant="outline" className="w-full">Voltar ao Início</Button></Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (done) {
     const prof = profissionais.find(f => f.id === form.profissionalId);
     const unidade = unidades.find(u => u.id === form.unidadeId);
@@ -416,12 +441,16 @@ const AgendarOnline: React.FC = () => {
                 <CheckCircle className="w-8 h-8 text-success" />
               </div>
               <h2 className="text-xl font-bold font-display text-foreground mb-2">Agendamento Confirmado!</h2>
-              <p className="text-muted-foreground mb-4">
-                {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
-              </p>
+              {onlineConfig.mensagem_confirmacao ? (
+                <p className="text-muted-foreground mb-4">{onlineConfig.mensagem_confirmacao}</p>
+              ) : (
+                <p className="text-muted-foreground mb-4">
+                  {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada com sucesso.
+                </p>
+              )}
+              <p className="text-muted-foreground mb-2 text-sm"><strong>Data:</strong> {form.data} às {form.hora}</p>
               <p className="text-sm text-muted-foreground mb-2"><strong>Profissional:</strong> {prof?.nome}</p>
               <p className="text-sm text-muted-foreground mb-2"><strong>Unidade:</strong> {unidade?.nome}</p>
-              <p className="text-sm text-muted-foreground mb-2"><strong>Tipo:</strong> {form.tipo}</p>
               <p className="text-sm text-muted-foreground mb-4">Lembre-se de chegar com 15 minutos de antecedência.</p>
               <div className="bg-info/10 p-3 rounded-lg text-sm text-info mb-4">
                 <p className="font-medium">Sua conta no Portal do Paciente foi criada!</p>
@@ -584,7 +613,7 @@ const AgendarOnline: React.FC = () => {
                 <h2 className="text-lg font-semibold font-display text-foreground">Data e Horário</h2>
                 <div className="flex items-center gap-2 p-3 bg-info/10 rounded-lg text-sm text-info">
                   <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>Agendamentos disponíveis a partir de amanhã.</span>
+                  <span>Agendamentos disponíveis de {onlineConfig.antecedencia_minima_dias} a {onlineConfig.antecedencia_maxima_dias} dias à frente.</span>
                 </div>
                 {availableDates.length === 0 ? (
                   <div className="flex items-center gap-3 p-4 bg-warning/10 rounded-lg">

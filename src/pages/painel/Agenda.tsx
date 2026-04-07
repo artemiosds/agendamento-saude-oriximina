@@ -179,6 +179,42 @@ const Agenda: React.FC = () => {
   const [rejeicaoTarget, setRejeicaoTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
 
+  // CANCELAMENTO com motivo obrigatório
+  const [cancelTarget, setCancelTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [cancelMotivo, setCancelMotivo] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelConfig, setCancelConfig] = useState<{
+    prazo_minimo_horas: number;
+    limite_cancelamentos_mes: number;
+    dias_bloqueio_apos_limite: number;
+    motivos: string[];
+    notificar_profissional: boolean;
+    liberar_vaga_automaticamente: boolean;
+  }>({
+    prazo_minimo_horas: 24,
+    limite_cancelamentos_mes: 3,
+    dias_bloqueio_apos_limite: 7,
+    motivos: ['Compromisso pessoal', 'Problema de saúde', 'Falta de transporte', 'Horário incompatível', 'Outro'],
+    notificar_profissional: true,
+    liberar_vaga_automaticamente: true,
+  });
+
+  // Load cancel config
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('system_config')
+          .select('configuracoes')
+          .eq('id', 'config_cancelamentos')
+          .maybeSingle();
+        if (data?.configuracoes) {
+          setCancelConfig(prev => ({ ...prev, ...(data.configuracoes as any) }));
+        }
+      } catch {}
+    })();
+  }, []);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
@@ -803,6 +839,92 @@ const Agenda: React.FC = () => {
         await updateAgendamento(agId, { syncStatus: "erro" });
         await refreshAgendamentos();
       }
+    }
+  };
+
+  const handleCancelarAgendamento = async () => {
+    if (!cancelTarget || !cancelMotivo) return;
+    setCancelLoading(true);
+    try {
+      const ag = cancelTarget;
+      const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
+
+      // Check cancellation limit for this patient this month
+      const now = new Date();
+      const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const { count: cancelCount } = await supabase
+        .from('agendamentos')
+        .select('*', { count: 'exact', head: true })
+        .eq('paciente_id', ag.pacienteId)
+        .eq('status', 'cancelado')
+        .gte('atualizado_em', `${mesAtual}-01T00:00:00`)
+        .lt('atualizado_em', `${mesAtual === `${now.getFullYear()}-12` ? `${now.getFullYear() + 1}-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, '0')}`}-01T00:00:00`);
+
+      if ((cancelCount || 0) >= cancelConfig.limite_cancelamentos_mes) {
+        toast.error(`Limite de ${cancelConfig.limite_cancelamentos_mes} cancelamentos/mês atingido para este paciente. Paciente ficará bloqueado por ${cancelConfig.dias_bloqueio_apos_limite} dias.`);
+      }
+
+      // Append motivo to observacoes
+      const obsAnterior = ag.observacoes || '';
+      const novaObs = `${obsAnterior}\n[CANCELAMENTO] Motivo: ${cancelMotivo} | Por: ${user?.nome || 'Sistema'} | Em: ${new Date().toLocaleString('pt-BR')}`.trim();
+
+      await updateAgendamento(ag.id, { status: 'cancelado' as any });
+      await (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id);
+
+      await logAction({
+        acao: 'cancelar',
+        entidade: 'agendamento',
+        entidadeId: ag.id,
+        modulo: 'agenda',
+        user,
+        detalhes: { paciente: ag.pacienteNome, motivo: cancelMotivo },
+      });
+
+      // Notify
+      if (cancelConfig.notificar_profissional) {
+        const unidade = unidades.find(u => u.id === ag.unidadeId);
+        await notify({
+          evento: 'cancelamento' as any,
+          paciente_nome: ag.pacienteNome,
+          telefone: paciente?.telefone || '',
+          email: paciente?.email || '',
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || '',
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: 'cancelado',
+          id_agendamento: ag.id,
+          observacoes: `Motivo: ${cancelMotivo}`,
+        });
+      }
+
+      // Liberar vaga
+      if (cancelConfig.liberar_vaga_automaticamente) {
+        await handleVagaLiberada(
+          { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
+          'cancelamento',
+          user,
+        );
+      }
+
+      // Google Calendar
+      if (ag.googleEventId && configuracoes.googleCalendar.removerCancelar) {
+        try {
+          await gcal.deleteEvent(ag.googleEventId);
+          await updateAgendamento(ag.id, { syncStatus: 'ok' });
+        } catch {}
+      }
+
+      await Promise.all([refreshAgendamentos(), refreshFila()]);
+      toast.success('Agendamento cancelado com sucesso.');
+      setCancelTarget(null);
+      setCancelMotivo('');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao cancelar: ${err.message}`);
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -1765,6 +1887,17 @@ const Agenda: React.FC = () => {
                               <sa.icon className="w-3.5 h-3.5" />
                             </Button>
                           ))}
+                        {!isProfissional && ag.status !== "cancelado" && ag.status !== "concluido" && !ehPendenteOnline && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 text-xs border-destructive/50 text-destructive"
+                            title="Cancelar Agendamento"
+                            onClick={() => { setCancelTarget(ag); setCancelMotivo(''); }}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         {can("agenda", "can_delete") && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -2108,6 +2241,44 @@ const Agenda: React.FC = () => {
             );
           })()}
       </DetalheDrawer>
+
+      {/* Dialog de Cancelamento com Motivo */}
+      <Dialog open={!!cancelTarget} onOpenChange={(o) => { if (!o) { setCancelTarget(null); setCancelMotivo(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Agendamento</DialogTitle>
+          </DialogHeader>
+          {cancelTarget && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                <p><strong>{cancelTarget.pacienteNome}</strong></p>
+                <p className="text-muted-foreground">{cancelTarget.data} às {cancelTarget.hora} — {cancelTarget.profissionalNome}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">Motivo do cancelamento *</Label>
+                <Select value={cancelMotivo} onValueChange={setCancelMotivo}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o motivo" /></SelectTrigger>
+                  <SelectContent>
+                    {cancelConfig.motivos.map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => { setCancelTarget(null); setCancelMotivo(''); }}>Voltar</Button>
+                <Button
+                  className="flex-1 bg-destructive text-destructive-foreground"
+                  disabled={!cancelMotivo || cancelLoading}
+                  onClick={handleCancelarAgendamento}
+                >
+                  {cancelLoading ? "Cancelando..." : "Confirmar Cancelamento"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
