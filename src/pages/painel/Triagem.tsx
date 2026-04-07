@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -103,6 +103,23 @@ const Triagem: React.FC = () => {
 
   const now = useMemo(() => new Date(), []);
 
+  // Load per-professional triage disabled list
+  const [profTriageDisabled, setProfTriageDisabled] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('triage_settings')
+          .select('profissional_id, enabled')
+          .not('profissional_id', 'is', null);
+        if (data) {
+          const disabled = new Set(data.filter(d => d.enabled === false).map(d => d.profissional_id!));
+          setProfTriageDisabled(disabled);
+        }
+      } catch {}
+    })();
+  }, []);
+
   const filaFiltrada = useMemo(() => {
     const termo = busca.trim().toLowerCase();
 
@@ -120,6 +137,9 @@ const Triagem: React.FC = () => {
 
         if (!agendamentoRelacionado) return null;
 
+        // Exclude patients whose professional has triage disabled
+        if (profTriageDisabled.has(agendamentoRelacionado.profissionalId)) return null;
+
         return {
           ...agendamentoRelacionado,
           filaId: item.id,
@@ -130,7 +150,7 @@ const Triagem: React.FC = () => {
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
       .sort((a, b) => a.hora.localeCompare(b.hora));
-  }, [agendamentos, fila, user?.unidadeId, busca]);
+  }, [agendamentos, fila, user?.unidadeId, busca, profTriageDisabled]);
 
   const imc = useMemo(() => {
     const peso = parseFloat(form.peso);
