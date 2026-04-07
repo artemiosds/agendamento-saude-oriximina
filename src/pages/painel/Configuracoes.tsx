@@ -35,7 +35,109 @@ const Configuracoes: React.FC = () => {
   const [triageLoading, setTriageLoading] = useState(true);
   const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
 
-  // Load triage settings for current unit
+  // Admin: Reativar atendimento
+  const [reativarProfId, setReativarProfId] = useState('');
+  const [reativarAgendamentos, setReativarAgendamentos] = useState<any[]>([]);
+  const [reativarAgId, setReativarAgId] = useState('');
+  const [reativarLoading, setReativarLoading] = useState(false);
+  const [reativarBuscando, setReativarBuscando] = useState(false);
+
+  // Admin: Transferir paciente
+  const [transferAgId, setTransferAgId] = useState('');
+  const [transferNovoProfId, setTransferNovoProfId] = useState('');
+  const [transferMotivo, setTransferMotivo] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferAgendamentos, setTransferAgendamentos] = useState<any[]>([]);
+  const [transferProfOrigem, setTransferProfOrigem] = useState('');
+  const [transferBuscando, setTransferBuscando] = useState(false);
+
+  const isMaster = user?.role === 'master';
+  const profissionaisAtivos = funcionarios.filter(f => f.ativo && ['profissional', 'enfermagem'].includes(f.role));
+
+  const buscarAgendamentosReativar = async (profId: string) => {
+    if (!profId) { setReativarAgendamentos([]); return; }
+    setReativarBuscando(true);
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('agendamentos')
+      .select('id, paciente_nome, data, hora, status')
+      .eq('profissional_id', profId)
+      .gte('data', today)
+      .not('status', 'in', '(cancelado,concluido,em_atendimento,apto_atendimento)')
+      .order('data', { ascending: true })
+      .limit(50);
+    setReativarAgendamentos(data || []);
+    setReativarBuscando(false);
+  };
+
+  const executarReativar = async () => {
+    if (!reativarAgId) return;
+    setReativarLoading(true);
+    try {
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({ status: 'apto_atendimento', atualizado_em: new Date().toISOString() })
+        .eq('id', reativarAgId);
+      if (error) throw error;
+      toast.success('Botão Iniciar Atendimento reativado com sucesso.');
+      setReativarAgId('');
+      buscarAgendamentosReativar(reativarProfId);
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setReativarLoading(false);
+    }
+  };
+
+  const buscarAgendamentosTransferir = async (profId: string) => {
+    if (!profId) { setTransferAgendamentos([]); return; }
+    setTransferBuscando(true);
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await supabase
+      .from('agendamentos')
+      .select('id, paciente_nome, data, hora, status, profissional_nome')
+      .eq('profissional_id', profId)
+      .gte('data', today)
+      .not('status', 'in', '(cancelado,concluido)')
+      .order('data', { ascending: true })
+      .limit(50);
+    setTransferAgendamentos(data || []);
+    setTransferBuscando(false);
+  };
+
+  const executarTransferencia = async () => {
+    if (!transferAgId || !transferNovoProfId || !transferMotivo.trim()) return;
+    setTransferLoading(true);
+    try {
+      const novoProfissional = funcionarios.find(f => f.id === transferNovoProfId);
+      if (!novoProfissional) throw new Error('Profissional não encontrado');
+
+      const ag = transferAgendamentos.find(a => a.id === transferAgId);
+      const obsAnterior = ag?.observacoes || '';
+      const novaObs = `${obsAnterior}\n[TRANSFERÊNCIA] De ${ag?.profissional_nome || 'N/A'} para ${novoProfissional.nome}. Motivo: ${transferMotivo.trim()}`.trim();
+
+      const { error } = await supabase
+        .from('agendamentos')
+        .update({
+          profissional_id: novoProfissional.id,
+          profissional_nome: novoProfissional.nome,
+          observacoes: novaObs,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq('id', transferAgId);
+      if (error) throw error;
+
+      toast.success(`Paciente transferido para ${novoProfissional.nome} com sucesso.`);
+      setTransferAgId('');
+      setTransferMotivo('');
+      setTransferNovoProfId('');
+      buscarAgendamentosTransferir(transferProfOrigem);
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setTransferLoading(false);
+    }
+  };
   useEffect(() => {
     (async () => {
       try {
