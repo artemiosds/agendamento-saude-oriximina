@@ -59,15 +59,17 @@ const Configuracoes: React.FC = () => {
   const buscarAgendamentosReativar = async (profId: string) => {
     if (!profId) { setReativarAgendamentos([]); return; }
     setReativarBuscando(true);
-    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const minDate = sevenDaysAgo.toISOString().split('T')[0];
     const { data } = await supabase
       .from('agendamentos')
       .select('id, paciente_nome, data, hora, status')
       .eq('profissional_id', profId)
-      .gte('data', today)
+      .gte('data', minDate)
       .not('status', 'in', '(cancelado,concluido,em_atendimento,apto_atendimento)')
-      .order('data', { ascending: true })
-      .limit(50);
+      .order('data', { ascending: false })
+      .limit(100);
     setReativarAgendamentos(data || []);
     setReativarBuscando(false);
   };
@@ -94,15 +96,17 @@ const Configuracoes: React.FC = () => {
   const buscarAgendamentosTransferir = async (profId: string) => {
     if (!profId) { setTransferAgendamentos([]); return; }
     setTransferBuscando(true);
-    const today = new Date().toISOString().split('T')[0];
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const minDate = sevenDaysAgo.toISOString().split('T')[0];
     const { data } = await supabase
       .from('agendamentos')
       .select('id, paciente_nome, data, hora, status, profissional_nome')
       .eq('profissional_id', profId)
-      .gte('data', today)
+      .gte('data', minDate)
       .not('status', 'in', '(cancelado,concluido)')
-      .order('data', { ascending: true })
-      .limit(50);
+      .order('data', { ascending: false })
+      .limit(100);
     setTransferAgendamentos(data || []);
     setTransferBuscando(false);
   };
