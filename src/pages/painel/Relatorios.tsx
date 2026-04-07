@@ -1951,6 +1951,79 @@ ${dataRows}
             </Card>
           )}
         </TabsContent>
+
+        {/* === MAPA DE ATENDIMENTO === */}
+        <TabsContent value="mapa" className="space-y-5 mt-4">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" /> Mapa de Atendimentos Concluídos
+              </h3>
+              <div className="flex flex-wrap items-end gap-3 mb-4">
+                <div>
+                  <Label className="text-xs">Data Inicial *</Label>
+                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <div>
+                  <Label className="text-xs">Data Final *</Label>
+                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                  <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <FileText className="w-4 h-4 mr-1" />PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <Download className="w-4 h-4 mr-1" />CSV
+                </Button>
+              </div>
+
+              {mapaGenerated && mapaData.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">Nenhum atendimento concluído encontrado no período selecionado.</p>
+              )}
+
+              {mapaGenerated && mapaData.length > 0 && (
+                <div className="overflow-x-auto">
+                  <p className="text-xs text-muted-foreground mb-2">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-muted/60">
+                        <th className="border border-border px-2 py-1.5 text-center w-10">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left">CNS</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Data</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mapaData.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                          <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
+                          <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                          <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
+                          <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                          <td className="border border-border px-2 py-1">{formatDateBR(r.data)}</td>
+                          <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
+                          <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                          <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/60 font-semibold">
+                        <td colSpan={8} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
