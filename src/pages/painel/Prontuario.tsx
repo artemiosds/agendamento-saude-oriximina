@@ -208,6 +208,7 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
 
   useEffect(() => {
     const loadProcs = async () => {
