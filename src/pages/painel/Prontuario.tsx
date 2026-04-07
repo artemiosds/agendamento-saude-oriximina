@@ -1540,12 +1540,9 @@ const ProntuarioPage: React.FC = () => {
         onOpenChange={setDocModalOpen}
         paciente={(() => {
           const p = pacientes.find(x => x.id === queryPacienteId);
-          return p ? { nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.data_nascimento, cid: p.cid, especialidade_destino: p.especialidade_destino } : undefined;
+          return p ? { nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.dataNascimento, cid: p.cid, especialidade_destino: '' } : undefined;
         })()}
-        profissional={(() => {
-          const f = funcionarios.find(x => x.id === user?.odataId);
-          return f ? { nome: f.nome, profissao: f.profissao, numero_conselho: f.numero_conselho, tipo_conselho: f.tipo_conselho, uf_conselho: f.uf_conselho } : undefined;
-        })()}
+        profissional={user ? { nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
         unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
         dataAtendimento={new Date().toLocaleDateString('pt-BR')}
       />
