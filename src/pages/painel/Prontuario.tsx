@@ -206,6 +206,7 @@ const ProntuarioPage: React.FC = () => {
 
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [docModalOpen, setDocModalOpen] = useState(false);
 
   useEffect(() => {
     const loadProcs = async () => {
