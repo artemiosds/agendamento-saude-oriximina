@@ -54,24 +54,48 @@ const Configuracoes: React.FC = () => {
   const [transferBuscando, setTransferBuscando] = useState(false);
 
   const isMaster = user?.role === 'master';
-  const profissionaisAtivos = funcionarios.filter(f => f.ativo);
+  const profissionaisAtivos = [...funcionarios].sort((a, b) =>
+    a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
+  );
+
+  const buscarTodosAgendamentosPorProfissional = async (profId: string, selectFields: string) => {
+    const pageSize = 500;
+    const todos: any[] = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('agendamentos')
+        .select(selectFields)
+        .eq('profissional_id', profId)
+        .order('data', { ascending: false })
+        .order('hora', { ascending: true })
+        .range(from, from + pageSize - 1);
+
+      if (error) throw error;
+      if (!data?.length) break;
+
+      todos.push(...data);
+
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return todos;
+  };
 
   const buscarAgendamentosReativar = async (profId: string) => {
     if (!profId) { setReativarAgendamentos([]); return; }
     setReativarBuscando(true);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const minDate = sevenDaysAgo.toISOString().split('T')[0];
-    const { data } = await supabase
-      .from('agendamentos')
-      .select('id, paciente_nome, data, hora, status')
-      .eq('profissional_id', profId)
-      .gte('data', minDate)
-      .not('status', 'in', '(cancelado,concluido,em_atendimento,apto_atendimento)')
-      .order('data', { ascending: false })
-      .limit(100);
-    setReativarAgendamentos(data || []);
-    setReativarBuscando(false);
+    try {
+      const data = await buscarTodosAgendamentosPorProfissional(profId, 'id, paciente_nome, data, hora, status');
+      setReativarAgendamentos(data);
+    } catch (err: any) {
+      toast.error(`Erro ao buscar agendamentos: ${err.message}`);
+      setReativarAgendamentos([]);
+    } finally {
+      setReativarBuscando(false);
+    }
   };
 
   const executarReativar = async () => {
@@ -96,19 +120,15 @@ const Configuracoes: React.FC = () => {
   const buscarAgendamentosTransferir = async (profId: string) => {
     if (!profId) { setTransferAgendamentos([]); return; }
     setTransferBuscando(true);
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const minDate = sevenDaysAgo.toISOString().split('T')[0];
-    const { data } = await supabase
-      .from('agendamentos')
-      .select('id, paciente_nome, data, hora, status, profissional_nome')
-      .eq('profissional_id', profId)
-      .gte('data', minDate)
-      .not('status', 'in', '(cancelado,concluido)')
-      .order('data', { ascending: false })
-      .limit(100);
-    setTransferAgendamentos(data || []);
-    setTransferBuscando(false);
+    try {
+      const data = await buscarTodosAgendamentosPorProfissional(profId, 'id, paciente_nome, data, hora, status, profissional_nome, observacoes');
+      setTransferAgendamentos(data);
+    } catch (err: any) {
+      toast.error(`Erro ao buscar agendamentos: ${err.message}`);
+      setTransferAgendamentos([]);
+    } finally {
+      setTransferBuscando(false);
+    }
   };
 
   const executarTransferencia = async () => {
