@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '@/contexts/DataContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
+import ConfiguracaoTriagem from '@/components/ConfiguracaoTriagem';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Card, CardContent } from '@/components/ui/card';
@@ -317,6 +318,9 @@ const Configuracoes: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Controle de Triagem por Profissional */}
+      <ConfiguracaoTriagem />
 
       {/* Acesso do Paciente ao Portal */}
       <Card className="shadow-card border-0">
