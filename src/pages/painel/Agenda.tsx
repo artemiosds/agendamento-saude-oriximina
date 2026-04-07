@@ -179,6 +179,42 @@ const Agenda: React.FC = () => {
   const [rejeicaoTarget, setRejeicaoTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [rejeicaoMotivo, setRejeicaoMotivo] = useState("");
 
+  // CANCELAMENTO com motivo obrigatório
+  const [cancelTarget, setCancelTarget] = useState<(typeof agendamentos)[0] | null>(null);
+  const [cancelMotivo, setCancelMotivo] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelConfig, setCancelConfig] = useState<{
+    prazo_minimo_horas: number;
+    limite_cancelamentos_mes: number;
+    dias_bloqueio_apos_limite: number;
+    motivos: string[];
+    notificar_profissional: boolean;
+    liberar_vaga_automaticamente: boolean;
+  }>({
+    prazo_minimo_horas: 24,
+    limite_cancelamentos_mes: 3,
+    dias_bloqueio_apos_limite: 7,
+    motivos: ['Compromisso pessoal', 'Problema de saúde', 'Falta de transporte', 'Horário incompatível', 'Outro'],
+    notificar_profissional: true,
+    liberar_vaga_automaticamente: true,
+  });
+
+  // Load cancel config
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('system_config')
+          .select('configuracoes')
+          .eq('id', 'config_cancelamentos')
+          .maybeSingle();
+        if (data?.configuracoes) {
+          setCancelConfig(prev => ({ ...prev, ...(data.configuracoes as any) }));
+        }
+      } catch {}
+    })();
+  }, []);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
