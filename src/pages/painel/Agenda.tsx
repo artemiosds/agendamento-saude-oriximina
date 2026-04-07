@@ -928,6 +928,7 @@ const Agenda: React.FC = () => {
     }
   };
 
+  const handleDeleteAgendamento = async (agId: string) => {
     if (!can("agenda", "can_delete")) {
       toast.error("Sem permissão para excluir.");
       return;
