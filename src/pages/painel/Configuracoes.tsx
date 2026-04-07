@@ -54,7 +54,7 @@ const Configuracoes: React.FC = () => {
   const [transferBuscando, setTransferBuscando] = useState(false);
 
   const isMaster = user?.role === 'master';
-  const profissionaisAtivos = funcionarios.filter(f => f.ativo && ['profissional', 'enfermagem'].includes(f.role));
+  const profissionaisAtivos = funcionarios.filter(f => f.ativo);
 
   const buscarAgendamentosReativar = async (profId: string) => {
     if (!profId) { setReativarAgendamentos([]); return; }
