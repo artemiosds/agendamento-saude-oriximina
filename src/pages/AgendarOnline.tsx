@@ -442,12 +442,16 @@ const AgendarOnline: React.FC = () => {
               </div>
               <h2 className="text-xl font-bold font-display text-foreground mb-2">Agendamento Confirmado!</h2>
               <p className="text-muted-foreground mb-4">
-                {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
-              </p>
-              <p className="text-sm text-muted-foreground mb-2"><strong>Profissional:</strong> {prof?.nome}</p>
-              <p className="text-sm text-muted-foreground mb-2"><strong>Unidade:</strong> {unidade?.nome}</p>
-              <p className="text-sm text-muted-foreground mb-2"><strong>Tipo:</strong> {form.tipo}</p>
-              <p className="text-sm text-muted-foreground mb-4">Lembre-se de chegar com 15 minutos de antecedência.</p>
+                {onlineConfig.mensagem_confirmacao ? (
+                  <p className="text-muted-foreground mb-4">{onlineConfig.mensagem_confirmacao}</p>
+                ) : (
+                  <p className="text-muted-foreground mb-4">
+                    {form.nome}, sua {form.tipo === 'Retorno' ? 'consulta de retorno' : 'consulta'} foi agendada para <strong>{form.data}</strong> às <strong>{form.hora}</strong>.
+                  </p>
+                )}
+                <p className="text-muted-foreground mb-4 text-sm">
+                  <strong>{form.nome}</strong> — {form.data} às {form.hora}
+                </p>
               <div className="bg-info/10 p-3 rounded-lg text-sm text-info mb-4">
                 <p className="font-medium">Sua conta no Portal do Paciente foi criada!</p>
                 <p className="text-xs mt-1">Acesse com seu e-mail e a senha escolhida para ver seus agendamentos.</p>
