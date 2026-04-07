@@ -85,6 +85,9 @@ const AgendarOnline: React.FC = () => {
       setDisponibilidades(json.disponibilidades || []);
       setBloqueios(json.bloqueios || []);
       setAgendamentos(json.agendamentos || []);
+      if (json.config_agendamento_online) {
+        setOnlineConfig(json.config_agendamento_online);
+      }
     } catch (err) {
       console.error('Failed to load public scheduling data:', err);
       toast.error('Erro ao carregar dados de agendamento.');
