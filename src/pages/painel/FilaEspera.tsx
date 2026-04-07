@@ -333,7 +333,7 @@ const FilaEspera: React.FC = () => {
     };
     const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
-      .filter((f) => !query || f.pacienteNome.toLowerCase().includes(query))
+      .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
       .filter((f) => filterUnidade === "all" || f.unidadeId === filterUnidade)
       .filter((f) => filterProf === "all" || f.profissionalId === filterProf)
       .filter((f) => filterStatus === "all" || f.status === filterStatus)
