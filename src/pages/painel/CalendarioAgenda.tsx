@@ -300,7 +300,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
             day.getUTCMonth() === currentMonth.getUTCMonth() &&
             day.getUTCFullYear() === currentMonth.getUTCFullYear();
 
-          const isDisabled = info.status === "blocked" || info.status === "past";
+          const isDisabled = info.status === "blocked";
 
           return (
             <button
