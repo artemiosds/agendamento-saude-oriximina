@@ -1887,6 +1887,17 @@ const Agenda: React.FC = () => {
                               <sa.icon className="w-3.5 h-3.5" />
                             </Button>
                           ))}
+                        {!isProfissional && ag.status !== "cancelado" && ag.status !== "concluido" && !ehPendenteOnline && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 text-xs border-destructive/50 text-destructive"
+                            title="Cancelar Agendamento"
+                            onClick={() => { setCancelTarget(ag); setCancelMotivo(''); }}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         {can("agenda", "can_delete") && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
