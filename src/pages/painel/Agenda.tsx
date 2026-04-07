@@ -1505,13 +1505,13 @@ const Agenda: React.FC = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <p className="font-semibold text-foreground cursor-default">
-                              {tipoInfo.icon} {ag.pacienteNome}
+                              {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                               {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                             </p>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs">
                             <p className="text-xs">
-                              <strong>Paciente:</strong> {ag.pacienteNome}
+                              <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                             </p>
                             {paciente?.telefone && (
                               <p className="text-xs">
