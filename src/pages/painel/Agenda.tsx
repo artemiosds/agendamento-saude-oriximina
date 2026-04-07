@@ -417,6 +417,37 @@ const Agenda: React.FC = () => {
         if (!confirmou) return;
       }
     }
+
+    // Server-side slot availability check
+    const canOverride = user && ["master", "coordenador"].includes(user.role);
+    try {
+      const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
+        p_profissional_id: newAg.profissionalId,
+        p_unidade_id: prof.unidadeId,
+        p_data: selectedDate,
+        p_hora: newAg.hora,
+      });
+      if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
+        const reason = (slotCheck as any).reason;
+        const reasonMsg =
+          reason === "date_blocked" ? "Data bloqueada." :
+          reason === "day_full" ? "Vagas do dia esgotadas." :
+          reason === "hour_full" ? "Vagas deste horário esgotadas." :
+          reason === "no_availability" ? "Sem disponibilidade cadastrada." :
+          "Sem disponibilidade.";
+        if (!canOverride) {
+          toast.error(`Não é possível agendar: ${reasonMsg}`);
+          return;
+        }
+        const confirmou = window.confirm(
+          `${reasonMsg} Deseja forçar um encaixe como ${user?.role}?`,
+        );
+        if (!confirmou) return;
+      }
+    } catch {
+      // If RPC fails, allow creation (fallback)
+    }
+
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
     const agId = `ag${Date.now()}`;
     const agData = {
