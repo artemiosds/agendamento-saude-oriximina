@@ -92,7 +92,7 @@ const Atendimentos: React.FC = () => {
                     {at.data} {at.hora_inicio}
                   </span>
                   <div className="flex-1">
-                    <p className="font-semibold text-foreground">{at.paciente_nome}</p>
+                    <p className="font-semibold text-foreground">{resolvePaciente(at.paciente_id, at.paciente_nome)}</p>
                     <p className="text-sm text-muted-foreground">{at.profissional_nome} • {at.procedimento}</p>
                     {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
                   </div>
