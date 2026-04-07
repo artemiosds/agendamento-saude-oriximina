@@ -30,6 +30,8 @@ import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
+import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -204,6 +206,7 @@ const ProntuarioPage: React.FC = () => {
 
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [docModalOpen, setDocModalOpen] = useState(false);
 
   useEffect(() => {
     const loadProcs = async () => {
@@ -861,6 +864,13 @@ const ProntuarioPage: React.FC = () => {
               >
                 <Printer className="w-4 h-4 mr-2" />
                 Imprimir Histórico Completo
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDocModalOpen(true)}
+              >
+                <Stamp className="w-4 h-4 mr-2" />
+                Gerar Documento
               </Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
@@ -1523,6 +1533,19 @@ const ProntuarioPage: React.FC = () => {
       )}
 
       <div ref={printRef} className="hidden" />
+
+      {/* Modal Gerar Documento Clínico */}
+      <GerarDocumentoModal
+        open={docModalOpen}
+        onOpenChange={setDocModalOpen}
+        paciente={(() => {
+          const p = pacientes.find(x => x.id === queryPacienteId);
+          return p ? { nome: p.nome, cpf: p.cpf, cns: p.cns, data_nascimento: p.dataNascimento, cid: p.cid, especialidade_destino: '' } : undefined;
+        })()}
+        profissional={user ? { nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
+        unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
+        dataAtendimento={new Date().toLocaleDateString('pt-BR')}
+      />
     </div>
   );
 };
