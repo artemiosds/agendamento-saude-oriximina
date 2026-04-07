@@ -232,6 +232,66 @@ const Configuracoes: React.FC = () => {
     }
   }, []);
 
+  // Load Agendamento Online + Cancelamentos configs
+  useEffect(() => {
+    if (!isMaster) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('system_config')
+          .select('id, configuracoes')
+          .in('id', ['config_agendamento_online', 'config_cancelamentos']);
+        if (data) {
+          for (const row of data) {
+            const cfg = row.configuracoes as any;
+            if (row.id === 'config_agendamento_online' && cfg) {
+              setAgOnline(prev => ({ ...prev, ...cfg }));
+            }
+            if (row.id === 'config_cancelamentos' && cfg) {
+              setCancelConfig(prev => ({ ...prev, ...cfg }));
+            }
+          }
+        }
+      } catch {}
+      setAgOnlineLoading(false);
+      setCancelLoading(false);
+    })();
+  }, [isMaster]);
+
+  const saveAgOnline = async () => {
+    setAgOnlineSaving(true);
+    try {
+      const { error } = await supabase.from('system_config').upsert({
+        id: 'config_agendamento_online',
+        configuracoes: agOnline as any,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      toast.success('Configurações de agendamento online salvas!');
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setAgOnlineSaving(false);
+    }
+  };
+
+  const saveCancelConfig = async () => {
+    setCancelSaving(true);
+    try {
+      const { error } = await supabase.from('system_config').upsert({
+        id: 'config_cancelamentos',
+        configuracoes: cancelConfig as any,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      toast.success('Regras de cancelamento salvas!');
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setCancelSaving(false);
+    }
+  };
+
   // Check connection status on mount
   useEffect(() => {
     gcal.checkStatus().then((connected) => {
