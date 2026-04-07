@@ -45,7 +45,8 @@ interface PublicUnit { id: string; nome: string; endereco: string; telefone: str
 interface PublicProf { id: string; nome: string; setor: string; unidade_id: string; sala_id: string; role: string; ativo: boolean; profissao: string; tempo_atendimento: number; pode_agendar_retorno: boolean }
 interface PublicDisp { id: string; profissional_id: string; unidade_id: string; data_inicio: string; data_fim: string; dias_semana: number[]; hora_inicio: string; hora_fim: string; vagas_por_hora: number; vagas_por_dia: number; duracao_consulta: number }
 interface PublicBloqueio { id: string; data_inicio: string; data_fim: string; dia_inteiro: boolean; hora_inicio: string; hora_fim: string; profissional_id: string; unidade_id: string; tipo: string; titulo: string }
-interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string }
+interface PublicAg { id: string; profissional_id: string; unidade_id: string; data: string; hora: string; status: string; origem?: string }
+interface OnlineConfig { habilitado: boolean; antecedencia_minima_dias: number; antecedencia_maxima_dias: number; limite_por_dia_profissional: number; mensagem_confirmacao: string; exigir_confirmacao_sms: boolean }
 
 const statusOcupaVaga = (s: string) => !['cancelado','falta'].includes(s);
 
@@ -62,6 +63,7 @@ const AgendarOnline: React.FC = () => {
   const [disponibilidades, setDisponibilidades] = useState<PublicDisp[]>([]);
   const [bloqueios, setBloqueios] = useState<PublicBloqueio[]>([]);
   const [agendamentos, setAgendamentos] = useState<PublicAg[]>([]);
+  const [onlineConfig, setOnlineConfig] = useState<OnlineConfig>({ habilitado: true, antecedencia_minima_dias: 1, antecedencia_maxima_dias: 30, limite_por_dia_profissional: 99, mensagem_confirmacao: '', exigir_confirmacao_sms: false });
 
   const [form, setForm] = useState({
     unidadeId: '', profissionalId: '', tipo: 'Consulta',
