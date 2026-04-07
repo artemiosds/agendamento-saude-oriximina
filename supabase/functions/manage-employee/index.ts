@@ -212,7 +212,19 @@ serve(async (req) => {
       if (current.auth_user_id) {
         const authUpdate: Record<string, any> = {};
         
-        if (senha && typeof senha === 'string' && senha.length >= 6) {
+      if (senha && typeof senha === 'string' && senha.trim().length > 0) {
+          if (senha.length < 6) {
+            return new Response(
+              JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres." }),
+              { status: 200, headers: corsHeaders }
+            );
+          }
+          if (!/[a-z]/.test(senha) || !/[A-Z]/.test(senha) || !/[0-9]/.test(senha)) {
+            return new Response(
+              JSON.stringify({ error: "A senha deve conter letras minúsculas, maiúsculas e números." }),
+              { status: 200, headers: corsHeaders }
+            );
+          }
           authUpdate.password = senha;
         }
         if (newEmail && newEmail !== current.email?.trim().toLowerCase()) {
@@ -228,8 +240,14 @@ serve(async (req) => {
 
           if (authErr) {
             console.error("Auth update error:", authErr);
+            let errorMsg = "Erro ao atualizar credenciais de acesso.";
+            if (authErr.message?.includes("weak_password") || (authErr as any).code === "weak_password" || authErr.message?.includes("Password should contain")) {
+              errorMsg = "Senha fraca. A senha deve conter letras minúsculas, maiúsculas e números. Mínimo 6 caracteres.";
+            } else {
+              errorMsg = "Erro ao atualizar credenciais: " + authErr.message;
+            }
             return new Response(
-              JSON.stringify({ error: "Erro ao atualizar credenciais de acesso: " + authErr.message }),
+              JSON.stringify({ error: errorMsg }),
               { status: 200, headers: corsHeaders }
             );
           }

@@ -247,11 +247,14 @@ const Funcionarios: React.FC = () => {
               <div>
                 <Label>{editId ? 'Nova Senha (opcional)' : 'Senha *'}</Label>
                 <div className="relative">
-                  <Input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="pr-10" />
+                  <Input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="pr-10" placeholder="Min. 6 caracteres (a-z, A-Z, 0-9)" />
                   <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                {form.senha && (form.senha.length < 6 || !/[a-z]/.test(form.senha) || !/[A-Z]/.test(form.senha) || !/[0-9]/.test(form.senha)) && (
+                  <p className="text-xs text-destructive mt-1">A senha deve ter min. 6 caracteres com letras minúsculas, maiúsculas e números.</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
