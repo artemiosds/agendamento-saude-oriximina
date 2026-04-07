@@ -28,9 +28,9 @@ serve(async (req) => {
       );
     }
 
-    if (novaSenha.length < 6) {
+    if (typeof novaSenha !== 'string' || novaSenha.length < 6 || novaSenha.length > 200) {
       return new Response(
-        JSON.stringify({ error: "A senha deve ter no mínimo 6 caracteres." }),
+        JSON.stringify({ error: "A senha deve ter entre 6 e 200 caracteres." }),
         { status: 200, headers: corsHeaders }
       );
     }
@@ -39,31 +39,24 @@ serve(async (req) => {
     const emailNorm = email.trim().toLowerCase();
 
     if (tipo === "funcionario") {
-      // Find funcionario by CPF + email
-      const { data: func, error: funcErr } = await supabaseAdmin
+      // Find all active funcionarios and match by CPF + email
+      const { data: funcs, error: funcErr } = await supabaseAdmin
         .from("funcionarios")
-        .select("id, auth_user_id, cpf, email")
-        .eq("ativo", true)
-        .single() === undefined
-        ? { data: null, error: null }
-        : await supabaseAdmin
-            .from("funcionarios")
-            .select("id, auth_user_id, cpf, email")
-            .eq("ativo", true);
+        .select("id, auth_user_id, cpf, email, nome")
+        .eq("ativo", true);
 
-      if (funcErr || !func) {
+      if (funcErr || !funcs || funcs.length === 0) {
+        console.error("Error fetching funcionarios:", funcErr);
         return new Response(
           JSON.stringify({ error: "CPF ou e-mail não encontrado. Verifique os dados informados." }),
           { status: 200, headers: corsHeaders }
         );
       }
 
-      // Find matching record
-      const records = Array.isArray(func) ? func : [func];
-      const match = records.find(
+      const match = funcs.find(
         (f: any) =>
           f.cpf?.replace(/\D/g, "") === cpfNorm &&
-          f.email?.toLowerCase() === emailNorm
+          f.email?.trim().toLowerCase() === emailNorm
       );
 
       if (!match) {
@@ -87,6 +80,7 @@ serve(async (req) => {
       );
 
       if (authErr) {
+        console.error("Auth update error:", authErr);
         return new Response(
           JSON.stringify({ error: "Erro ao atualizar senha: " + authErr.message }),
           { status: 200, headers: corsHeaders }
@@ -96,7 +90,7 @@ serve(async (req) => {
       // Log action
       await supabaseAdmin.from("action_logs").insert({
         user_id: match.id,
-        user_nome: "sistema",
+        user_nome: match.nome || "sistema",
         role: "sistema",
         acao: "redefinir_senha",
         entidade: "funcionario",
@@ -113,12 +107,12 @@ serve(async (req) => {
     }
 
     if (tipo === "paciente") {
-      // Find paciente by CPF + email
+      // Find all pacientes and match by CPF + email
       const { data: pacs, error: pacErr } = await supabaseAdmin
         .from("pacientes")
-        .select("id, auth_user_id, cpf, email");
+        .select("id, auth_user_id, cpf, email, nome");
 
-      if (pacErr || !pacs) {
+      if (pacErr || !pacs || pacs.length === 0) {
         return new Response(
           JSON.stringify({ error: "CPF ou e-mail não encontrado. Verifique os dados informados." }),
           { status: 200, headers: corsHeaders }
@@ -128,7 +122,7 @@ serve(async (req) => {
       const match = pacs.find(
         (p: any) =>
           p.cpf?.replace(/\D/g, "") === cpfNorm &&
-          p.email?.toLowerCase() === emailNorm
+          p.email?.trim().toLowerCase() === emailNorm
       );
 
       if (!match) {
@@ -152,6 +146,7 @@ serve(async (req) => {
       );
 
       if (authErr) {
+        console.error("Auth update error:", authErr);
         return new Response(
           JSON.stringify({ error: "Erro ao atualizar senha: " + authErr.message }),
           { status: 200, headers: corsHeaders }
@@ -161,7 +156,7 @@ serve(async (req) => {
       // Log action
       await supabaseAdmin.from("action_logs").insert({
         user_id: match.id,
-        user_nome: "sistema",
+        user_nome: match.nome || "sistema",
         role: "sistema",
         acao: "redefinir_senha",
         entidade: "paciente",
