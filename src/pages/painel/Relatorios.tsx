@@ -1980,6 +1980,16 @@ ${dataRows}
                   <Label className="text-xs">Data Final *</Label>
                   <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
+                <div>
+                  <Label className="text-xs">Profissional</Label>
+                  <Select value={mapaProf} onValueChange={v => { setMapaProf(v); setMapaGenerated(false); }}>
+                    <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
