@@ -407,6 +407,12 @@ const ProntuarioPage: React.FC = () => {
     };
     setForm(formData);
     setPreviousForm(formData);
+    // Load exames from solicitacao_exames JSON
+    try {
+      const parsed = p.solicitacao_exames ? JSON.parse(p.solicitacao_exames) : null;
+      if (parsed?.exames && Array.isArray(parsed.exames)) setListaExames(parsed.exames);
+      else setListaExames([]);
+    } catch { setListaExames([]); }
     setDialogOpen(true);
     const pac = pacientes.find((px) => px.id === p.paciente_id);
     logAction({
