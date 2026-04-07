@@ -1232,6 +1232,182 @@ const Configuracoes: React.FC = () => {
                 })()}
               </CardContent>
             </Card>
+
+            {/* CONFIG 3 — Agendamento Online */}
+            <Card className="shadow-card border border-border/50">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+                    <Globe className="w-5 h-5 text-success" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold font-display text-foreground">Agendamento Online (Controle)</h3>
+                    <p className="text-sm text-muted-foreground">Regras para agendamento pelo portal do paciente</p>
+                  </div>
+                  {agOnlineLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                    <Switch checked={agOnline.habilitado} onCheckedChange={v => setAgOnline(prev => ({ ...prev, habilitado: v }))} />
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Antecedência mínima (dias)</Label>
+                    <Input type="number" min={0} value={agOnline.antecedencia_minima_dias} onChange={e => setAgOnline(prev => ({ ...prev, antecedencia_minima_dias: parseInt(e.target.value) || 0 }))} />
+                    <p className="text-xs text-muted-foreground">Ex: 1 = paciente agenda com pelo menos 1 dia de antecedência</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Antecedência máxima (dias)</Label>
+                    <Input type="number" min={1} value={agOnline.antecedencia_maxima_dias} onChange={e => setAgOnline(prev => ({ ...prev, antecedencia_maxima_dias: parseInt(e.target.value) || 30 }))} />
+                    <p className="text-xs text-muted-foreground">Ex: 30 = paciente pode agendar até 30 dias à frente</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Limite por dia por profissional</Label>
+                    <Input type="number" min={1} value={agOnline.limite_por_dia_profissional} onChange={e => setAgOnline(prev => ({ ...prev, limite_por_dia_profissional: parseInt(e.target.value) || 5 }))} />
+                    <p className="text-xs text-muted-foreground">Máximo de agendamentos online por profissional/dia</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Confirmação por SMS/WhatsApp</Label>
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <span className="text-sm text-muted-foreground">Exigir confirmação antes de confirmar vaga</span>
+                      <Switch checked={agOnline.exigir_confirmacao_sms} onCheckedChange={v => setAgOnline(prev => ({ ...prev, exigir_confirmacao_sms: v }))} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-1.5">
+                  <Label className="text-[13px] font-bold text-foreground/80">Mensagem de confirmação para o paciente</Label>
+                  <textarea
+                    className="w-full border rounded-lg p-3 text-sm bg-background text-foreground min-h-[80px] border-border"
+                    value={agOnline.mensagem_confirmacao}
+                    onChange={e => setAgOnline(prev => ({ ...prev, mensagem_confirmacao: e.target.value }))}
+                    placeholder="Mensagem exibida ao paciente ao confirmar agendamento"
+                  />
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-bold text-foreground/80">Profissionais com agendamento online bloqueado</Label>
+                  <p className="text-xs text-muted-foreground">Profissionais marcados não receberão agendamentos pelo portal</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto">
+                    {profissionaisAtivos.filter(p => ['profissional', 'master', 'coordenador'].includes(p.role)).map(p => (
+                      <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                        <span className="text-sm truncate">{p.nome}</span>
+                        <Switch
+                          checked={!agOnline.profissionais_bloqueados.includes(p.id)}
+                          onCheckedChange={v => {
+                            setAgOnline(prev => ({
+                              ...prev,
+                              profissionais_bloqueados: v
+                                ? prev.profissionais_bloqueados.filter(id => id !== p.id)
+                                : [...prev.profissionais_bloqueados, p.id],
+                            }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Button className="gradient-primary text-primary-foreground w-full mt-4" disabled={agOnlineSaving} onClick={saveAgOnline}>
+                  {agOnlineSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Salvar Configurações de Agendamento Online
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* CONFIG 4 — Controle de Cancelamentos */}
+            <Card className="shadow-card border border-border/50">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+                    <Ban className="w-5 h-5 text-destructive" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold font-display text-foreground">Controle de Cancelamentos</h3>
+                    <p className="text-sm text-muted-foreground">Regras e penalidades para cancelamentos de agendamentos</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Prazo mínimo sem penalidade (horas)</Label>
+                    <Input type="number" min={0} value={cancelConfig.prazo_minimo_horas} onChange={e => setCancelConfig(prev => ({ ...prev, prazo_minimo_horas: parseInt(e.target.value) || 0 }))} />
+                    <p className="text-xs text-muted-foreground">Ex: 24 = cancelar até 24h antes sem penalidade</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Limite de cancelamentos/mês</Label>
+                    <Input type="number" min={1} value={cancelConfig.limite_cancelamentos_mes} onChange={e => setCancelConfig(prev => ({ ...prev, limite_cancelamentos_mes: parseInt(e.target.value) || 3 }))} />
+                    <p className="text-xs text-muted-foreground">Máximo por paciente por mês</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[13px] font-bold text-foreground/80">Dias de bloqueio ao atingir limite</Label>
+                    <Input type="number" min={0} value={cancelConfig.dias_bloqueio_apos_limite} onChange={e => setCancelConfig(prev => ({ ...prev, dias_bloqueio_apos_limite: parseInt(e.target.value) || 0 }))} />
+                    <p className="text-xs text-muted-foreground">Paciente fica impedido de agendar por X dias</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">Notificar profissional ao cancelar</span>
+                      <p className="text-xs text-muted-foreground">Envia notificação ao profissional</p>
+                    </div>
+                    <Switch checked={cancelConfig.notificar_profissional} onCheckedChange={v => setCancelConfig(prev => ({ ...prev, notificar_profissional: v }))} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                    <div>
+                      <span className="text-sm font-medium text-foreground">Liberar vaga automaticamente</span>
+                      <p className="text-xs text-muted-foreground">Vaga fica disponível imediatamente</p>
+                    </div>
+                    <Switch checked={cancelConfig.liberar_vaga_automaticamente} onCheckedChange={v => setCancelConfig(prev => ({ ...prev, liberar_vaga_automaticamente: v }))} />
+                  </div>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <Label className="text-[13px] font-bold text-foreground/80">Motivos de cancelamento obrigatórios</Label>
+                  <p className="text-xs text-muted-foreground">Paciente/recepção deve selecionar um motivo ao cancelar</p>
+                  <div className="space-y-1.5">
+                    {cancelConfig.motivos.map((motivo, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <div className="flex-1 px-3 py-2 bg-muted/50 rounded-lg text-sm">{motivo}</div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={() => {
+                          setCancelConfig(prev => ({ ...prev, motivos: prev.motivos.filter((_, idx) => idx !== i) }));
+                        }}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Novo motivo..."
+                      value={novoMotivo}
+                      onChange={e => setNovoMotivo(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && novoMotivo.trim()) {
+                          setCancelConfig(prev => ({ ...prev, motivos: [...prev.motivos, novoMotivo.trim()] }));
+                          setNovoMotivo('');
+                        }
+                      }}
+                    />
+                    <Button variant="outline" size="icon" disabled={!novoMotivo.trim()} onClick={() => {
+                      setCancelConfig(prev => ({ ...prev, motivos: [...prev.motivos, novoMotivo.trim()] }));
+                      setNovoMotivo('');
+                    }}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <Button className="gradient-primary text-primary-foreground w-full mt-4" disabled={cancelSaving} onClick={saveCancelConfig}>
+                  {cancelSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Salvar Regras de Cancelamento
+                </Button>
+              </CardContent>
+            </Card>
           </TabsContent>
         )}
       </Tabs>
