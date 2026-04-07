@@ -863,6 +863,13 @@ const Configuracoes: React.FC = () => {
           </Card>
         </TabsContent>
 
+        {/* ═══ ABA PRONTUÁRIO (MASTER) ═══ */}
+        {isMaster && (
+          <TabsContent value="prontuario" className="space-y-4 mt-4">
+            <EditorProntuarioConfig />
+          </TabsContent>
+        )}
+
         {/* ═══ ABA ADMINISTRAÇÃO (MASTER) ═══ */}
         {isMaster && (
           <TabsContent value="admin" className="space-y-4 mt-4">
