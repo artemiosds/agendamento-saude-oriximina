@@ -118,7 +118,7 @@ const Atendimentos: React.FC = () => {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Excluir atendimento?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Excluir o atendimento de {at.paciente_nome}? Esta ação será registrada em log.
+                              Excluir o atendimento de {resolvePaciente(at.paciente_id, at.paciente_nome)}? Esta ação será registrada em log.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
