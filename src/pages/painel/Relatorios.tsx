@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -63,6 +63,17 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+
+  // Mapa de Atendimento state
+  const [mapaDateFrom, setMapaDateFrom] = useState('');
+  const [mapaDateTo, setMapaDateTo] = useState('');
+  const [mapaData, setMapaData] = useState<Array<{
+    num: number; paciente_nome: string; cns: string; telefone: string;
+    data: string; profissional_nome: string; especialidade: string; cid: string;
+    tipo: string;
+  }>>([]);
+  const [mapaGenerated, setMapaGenerated] = useState(false);
+  const [mapaLoading, setMapaLoading] = useState(false);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
