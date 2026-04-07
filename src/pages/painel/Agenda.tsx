@@ -1590,7 +1590,7 @@ const Agenda: React.FC = () => {
                 const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
-                const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
+                const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && (ehHoje || ag.status === "apto_atendimento");
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
