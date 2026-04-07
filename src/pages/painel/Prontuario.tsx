@@ -31,6 +31,7 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import SolicitacaoExames from "@/components/SolicitacaoExames";
 import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
@@ -207,6 +208,7 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
 
   useEffect(() => {
     const loadProcs = async () => {
@@ -366,6 +368,7 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     setSelectedProcIds([]);
     setEpisodios([]);
+    setListaExames([]);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0] });
     setDialogOpen(true);
   };
@@ -404,6 +407,12 @@ const ProntuarioPage: React.FC = () => {
     };
     setForm(formData);
     setPreviousForm(formData);
+    // Load exames from solicitacao_exames JSON
+    try {
+      const parsed = p.solicitacao_exames ? JSON.parse(p.solicitacao_exames) : null;
+      if (parsed?.exames && Array.isArray(parsed.exames)) setListaExames(parsed.exames);
+      else setListaExames([]);
+    } catch { setListaExames([]); }
     setDialogOpen(true);
     const pac = pacientes.find((px) => px.id === p.paciente_id);
     logAction({
@@ -452,7 +461,7 @@ const ProntuarioPage: React.FC = () => {
         hipotese: form.hipotese,
         conduta: form.conduta,
         prescricao: form.prescricao,
-        solicitacao_exames: form.solicitacao_exames,
+        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: form.observacoes,
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
@@ -1255,6 +1264,22 @@ const ProntuarioPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Solicitação de Exames */}
+            <SolicitacaoExames
+              profissionalId={user?.id || ""}
+              value={listaExames}
+              onChange={setListaExames}
+              pacienteNome={form.paciente_nome}
+              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
+              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              dataAtendimento={form.data_atendimento}
+              profissionalNome={user?.nome}
+              profissionalConselho={user?.numeroConselho}
+              profissionalTipoConselho={user?.tipoConselho}
+              profissionalUfConselho={user?.ufConselho}
+              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+            />
 
             {/* Decisão Clínica: PTS / Tratamento */}
             {!editId && form.paciente_id && (
