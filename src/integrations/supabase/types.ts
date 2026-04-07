@@ -341,6 +341,39 @@ export type Database = {
         }
         Relationships: []
       }
+      exam_types: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          codigo_sus: string
+          criado_em: string
+          id: string
+          is_global: boolean
+          nome: string
+          profissional_id: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string
+          codigo_sus?: string
+          criado_em?: string
+          id?: string
+          is_global?: boolean
+          nome: string
+          profissional_id?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          codigo_sus?: string
+          criado_em?: string
+          id?: string
+          is_global?: boolean
+          nome?: string
+          profissional_id?: string | null
+        }
+        Relationships: []
+      }
       fila_espera: {
         Row: {
           cid: string
@@ -1005,6 +1038,33 @@ export type Database = {
           nome?: string
           profissao?: string
           profissionais_ids?: string[] | null
+        }
+        Relationships: []
+      }
+      professional_preferences: {
+        Row: {
+          criado_em: string
+          desabilitado: boolean
+          id: string
+          item_id: string
+          profissional_id: string
+          tipo: string
+        }
+        Insert: {
+          criado_em?: string
+          desabilitado?: boolean
+          id?: string
+          item_id: string
+          profissional_id: string
+          tipo?: string
+        }
+        Update: {
+          criado_em?: string
+          desabilitado?: boolean
+          id?: string
+          item_id?: string
+          profissional_id?: string
+          tipo?: string
         }
         Relationships: []
       }
