@@ -461,7 +461,7 @@ const ProntuarioPage: React.FC = () => {
         hipotese: form.hipotese,
         conduta: form.conduta,
         prescricao: form.prescricao,
-        solicitacao_exames: form.solicitacao_exames,
+        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
         observacoes: form.observacoes,
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
