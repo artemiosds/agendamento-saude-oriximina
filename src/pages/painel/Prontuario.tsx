@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -198,6 +199,11 @@ const ProntuarioPage: React.FC = () => {
   const canEdit = hasPermission(["master", "coordenador", "profissional"]);
   const canDelete = hasPermission(["master", "coordenador"]);
   const tempoLimite = user?.tempoAtendimento || 30;
+  const { getEnabledFields: getStructureSections } = useProntuarioStructure();
+  const structureSections = getStructureSections();
+
+  // Custom fields storage (for fields not in DB columns)
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const loadProcs = async () => {
@@ -1083,118 +1089,107 @@ const ProntuarioPage: React.FC = () => {
               </Select>
             </div>
 
-            {/* SOAP Section - shown for sessão type */}
-            {form.tipo_registro === 'sessao' && (
-              <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
-                <h3 className="font-semibold text-sm text-primary">Registro SOAP — Sessão</h3>
-                <div>
-                  <Label>S — Subjetivo (Relato do paciente)</Label>
-                  <Textarea rows={2} value={form.soap_subjetivo}
-                    onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))}
-                    placeholder="O que o paciente relata..." />
-                </div>
-                <div>
-                  <Label>O — Objetivo (Dados observáveis)</Label>
-                  <Textarea rows={2} value={form.soap_objetivo}
-                    onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))}
-                    placeholder="Achados clínicos, exame físico, sinais vitais..." />
-                </div>
-                <div>
-                  <Label>A — Avaliação (Análise clínica)</Label>
-                  <Textarea rows={2} value={form.soap_avaliacao}
-                    onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))}
-                    placeholder="Interpretação dos achados, hipóteses, diagnóstico funcional..." />
-                </div>
-                <div>
-                  <Label>P — Plano (Plano da sessão)</Label>
-                  <Textarea rows={2} value={form.soap_plano}
-                    onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))}
-                    placeholder="Condutas, intervenções realizadas, próximos passos..." />
-                </div>
-              </div>
-            )}
+            {/* Dynamic fields from structure config */}
+            {structureSections ? (
+              structureSections.map(section => {
+                // SOAP section: only show for sessao type
+                if (section.id === 'sec_soap' && form.tipo_registro !== 'sessao') return null;
 
-            {/* Standard fields (hidden when SOAP mode is active, but still accessible) */}
-            <div>
-              <Label>{form.tipo_registro === 'avaliacao_inicial' ? 'Queixa Principal *' : 'Queixa Principal'}</Label>
-              <Textarea
-                rows={2}
-                value={form.queixa_principal}
-                onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Anamnese</Label>
-              <Textarea
-                rows={3}
-                value={form.anamnese}
-                onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Sinais e Sintomas</Label>
-              <Textarea
-                rows={2}
-                value={form.sinais_sintomas}
-                onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Exame Físico</Label>
-              <Textarea
-                rows={3}
-                value={form.exame_fisico}
-                onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Hipótese / Avaliação</Label>
-              <Textarea
-                rows={2}
-                value={form.hipotese}
-                onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Conduta</Label>
-              <Textarea
-                rows={2}
-                value={form.conduta}
-                onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Prescrição / Orientações</Label>
-              <Textarea
-                rows={2}
-                value={form.prescricao}
-                onChange={(e) => setForm((p) => ({ ...p, prescricao: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Solicitação de Exames</Label>
-              <Textarea
-                rows={2}
-                value={form.solicitacao_exames}
-                onChange={(e) => setForm((p) => ({ ...p, solicitacao_exames: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Evolução</Label>
-              <Textarea
-                rows={2}
-                value={form.evolucao}
-                onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Observações Gerais</Label>
-              <Textarea
-                rows={2}
-                value={form.observacoes}
-                onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))}
-              />
-            </div>
+                return (
+                  <div key={section.id} className={section.id === 'sec_soap' ? 'space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20' : 'space-y-3'}>
+                    {section.id === 'sec_soap' && <h3 className="font-semibold text-sm text-primary">Registro SOAP — Sessão</h3>}
+                    {section.id !== 'sec_soap' && section.title && (
+                      <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">{section.title}</h4>
+                    )}
+                    {section.fields.map(field => {
+                      const isBuiltin = field.isBuiltin;
+                      const formKey = field.key as keyof typeof form;
+                      const value = isBuiltin ? (form[formKey] || '') : (customFields[field.key] || '');
+                      const onChange = (val: string) => {
+                        if (isBuiltin) {
+                          setForm(p => ({ ...p, [field.key]: val }));
+                        } else {
+                          setCustomFields(p => ({ ...p, [field.key]: val }));
+                        }
+                      };
+
+                      return (
+                        <div key={field.id}>
+                          <Label>{field.label}{field.required && <span className="text-destructive ml-0.5">*</span>}</Label>
+                          {(field.type === 'textarea') && (
+                            <Textarea rows={2} value={value as string} onChange={e => onChange(e.target.value)} />
+                          )}
+                          {field.type === 'text' && (
+                            <Input value={value as string} onChange={e => onChange(e.target.value)} />
+                          )}
+                          {field.type === 'number' && (
+                            <Input type="number" value={value as string} onChange={e => onChange(e.target.value)} />
+                          )}
+                          {field.type === 'date' && (
+                            <Input type="date" value={value as string} onChange={e => onChange(e.target.value)} />
+                          )}
+                          {field.type === 'select' && field.key !== 'indicacao_retorno' && (
+                            <Select value={value as string || '_none'} onValueChange={v => onChange(v === '_none' ? '' : v)}>
+                              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_none">Selecione...</SelectItem>
+                                {(field.options || []).map(opt => (
+                                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {field.type === 'checkbox' && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Checkbox checked={value === 'true'} onCheckedChange={v => onChange(v ? 'true' : 'false')} />
+                              <span className="text-sm">{field.label}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              <>
+                {/* Fallback: original hardcoded fields when no config saved */}
+                {form.tipo_registro === 'sessao' && (
+                  <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
+                    <h3 className="font-semibold text-sm text-primary">Registro SOAP — Sessão</h3>
+                    <div>
+                      <Label>S — Subjetivo (Relato do paciente)</Label>
+                      <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))} placeholder="O que o paciente relata..." />
+                    </div>
+                    <div>
+                      <Label>O — Objetivo (Dados observáveis)</Label>
+                      <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))} placeholder="Achados clínicos, exame físico, sinais vitais..." />
+                    </div>
+                    <div>
+                      <Label>A — Avaliação (Análise clínica)</Label>
+                      <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))} placeholder="Interpretação dos achados, hipóteses, diagnóstico funcional..." />
+                    </div>
+                    <div>
+                      <Label>P — Plano (Plano da sessão)</Label>
+                      <Textarea rows={2} value={form.soap_plano} onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))} placeholder="Condutas, intervenções realizadas, próximos passos..." />
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <Label>{form.tipo_registro === 'avaliacao_inicial' ? 'Queixa Principal *' : 'Queixa Principal'}</Label>
+                  <Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} />
+                </div>
+                <div><Label>Anamnese</Label><Textarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
+                <div><Label>Sinais e Sintomas</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} /></div>
+                <div><Label>Exame Físico</Label><Textarea rows={3} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} /></div>
+                <div><Label>Hipótese / Avaliação</Label><Textarea rows={2} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} /></div>
+                <div><Label>Conduta</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
+                <div><Label>Prescrição / Orientações</Label><Textarea rows={2} value={form.prescricao} onChange={(e) => setForm((p) => ({ ...p, prescricao: e.target.value }))} /></div>
+                <div><Label>Solicitação de Exames</Label><Textarea rows={2} value={form.solicitacao_exames} onChange={(e) => setForm((p) => ({ ...p, solicitacao_exames: e.target.value }))} /></div>
+                <div><Label>Evolução</Label><Textarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
+                <div><Label>Observações Gerais</Label><Textarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
+              </>
+            )}
 
             {filteredProcedimentos.length > 0 && (
               <div>
