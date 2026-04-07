@@ -34,6 +34,7 @@ const menuItems: {
   { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
   { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
   { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },
+  { to: '/painel/alta',             label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
   { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
   { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
   { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
