@@ -1656,7 +1656,7 @@ ${dataRows}
                         <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 px-2 text-foreground">{a.data}</td>
                           <td className="py-2 px-2 text-foreground">{a.hora}</td>
-                          <td className="py-2 px-3 text-foreground font-medium">{a.pacienteNome}</td>
+                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
                           <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
                           <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
                           <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
