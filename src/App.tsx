@@ -246,12 +246,12 @@ const App = () => (
                         <Permissoes />
                       </ModuleRoute>
                     } />
-                    </Route>
                     <Route path="alta" element={
                       <ModuleRoute modulo="prontuario">
                         <RelatorioAlta />
                       </ModuleRoute>
                     } />
+                  </Route>
 
                   <Route path="*" element={<NotFound />} />
                 </Routes>
