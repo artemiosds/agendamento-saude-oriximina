@@ -842,7 +842,92 @@ const Agenda: React.FC = () => {
     }
   };
 
-  const handleDeleteAgendamento = async (agId: string) => {
+  const handleCancelarAgendamento = async () => {
+    if (!cancelTarget || !cancelMotivo) return;
+    setCancelLoading(true);
+    try {
+      const ag = cancelTarget;
+      const paciente = pacientes.find(p => p.id === ag.pacienteId || p.nome === ag.pacienteNome);
+
+      // Check cancellation limit for this patient this month
+      const now = new Date();
+      const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const { count: cancelCount } = await supabase
+        .from('agendamentos')
+        .select('*', { count: 'exact', head: true })
+        .eq('paciente_id', ag.pacienteId)
+        .eq('status', 'cancelado')
+        .gte('atualizado_em', `${mesAtual}-01T00:00:00`)
+        .lt('atualizado_em', `${mesAtual === `${now.getFullYear()}-12` ? `${now.getFullYear() + 1}-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, '0')}`}-01T00:00:00`);
+
+      if ((cancelCount || 0) >= cancelConfig.limite_cancelamentos_mes) {
+        toast.error(`Limite de ${cancelConfig.limite_cancelamentos_mes} cancelamentos/mês atingido para este paciente. Paciente ficará bloqueado por ${cancelConfig.dias_bloqueio_apos_limite} dias.`);
+      }
+
+      // Append motivo to observacoes
+      const obsAnterior = ag.observacoes || '';
+      const novaObs = `${obsAnterior}\n[CANCELAMENTO] Motivo: ${cancelMotivo} | Por: ${user?.nome || 'Sistema'} | Em: ${new Date().toLocaleString('pt-BR')}`.trim();
+
+      await updateAgendamento(ag.id, { status: 'cancelado' as any });
+      await (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id);
+
+      await logAction({
+        acao: 'cancelar',
+        entidade: 'agendamento',
+        entidadeId: ag.id,
+        modulo: 'agenda',
+        user,
+        detalhes: { paciente: ag.pacienteNome, motivo: cancelMotivo },
+      });
+
+      // Notify
+      if (cancelConfig.notificar_profissional) {
+        const unidade = unidades.find(u => u.id === ag.unidadeId);
+        await notify({
+          evento: 'cancelamento' as any,
+          paciente_nome: ag.pacienteNome,
+          telefone: paciente?.telefone || '',
+          email: paciente?.email || '',
+          data_consulta: ag.data,
+          hora_consulta: ag.hora,
+          unidade: unidade?.nome || '',
+          profissional: ag.profissionalNome,
+          tipo_atendimento: ag.tipo,
+          status_agendamento: 'cancelado',
+          id_agendamento: ag.id,
+          observacoes: `Motivo: ${cancelMotivo}`,
+        });
+      }
+
+      // Liberar vaga
+      if (cancelConfig.liberar_vaga_automaticamente) {
+        await handleVagaLiberada(
+          { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
+          'cancelamento',
+          user,
+        );
+      }
+
+      // Google Calendar
+      if (ag.googleEventId && configuracoes.googleCalendar.removerCancelar) {
+        try {
+          await gcal.deleteEvent(ag.googleEventId);
+          await updateAgendamento(ag.id, { syncStatus: 'ok' });
+        } catch {}
+      }
+
+      await Promise.all([refreshAgendamentos(), refreshFila()]);
+      toast.success('Agendamento cancelado com sucesso.');
+      setCancelTarget(null);
+      setCancelMotivo('');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao cancelar: ${err.message}`);
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
     if (!can("agenda", "can_delete")) {
       toast.error("Sem permissão para excluir.");
       return;
