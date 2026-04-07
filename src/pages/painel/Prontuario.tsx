@@ -865,6 +865,13 @@ const ProntuarioPage: React.FC = () => {
                 <Printer className="w-4 h-4 mr-2" />
                 Imprimir Histórico Completo
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDocModalOpen(true)}
+              >
+                <Stamp className="w-4 h-4 mr-2" />
+                Gerar Documento
+              </Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
               </Button>
