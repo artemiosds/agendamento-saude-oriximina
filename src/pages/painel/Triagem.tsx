@@ -251,18 +251,8 @@ const Triagem: React.FC = () => {
     if (!selectedItem) return;
     setSaving(true);
 
-    if (
-      !form.peso ||
-      !form.altura ||
-      !form.pressaoArterial ||
-      !form.temperatura ||
-      !form.frequenciaCardiaca ||
-      !form.saturacaoOxigenio ||
-      !form.classificacaoRisco ||
-      !form.queixaPrincipal ||
-      !form.observacoes
-    ) {
-      toast.error("Por favor, preencha todos os campos obrigatórios da triagem.");
+    if (!form.classificacaoRisco) {
+      toast.error("Por favor, selecione a Classificação de Risco.");
       setSaving(false);
       return;
     }
@@ -437,11 +427,11 @@ const Triagem: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
-                <Label>Peso (kg) *</Label>
+                <Label>Peso (kg)</Label>
                 <Input type="number" step="0.01" value={form.peso} onChange={(e) => setForm((p) => ({ ...p, peso: e.target.value }))} placeholder="70.5" />
               </div>
               <div>
-                <Label>Altura (cm) *</Label>
+                <Label>Altura (cm)</Label>
                 <Input type="number" step="0.01" value={form.altura} onChange={(e) => setForm((p) => ({ ...p, altura: e.target.value }))} placeholder="170" />
               </div>
               <div>
@@ -457,19 +447,19 @@ const Triagem: React.FC = () => {
                 </div>
               </div>
               <div>
-                <Label>Pressão Arterial *</Label>
+                <Label>Pressão Arterial</Label>
                 <Input value={form.pressaoArterial} onChange={(e) => setForm((p) => ({ ...p, pressaoArterial: e.target.value }))} placeholder="120/80" />
               </div>
               <div>
-                <Label>Temperatura (°C) *</Label>
+                <Label>Temperatura (°C)</Label>
                 <Input type="number" step="0.1" value={form.temperatura} onChange={(e) => setForm((p) => ({ ...p, temperatura: e.target.value }))} placeholder="36.5" />
               </div>
               <div>
-                <Label>FC (bpm) *</Label>
+                <Label>FC (bpm)</Label>
                 <Input type="number" value={form.frequenciaCardiaca} onChange={(e) => setForm((p) => ({ ...p, frequenciaCardiaca: e.target.value }))} placeholder="72" />
               </div>
               <div>
-                <Label>SatO2 (%) *</Label>
+                <Label>SatO2 (%)</Label>
                 <Input type="number" value={form.saturacaoOxigenio} onChange={(e) => setForm((p) => ({ ...p, saturacaoOxigenio: e.target.value }))} placeholder="98" />
               </div>
               <div>
@@ -499,7 +489,7 @@ const Triagem: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>Queixa Principal *</Label>
+              <Label>Queixa Principal</Label>
               <Textarea rows={2} value={form.queixaPrincipal} onChange={(e) => setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))} placeholder="Queixa principal do paciente..." />
             </div>
             <div>
@@ -545,7 +535,7 @@ const Triagem: React.FC = () => {
               )}
             </div>
             <div>
-              <Label>Observações *</Label>
+              <Label>Observações</Label>
               <Textarea rows={3} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} placeholder="Observações relevantes da triagem..." />
             </div>
             <div className="flex flex-col gap-2">
