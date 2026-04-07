@@ -285,7 +285,7 @@ const Agenda: React.FC = () => {
 
     return base.filter((a) => {
       const pac = pacientes.find((p) => p.id === a.pacienteId);
-      const nome = a.pacienteNome.toLowerCase();
+      const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
       const cpf = pac?.cpf?.toLowerCase() || "";
       const cns = pac?.cns?.toLowerCase() || "";
       return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
