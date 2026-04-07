@@ -239,6 +239,16 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
   }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
 
+  // Clear selected hora when it's no longer in available slots
+  React.useEffect(() => {
+    if (newAg.hora && newAgSlots.length > 0 && !newAgSlots.includes(newAg.hora)) {
+      setNewAg((p) => ({ ...p, hora: "" }));
+    }
+    if (newAgSlots.length === 0 && newAg.hora) {
+      setNewAg((p) => ({ ...p, hora: "" }));
+    }
+  }, [newAgSlots, newAg.hora]);
+
   const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
     return getAvailableDates(user.id, user.unidadeId);
