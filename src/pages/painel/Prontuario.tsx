@@ -31,6 +31,7 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import SolicitacaoExames from "@/components/SolicitacaoExames";
 import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
