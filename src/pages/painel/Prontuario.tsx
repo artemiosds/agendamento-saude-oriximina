@@ -199,6 +199,11 @@ const ProntuarioPage: React.FC = () => {
   const canEdit = hasPermission(["master", "coordenador", "profissional"]);
   const canDelete = hasPermission(["master", "coordenador"]);
   const tempoLimite = user?.tempoAtendimento || 30;
+  const { getEnabledFields: getStructureSections } = useProntuarioStructure();
+  const structureSections = getStructureSections();
+
+  // Custom fields storage (for fields not in DB columns)
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const loadProcs = async () => {
