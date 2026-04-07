@@ -1073,6 +1073,7 @@ ${dataRows}
           <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
           <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
+          <TabsTrigger value="mapa" className="text-xs"><MapPin className="w-3 h-3 mr-1" />Mapa Atendimento</TabsTrigger>
         </TabsList>
 
         {/* === GERAL === */}
