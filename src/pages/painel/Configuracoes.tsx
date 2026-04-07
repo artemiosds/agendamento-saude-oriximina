@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info, FileText } from 'lucide-react';
+import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info, FileText, Globe, Ban, Plus, Trash2 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import ModelosDocumentos from '@/components/ModelosDocumentos';
 import { Stamp } from 'lucide-react';
