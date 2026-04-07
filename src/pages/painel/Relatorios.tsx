@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -63,6 +63,17 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+
+  // Mapa de Atendimento state
+  const [mapaDateFrom, setMapaDateFrom] = useState('');
+  const [mapaDateTo, setMapaDateTo] = useState('');
+  const [mapaData, setMapaData] = useState<Array<{
+    num: number; paciente_nome: string; cns: string; telefone: string;
+    data: string; profissional_nome: string; especialidade: string; cid: string;
+    tipo: string;
+  }>>([]);
+  const [mapaGenerated, setMapaGenerated] = useState(false);
+  const [mapaLoading, setMapaLoading] = useState(false);
 
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
@@ -796,6 +807,152 @@ ${dataRows}
     );
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
+  // === MAPA DE ATENDIMENTO ===
+  const generateMapa = useCallback(async () => {
+    if (!mapaDateFrom || !mapaDateTo) return;
+    setMapaLoading(true);
+    try {
+      const { data: atendimentos } = await supabase
+        .from('atendimentos')
+        .select('paciente_id, paciente_nome, profissional_nome, data, setor, procedimento, status')
+        .eq('status', 'concluido')
+        .gte('data', mapaDateFrom)
+        .lte('data', mapaDateTo)
+        .order('data', { ascending: true })
+        .limit(2000);
+
+      if (!atendimentos || atendimentos.length === 0) {
+        setMapaData([]);
+        setMapaGenerated(true);
+        setMapaLoading(false);
+        return;
+      }
+
+      const pacienteIds = [...new Set(atendimentos.map(a => a.paciente_id))];
+      const { data: pacs } = await supabase
+        .from('pacientes')
+        .select('id, cns, telefone, cid')
+        .in('id', pacienteIds);
+
+      const pacMap = new Map((pacs || []).map(p => [p.id, p]));
+
+      const rows = atendimentos.map((a, i) => {
+        const pac = pacMap.get(a.paciente_id);
+        return {
+          num: i + 1,
+          paciente_nome: a.paciente_nome,
+          cns: pac?.cns || '',
+          telefone: pac?.telefone || '',
+          data: a.data,
+          profissional_nome: a.profissional_nome,
+          especialidade: a.setor || '',
+          cid: pac?.cid || '',
+          tipo: a.procedimento || '',
+        };
+      });
+
+      setMapaData(rows);
+      setMapaGenerated(true);
+    } catch (e) {
+      console.error('Erro ao gerar mapa:', e);
+    } finally {
+      setMapaLoading(false);
+    }
+  }, [mapaDateFrom, mapaDateTo]);
+
+  const formatDateBR = (d: string) => {
+    if (!d) return '';
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  };
+
+  const exportMapaPDF = useCallback(() => {
+    if (mapaData.length === 0) return;
+    const now = new Date().toLocaleString('pt-BR');
+    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+
+    const tableRows = mapaData.map((r, i) =>
+      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${r.cns}</td><td>${r.telefone}</td><td>${formatDateBR(r.data)}</td><td>${r.profissional_nome}</td><td>${r.especialidade}</td><td>${r.cid}</td></tr>`
+    ).join('');
+
+    const body = `
+      <h2>Mapa de Atendimentos Concluídos</h2>
+      <table>
+        <thead><tr>
+          <th style="width:35px;text-align:center">Nº</th>
+          <th>Nome do Paciente</th><th>CNS</th><th>Telefone</th>
+          <th style="width:85px">Data</th><th>Profissional</th>
+          <th>Especialidade</th><th style="width:60px">CID</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot><tr><td colspan="8" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+      </table>
+      <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const logoSrc = '/logo-sms.jpeg';
+    const logoUrl = window.location.origin + logoSrc;
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; padding:16px; color:#1e293b; font-size:10px; line-height:1.4; }
+  .doc-header { display:flex; align-items:center; gap:14px; padding:12px 16px; margin-bottom:12px;
+    background:linear-gradient(135deg,#0c4a6e,#0369a1); border-radius:6px; color:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .doc-header img { width:48px; height:48px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
+  .doc-header .header-text { flex:1; }
+  .doc-header h1 { font-size:13px; font-weight:700; }
+  .doc-header .subtitle { font-size:10px; opacity:.85; margin-top:1px; }
+  .doc-header .doc-title { font-size:11px; font-weight:700; margin-top:4px; text-transform:uppercase; }
+  .doc-header .emit-date { text-align:right; font-size:8px; opacity:.75; white-space:nowrap; }
+  .periodo { text-align:center; font-size:11px; color:#334155; margin-bottom:10px; font-weight:600; }
+  h2 { font-size:12px; color:#0369a1; margin:10px 0 6px; padding-bottom:3px; border-bottom:2px solid #e0f2fe; }
+  table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+  th,td { border:1px solid #e2e8f0; padding:4px 6px; text-align:left; font-size:9px; }
+  th { background:#f1f5f9; font-weight:600; color:#334155; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tr:nth-child(even) { background:#f9f9f9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tfoot td { border-top:2px solid #0369a1; }
+  @media print { body { padding:6px; } .no-print { display:none !important; } }
+</style></head><body>
+  <div class="doc-header">
+    <img src="${logoUrl}" alt="Logo" />
+    <div class="header-text">
+      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
+      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div>
+      <div class="doc-title">Mapa de Atendimentos Concluídos</div>
+    </div>
+    <div class="emit-date">Data de emissão:<br/>${now}</div>
+  </div>
+  <div class="periodo">Período: ${periodo}</div>
+  ${body}
+</body></html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+  }, [mapaData, mapaDateFrom, mapaDateTo, user]);
+
+  const exportMapaCSV = useCallback(() => {
+    if (mapaData.length === 0) return;
+    const headers = ['Nº', 'Nome do Paciente', 'CNS', 'Telefone', 'Data', 'Profissional', 'Especialidade', 'CID'];
+    const rows = mapaData.map(r => [
+      r.num.toString(), r.paciente_nome, r.cns, r.telefone,
+      formatDateBR(r.data), r.profissional_nome, r.especialidade, r.cid,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mapa-atendimentos-${mapaDateFrom}-a-${mapaDateTo}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [mapaData, mapaDateFrom, mapaDateTo]);
+
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
   };
@@ -916,6 +1073,7 @@ ${dataRows}
           <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
           <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
           <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
+          <TabsTrigger value="mapa" className="text-xs"><MapPin className="w-3 h-3 mr-1" />Mapa Atendimento</TabsTrigger>
         </TabsList>
 
         {/* === GERAL === */}
@@ -1792,6 +1950,79 @@ ${dataRows}
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* === MAPA DE ATENDIMENTO === */}
+        <TabsContent value="mapa" className="space-y-5 mt-4">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" /> Mapa de Atendimentos Concluídos
+              </h3>
+              <div className="flex flex-wrap items-end gap-3 mb-4">
+                <div>
+                  <Label className="text-xs">Data Inicial *</Label>
+                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <div>
+                  <Label className="text-xs">Data Final *</Label>
+                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                  <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <FileText className="w-4 h-4 mr-1" />PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <Download className="w-4 h-4 mr-1" />CSV
+                </Button>
+              </div>
+
+              {mapaGenerated && mapaData.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">Nenhum atendimento concluído encontrado no período selecionado.</p>
+              )}
+
+              {mapaGenerated && mapaData.length > 0 && (
+                <div className="overflow-x-auto">
+                  <p className="text-xs text-muted-foreground mb-2">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-muted/60">
+                        <th className="border border-border px-2 py-1.5 text-center w-10">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left">CNS</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Data</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mapaData.map((r, i) => (
+                        <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                          <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
+                          <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                          <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
+                          <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                          <td className="border border-border px-2 py-1">{formatDateBR(r.data)}</td>
+                          <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
+                          <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                          <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/60 font-semibold">
+                        <td colSpan={8} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
