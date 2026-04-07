@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
@@ -165,6 +166,7 @@ const FilaEspera: React.FC = () => {
   } = useData();
   const { user, hasPermission } = useAuth();
   const [detalheOpen, setDetalheOpen] = useState(false);
+  const resolvePaciente = usePacienteNomeResolver();
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
