@@ -177,7 +177,7 @@ const RelatorioAlta: React.FC = () => {
         profissional_id: profId,
         profissional_nome: val.nome,
         profissao: func?.profissao || "",
-        conselho: func ? `${func.tipo_conselho} ${func.numero_conselho}/${func.uf_conselho}` : "",
+        conselho: func ? `${func.tipoConselho} ${func.numeroConselho}/${func.ufConselho}` : "",
         periodo_inicio: datas[0] || "",
         periodo_fim: datas[datas.length - 1] || "",
         sessoes: sessionCounts.get(profId) || val.datas.length,
@@ -262,13 +262,13 @@ const RelatorioAlta: React.FC = () => {
     let html = `
       <div class="info-grid">
         <div><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.data_nascimento)} (${calcIdade(p.data_nascimento)})</span></div>
+        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
         <div><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
         <div><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nome_responsavel || "—"}</span></div>
+        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
         <div><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(dataAlta)}</span></div>
         <div><span class="info-label">Modalidades</span><br/><span class="info-value">${modalidades.join(", ") || "—"}</span></div>
-        <div><span class="info-label">Data Admissão</span><br/><span class="info-value">${fmt(p.criado_em || "")}</span></div>
+        <div><span class="info-label">Data Admissão</span><br/><span class="info-value">${fmt(p.criadoEm || "")}</span></div>
       </div>
 
       <h2>Diagnóstico</h2>
@@ -340,17 +340,17 @@ const RelatorioAlta: React.FC = () => {
     const func = funcionarios.find(f => f.id === user?.id);
     const profNome = user?.nome || "";
     const profissao = func?.profissao || user?.cargo || "";
-    const conselho = func ? `${func.tipo_conselho} ${func.numero_conselho}/${func.uf_conselho}` : "";
+    const conselho = func ? `${func.tipoConselho} ${func.numeroConselho}/${func.ufConselho}` : "";
 
     const motivoLabel = MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || indMotivo;
 
     return `
       <div class="info-grid">
         <div><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.data_nascimento)} (${calcIdade(p.data_nascimento)})</span></div>
+        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
         <div><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
         <div><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nome_responsavel || "—"}</span></div>
+        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
         <div><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(indDataAlta)}</span></div>
         <div><span class="info-label">Profissional</span><br/><span class="info-value">${profNome} — ${profissao}</span></div>
         <div><span class="info-label">Conselho</span><br/><span class="info-value">${conselho}</span></div>
@@ -421,7 +421,7 @@ const RelatorioAlta: React.FC = () => {
     const errs = type === "multi" ? validateMulti() : validateInd();
     if (errs.length > 0) { toast.error(errs[0]); return; }
 
-    const unidade = user?.unidade_id || "";
+    const unidade = user?.unidadeId || "";
     const dataAlt = type === "multi" ? dataAlta : indDataAlta;
 
     const record = {
@@ -541,11 +541,11 @@ const RelatorioAlta: React.FC = () => {
             {paciente && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-muted/50 rounded-lg p-3">
                 <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{paciente.nome}</strong></div>
-                <div><span className="text-muted-foreground text-xs block">Data Nasc.</span>{fmt(paciente.data_nascimento)} ({calcIdade(paciente.data_nascimento)})</div>
+                <div><span className="text-muted-foreground text-xs block">Data Nasc.</span>{fmt(paciente.dataNascimento)} ({calcIdade(paciente.dataNascimento)})</div>
                 <div><span className="text-muted-foreground text-xs block">CNS</span>{paciente.cns || "—"}</div>
                 <div><span className="text-muted-foreground text-xs block">CPF</span>{paciente.cpf || "—"}</div>
-                <div><span className="text-muted-foreground text-xs block">Responsável</span>{paciente.nome_responsavel || "—"}</div>
-                <div><span className="text-muted-foreground text-xs block">Admissão</span>{fmt(paciente.criado_em || "")}</div>
+                <div><span className="text-muted-foreground text-xs block">Responsável</span>{paciente.nomeMae || "—"}</div>
+                <div><span className="text-muted-foreground text-xs block">Admissão</span>{fmt(paciente.criadoEm || "")}</div>
                 <div>
                   <Label className="text-xs">Data de Alta</Label>
                   <Input type="date" value={dataAlta} onChange={e => setDataAlta(e.target.value)} className="h-8 text-sm" />
@@ -777,7 +777,7 @@ const RelatorioAlta: React.FC = () => {
           {paciente && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm bg-muted/50 rounded-lg p-3">
               <div><span className="text-muted-foreground text-xs block">Paciente</span><strong>{paciente.nome}</strong></div>
-              <div><span className="text-muted-foreground text-xs block">Data Nasc.</span>{fmt(paciente.data_nascimento)} ({calcIdade(paciente.data_nascimento)})</div>
+              <div><span className="text-muted-foreground text-xs block">Data Nasc.</span>{fmt(paciente.dataNascimento)} ({calcIdade(paciente.dataNascimento)})</div>
               <div><span className="text-muted-foreground text-xs block">CNS</span>{paciente.cns || "—"}</div>
               <div><span className="text-muted-foreground text-xs block">CPF</span>{paciente.cpf || "—"}</div>
               <div><span className="text-muted-foreground text-xs block">Profissional</span>{user?.nome}</div>
