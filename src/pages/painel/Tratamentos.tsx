@@ -1835,9 +1835,10 @@ const Tratamentos: React.FC = () => {
         {(isProfissional || canManageFull) && (
           <Button
             onClick={() => {
+              const userIsProf = profissionais.some((p) => p.id === user?.id);
               setNewCycle({
                 patient_id: "",
-                professional_id: isProfissional ? user?.id || "" : "",
+                professional_id: userIsProf ? user?.id || "" : "",
                 unit_id: user?.unidadeId || "",
                 specialty: user?.profissao || "",
                 treatment_type: "",
@@ -2031,6 +2032,11 @@ const Tratamentos: React.FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  {newCycle.professional_id && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {profissionais.find((p) => p.id === newCycle.professional_id)?.nome || ""}
+                    </p>
+                  )}
                 </div>
               )}
               <div>
