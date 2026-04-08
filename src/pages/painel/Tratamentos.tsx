@@ -2032,6 +2032,11 @@ const Tratamentos: React.FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  {newCycle.professional_id && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {profissionais.find((p) => p.id === newCycle.professional_id)?.nome || ""}
+                    </p>
+                  )}
                 </div>
               )}
               <div>
