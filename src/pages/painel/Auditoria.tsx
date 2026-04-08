@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useData } from '@/contexts/DataContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';

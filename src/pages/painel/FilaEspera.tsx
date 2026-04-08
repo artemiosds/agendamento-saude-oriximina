@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
 import { useFilaAutomatica } from "@/hooks/useFilaAutomatica";
 import { useEnsurePortalAccess } from "@/hooks/useEnsurePortalAccess";

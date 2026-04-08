@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { regulationService, PatientRegulation, PatientEvaluation } from '@/services/regulationService';
 import { procedureService, ProcedimentoDB } from '@/services/procedureService';
 import { supabase } from '@/integrations/supabase/client';

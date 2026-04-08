@@ -153,7 +153,8 @@ const Tratamentos: React.FC = () => {
     getAvailableDates,
     addAgendamento,
   } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 
