@@ -39,7 +39,7 @@ const PTS_SPECIALTIES = [
   'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
 ];
 
-const FREQUENCY_OPTIONS = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from '@/lib/treatmentSessionGenerator';
 
 interface ProntuarioDB {
   id: string;
@@ -190,8 +190,9 @@ const ProntuarioPage: React.FC = () => {
   const [cycleOpen, setCycleOpen] = useState(false);
   const [cycleSaving, setCycleSaving] = useState(false);
   const [cycleForm, setCycleForm] = useState({
-    treatment_type: '', total_sessions: 6, frequency: 'semanal',
+    treatment_type: '', total_sessions: 6, frequency: '1x_semana',
     start_date: new Date().toISOString().split("T")[0], clinical_notes: '',
+    weekdays: [] as number[], duration_months: 3,
   });
 
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
