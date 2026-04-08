@@ -1999,22 +1999,11 @@ const Tratamentos: React.FC = () => {
             <div className="space-y-4 pr-2">
               <div>
                 <Label>Paciente *</Label>
-                <Select
+                <BuscaPaciente
+                  pacientes={pacientes}
                   value={newCycle.patient_id}
-                  onValueChange={(v) => setNewCycle((p) => ({ ...p, patient_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pacientes.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                        {p.cpf ? ` — ${p.cpf}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(id, nome) => setNewCycle((p) => ({ ...p, patient_id: id }))}
+                />
               </div>
               {!isProfissional && (
                 <div>
@@ -2054,6 +2043,66 @@ const Tratamentos: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <Label>Frequência *</Label>
+                  <Select
+                    value={newCycle.frequency}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, frequency: v, weekdays: [] }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS_NEW.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Duração (meses)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={newCycle.duration_months}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, duration_months: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              </div>
+
+              {isWeekdayFrequency(newCycle.frequency) && (
+                <div>
+                  <Label className="mb-2 block">Dias da Semana * (selecione {getMaxWeekdays(newCycle.frequency)})</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {WEEKDAY_LABELS.map((day) => {
+                      const checked = newCycle.weekdays.includes(day.value);
+                      const maxReached = newCycle.weekdays.length >= getMaxWeekdays(newCycle.frequency);
+                      return (
+                        <label key={day.value} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer text-sm transition-colors ${checked ? 'bg-primary/10 border-primary text-primary' : maxReached ? 'opacity-40 cursor-not-allowed border-border' : 'border-border hover:bg-accent'}`}>
+                          <Checkbox
+                            checked={checked}
+                            disabled={!checked && maxReached}
+                            onCheckedChange={(c) => {
+                              setNewCycle((p) => ({
+                                ...p,
+                                weekdays: c
+                                  ? [...p.weekdays, day.value]
+                                  : p.weekdays.filter((d) => d !== day.value),
+                              }));
+                            }}
+                          />
+                          {day.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {newCycle.frequency === 'manual' && (
+                <div>
                   <Label>Sessões Previstas</Label>
                   <Input
                     type="number"
@@ -2062,25 +2111,8 @@ const Tratamentos: React.FC = () => {
                     onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
                   />
                 </div>
-                <div>
-                  <Label>Frequência</Label>
-                  <Select
-                    value={newCycle.frequency}
-                    onValueChange={(v) => setNewCycle((p) => ({ ...p, frequency: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {frequencyOptions.map((f) => (
-                        <SelectItem key={f} value={f} className="capitalize">
-                          {f}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
+
               <div>
                 <Label>Data de Início</Label>
                 <Input
@@ -2089,13 +2121,26 @@ const Tratamentos: React.FC = () => {
                   onChange={(e) => setNewCycle((p) => ({ ...p, start_date: e.target.value }))}
                 />
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                <span className="text-muted-foreground">Previsão término: </span>
-                <strong>
-                  {new Date(
-                    calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency) + "T12:00:00",
-                  ).toLocaleDateString("pt-BR")}
-                </strong>
+
+              <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                <div>
+                  <span className="text-muted-foreground">Sessões previstas: </span>
+                  <strong>
+                    {newCycle.frequency === 'manual'
+                      ? newCycle.total_sessions
+                      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Previsão término: </span>
+                  <strong>
+                    {(() => {
+                      const total = newCycle.frequency === 'manual' ? newCycle.total_sessions : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
+                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total);
+                      return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                    })()}
+                  </strong>
+                </div>
               </div>
 
               {newCycle.patient_id && ptsDisponiveis.length > 0 && (
