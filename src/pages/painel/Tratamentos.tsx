@@ -367,17 +367,13 @@ const Tratamentos: React.FC = () => {
     });
   }, [procedimentos, selectedCycle, profissionais]);
 
-  const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
-    const d = new Date(startDate + "T12:00:00");
-    const weeksMap: Record<string, number> = { diário: 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
-    const weeks = (weeksMap[frequency] || 1) * totalSessions;
-    d.setDate(d.getDate() + Math.ceil(weeks * 7));
-    return d.toISOString().split("T")[0];
-  };
-
   const handleCreateCycle = async () => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
+      return;
+    }
+    if (isWeekdayFrequency(newCycle.frequency) && newCycle.weekdays.length !== getMaxWeekdays(newCycle.frequency)) {
+      toast.error(`Selecione exatamente ${getMaxWeekdays(newCycle.frequency)} dia(s) da semana.`);
       return;
     }
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
@@ -394,7 +390,12 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    const endDate = calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency);
+    const totalSessions = newCycle.frequency === 'manual'
+      ? newCycle.total_sessions
+      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
+
+    const sessionDates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions);
+    const endDate = calcEndDateFromSessions(sessionDates);
 
     try {
       const { data: cycleData, error: cycleError } = await supabase
@@ -407,7 +408,7 @@ const Tratamentos: React.FC = () => {
           treatment_type: newCycle.treatment_type,
           start_date: newCycle.start_date,
           end_date_predicted: endDate,
-          total_sessions: newCycle.total_sessions,
+          total_sessions: totalSessions,
           sessions_done: 0,
           frequency: newCycle.frequency,
           status: "em_andamento",
@@ -420,24 +421,15 @@ const Tratamentos: React.FC = () => {
 
       if (cycleError) throw cycleError;
 
-      const sessionsToCreate = [];
-      const startD = new Date(newCycle.start_date + "T12:00:00");
-      const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
-      const delta = weeksDelta[newCycle.frequency] || 7;
-
-      for (let i = 0; i < newCycle.total_sessions; i++) {
-        const sessionDate = new Date(startD);
-        sessionDate.setDate(startD.getDate() + Math.round(i * delta));
-        sessionsToCreate.push({
-          cycle_id: cycleData.id,
-          patient_id: newCycle.patient_id,
-          professional_id: newCycle.professional_id,
-          session_number: i + 1,
-          total_sessions: newCycle.total_sessions,
-          scheduled_date: sessionDate.toISOString().split("T")[0],
-          status: "pendente_agendamento",
-        });
-      }
+      const sessionsToCreate = sessionDates.map((date, i) => ({
+        cycle_id: cycleData.id,
+        patient_id: newCycle.patient_id,
+        professional_id: newCycle.professional_id,
+        session_number: i + 1,
+        total_sessions: totalSessions,
+        scheduled_date: date,
+        status: "pendente_agendamento",
+      }));
 
       const { error: sessionsError } = await supabase.from("treatment_sessions").insert(sessionsToCreate).select();
       if (sessionsError) {
@@ -455,12 +447,12 @@ const Tratamentos: React.FC = () => {
           paciente: pac?.nome,
           profissional: prof?.nome,
           tipo: newCycle.treatment_type,
-          sessoes: newCycle.total_sessions,
+          sessoes: totalSessions,
           pts_vinculado: newCycle.pts_id || null,
         },
       });
 
-      toast.success("Ciclo criado! As sessões aguardam agendamento pela recepção.");
+      toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
       setCreateOpen(false);
       loadData();
     } catch (err: any) {
@@ -1846,10 +1838,12 @@ const Tratamentos: React.FC = () => {
                 specialty: user?.profissao || "",
                 treatment_type: "",
                 total_sessions: 6,
-                frequency: "semanal",
+                frequency: "1x_semana",
                 start_date: new Date().toISOString().split("T")[0],
                 clinical_notes: "",
                 pts_id: "",
+                weekdays: [],
+                duration_months: 3,
               });
               setCreateOpen(true);
             }}
