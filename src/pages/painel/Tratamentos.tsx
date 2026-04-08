@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
+import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ import {
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
 
 interface TreatmentCycle {
   id: string;
@@ -116,7 +119,7 @@ const statusLabels: Record<string, string> = {
   em_reavaliacao: "Em Reavaliação",
 };
 
-const frequencyOptions = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
+// frequency options moved to treatmentSessionGenerator
 
 const sessionStatusColors: Record<string, string> = {
   pendente_agendamento: "bg-warning/10 text-warning",
@@ -193,10 +196,12 @@ const Tratamentos: React.FC = () => {
     specialty: "",
     treatment_type: "",
     total_sessions: 6,
-    frequency: "semanal",
+    frequency: "1x_semana",
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
     pts_id: "",
+    weekdays: [] as number[],
+    duration_months: 3,
   });
 
   const [newSession, setNewSession] = useState({
@@ -362,17 +367,13 @@ const Tratamentos: React.FC = () => {
     });
   }, [procedimentos, selectedCycle, profissionais]);
 
-  const calcEndDate = (startDate: string, totalSessions: number, frequency: string) => {
-    const d = new Date(startDate + "T12:00:00");
-    const weeksMap: Record<string, number> = { diário: 1 / 7, semanal: 1, bisemanal: 0.5, quinzenal: 2, mensal: 4 };
-    const weeks = (weeksMap[frequency] || 1) * totalSessions;
-    d.setDate(d.getDate() + Math.ceil(weeks * 7));
-    return d.toISOString().split("T")[0];
-  };
-
   const handleCreateCycle = async () => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
+      return;
+    }
+    if (isWeekdayFrequency(newCycle.frequency) && newCycle.weekdays.length !== getMaxWeekdays(newCycle.frequency)) {
+      toast.error(`Selecione exatamente ${getMaxWeekdays(newCycle.frequency)} dia(s) da semana.`);
       return;
     }
     const prof = profissionais.find((p) => p.id === newCycle.professional_id);
@@ -389,7 +390,12 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    const endDate = calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency);
+    const totalSessions = newCycle.frequency === 'manual'
+      ? newCycle.total_sessions
+      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
+
+    const sessionDates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions);
+    const endDate = calcEndDateFromSessions(sessionDates);
 
     try {
       const { data: cycleData, error: cycleError } = await supabase
@@ -402,7 +408,7 @@ const Tratamentos: React.FC = () => {
           treatment_type: newCycle.treatment_type,
           start_date: newCycle.start_date,
           end_date_predicted: endDate,
-          total_sessions: newCycle.total_sessions,
+          total_sessions: totalSessions,
           sessions_done: 0,
           frequency: newCycle.frequency,
           status: "em_andamento",
@@ -415,24 +421,15 @@ const Tratamentos: React.FC = () => {
 
       if (cycleError) throw cycleError;
 
-      const sessionsToCreate = [];
-      const startD = new Date(newCycle.start_date + "T12:00:00");
-      const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
-      const delta = weeksDelta[newCycle.frequency] || 7;
-
-      for (let i = 0; i < newCycle.total_sessions; i++) {
-        const sessionDate = new Date(startD);
-        sessionDate.setDate(startD.getDate() + Math.round(i * delta));
-        sessionsToCreate.push({
-          cycle_id: cycleData.id,
-          patient_id: newCycle.patient_id,
-          professional_id: newCycle.professional_id,
-          session_number: i + 1,
-          total_sessions: newCycle.total_sessions,
-          scheduled_date: sessionDate.toISOString().split("T")[0],
-          status: "pendente_agendamento",
-        });
-      }
+      const sessionsToCreate = sessionDates.map((date, i) => ({
+        cycle_id: cycleData.id,
+        patient_id: newCycle.patient_id,
+        professional_id: newCycle.professional_id,
+        session_number: i + 1,
+        total_sessions: totalSessions,
+        scheduled_date: date,
+        status: "pendente_agendamento",
+      }));
 
       const { error: sessionsError } = await supabase.from("treatment_sessions").insert(sessionsToCreate).select();
       if (sessionsError) {
@@ -450,12 +447,12 @@ const Tratamentos: React.FC = () => {
           paciente: pac?.nome,
           profissional: prof?.nome,
           tipo: newCycle.treatment_type,
-          sessoes: newCycle.total_sessions,
+          sessoes: totalSessions,
           pts_vinculado: newCycle.pts_id || null,
         },
       });
 
-      toast.success("Ciclo criado! As sessões aguardam agendamento pela recepção.");
+      toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
       setCreateOpen(false);
       loadData();
     } catch (err: any) {
@@ -738,7 +735,11 @@ const Tratamentos: React.FC = () => {
     }
     try {
       const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
-      const newEndDate = calcEndDate(selectedCycle.start_date, newTotal, selectedCycle.frequency);
+      const newEndDate = (() => {
+        const d = new Date(selectedCycle.start_date + "T12:00:00");
+        d.setDate(d.getDate() + newTotal * 7);
+        return d.toISOString().split("T")[0];
+      })();
 
       await supabase.from("treatment_extensions").insert({
         cycle_id: selectedCycle.id,
@@ -1841,10 +1842,12 @@ const Tratamentos: React.FC = () => {
                 specialty: user?.profissao || "",
                 treatment_type: "",
                 total_sessions: 6,
-                frequency: "semanal",
+                frequency: "1x_semana",
                 start_date: new Date().toISOString().split("T")[0],
                 clinical_notes: "",
                 pts_id: "",
+                weekdays: [],
+                duration_months: 3,
               });
               setCreateOpen(true);
             }}
@@ -1996,22 +1999,11 @@ const Tratamentos: React.FC = () => {
             <div className="space-y-4 pr-2">
               <div>
                 <Label>Paciente *</Label>
-                <Select
+                <BuscaPaciente
+                  pacientes={pacientes}
                   value={newCycle.patient_id}
-                  onValueChange={(v) => setNewCycle((p) => ({ ...p, patient_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pacientes.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nome}
-                        {p.cpf ? ` — ${p.cpf}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={(id, nome) => setNewCycle((p) => ({ ...p, patient_id: id }))}
+                />
               </div>
               {!isProfissional && (
                 <div>
@@ -2051,6 +2043,66 @@ const Tratamentos: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <Label>Frequência *</Label>
+                  <Select
+                    value={newCycle.frequency}
+                    onValueChange={(v) => setNewCycle((p) => ({ ...p, frequency: v, weekdays: [] }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS_NEW.map((f) => (
+                        <SelectItem key={f.value} value={f.value}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Duração (meses)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={24}
+                    value={newCycle.duration_months}
+                    onChange={(e) => setNewCycle((p) => ({ ...p, duration_months: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+              </div>
+
+              {isWeekdayFrequency(newCycle.frequency) && (
+                <div>
+                  <Label className="mb-2 block">Dias da Semana * (selecione {getMaxWeekdays(newCycle.frequency)})</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {WEEKDAY_LABELS.map((day) => {
+                      const checked = newCycle.weekdays.includes(day.value);
+                      const maxReached = newCycle.weekdays.length >= getMaxWeekdays(newCycle.frequency);
+                      return (
+                        <label key={day.value} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer text-sm transition-colors ${checked ? 'bg-primary/10 border-primary text-primary' : maxReached ? 'opacity-40 cursor-not-allowed border-border' : 'border-border hover:bg-accent'}`}>
+                          <Checkbox
+                            checked={checked}
+                            disabled={!checked && maxReached}
+                            onCheckedChange={(c) => {
+                              setNewCycle((p) => ({
+                                ...p,
+                                weekdays: c
+                                  ? [...p.weekdays, day.value]
+                                  : p.weekdays.filter((d) => d !== day.value),
+                              }));
+                            }}
+                          />
+                          {day.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {newCycle.frequency === 'manual' && (
+                <div>
                   <Label>Sessões Previstas</Label>
                   <Input
                     type="number"
@@ -2059,25 +2111,8 @@ const Tratamentos: React.FC = () => {
                     onChange={(e) => setNewCycle((p) => ({ ...p, total_sessions: parseInt(e.target.value) || 1 }))}
                   />
                 </div>
-                <div>
-                  <Label>Frequência</Label>
-                  <Select
-                    value={newCycle.frequency}
-                    onValueChange={(v) => setNewCycle((p) => ({ ...p, frequency: v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {frequencyOptions.map((f) => (
-                        <SelectItem key={f} value={f} className="capitalize">
-                          {f}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
+
               <div>
                 <Label>Data de Início</Label>
                 <Input
@@ -2086,13 +2121,26 @@ const Tratamentos: React.FC = () => {
                   onChange={(e) => setNewCycle((p) => ({ ...p, start_date: e.target.value }))}
                 />
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg text-sm">
-                <span className="text-muted-foreground">Previsão término: </span>
-                <strong>
-                  {new Date(
-                    calcEndDate(newCycle.start_date, newCycle.total_sessions, newCycle.frequency) + "T12:00:00",
-                  ).toLocaleDateString("pt-BR")}
-                </strong>
+
+              <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                <div>
+                  <span className="text-muted-foreground">Sessões previstas: </span>
+                  <strong>
+                    {newCycle.frequency === 'manual'
+                      ? newCycle.total_sessions
+                      : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Previsão término: </span>
+                  <strong>
+                    {(() => {
+                      const total = newCycle.frequency === 'manual' ? newCycle.total_sessions : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
+                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total);
+                      return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
+                    })()}
+                  </strong>
+                </div>
               </div>
 
               {newCycle.patient_id && ptsDisponiveis.length > 0 && (
