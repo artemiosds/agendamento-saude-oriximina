@@ -27,12 +27,13 @@ interface AtendimentoDB {
 }
 
 const Atendimentos: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { unidades, logAction } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
-  const canDelete = hasPermission(['master', 'coordenador', 'recepcao']);
+  const canDelete = can('atendimento', 'can_delete');
 
   const load = async () => {
     setLoading(true);

@@ -165,14 +165,15 @@ const FilaEspera: React.FC = () => {
     getAvailableSlots,
     getDayInfoMap,
   } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const [detalheOpen, setDetalheOpen] = useState(false);
   const resolvePaciente = usePacienteNomeResolver();
   const [detalheFila, setDetalheFila] = useState<(typeof fila)[0] | null>(null);
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
-  const canManage = hasPermission(["master", "coordenador", "recepcao", "gestao"]);
+  const canManage = can('fila', 'can_edit');
   const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 

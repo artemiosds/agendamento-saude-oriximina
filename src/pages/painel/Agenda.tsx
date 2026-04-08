@@ -149,7 +149,7 @@ const Agenda: React.FC = () => {
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -236,12 +236,12 @@ const Agenda: React.FC = () => {
     profissionalId: string;
     observacoes: string;
   } | null>(null);
-  const canEdit = hasPermission(["master", "coordenador", "recepcao", "gestao"]);
+  const canEdit = can('agenda', 'can_edit');
 
   const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const canAprovar = hasPermission(["master", "coordenador", "recepcao"]);
+  const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
 
   // NOVO: agendamentos online pendentes de aprovação

@@ -64,8 +64,7 @@ const Funcionarios: React.FC = () => {
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
-
-  const canManage = hasPermission(['master', 'coordenador']);
+  const canManage = can('usuarios', 'can_edit');
 
   const loadFuncionarios = async () => {
     setLoading(true);

@@ -202,8 +202,8 @@ const ProntuarioPage: React.FC = () => {
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
 
   const isProfissional = user?.role === "profissional";
-  const canEdit = hasPermission(["master", "coordenador", "profissional"]);
-  const canDelete = hasPermission(["master", "coordenador"]);
+  const canEdit = can('prontuario', 'can_edit');
+  const canDelete = can('prontuario', 'can_delete');
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();

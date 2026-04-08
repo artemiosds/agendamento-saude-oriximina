@@ -223,10 +223,9 @@ const Tratamentos: React.FC = () => {
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
-  const canManageFull = hasPermission(["master", "coordenador"]);
+  const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
-  const canAgendarSessao =
-    user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
+  const canAgendarSessao = can('tratamento', 'can_execute');
 
   const loadData = useCallback(async () => {
     setLoading(true);
