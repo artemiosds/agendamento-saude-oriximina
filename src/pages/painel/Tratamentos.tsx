@@ -196,10 +196,12 @@ const Tratamentos: React.FC = () => {
     specialty: "",
     treatment_type: "",
     total_sessions: 6,
-    frequency: "semanal",
+    frequency: "1x_semana",
     start_date: new Date().toISOString().split("T")[0],
     clinical_notes: "",
     pts_id: "",
+    weekdays: [] as number[],
+    duration_months: 3,
   });
 
   const [newSession, setNewSession] = useState({
