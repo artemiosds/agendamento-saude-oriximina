@@ -54,7 +54,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 const Regulacao: React.FC = () => {
   const { pacientes, funcionarios, unidades, logAction } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { isMaster } = useUnidadeFilter();
 
   const [regulations, setRegulations] = useState<PatientRegulation[]>([]);

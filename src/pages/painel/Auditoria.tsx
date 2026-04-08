@@ -117,7 +117,8 @@ const formatCpf = (cpf: string) => {
 };
 
 const Auditoria: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { funcionarios } = useData();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
