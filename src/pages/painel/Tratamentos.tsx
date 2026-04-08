@@ -1970,7 +1970,7 @@ const Tratamentos: React.FC = () => {
                     <Badge className={cn("border text-xs", statusColors[cycle.status])}>
                       {statusLabels[cycle.status]}
                     </Badge>
-                    {user?.role === "master" && (
+                    {(user?.role === "master" || user?.role === "profissional") && (
                       <Button
                         size="sm"
                         variant="ghost"
