@@ -829,7 +829,7 @@ const ProntuarioPage: React.FC = () => {
       });
       toast.success("Ciclo de tratamento criado! Sessões aguardam agendamento pela recepção.");
       setCycleOpen(false);
-      setCycleForm({ treatment_type: '', total_sessions: 6, frequency: 'semanal', start_date: new Date().toISOString().split("T")[0], clinical_notes: '' });
+      setCycleForm({ treatment_type: '', total_sessions: 6, frequency: '1x_semana', start_date: new Date().toISOString().split("T")[0], clinical_notes: '', weekdays: [], duration_months: 3 });
     } catch (err: any) {
       toast.error("Erro ao criar ciclo: " + (err?.message || ""));
     }
