@@ -34,7 +34,8 @@ interface EvalExisting {
 }
 
 const AvaliacaoMultiprofissional: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { logAction, refreshAgendamentos } = useData();
   const [pacientes, setPacientes] = useState<PacienteMulti[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,7 +197,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
     setSaving(false);
   };
 
-  const canDecide = hasPermission(['master', 'coordenador', 'enfermagem']);
+  const canDecide = can('enfermagem', 'can_execute');
   const favoraveis = existingEvals.filter(e => e.parecer === 'favoravel').length;
   const desfavoraveis = existingEvals.filter(e => e.parecer === 'desfavoravel').length;
 

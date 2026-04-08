@@ -37,7 +37,8 @@ interface PTSRecord {
 }
 
 const PTS: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { pacientes, funcionarios, logAction } = useData();
   const [ptsList, setPtsList] = useState<PTSRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,7 +132,7 @@ const PTS: React.FC = () => {
     setSaving(false);
   };
 
-  if (!hasPermission(['master', 'coordenador', 'profissional'])) {
+  if (!can('tratamento', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 

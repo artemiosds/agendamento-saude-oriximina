@@ -248,7 +248,7 @@ const Regulacao: React.FC = () => {
   const getEvaluationsForReg = (regId: string) =>
     evaluations.filter(e => e.regulation_id === regId);
 
-  if (!hasPermission(['master', 'coordenador', 'profissional'])) {
+  if (!can('encaminhamento', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
 
