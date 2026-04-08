@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useData } from '@/contexts/DataContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -116,7 +117,8 @@ const formatCpf = (cpf: string) => {
 };
 
 const Auditoria: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { funcionarios } = useData();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,7 +144,7 @@ const Auditoria: React.FC = () => {
   const [filterEventoGrupo, setFilterEventoGrupo] = useState('');
 
   const isMaster = user?.role === 'master';
-  const canAccess = hasPermission(['master', 'coordenador', 'gestao']);
+  const canAccess = can('relatorios', 'can_view') || isMaster;
 
   const loadLogs = useCallback(async () => {
     setLoading(true);

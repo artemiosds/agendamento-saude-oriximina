@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
@@ -152,7 +153,8 @@ const Tratamentos: React.FC = () => {
     getAvailableDates,
     addAgendamento,
   } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 
@@ -221,10 +223,9 @@ const Tratamentos: React.FC = () => {
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
 
-  const canManageFull = hasPermission(["master", "coordenador"]);
+  const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
-  const canAgendarSessao =
-    user?.role === "master" || user?.role === "recepcao" || user?.role === "coordenador" || user?.role === "gestao";
+  const canAgendarSessao = can('tratamento', 'can_execute');
 
   const loadData = useCallback(async () => {
     setLoading(true);

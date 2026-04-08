@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { regulationService, PatientRegulation, PatientEvaluation } from '@/services/regulationService';
 import { procedureService, ProcedimentoDB } from '@/services/procedureService';
 import { supabase } from '@/integrations/supabase/client';
@@ -53,7 +54,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 const Regulacao: React.FC = () => {
   const { pacientes, funcionarios, unidades, logAction } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { isMaster } = useUnidadeFilter();
 
   const [regulations, setRegulations] = useState<PatientRegulation[]>([]);
@@ -247,7 +249,7 @@ const Regulacao: React.FC = () => {
   const getEvaluationsForReg = (regId: string) =>
     evaluations.filter(e => e.regulation_id === regId);
 
-  if (!hasPermission(['master', 'coordenador', 'profissional'])) {
+  if (!can('encaminhamento', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -158,7 +159,8 @@ const retornoOptions = [
 ];
 
 const ProntuarioPage: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -200,8 +202,8 @@ const ProntuarioPage: React.FC = () => {
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
 
   const isProfissional = user?.role === "profissional";
-  const canEdit = hasPermission(["master", "coordenador", "profissional"]);
-  const canDelete = hasPermission(["master", "coordenador"]);
+  const canEdit = can('prontuario', 'can_edit');
+  const canDelete = can('prontuario', 'can_delete');
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();

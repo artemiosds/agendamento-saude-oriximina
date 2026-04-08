@@ -57,7 +57,7 @@ const ROLES_PROFISSIONAL = [
 
 const Bloqueios: React.FC = () => {
   const { bloqueios, addBloqueio, deleteBloqueio, refreshBloqueios, unidades, funcionarios, logAction } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
 
   const [dialogOpen, setDialogOpen]     = useState(false);
   const [importing, setImporting]       = useState(false);

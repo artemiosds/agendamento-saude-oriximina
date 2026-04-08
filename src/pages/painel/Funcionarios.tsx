@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +53,8 @@ interface FuncionarioDB {
 const Funcionarios: React.FC = () => {
   const { unidades, salas, refreshFuncionarios, logAction } = useData();
   const { unidadesVisiveis } = useUnidadeFilter();
-  const { hasPermission, user } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,8 +65,7 @@ const Funcionarios: React.FC = () => {
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
-
-  const canManage = hasPermission(['master', 'coordenador']);
+  const canManage = can('usuarios', 'can_edit');
 
   const loadFuncionarios = async () => {
     setLoading(true);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,7 +76,8 @@ interface PacienteResumo {
 }
 
 const AvaliacaoEnfermagem: React.FC = () => {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const { logAction, refreshFila } = useData();
   const [fila, setFila] = useState<FilaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -277,7 +279,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
     setSaving(false);
   };
 
-  if (!hasPermission(['master', 'coordenador', 'profissional', 'enfermagem'])) {
+  if (!can('enfermagem', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
 
