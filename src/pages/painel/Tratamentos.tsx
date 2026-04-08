@@ -3,6 +3,7 @@ import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
+import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ import {
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
 
 interface TreatmentCycle {
   id: string;
@@ -116,7 +119,7 @@ const statusLabels: Record<string, string> = {
   em_reavaliacao: "Em Reavaliação",
 };
 
-const frequencyOptions = ["semanal", "quinzenal", "mensal", "bisemanal", "diário"];
+// frequency options moved to treatmentSessionGenerator
 
 const sessionStatusColors: Record<string, string> = {
   pendente_agendamento: "bg-warning/10 text-warning",
