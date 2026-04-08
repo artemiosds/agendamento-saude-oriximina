@@ -735,7 +735,11 @@ const Tratamentos: React.FC = () => {
     }
     try {
       const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
-      const newEndDate = calcEndDate(selectedCycle.start_date, newTotal, selectedCycle.frequency);
+      const newEndDate = (() => {
+        const d = new Date(selectedCycle.start_date + "T12:00:00");
+        d.setDate(d.getDate() + newTotal * 7);
+        return d.toISOString().split("T")[0];
+      })();
 
       await supabase.from("treatment_extensions").insert({
         cycle_id: selectedCycle.id,
