@@ -1835,9 +1835,10 @@ const Tratamentos: React.FC = () => {
         {(isProfissional || canManageFull) && (
           <Button
             onClick={() => {
+              const userIsProf = profissionais.some((p) => p.id === user?.id);
               setNewCycle({
                 patient_id: "",
-                professional_id: isProfissional ? user?.id || "" : "",
+                professional_id: userIsProf ? user?.id || "" : "",
                 unit_id: user?.unidadeId || "",
                 specialty: user?.profissao || "",
                 treatment_type: "",
