@@ -87,7 +87,7 @@ const Pacientes: React.FC = () => {
     refreshPacientes,
     refreshFila,
   } = useData();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
