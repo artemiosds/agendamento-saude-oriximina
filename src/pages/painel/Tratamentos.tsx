@@ -281,6 +281,14 @@ const Tratamentos: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  // Auto-refresh when agendamentos or treatment_sessions change
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'treatment_sessions'],
+    onchange: loadData,
+    enabled: true,
+    debounceMs: 500,
+  });
+
   const filteredCycles = useMemo(() => {
     return cycles.filter((c) => {
       if (filterProf !== "all" && c.professional_id !== filterProf) return false;
