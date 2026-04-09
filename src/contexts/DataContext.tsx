@@ -1344,24 +1344,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addBloqueio = useCallback(
     async (b: Omit<BloqueioAgenda, "id">) => {
-      const id = `blq${Date.now()}`;
-      const { error } = await supabase.from("bloqueios" as any).insert({
-        id,
+      const { data: inserted, error } = await supabase.from("bloqueios" as any).insert({
         titulo: b.titulo,
         tipo: b.tipo,
         data_inicio: b.dataInicio,
         data_fim: b.dataFim,
         dia_inteiro: b.diaInteiro,
-        hora_inicio: b.horaInicio,
-        hora_fim: b.horaFim,
-        unidade_id: b.unidadeId,
-        profissional_id: b.profissionalId,
+        hora_inicio: b.horaInicio || '',
+        hora_fim: b.horaFim || '',
+        unidade_id: b.unidadeId || '',
+        profissional_id: b.profissionalId || '',
         criado_por: b.criadoPor,
-      } as any);
-      if (!error) {
+      } as any).select().single();
+      if (!error && inserted) {
+        const id = (inserted as any).id;
         invalidateCache(queryKeys.bloqueios.all);
         setBloqueios((prev) => [{ ...b, id }, ...prev]);
-      } else console.error("Error adding bloqueio:", error);
+      } else {
+        console.error("Error adding bloqueio:", error);
+        throw error;
+      }
     },
     [invalidateCache],
   );
