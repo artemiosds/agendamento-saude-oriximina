@@ -427,8 +427,13 @@ const Tratamentos: React.FC = () => {
       ? newCycle.total_sessions
       : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
 
-    const sessionDates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions);
+    const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
+    const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
     const endDate = calcEndDateFromSessions(sessionDates);
+
+    if (skippedCount > 0) {
+      toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+    }
 
     try {
       const { data: cycleData, error: cycleError } = await supabase
