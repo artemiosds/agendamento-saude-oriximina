@@ -1,5 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import { v4 as uuidV4 } from 'crypto';
 
 export interface EncaminhamentoData {
   id: string;
