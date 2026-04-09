@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates } from "@/lib/treatmentSessionGenerator";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
@@ -149,6 +149,7 @@ const Tratamentos: React.FC = () => {
     unidades,
     fila,
     salas,
+    bloqueios,
     addToFila,
     logAction,
     getAvailableSlots,
@@ -426,8 +427,13 @@ const Tratamentos: React.FC = () => {
       ? newCycle.total_sessions
       : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
 
-    const sessionDates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions);
+    const blockedRanges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
+    const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(newCycle.start_date, newCycle.frequency, newCycle.weekdays, totalSessions, blockedRanges);
     const endDate = calcEndDateFromSessions(sessionDates);
+
+    if (skippedCount > 0) {
+      toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+    }
 
     try {
       const { data: cycleData, error: cycleError } = await supabase
@@ -2169,7 +2175,8 @@ const Tratamentos: React.FC = () => {
                   <strong>
                     {(() => {
                       const total = newCycle.frequency === 'manual' ? newCycle.total_sessions : calculateTotalSessions(newCycle.frequency, newCycle.duration_months, newCycle.weekdays);
-                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total);
+                      const ranges = buildBlockedRanges(bloqueios, newCycle.professional_id, newCycle.unit_id);
+                      const dates = generateSessionDates(newCycle.start_date, newCycle.frequency, newCycle.weekdays, total, ranges);
                       return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
                     })()}
                   </strong>
