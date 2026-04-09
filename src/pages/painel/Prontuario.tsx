@@ -161,7 +161,7 @@ const retornoOptions = [
 const ProntuarioPage: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
-  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots } = useData();
+  const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, bloqueios } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
