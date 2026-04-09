@@ -26,7 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadProfile = useCallback(async (authUserId: string) => {
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('funcionarios')
         .select('*')
         .eq('auth_user_id', authUserId)
@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const ip = await getPublicIp();
       const dispositivo = getDeviceInfo();
-      await supabase.from('action_logs' as any).insert({
+      await supabase.from('action_logs').insert({
         user_id: userData?.id || '',
         user_nome: userData?.nome || 'sistema',
         role: userData?.role || 'sistema',
@@ -104,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: acao.includes('falha') ? 'erro' : 'sucesso',
         erro: '',
         ip,
-      } as any);
+      });
     } catch (err) {
       console.error('Error logging auth action:', err);
     }

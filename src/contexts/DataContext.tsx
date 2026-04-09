@@ -272,7 +272,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       // Fire-and-forget: don't block the UI waiting for IP + insert
       getPublicIp().then((ip) => {
-        supabase.from("action_logs" as any).insert({
+        supabase.from("action_logs").insert({
           user_id: actor?.id || "",
           user_nome: actor?.nome || "sistema",
           role: actor?.role || "sistema",
@@ -285,7 +285,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: input.status || "sucesso",
           erro: input.erro || "",
           ip,
-        } as any).then(null, (err: any) => console.error("Error writing action log:", err));
+        }).then(null, (err: any) => console.error("Error writing action log:", err));
       });
     },
     [],
@@ -325,7 +325,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadConfiguracoes = useCallback(async () => {
     try {
       const { data, error } = await supabase.from("system_config").select("configuracoes").eq("id", "default").maybeSingle();
-      if (data && !error) setConfiguracoes(safeConfigMerge((data as any).configuracoes));
+      if (data && !error) setConfiguracoes(safeConfigMerge(data.configuracoes as Record<string, unknown>));
     } catch (err) {
       console.error("Error loading configs:", err);
     }
