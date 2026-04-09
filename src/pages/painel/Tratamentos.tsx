@@ -149,6 +149,7 @@ const Tratamentos: React.FC = () => {
     unidades,
     fila,
     salas,
+    bloqueios,
     addToFila,
     logAction,
     getAvailableSlots,
