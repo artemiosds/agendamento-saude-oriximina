@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
+import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates } from "@/lib/treatmentSessionGenerator";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
