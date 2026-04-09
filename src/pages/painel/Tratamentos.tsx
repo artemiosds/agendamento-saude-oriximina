@@ -1266,7 +1266,9 @@ const Tratamentos: React.FC = () => {
                       key={s.id}
                       className={cn(
                         "flex flex-col gap-1 p-3 rounded-lg",
-                        isPendente ? "bg-warning/5 border border-warning/20" : "bg-muted/30",
+                        isPendente ? "bg-warning/5 border border-warning/20"
+                          : s.status === "agendada" ? "bg-warning/5 border border-warning/20"
+                          : "bg-muted/30",
                       )}
                     >
                       <div className="flex items-center gap-3">
