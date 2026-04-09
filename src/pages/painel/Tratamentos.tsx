@@ -1001,8 +1001,19 @@ const Tratamentos: React.FC = () => {
       selectedCycle.total_sessions > 0
         ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
         : 0;
-    const pendingCount = cycleSessions.filter((s) => s.status === "pendente_agendamento").length;
-    const scheduledCount = cycleSessions.filter((s) => s.status === "agendada").length;
+    const pendingCount = cycleSessions.filter((s) => {
+      if (s.status !== "pendente_agendamento") return false;
+      const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+      return !agendamentoMap[agKey]; // only truly pending if no matching agendamento
+    }).length;
+    const scheduledCount = cycleSessions.filter((s) => {
+      if (s.status === "agendada") return true;
+      if (s.status === "pendente_agendamento") {
+        const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+        return !!agendamentoMap[agKey];
+      }
+      return false;
+    }).length;
 
     return (
       <div className="space-y-4 animate-fade-in">
