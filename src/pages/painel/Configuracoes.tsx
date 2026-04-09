@@ -1371,7 +1371,7 @@ const Configuracoes: React.FC = () => {
                   <p className="text-xs text-muted-foreground">Paciente/recepção deve selecionar um motivo ao cancelar</p>
                   <div className="space-y-1.5">
                     {cancelConfig.motivos.map((motivo, i) => (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={`motivo-${motivo}-${i}`} className="flex items-center gap-2">
                         <div className="flex-1 px-3 py-2 bg-muted/50 rounded-lg text-sm">{motivo}</div>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive" onClick={() => {
                           setCancelConfig(prev => ({ ...prev, motivos: prev.motivos.filter((_, idx) => idx !== i) }));

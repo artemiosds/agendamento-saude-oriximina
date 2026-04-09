@@ -280,7 +280,7 @@ const Tratamentos: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData]); // loadData already depends on user?.id and user?.role via useCallback
 
   // Auto-refresh when agendamentos or treatment_sessions change
   useRealtimeSubscription({
@@ -773,11 +773,38 @@ const Tratamentos: React.FC = () => {
     }
     try {
       const newTotal = selectedCycle.total_sessions + extensionForm.new_sessions;
-      const newEndDate = (() => {
-        const d = new Date(selectedCycle.start_date + "T12:00:00");
-        d.setDate(d.getDate() + newTotal * 7);
-        return d.toISOString().split("T")[0];
-      })();
+
+      // Determine weekdays from existing sessions or fallback
+      const existingSessions = sessions.filter(s => s.cycle_id === selectedCycle.id);
+      const weekdaysFromExisting = [...new Set(existingSessions.map(s => {
+        const d = new Date(s.scheduled_date + 'T12:00:00');
+        const dow = d.getDay();
+        return dow === 0 ? 7 : dow;
+      }))].sort((a, b) => a - b);
+
+      // Find last existing session date as start for new sessions
+      const lastSessionDate = existingSessions.length > 0
+        ? existingSessions.sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))[0].scheduled_date
+        : selectedCycle.start_date;
+
+      const nextDay = new Date(lastSessionDate + 'T12:00:00');
+      nextDay.setDate(nextDay.getDate() + 1);
+      const startForNew = nextDay.toISOString().split('T')[0];
+
+      const blockedRanges = buildBlockedRanges(bloqueios, selectedCycle.professional_id, selectedCycle.unit_id);
+      const { dates: newDates, skippedCount } = generateSessionDatesWithInfo(
+        startForNew,
+        selectedCycle.frequency,
+        weekdaysFromExisting.length > 0 ? weekdaysFromExisting : [],
+        extensionForm.new_sessions,
+        blockedRanges,
+      );
+
+      if (skippedCount > 0) {
+        toast.info(`${skippedCount} sessão(ões) da extensão foram realocadas devido a feriados ou bloqueios.`);
+      }
+
+      const newEndDate = newDates.length > 0 ? newDates[newDates.length - 1] : selectedCycle.end_date_predicted || new Date().toISOString().split('T')[0];
 
       await supabase.from("treatment_extensions").insert({
         cycle_id: selectedCycle.id,
@@ -789,23 +816,15 @@ const Tratamentos: React.FC = () => {
         changed_by: user?.id || "",
       });
 
-      const startD = new Date(selectedCycle.start_date + "T12:00:00");
-      const weeksDelta: Record<string, number> = { diário: 1, semanal: 7, bisemanal: 3.5, quinzenal: 14, mensal: 30 };
-      const delta = weeksDelta[selectedCycle.frequency] || 7;
-      const newSessions = [];
-      for (let i = selectedCycle.total_sessions; i < newTotal; i++) {
-        const sessionDate = new Date(startD);
-        sessionDate.setDate(startD.getDate() + Math.round(i * delta));
-        newSessions.push({
-          cycle_id: selectedCycle.id,
-          patient_id: selectedCycle.patient_id,
-          professional_id: selectedCycle.professional_id,
-          session_number: i + 1,
-          total_sessions: newTotal,
-          scheduled_date: sessionDate.toISOString().split("T")[0],
-          status: "pendente_agendamento",
-        });
-      }
+      const newSessions = newDates.map((date, idx) => ({
+        cycle_id: selectedCycle.id,
+        patient_id: selectedCycle.patient_id,
+        professional_id: selectedCycle.professional_id,
+        session_number: selectedCycle.total_sessions + idx + 1,
+        total_sessions: newTotal,
+        scheduled_date: date,
+        status: "pendente_agendamento",
+      }));
       await supabase.from("treatment_sessions").insert(newSessions);
 
       await supabase
