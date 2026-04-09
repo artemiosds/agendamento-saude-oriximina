@@ -250,6 +250,25 @@ const Tratamentos: React.FC = () => {
       if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
+
+      // Cross-reference: fetch agendamentos for all patient+professional pairs in sessions
+      if (sData && sData.length > 0) {
+        const patientIds = [...new Set(sData.map((s: any) => s.patient_id))];
+        const { data: agData } = await supabase
+          .from("agendamentos")
+          .select("id, data, hora, status, paciente_id, profissional_id")
+          .in("paciente_id", patientIds)
+          .not("status", "in", '("cancelado","falta","remarcado")');
+
+        const map: Record<string, { id: string; hora: string; status: string }> = {};
+        if (agData) {
+          for (const ag of agData) {
+            const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
+            map[key] = { id: ag.id, hora: ag.hora, status: ag.status };
+          }
+        }
+        setAgendamentoMap(map);
+      }
     } catch (err) {
       console.error("Error loading treatments:", err);
       toast.error("Erro ao carregar dados de tratamento.");
