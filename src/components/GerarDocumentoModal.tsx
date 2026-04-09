@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useData } from '@/contexts/DataContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,22 +11,28 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { FileText, Printer } from 'lucide-react';
 import { openPrintDocument } from '@/lib/printLayout';
+import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  paciente?: { nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string };
-  profissional?: { nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
+  paciente?: { id?: string; nome: string; cpf: string; cns: string; data_nascimento: string; cid: string; especialidade_destino: string };
+  profissional?: { id?: string; nome: string; profissao: string; numero_conselho: string; tipo_conselho: string; uf_conselho: string };
   unidade?: string;
   dataAtendimento?: string;
 }
 
+const ENCAMINHAMENTO_TIPOS = ['encaminhamento', 'guia de encaminhamento'];
+
 const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
   const { user } = useAuth();
+  const { funcionarios } = useData();
   const [modelos, setModelos] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [conteudoFinal, setConteudoFinal] = useState('');
+  const [profDestinoId, setProfDestinoId] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (open) loadModelos();
@@ -39,7 +46,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         .eq('id', 'modelos_documentos')
         .maybeSingle();
       if (data?.configuracoes) {
-        const all: DocumentTemplate[] = Array.isArray(data.configuracoes) ? data.configuracoes : ((data.configuracoes as any).modelos || []);
+        const raw = data.configuracoes as Record<string, unknown>;
+        const all: DocumentTemplate[] = Array.isArray(raw) ? raw : ((raw as any).modelos || []);
         const filtered = all.filter(m =>
           m.ativo && m.perfis_permitidos.includes(user?.role || '')
         );
@@ -65,13 +73,56 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
+    setProfDestinoId('');
     const m = modelos.find(x => x.id === id);
     if (m) setConteudoFinal(substituir(m.conteudo));
   };
 
-  const handlePrint = () => {
-    const m = modelos.find(x => x.id === selectedId);
-    if (!m) return;
+  const selected = modelos.find(x => x.id === selectedId);
+  const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
+
+  const handleSaveAndPrint = async () => {
+    if (!selected) return;
+
+    // If it's an encaminhamento, save it
+    if (isEncaminhamento && profDestinoId) {
+      setSalvando(true);
+      const conselho = profissional
+        ? `${profissional.tipo_conselho} ${profissional.numero_conselho}/${profissional.uf_conselho}`
+        : '';
+
+      const result = await salvarEncaminhamento({
+        paciente_id: paciente?.id || '',
+        paciente_nome: paciente?.nome || '',
+        paciente_cpf: paciente?.cpf || '',
+        paciente_cns: paciente?.cns || '',
+        paciente_data_nascimento: paciente?.data_nascimento || '',
+        paciente_cid: paciente?.cid || '',
+        paciente_especialidade_destino: paciente?.especialidade_destino || '',
+        profissional_origem_id: profissional?.id || user?.id || '',
+        profissional_origem_nome: profissional?.nome || user?.nome || '',
+        profissional_origem_profissao: profissional?.profissao || '',
+        profissional_origem_conselho: conselho,
+        profissional_destino_id: profDestinoId,
+        especialidade_destino: paciente?.especialidade_destino || '',
+        conteudo_documento: conteudoFinal,
+        observacao: '',
+        gerado_por: user?.nome || '',
+        gerado_por_perfil: user?.role || '',
+        unidade: unidade || 'CER II Oriximiná',
+        tipo_documento: selected.tipo,
+      });
+
+      setSalvando(false);
+
+      if (!result.success) {
+        toast.error('Erro ao salvar encaminhamento: ' + (result.error || ''));
+        return;
+      }
+      toast.success('Encaminhamento salvo e enviado ao profissional destino!');
+    }
+
+    // Print
     const html = conteudoFinal.replace(/\n/g, '<br/>');
     const conselho = profissional
       ? `${profissional.tipo_conselho} ${profissional.numero_conselho}/${profissional.uf_conselho}`
@@ -86,7 +137,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         <div class="role">${profissional?.profissao || ''} — ${conselho}</div>
       </div>
     `;
-    openPrintDocument(m.tipo, body, {
+    openPrintDocument(selected.tipo, body, {
       'Paciente': paciente?.nome || '',
       'CPF': paciente?.cpf || '',
       'Data': new Date().toLocaleDateString('pt-BR'),
@@ -94,7 +145,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     toast.success('Documento gerado para impressão!');
   };
 
-  const selected = modelos.find(x => x.id === selectedId);
+  const profissionaisDestino = funcionarios.filter(f =>
+    f.ativo && f.role === 'profissional' && f.id !== (profissional?.id || user?.id)
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,6 +156,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" /> Gerar Documento Clínico
           </DialogTitle>
+          <DialogDescription className="sr-only">Selecione um modelo e gere o documento</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -124,6 +178,22 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
           {selected && (
             <>
+              {/* If encaminhamento, show destination professional selector */}
+              {isEncaminhamento && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Profissional destino (encaminhamento)</Label>
+                  <Select value={profDestinoId} onValueChange={setProfDestinoId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o profissional destino..." /></SelectTrigger>
+                    <SelectContent>
+                      {profissionaisDestino.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">O encaminhamento será salvo e ficará disponível na fila do profissional selecionado.</p>
+                </div>
+              )}
+
               <Separator />
               <div className="space-y-1.5">
                 <Label className="text-[13px] font-bold">Conteúdo (editável antes de imprimir)</Label>
@@ -156,8 +226,13 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
           {selected && (
-            <Button onClick={handlePrint} className="gap-1.5">
-              <Printer className="w-4 h-4" /> Imprimir Documento
+            <Button
+              onClick={handleSaveAndPrint}
+              disabled={salvando || (isEncaminhamento && !profDestinoId)}
+              className="gap-1.5"
+            >
+              <Printer className="w-4 h-4" />
+              {isEncaminhamento ? 'Salvar e Imprimir' : 'Imprimir Documento'}
             </Button>
           )}
         </DialogFooter>

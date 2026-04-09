@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,7 +34,8 @@ const menuItems: {
   { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
   { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
   { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },
-  { to: '/painel/alta',             label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
+  { to: '/painel/alta',              label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
+  { to: '/painel/encaminhamentos',  label: 'Encaminhamentos',        icon: Send,               modulo: 'encaminhamento' },
   { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
   { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
   { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
