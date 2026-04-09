@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface TreatmentCycle {
   id: string;
@@ -166,6 +167,8 @@ const Tratamentos: React.FC = () => {
   const [ptsList, setPtsList] = useState<PTSRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCycle, setSelectedCycle] = useState<TreatmentCycle | null>(null);
+  // Map: "patientId|profId|date" -> { id, hora, status }
+  const [agendamentoMap, setAgendamentoMap] = useState<Record<string, { id: string; hora: string; status: string }>>({}); 
   const [ptsVinculado, setPtsVinculado] = useState<PTSRecord | null>(null);
   const [vincularPtsOpen, setVincularPtsOpen] = useState(false);
   const [selectedPtsId, setSelectedPtsId] = useState("");
@@ -248,6 +251,25 @@ const Tratamentos: React.FC = () => {
       if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
+
+      // Cross-reference: fetch agendamentos for all patient+professional pairs in sessions
+      if (sData && sData.length > 0) {
+        const patientIds = [...new Set(sData.map((s: any) => s.patient_id))];
+        const { data: agData } = await supabase
+          .from("agendamentos")
+          .select("id, data, hora, status, paciente_id, profissional_id")
+          .in("paciente_id", patientIds)
+          .not("status", "in", '("cancelado","falta","remarcado")');
+
+        const map: Record<string, { id: string; hora: string; status: string }> = {};
+        if (agData) {
+          for (const ag of agData) {
+            const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
+            map[key] = { id: ag.id, hora: ag.hora, status: ag.status };
+          }
+        }
+        setAgendamentoMap(map);
+      }
     } catch (err) {
       console.error("Error loading treatments:", err);
       toast.error("Erro ao carregar dados de tratamento.");
@@ -258,6 +280,14 @@ const Tratamentos: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-refresh when agendamentos or treatment_sessions change
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'treatment_sessions'],
+    onchange: loadData,
+    enabled: true,
+    debounceMs: 500,
+  });
 
   const filteredCycles = useMemo(() => {
     return cycles.filter((c) => {
@@ -980,8 +1010,19 @@ const Tratamentos: React.FC = () => {
       selectedCycle.total_sessions > 0
         ? Math.round((selectedCycle.sessions_done / selectedCycle.total_sessions) * 100)
         : 0;
-    const pendingCount = cycleSessions.filter((s) => s.status === "pendente_agendamento").length;
-    const scheduledCount = cycleSessions.filter((s) => s.status === "agendada").length;
+    const pendingCount = cycleSessions.filter((s) => {
+      if (s.status !== "pendente_agendamento") return false;
+      const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+      return !agendamentoMap[agKey]; // only truly pending if no matching agendamento
+    }).length;
+    const scheduledCount = cycleSessions.filter((s) => {
+      if (s.status === "agendada") return true;
+      if (s.status === "pendente_agendamento") {
+        const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+        return !!agendamentoMap[agKey];
+      }
+      return false;
+    }).length;
 
     return (
       <div className="space-y-4 animate-fade-in">
@@ -1261,13 +1302,20 @@ const Tratamentos: React.FC = () => {
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
+                  // Cross-reference: check if this session has a matching agendamento
+                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+                  const matchedAg = isPendente ? agendamentoMap[agKey] : null;
+                  const effectiveStatus = matchedAg ? "agendada" : s.status;
+                  const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
+                  const isAgendada = effectiveStatus === "agendada";
+
                   return (
                     <div
                       key={s.id}
                       className={cn(
                         "flex flex-col gap-1 p-3 rounded-lg",
-                        isPendente ? "bg-warning/5 border border-warning/20"
-                          : s.status === "agendada" ? "bg-warning/5 border border-warning/20"
+                        effectiveIsPendente ? "bg-warning/5 border border-warning/20"
+                          : isAgendada ? "bg-info/5 border border-info/20"
                           : "bg-muted/30",
                       )}
                     >
@@ -1280,15 +1328,21 @@ const Tratamentos: React.FC = () => {
                             {s.scheduled_date
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
                               : "—"}
-                            {isPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
+                            {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
+                            {isAgendada && matchedAg && (
+                              <span className="ml-2 text-xs text-info font-medium">· Agendada às {matchedAg.hora}</span>
+                            )}
+                            {isAgendada && !matchedAg && s.appointment_id && (
+                              <span className="ml-2 text-xs text-info font-medium">· Agendada</span>
+                            )}
                           </p>
                           {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
                         </div>
-                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[s.status])}>
-                          {sessionStatusLabels[s.status] || s.status}
+                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[effectiveStatus])}>
+                          {sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
 
-                        {canAgendarSessao && isPendente && selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && effectiveIsPendente && selectedCycle.status === "em_andamento" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1305,7 +1359,7 @@ const Tratamentos: React.FC = () => {
                         )}
 
                         {canAgendarSessao &&
-                          ["agendada", "pendente_agendamento"].includes(s.status) &&
+                          (isAgendada || effectiveIsPendente) &&
                           selectedCycle.status === "em_andamento" && (
                             <Button
                               size="sm"
