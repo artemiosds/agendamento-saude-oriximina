@@ -782,8 +782,13 @@ const ProntuarioPage: React.FC = () => {
         ? cycleForm.total_sessions
         : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
 
-      const sessionDates = generateSessionDates(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions);
+      const blockedRanges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
+      const { dates: sessionDates, skippedCount } = generateSessionDatesWithInfo(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, totalSessions, blockedRanges);
       const endDate = calcEndDateFromSessions(sessionDates);
+
+      if (skippedCount > 0) {
+        toast.info(`${skippedCount} sessão(ões) foram realocadas devido a feriados ou bloqueios no calendário.`);
+      }
 
       const { data: cycleData, error: cycleError } = await supabase.from("treatment_cycles").insert({
         patient_id: form.paciente_id,
@@ -1490,7 +1495,8 @@ const ProntuarioPage: React.FC = () => {
                 <strong>
                   {(() => {
                     const total = cycleForm.frequency === 'manual' ? cycleForm.total_sessions : calculateTotalSessions(cycleForm.frequency, cycleForm.duration_months, cycleForm.weekdays);
-                    const dates = generateSessionDates(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, total);
+                    const ranges = buildBlockedRanges(bloqueios, user?.id || '', user?.unidadeId || '');
+                    const dates = generateSessionDates(cycleForm.start_date, cycleForm.frequency, cycleForm.weekdays, total, ranges);
                     return dates.length > 0 ? new Date(dates[dates.length - 1] + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
                   })()}
                 </strong>
