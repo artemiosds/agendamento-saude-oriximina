@@ -871,11 +871,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.status !== undefined) dbData.status = data.status;
       if (data.hora !== undefined) dbData.hora = data.hora;
       if (data.data !== undefined) dbData.data = data.data;
+      if (data.tipo !== undefined) dbData.tipo = data.tipo;
       if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
       if (data.googleEventId !== undefined) dbData.google_event_id = data.googleEventId;
       if (data.syncStatus !== undefined) dbData.sync_status = data.syncStatus;
       if (data.salaId !== undefined) dbData.sala_id = data.salaId;
       if (data.horaChegada !== undefined) dbData.hora_chegada = data.horaChegada;
+      if (data.profissionalId !== undefined) dbData.profissional_id = data.profissionalId;
+      if (data.profissionalNome !== undefined) dbData.profissional_nome = data.profissionalNome;
       if (data.status === "remarcado" || data.data !== undefined || data.hora !== undefined) {
         dbData.lembrete_24h_enviado_em = null;
         dbData.lembrete_proximo_enviado_em = null;
