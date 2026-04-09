@@ -37,6 +37,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
+import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 
 interface TreatmentCycle {
   id: string;
@@ -1571,181 +1572,150 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        <Dialog
+        <ModalAgendarSessao
           open={!!agendarSessaoTarget}
-          onOpenChange={(open) => {
-            if (!open) {
+          onClose={() => {
+            setAgendarSessaoTarget(null);
+            setAgendarSessaoData("");
+            setAgendarSessaoHora("");
+            setAgendarSessaoSalaId("");
+          }}
+          session={agendarSessaoTarget}
+          cycle={selectedCycle ? {
+            id: selectedCycle.id,
+            patient_id: selectedCycle.patient_id,
+            professional_id: selectedCycle.professional_id,
+            unit_id: selectedCycle.unit_id,
+            treatment_type: selectedCycle.treatment_type,
+          } : null}
+          pacienteNome={pacientes.find(p => p.id === selectedCycle?.patient_id)?.nome || ''}
+          profissionalNome={funcionarios.find(f => f.id === selectedCycle?.professional_id)?.nome || ''}
+          salas={salasDisponiveis}
+          availableDates={agendarSessaoDatesDisponiveis}
+          getAvailableSlots={getAvailableSlots}
+          onConfirm={async (data, hora, salaId) => {
+            setAgendarSessaoData(data);
+            setAgendarSessaoHora(hora);
+            setAgendarSessaoSalaId(salaId);
+            // Inline the confirm logic
+            if (!agendarSessaoTarget || !selectedCycle) return;
+            setAgendandoSessao(true);
+            try {
+              const prof = funcionarios.find(f => f.id === selectedCycle.professional_id);
+              const pac = pacientes.find(p => p.id === selectedCycle.patient_id);
+              if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
+              const agId = `ag${Date.now()}`;
+              await addAgendamento({
+                id: agId,
+                pacienteId: selectedCycle.patient_id,
+                pacienteNome: pac.nome,
+                unidadeId: selectedCycle.unit_id,
+                salaId: salaId || "",
+                setorId: "",
+                profissionalId: selectedCycle.professional_id,
+                profissionalNome: prof.nome,
+                data,
+                hora,
+                status: "confirmado",
+                tipo: "Sessão de Tratamento",
+                observacoes: `Sessão ${agendarSessaoTarget.session_number}/${agendarSessaoTarget.total_sessions} — ${selectedCycle.treatment_type}`,
+                origem: "recepcao",
+                criadoEm: new Date().toISOString(),
+                criadoPor: user?.id || "",
+              });
+              const { error: updateError } = await supabase
+                .from("treatment_sessions")
+                .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
+                .eq("id", agendarSessaoTarget.id);
+              if (updateError) throw updateError;
+              await logAction({
+                acao: "agendar_sessao_tratamento",
+                entidade: "treatment_session",
+                entidadeId: agendarSessaoTarget.id,
+                modulo: "tratamentos",
+                user,
+                detalhes: { ciclo: selectedCycle.id, sessao: agendarSessaoTarget.session_number, data, hora, agendamento_id: agId },
+              });
+              toast.success(`Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora}!`);
               setAgendarSessaoTarget(null);
-              setAgendarSessaoData("");
-              setAgendarSessaoHora("");
+              loadData();
+            } catch (err: any) {
+              console.error(err);
+              toast.error(err?.message || "Erro ao agendar sessão.");
+              throw err;
+            } finally {
+              setAgendandoSessao(false);
             }
           }}
-        >
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                Agendar Sessão {agendarSessaoTarget?.session_number}/{agendarSessaoTarget?.total_sessions}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
-                <p>
-                  <strong>Paciente:</strong> {pacientes.find((p) => p.id === selectedCycle.patient_id)?.nome}
-                </p>
-                <p>
-                  <strong>Profissional:</strong>{" "}
-                  {funcionarios.find((f) => f.id === selectedCycle.professional_id)?.nome}
-                </p>
-                <p>
-                  <strong>Tratamento:</strong> {selectedCycle.treatment_type}
-                </p>
-              </div>
-              <div>
-                <Label>Data *</Label>
-                {agendarSessaoDatesDisponiveis.length === 0 ? (
-                  <p className="text-sm text-warning mt-1">Não há datas disponíveis para este profissional.</p>
-                ) : (
-                  <Select
-                    value={agendarSessaoData}
-                    onValueChange={(v) => {
-                      setAgendarSessaoData(v);
-                      setAgendarSessaoHora("");
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a data" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {agendarSessaoDatesDisponiveis.slice(0, 60).map((d) => {
-                        const dateObj = new Date(d + "T12:00:00");
-                        const label = dateObj.toLocaleDateString("pt-BR", {
-                          weekday: "short",
-                          day: "2-digit",
-                          month: "2-digit",
-                        });
-                        return (
-                          <SelectItem key={d} value={d}>
-                            {label}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              {agendarSessaoData && (
-                <div>
-                  <Label>Horário *</Label>
-                  {agendarSessaoSlots.length === 0 ? (
-                    <p className="text-sm text-warning mt-1">Sem horários disponíveis nesta data.</p>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                      {agendarSessaoSlots.map((slot) => (
-                        <Button
-                          key={slot}
-                          size="sm"
-                          variant={agendarSessaoHora === slot ? "default" : "outline"}
-                          className={agendarSessaoHora === slot ? "gradient-primary text-primary-foreground" : ""}
-                          onClick={() => setAgendarSessaoHora(slot)}
-                        >
-                          {slot}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {salasDisponiveis.length > 0 && (
-                <div>
-                  <Label>Sala (opcional)</Label>
-                  <Select
-                    value={agendarSessaoSalaId || "none"}
-                    onValueChange={(v) => setAgendarSessaoSalaId(v === "none" ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {salasDisponiveis.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <Button
-                onClick={handleAgendarSessao}
-                className="w-full gradient-primary text-primary-foreground"
-                disabled={!agendarSessaoData || !agendarSessaoHora || agendandoSessao}
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                {agendandoSessao ? "Agendando..." : "Confirmar Agendamento"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          mode="agendar"
+        />
 
-        <Dialog
+        <ModalAgendarSessao
           open={!!remarcarTarget}
-          onOpenChange={(open) => {
-            if (!open) {
+          onClose={() => {
+            setRemarcarTarget(null);
+            setRemarcarData("");
+            setRemarcarBlockedMsg("");
+          }}
+          session={remarcarTarget}
+          cycle={selectedCycle ? {
+            id: selectedCycle.id,
+            patient_id: selectedCycle.patient_id,
+            professional_id: selectedCycle.professional_id,
+            unit_id: selectedCycle.unit_id,
+            treatment_type: selectedCycle.treatment_type,
+          } : null}
+          pacienteNome={pacientes.find(p => p.id === selectedCycle?.patient_id)?.nome || ''}
+          profissionalNome={funcionarios.find(f => f.id === selectedCycle?.professional_id)?.nome || ''}
+          salas={salasDisponiveis}
+          availableDates={agendarSessaoDatesDisponiveis}
+          getAvailableSlots={getAvailableSlots}
+          onConfirm={async (data, hora, salaId) => {
+            if (!remarcarTarget || !selectedCycle) return;
+            setRemarcarSaving(true);
+            try {
+              const oldDate = remarcarTarget.scheduled_date;
+              const { data: blocked } = await supabase.rpc("is_date_blocked", {
+                p_date: data,
+                p_profissional_id: selectedCycle.professional_id,
+                p_unidade_id: selectedCycle.unit_id,
+              });
+              if (blocked === true) { toast.error("Data bloqueada."); return; }
+              const { error } = await supabase
+                .from("treatment_sessions")
+                .update({ scheduled_date: data })
+                .eq("id", remarcarTarget.id);
+              if (error) throw error;
+              if (remarcarTarget.appointment_id) {
+                await supabase.from("agendamentos").update({ data, hora }).eq("id", remarcarTarget.appointment_id);
+              }
+              await logAction({
+                acao: "remarcar_sessao",
+                entidade: "treatment_session",
+                entidadeId: remarcarTarget.id,
+                modulo: "tratamentos",
+                user,
+                detalhes: {
+                  ciclo: selectedCycle.id,
+                  sessao: remarcarTarget.session_number,
+                  data_anterior: oldDate,
+                  data_nova: data,
+                  agendamento_vinculado: remarcarTarget.appointment_id || null,
+                },
+              });
+              toast.success(`Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
               setRemarcarTarget(null);
-              setRemarcarData("");
-              setRemarcarBlockedMsg("");
+              loadData();
+            } catch (err: any) {
+              console.error(err);
+              toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
+              throw err;
+            } finally {
+              setRemarcarSaving(false);
             }
           }}
-        >
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                Remarcar Sessão {remarcarTarget?.session_number}/{remarcarTarget?.total_sessions}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
-                <p>
-                  <strong>Data atual:</strong>{" "}
-                  {remarcarTarget?.scheduled_date
-                    ? new Date(remarcarTarget.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
-                    : "—"}
-                </p>
-                <p>
-                  <strong>Paciente:</strong> {pacientes.find((p) => p.id === selectedCycle?.patient_id)?.nome}
-                </p>
-                <p>
-                  <strong>Profissional:</strong>{" "}
-                  {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome}
-                </p>
-              </div>
-              <div>
-                <Label>Nova Data *</Label>
-                <Input
-                  type="date"
-                  value={remarcarData}
-                  min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => handleCheckRemarcarDate(e.target.value)}
-                />
-              </div>
-              {remarcarBlockedMsg && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                  <span>{remarcarBlockedMsg}</span>
-                </div>
-              )}
-              <Button
-                onClick={handleRemarcarSessao}
-                className="w-full gradient-primary text-primary-foreground"
-                disabled={!remarcarData || !!remarcarBlockedMsg || remarcarSaving}
-              >
-                <CalendarClock className="w-4 h-4 mr-2" />
-                {remarcarSaving ? "Salvando..." : "Confirmar Remarcação"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          mode="remarcar"
+        />
 
         <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
           <DialogContent className="sm:max-w-md">
