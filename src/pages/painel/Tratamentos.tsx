@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDates, calcEndDateFromSessions } from "@/lib/treatmentSessionGenerator";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface TreatmentCycle {
   id: string;
