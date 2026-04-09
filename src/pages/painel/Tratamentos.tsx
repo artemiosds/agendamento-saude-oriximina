@@ -1282,13 +1282,20 @@ const Tratamentos: React.FC = () => {
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
+                  // Cross-reference: check if this session has a matching agendamento
+                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+                  const matchedAg = isPendente ? agendamentoMap[agKey] : null;
+                  const effectiveStatus = matchedAg ? "agendada" : s.status;
+                  const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
+                  const isAgendada = effectiveStatus === "agendada";
+
                   return (
                     <div
                       key={s.id}
                       className={cn(
                         "flex flex-col gap-1 p-3 rounded-lg",
-                        isPendente ? "bg-warning/5 border border-warning/20"
-                          : s.status === "agendada" ? "bg-warning/5 border border-warning/20"
+                        effectiveIsPendente ? "bg-warning/5 border border-warning/20"
+                          : isAgendada ? "bg-info/5 border border-info/20"
                           : "bg-muted/30",
                       )}
                     >
@@ -1301,15 +1308,21 @@ const Tratamentos: React.FC = () => {
                             {s.scheduled_date
                               ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")
                               : "—"}
-                            {isPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
+                            {effectiveIsPendente && <span className="ml-2 text-xs text-warning">· Aguarda agendamento</span>}
+                            {isAgendada && matchedAg && (
+                              <span className="ml-2 text-xs text-info font-medium">· Agendada às {matchedAg.hora}</span>
+                            )}
+                            {isAgendada && !matchedAg && s.appointment_id && (
+                              <span className="ml-2 text-xs text-info font-medium">· Agendada</span>
+                            )}
                           </p>
                           {s.procedure_done && <p className="text-xs text-muted-foreground">{s.procedure_done}</p>}
                         </div>
-                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[s.status])}>
-                          {sessionStatusLabels[s.status] || s.status}
+                        <Badge className={cn("text-xs shrink-0", sessionStatusColors[effectiveStatus])}>
+                          {sessionStatusLabels[effectiveStatus] || effectiveStatus}
                         </Badge>
 
-                        {canAgendarSessao && isPendente && selectedCycle.status === "em_andamento" && (
+                        {canAgendarSessao && effectiveIsPendente && selectedCycle.status === "em_andamento" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1326,7 +1339,7 @@ const Tratamentos: React.FC = () => {
                         )}
 
                         {canAgendarSessao &&
-                          ["agendada", "pendente_agendamento"].includes(s.status) &&
+                          (isAgendada || effectiveIsPendente) &&
                           selectedCycle.status === "em_andamento" && (
                             <Button
                               size="sm"
