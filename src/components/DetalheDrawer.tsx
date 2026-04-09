@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +80,7 @@ const DetalheDrawer: React.FC<DetalheDrawerProps> = ({ open, onOpenChange, titul
       <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col">
         <SheetHeader className="p-4 pb-2 border-b">
           <SheetTitle className="font-display text-lg">{titulo}</SheetTitle>
+          <SheetDescription className="sr-only">Detalhes de {titulo}</SheetDescription>
         </SheetHeader>
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-5 pb-6">
