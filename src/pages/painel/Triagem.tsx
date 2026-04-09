@@ -525,9 +525,9 @@ const Triagem: React.FC = () => {
               {form.alergias.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {form.alergias.map((a, i) => (
-                    <Badge key={i} variant="destructive" className="text-xs">
+                    <Badge key={`alergia-${a}-${i}`} variant="destructive" className="text-xs">
                       {a}{" "}
-                      <button className="ml-1" onClick={() => setForm((p) => ({ ...p, alergias: p.alergias.filter((_, j) => j !== i) }))}>
+                      <button aria-label="Remover alergia" className="ml-1" onClick={() => setForm((p) => ({ ...p, alergias: p.alergias.filter((_, j) => j !== i) }))}>
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>
@@ -546,9 +546,9 @@ const Triagem: React.FC = () => {
               {form.medicamentos.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {form.medicamentos.map((m, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">
+                    <Badge key={`med-${m}-${i}`} variant="secondary" className="text-xs">
                       {m}{" "}
-                      <button className="ml-1" onClick={() => setForm((p) => ({ ...p, medicamentos: p.medicamentos.filter((_, j) => j !== i) }))}>
+                      <button aria-label="Remover medicamento" className="ml-1" onClick={() => setForm((p) => ({ ...p, medicamentos: p.medicamentos.filter((_, j) => j !== i) }))}>
                         <X className="h-3 w-3" />
                       </button>
                     </Badge>

@@ -247,7 +247,7 @@ const ProntuarioPage: React.FC = () => {
 
   useEffect(() => {
     loadProntuarios();
-  }, [user]);
+  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadTriagem = async (agendamentoId: string) => {
     try {

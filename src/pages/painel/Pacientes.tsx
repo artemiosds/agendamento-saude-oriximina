@@ -335,9 +335,10 @@ const Pacientes: React.FC = () => {
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        supabase.from("pacientes").update(dbFields).eq("id", editId).then(() => {
-          refreshPacientes();
-        });
+        supabase.from("pacientes").update(dbFields).eq("id", editId)
+          .then(({ error }) => { if (error) console.error("Erro ao atualizar paciente:", error); })
+          .catch((err) => console.error("Erro ao atualizar paciente:", err))
+          .finally(() => refreshPacientes());
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
@@ -387,9 +388,10 @@ const Pacientes: React.FC = () => {
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        supabase.from("pacientes").insert({ id, ...dbFields }).then(() => {
-          refreshPacientes();
-        });
+        supabase.from("pacientes").insert({ id, ...dbFields })
+          .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
+          .catch((err) => console.error("Erro ao cadastrar paciente:", err))
+          .finally(() => refreshPacientes());
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch {

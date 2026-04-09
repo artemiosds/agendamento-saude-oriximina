@@ -1192,7 +1192,7 @@ ${dataRows}
                 <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
                     <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {statusData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
                     <Tooltip />
                   </PieChart>
@@ -1325,8 +1325,8 @@ ${dataRows}
                       <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
                       <Tooltip />
                       <Bar dataKey="total" name="Atendimentos">
-                        {rankingProdutividade.map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} />
+                        {rankingProdutividade.map((entry) => (
+                          <Cell key={`prod-${entry.nome}`} fill={entry.fill} />
                         ))}
                       </Bar>
                       <Legend payload={[
@@ -1393,8 +1393,8 @@ ${dataRows}
                     </tr>
                   </thead>
                   <tbody>
-                    {faltasReport.map((f, i) => (
-                      <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                    {faltasReport.map((f) => (
+                      <tr key={`falta-${f.nome}-${f.profissional}`} className="border-b last:border-0 hover:bg-muted/30">
                         <td className="py-2.5 px-3 text-foreground font-medium">{f.nome}</td>
                         <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.email || '-'}</td>
                         <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.telefone || '-'}</td>
@@ -1419,7 +1419,7 @@ ${dataRows}
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie data={faltasPorUnidade} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                      {faltasPorUnidade.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      {faltasPorUnidade.map((entry, i) => <Cell key={`unidade-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
                     <Tooltip formatter={(value: number) => [`${value} faltas`, 'Total']} />
                     <Legend />
