@@ -327,10 +327,11 @@ const ProntuarioPage: React.FC = () => {
     const horaInicio = searchParams.get("horaInicio");
     const data = searchParams.get("data");
 
-    if (pacienteId && pacienteNome) {
-      if (agendamentoId) loadTriagem(agendamentoId);
+    if (pacienteId && pacienteNome && agendamentoId) {
+      // Coming from Agenda with a specific appointment — open form
+      loadTriagem(agendamentoId);
       loadEpisodios(pacienteId);
-      const existingForAgendamento = agendamentoId ? prontuarios.find((p) => p.agendamento_id === agendamentoId) : null;
+      const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
       if (existingForAgendamento) {
         openEdit(existingForAgendamento);
       } else {
@@ -346,9 +347,9 @@ const ProntuarioPage: React.FC = () => {
         });
         setDialogOpen(true);
       }
-      if (agendamentoId && horaInicio) {
+      if (horaInicio) {
         setActiveAtendimento({ agendamentoId, horaInicio });
-      } else if (agendamentoId) {
+      } else {
         const stored = localStorage.getItem(`timer_${agendamentoId}`);
         if (stored) {
           try {
@@ -357,6 +358,9 @@ const ProntuarioPage: React.FC = () => {
           } catch {}
         }
       }
+    } else if (pacienteId && pacienteNome) {
+      // Coming from Pacientes page — just show the filtered list, don't open form
+      setSearch(pacienteNome);
     }
   }, [searchParams, prontuarios.length]);
 
