@@ -1905,6 +1905,7 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Solicitar Extensão</DialogTitle>
