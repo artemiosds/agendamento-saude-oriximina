@@ -1561,7 +1561,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
-            <ScrollArea className="max-h-[500px]">
+            <ScrollArea className="max-h-[calc(100vh-320px)]">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
