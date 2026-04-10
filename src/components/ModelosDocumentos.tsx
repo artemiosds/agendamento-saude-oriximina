@@ -15,6 +15,12 @@ import { toast } from 'sonner';
 import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer } from 'lucide-react';
 import { openPrintDocument } from '@/lib/printLayout';
 
+export interface TemplateVersion {
+  conteudo: string;
+  salvo_em: string;
+  salvo_por?: string;
+}
+
 export interface DocumentTemplate {
   id: string;
   nome: string;
@@ -24,6 +30,7 @@ export interface DocumentTemplate {
   perfis_permitidos: string[];
   criado_em: string;
   atualizado_em: string;
+  versoes?: TemplateVersion[];
 }
 
 const TIPOS_DOCUMENTO = [
@@ -55,6 +62,29 @@ const VARIAVEIS = [
   { tag: '{{especialidade}}', desc: 'Especialidade' },
   { tag: '{{unidade}}', desc: 'Unidade de saúde' },
   { tag: '{{data_hoje}}', desc: 'Data de hoje' },
+  { tag: '{{dias_afastamento}}', desc: 'Dias de afastamento' },
+  { tag: '{{data_inicio}}', desc: 'Data início afastamento' },
+  { tag: '{{data_fim}}', desc: 'Data fim afastamento' },
+  { tag: '{{hora_entrada}}', desc: 'Horário de entrada' },
+  { tag: '{{hora_saida}}', desc: 'Horário de saída' },
+  { tag: '{{medicamentos}}', desc: 'Lista de medicamentos' },
+  { tag: '{{especialidade_destino}}', desc: 'Especialidade destino' },
+  { tag: '{{unidade_destino}}', desc: 'Unidade destino' },
+  { tag: '{{motivo}}', desc: 'Motivo' },
+  { tag: '{{observacoes}}', desc: 'Observações' },
+  { tag: '{{prioridade}}', desc: 'Prioridade' },
+  { tag: '{{validade_receita}}', desc: 'Validade da receita' },
+  { tag: '{{objetivo}}', desc: 'Objetivo do laudo' },
+  { tag: '{{historico}}', desc: 'Histórico relevante' },
+  { tag: '{{exame_fisico}}', desc: 'Exame físico' },
+  { tag: '{{conclusao}}', desc: 'Conclusão/parecer' },
+  { tag: '{{recomendacoes}}', desc: 'Recomendações' },
+  { tag: '{{queixa_principal}}', desc: 'Queixa principal' },
+  { tag: '{{evolucao_clinica}}', desc: 'Evolução clínica' },
+  { tag: '{{conduta}}', desc: 'Conduta realizada' },
+  { tag: '{{plano}}', desc: 'Plano terapêutico' },
+  { tag: '{{orientacoes}}', desc: 'Orientações gerais' },
+  { tag: '{{finalidade}}', desc: 'Finalidade comparecimento' },
 ];
 
 const defaultTemplate = (): DocumentTemplate => ({
@@ -66,6 +96,7 @@ const defaultTemplate = (): DocumentTemplate => ({
   perfis_permitidos: ['master', 'profissional'],
   criado_em: new Date().toISOString(),
   atualizado_em: new Date().toISOString(),
+  versoes: [],
 });
 
 const ModelosDocumentos: React.FC = () => {
@@ -128,8 +159,16 @@ const ModelosDocumentos: React.FC = () => {
     const updated = [...modelos];
     current.atualizado_em = new Date().toISOString();
     if (existing >= 0) {
+      // Save version history (keep last 5)
+      const oldModel = updated[existing];
+      const versoes = [...(current.versoes || [])];
+      if (oldModel.conteudo !== current.conteudo) {
+        versoes.unshift({ conteudo: oldModel.conteudo, salvo_em: oldModel.atualizado_em });
+        current.versoes = versoes.slice(0, 5);
+      }
       updated[existing] = current;
     } else {
+      current.versoes = [];
       updated.push(current);
     }
     await saveModelos(updated);
@@ -164,7 +203,30 @@ const ModelosDocumentos: React.FC = () => {
       .replace(/\{\{cid\}\}/g, 'F84.0')
       .replace(/\{\{especialidade\}\}/g, 'Fisioterapia')
       .replace(/\{\{unidade\}\}/g, 'CER II Oriximiná')
-      .replace(/\{\{data_hoje\}\}/g, hoje);
+      .replace(/\{\{data_hoje\}\}/g, hoje)
+      .replace(/\{\{dias_afastamento\}\}/g, '3')
+      .replace(/\{\{data_inicio\}\}/g, hoje)
+      .replace(/\{\{data_fim\}\}/g, hoje)
+      .replace(/\{\{hora_entrada\}\}/g, '08:00')
+      .replace(/\{\{hora_saida\}\}/g, '09:30')
+      .replace(/\{\{medicamentos\}\}/g, '1. Paracetamol 500mg — Oral, 8/8h, 5 dias')
+      .replace(/\{\{especialidade_destino\}\}/g, 'Neurologia')
+      .replace(/\{\{unidade_destino\}\}/g, 'Hospital Regional')
+      .replace(/\{\{motivo\}\}/g, 'Avaliação complementar')
+      .replace(/\{\{observacoes\}\}/g, 'Sem observações adicionais')
+      .replace(/\{\{prioridade\}\}/g, 'Eletivo')
+      .replace(/\{\{validade_receita\}\}/g, hoje)
+      .replace(/\{\{objetivo\}\}/g, 'Avaliação funcional')
+      .replace(/\{\{historico\}\}/g, 'Histórico relevante do paciente')
+      .replace(/\{\{exame_fisico\}\}/g, 'Exame físico normal')
+      .replace(/\{\{conclusao\}\}/g, 'Paciente apto')
+      .replace(/\{\{recomendacoes\}\}/g, 'Manter acompanhamento')
+      .replace(/\{\{queixa_principal\}\}/g, 'Dor lombar')
+      .replace(/\{\{evolucao_clinica\}\}/g, 'Melhora progressiva')
+      .replace(/\{\{conduta\}\}/g, 'Exercícios terapêuticos')
+      .replace(/\{\{plano\}\}/g, 'Continuar tratamento semanal')
+      .replace(/\{\{orientacoes\}\}/g, 'Tomar conforme prescrição')
+      .replace(/\{\{finalidade\}\}/g, 'Consulta');
   };
 
   const handlePreview = (m: DocumentTemplate) => {
@@ -372,6 +434,42 @@ const ModelosDocumentos: React.FC = () => {
                 />
                 <Label className="text-sm">Modelo ativo</Label>
               </div>
+
+              {/* Version History */}
+              {current.versoes && current.versoes.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Histórico de versões ({current.versoes.length})</Label>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {current.versoes.map((v, i) => (
+                      <div key={i} className="flex items-center justify-between border rounded p-2 bg-muted/30 text-xs">
+                        <div>
+                          <span className="font-medium">Versão {current.versoes!.length - i}</span>
+                          <span className="text-muted-foreground ml-2">{new Date(v.salvo_em).toLocaleString('pt-BR')}</span>
+                          <p className="text-muted-foreground line-clamp-1 mt-0.5">{v.conteudo.slice(0, 80)}...</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 shrink-0"
+                          onClick={() => {
+                            if (confirm('Restaurar esta versão? O conteúdo atual será salvo no histórico.')) {
+                              const versoes = [...(current.versoes || [])];
+                              versoes.unshift({ conteudo: current.conteudo, salvo_em: current.atualizado_em });
+                              setCurrent({
+                                ...current,
+                                conteudo: v.conteudo,
+                                versoes: versoes.slice(0, 5),
+                              });
+                            }
+                          }}
+                        >
+                          Restaurar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
