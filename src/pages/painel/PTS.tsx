@@ -74,56 +74,23 @@ const PTS: React.FC = () => {
 
   const isMaster = user?.role === 'master';
 
-  // Map user profissao to SIGTAP especialidade dynamically
-  const sigtapEspecialidade = useMemo(() => {
-    if (!user) return '';
+  const isFisioterapeuta = useMemo(() => {
+    if (!user) return false;
     const prof = (user.profissao || '').toLowerCase().trim();
-    // Map profession names to SIGTAP especialidade keys
-    const mapping: Record<string, string> = {
-      fisioterapeuta: 'fisioterapia',
-      fisioterapia: 'fisioterapia',
-      fonoaudiologa: 'fonoaudiologia',
-      fonoaudiologo: 'fonoaudiologia',
-      fonoaudiologia: 'fonoaudiologia',
-      psicologa: 'psicologia',
-      psicologo: 'psicologia',
-      psicologia: 'psicologia',
-      'terapeuta ocupacional': 'terapia ocupacional',
-      'terapia ocupacional': 'terapia ocupacional',
-      nutricionista: 'nutricao',
-      nutricao: 'nutricao',
-      enfermeiro: 'enfermagem',
-      enfermeira: 'enfermagem',
-      enfermagem: 'enfermagem',
-    };
-    // Normalize removing accents for matching
-    const profNorm = prof.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    for (const [key, value] of Object.entries(mapping)) {
-      const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      if (profNorm === keyNorm || profNorm.includes(keyNorm) || keyNorm.includes(profNorm)) {
-        return value;
-      }
-    }
-    return '';
+    return prof.includes('fisioterapi') || prof === 'fisioterapia';
   }, [user]);
 
-  const hasSigtapProfession = sigtapEspecialidade !== '';
-
-  // Load SIGTAP procedures matching user's profession
+  // Load SIGTAP procedures for fisioterapia only
   const loadSigtapProcs = useCallback(async () => {
-    if (!hasSigtapProfession && !isMaster) return;
-    let query = (supabase as any)
+    if (!isFisioterapeuta && !isMaster) return;
+    const { data } = await (supabase as any)
       .from('sigtap_procedimentos')
       .select('*')
+      .eq('especialidade', 'fisioterapia')
       .eq('ativo', true)
       .order('codigo');
-    // If not master, filter by the professional's specialty
-    if (!isMaster && sigtapEspecialidade) {
-      query = query.eq('especialidade', sigtapEspecialidade);
-    }
-    const { data } = await query;
     if (data) setSigtapProcs(data);
-  }, [hasSigtapProfession, isMaster, sigtapEspecialidade]);
+  }, [isFisioterapeuta, isMaster]);
 
   const [form, setForm] = useState({
     patient_id: '', patient_name: '',
