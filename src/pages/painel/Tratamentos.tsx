@@ -633,6 +633,138 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const handleEditRealizada = async () => {
+    if (!editRealizadaTarget || !selectedCycle) return;
+    if (
+      !editRealizadaSoap.subjetivo?.trim() ||
+      !editRealizadaSoap.objetivo?.trim() ||
+      !editRealizadaSoap.avaliacao?.trim() ||
+      !editRealizadaSoap.plano?.trim()
+    ) {
+      toast.error("Preencha todos os campos SOAP.");
+      return;
+    }
+    if (!editRealizadaProcedure?.trim()) {
+      toast.error("Informe o procedimento realizado.");
+      return;
+    }
+    setEditRealizadaSaving(true);
+    try {
+      const clinicalNotesJson = JSON.stringify({
+        tipo: "soap",
+        subjetivo: editRealizadaSoap.subjetivo,
+        objetivo: editRealizadaSoap.objetivo,
+        avaliacao: editRealizadaSoap.avaliacao,
+        plano: editRealizadaSoap.plano,
+        editado_em: new Date().toISOString(),
+        editado_por: user?.id,
+      });
+
+      const updatePayload: any = {
+        clinical_notes: clinicalNotesJson,
+        procedure_done: editRealizadaProcedure,
+      };
+      if (editRealizadaDate && editRealizadaDate !== editRealizadaTarget.scheduled_date) {
+        updatePayload.scheduled_date = editRealizadaDate;
+      }
+
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update(updatePayload)
+        .eq("id", editRealizadaTarget.id);
+
+      if (error) throw error;
+
+      await logAction({
+        acao: "editar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: editRealizadaTarget.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { ciclo: selectedCycle.id, sessao: editRealizadaTarget.session_number },
+      });
+
+      toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada (Modo Master).`);
+      setEditRealizadaOpen(false);
+      setEditRealizadaTarget(null);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao editar sessão: " + err.message);
+    } finally {
+      setEditRealizadaSaving(false);
+    }
+  };
+
+  const handleClearRealizada = async (session: TreatmentSession) => {
+    if (!selectedCycle) return;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "agendada",
+          clinical_notes: "",
+          procedure_done: "",
+          absence_type: null,
+        })
+        .eq("id", session.id);
+
+      if (error) throw error;
+
+      // Decrement sessions_done
+      const newDone = Math.max(0, selectedCycle.sessions_done - 1);
+      await supabase
+        .from("treatment_cycles")
+        .update({
+          sessions_done: newDone,
+          status: "em_andamento",
+        })
+        .eq("id", selectedCycle.id);
+
+      await logAction({
+        acao: "limpar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { ciclo: selectedCycle.id, sessao: session.session_number },
+      });
+
+      toast.success(`Sessão ${session.session_number} revertida para "Agendada" (Modo Master).`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao limpar sessão: " + err.message);
+    }
+  };
+
+  const openEditRealizada = (session: TreatmentSession) => {
+    setEditRealizadaTarget(session);
+    setEditRealizadaDate(session.scheduled_date);
+    setEditRealizadaProcedure(session.procedure_done || "");
+    // Parse existing SOAP notes
+    try {
+      const parsed = JSON.parse(session.clinical_notes);
+      if (parsed.tipo === "soap") {
+        setEditRealizadaSoap({
+          subjetivo: parsed.subjetivo || "",
+          objetivo: parsed.objetivo || "",
+          avaliacao: parsed.avaliacao || "",
+          plano: parsed.plano || "",
+        });
+      } else {
+        setEditRealizadaSoap({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+      }
+    } catch {
+      setEditRealizadaSoap({ subjetivo: session.clinical_notes || "", objetivo: "", avaliacao: "", plano: "" });
+    }
+    setEditRealizadaOpen(true);
+  };
+
   const handleAgendarSessao = async () => {
     if (!agendarSessaoTarget || !agendarSessaoData || !agendarSessaoHora || !selectedCycle) {
       toast.error("Selecione data e horário.");
