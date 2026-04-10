@@ -113,7 +113,7 @@ const PTS: React.FC = () => {
 
   const loadPts = useCallback(async () => {
     setLoading(true);
-    let query = (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('pts').select('*').order('created_at', { ascending: false });
     if (!isMaster && user?.role === 'profissional') {
       query = query.eq('professional_id', user.id);
     }
