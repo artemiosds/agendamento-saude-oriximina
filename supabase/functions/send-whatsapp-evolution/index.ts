@@ -25,10 +25,31 @@ async function getClinicaConfig(supabase: ReturnType<typeof createClient>): Prom
   return data as ClinicaConfig;
 }
 
-function formatPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("55")) return digits;
-  return "55" + digits;
+/**
+ * Normalize phone to 13-digit format starting with "55".
+ * Returns null if invalid.
+ */
+function normalizePhone(raw: string): string | null {
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length === 10 && !digits.startsWith("55")) {
+    digits = digits.slice(0, 2) + "9" + digits.slice(2);
+  }
+  if (digits.length === 11 && !digits.startsWith("55")) {
+    digits = "55" + digits;
+  }
+  if (digits.length === 12 && digits.startsWith("55")) {
+    digits = digits.slice(0, 4) + "9" + digits.slice(4);
+  }
+
+  if (digits.length === 13 && digits.startsWith("55")) return digits;
+  return null;
+}
+
+function isValidPhone(phone: string): boolean {
+  return phone.length === 13 && phone.startsWith("55") && /^\d+$/.test(phone);
 }
 
 function buildMessage(tipo: string, data: {
@@ -91,7 +112,22 @@ serve(async (req) => {
 
     // Test mode
     if (tipo === "teste" && telefone_teste) {
-      const phone = formatPhone(telefone_teste);
+      const normalized = normalizePhone(telefone_teste);
+      if (!normalized || !isValidPhone(normalized)) {
+        await supabase.from("notification_logs").insert({
+          evento: "teste",
+          canal: "whatsapp_evolution",
+          destinatario_telefone: telefone_teste,
+          status: "erro",
+          erro: `Telefone inválido: ${telefone_teste}`,
+          payload: { tipo: "teste", telefone_teste },
+        });
+        return new Response(
+          JSON.stringify({ success: false, error: `Telefone inválido: ${telefone_teste}. O número deve ter 13 dígitos começando com 55.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
       const message = buildMessage("teste", {
         paciente_nome: "Teste",
         data_consulta: new Date().toLocaleDateString("pt-BR"),
@@ -106,7 +142,7 @@ serve(async (req) => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: config.evolution_api_key },
-          body: JSON.stringify({ number: phone, text: message }),
+          body: JSON.stringify({ number: normalized, text: message }),
         }
       );
 
@@ -149,18 +185,35 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!paciente?.telefone) {
-      // Log and return
       await supabase.from("notification_logs").insert({
         agendamento_id: ag.id,
         evento: tipo || "whatsapp",
         canal: "whatsapp_evolution",
         destinatario_telefone: "",
-        status: "falha",
+        status: "erro",
         erro: "Paciente sem telefone cadastrado",
         payload: { tipo, agendamento_id },
       });
       return new Response(
         JSON.stringify({ success: false, error: "Paciente sem telefone" }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // ── PHONE VALIDATION GUARD ──
+    const phone = normalizePhone(paciente.telefone);
+    if (!phone || !isValidPhone(phone)) {
+      await supabase.from("notification_logs").insert({
+        agendamento_id: ag.id,
+        evento: tipo || "whatsapp",
+        canal: "whatsapp_evolution",
+        destinatario_telefone: paciente.telefone,
+        status: "erro",
+        erro: `Telefone inválido: ${paciente.telefone}`,
+        payload: { tipo, agendamento_id, raw_phone: paciente.telefone },
+      });
+      return new Response(
+        JSON.stringify({ success: false, error: `Número inválido — verifique o cadastro do paciente. Telefone: ${paciente.telefone}` }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -172,7 +225,6 @@ serve(async (req) => {
       unidadeNome = u?.nome || "";
     }
 
-    const phone = formatPhone(paciente.telefone);
     const message = buildMessage(tipo || "confirmacao", {
       paciente_nome: paciente.nome || ag.paciente_nome,
       data_consulta: ag.data,
