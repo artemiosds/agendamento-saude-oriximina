@@ -288,7 +288,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                 const { day, dateStr } = cell;
                 const status = getDayStatus(dateStr);
                 const isSelected = dateStr === selectedDate;
-                const canClick = status !== 'past' && status !== 'unavailable';
+                const canClick = status !== 'past' && (isMaster || status !== 'unavailable');
 
                 return (
                   <div key={dateStr} className="flex items-center justify-center py-0.5">
@@ -377,7 +377,19 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
             <div>
               <Label className="mb-2 block">Horários disponíveis em {formatDateBR(selectedDate)}:</Label>
               {slots.length === 0 ? (
-                <p className="text-sm text-warning">Sem horários disponíveis nesta data.</p>
+                isMaster ? (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
+                    <input
+                      type="time"
+                      value={selectedHora}
+                      onChange={(e) => setSelectedHora(e.target.value)}
+                      className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-warning">Sem horários disponíveis nesta data.</p>
+                )
               ) : (
                 <div className="grid grid-cols-5 gap-2">
                   {slots.map(slot => {
@@ -399,6 +411,17 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
                       </Button>
                     );
                   })}
+                  {isMaster && (
+                    <div className="col-span-5 mt-2 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Ou digite:</span>
+                      <input
+                        type="time"
+                        value={slots.includes(selectedHora) ? "" : selectedHora}
+                        onChange={(e) => setSelectedHora(e.target.value)}
+                        className="flex h-9 w-32 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
