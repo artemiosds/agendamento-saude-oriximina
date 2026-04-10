@@ -776,7 +776,82 @@ const Tratamentos: React.FC = () => {
     }
   };
 
-  const handleExtension = async () => {
+  const handleAddIntermediateSession = async () => {
+    if (!selectedCycle || !intermediateDate || intermediateAfterSession < 0) {
+      toast.error("Selecione a data e a posição da sessão.");
+      return;
+    }
+    try {
+      const currentSessions = sessions
+        .filter((s) => s.cycle_id === selectedCycle.id)
+        .sort((a, b) => a.session_number - b.session_number);
+
+      const insertPos = intermediateAfterSession; // insert after this session number
+      const newTotal = selectedCycle.total_sessions + 1;
+
+      // 1. Renumber sessions after insertPos
+      const toRenumber = currentSessions.filter((s) => s.session_number > insertPos);
+      for (const s of toRenumber) {
+        await supabase
+          .from("treatment_sessions")
+          .update({ session_number: s.session_number + 1, total_sessions: newTotal })
+          .eq("id", s.id);
+      }
+
+      // Update total_sessions for existing sessions at or before insertPos
+      const toUpdateTotal = currentSessions.filter((s) => s.session_number <= insertPos);
+      for (const s of toUpdateTotal) {
+        await supabase
+          .from("treatment_sessions")
+          .update({ total_sessions: newTotal })
+          .eq("id", s.id);
+      }
+
+      // 2. Insert new session
+      const { error: insertError } = await supabase.from("treatment_sessions").insert({
+        cycle_id: selectedCycle.id,
+        patient_id: selectedCycle.patient_id,
+        professional_id: selectedCycle.professional_id,
+        session_number: insertPos + 1,
+        total_sessions: newTotal,
+        scheduled_date: intermediateDate,
+        status: "pendente_agendamento",
+      });
+      if (insertError) throw insertError;
+
+      // 3. Update cycle total
+      await supabase
+        .from("treatment_cycles")
+        .update({ total_sessions: newTotal })
+        .eq("id", selectedCycle.id);
+
+      await logAction({
+        acao: "adicionar_sessao_intermediaria",
+        entidade: "treatment_session",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          ciclo: selectedCycle.id,
+          posicao: insertPos + 1,
+          data: intermediateDate,
+          total_anterior: selectedCycle.total_sessions,
+          total_novo: newTotal,
+        },
+      });
+
+      toast.success(`Sessão intermediária ${insertPos + 1}/${newTotal} adicionada em ${new Date(intermediateDate + "T12:00:00").toLocaleDateString("pt-BR")}!`);
+      setAddIntermediateOpen(false);
+      setIntermediateDate("");
+      setIntermediateAfterSession(0);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
+    }
+  };
+
+
     if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
       toast.error("Informe a quantidade de sessões e o motivo.");
       return;
