@@ -238,7 +238,7 @@ const Agenda: React.FC = () => {
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
 
-  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
+  const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
@@ -277,15 +277,16 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
   }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
 
-  // Clear selected hora when it's no longer in available slots
+  // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
+    if (isMaster) return;
     if (newAg.hora && newAgSlots.length > 0 && !newAgSlots.includes(newAg.hora)) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
     if (newAgSlots.length === 0 && newAg.hora) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
-  }, [newAgSlots, newAg.hora]);
+  }, [newAgSlots, newAg.hora, isMaster]);
 
   const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
