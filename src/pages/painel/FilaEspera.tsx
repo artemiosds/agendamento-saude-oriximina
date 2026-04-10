@@ -333,15 +333,27 @@ const FilaEspera: React.FC = () => {
   };
 
   const filteredFila = useMemo(() => {
-    const prioOrder: Record<string, number> = {
-      urgente: 0,
-      gestante: 1,
-      idoso: 2,
-      alta: 3,
-      pcd: 4,
-      crianca: 5,
-      normal: 6,
+    // Helper: calculate age from dataNascimento
+    const getAge = (pacienteId: string): number => {
+      const pac = pacientes.find((p) => p.id === pacienteId);
+      if (!pac?.dataNascimento) return 0;
+      const birth = new Date(pac.dataNascimento);
+      if (isNaN(birth.getTime())) return 0;
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age;
     };
+
+    // Legal priority order (idoso 60+, gestante, pcd, crianca de colo)
+    const legalPrioOrder: Record<string, number> = {
+      gestante: 0,
+      idoso: 1,
+      pcd: 2,
+      crianca: 3,
+    };
+
     const query = debouncedSearchQuery.toLowerCase().trim();
     return [...fila]
       .filter((f) => !query || resolvePaciente(f.pacienteId, f.pacienteNome).toLowerCase().includes(query))
@@ -351,17 +363,29 @@ const FilaEspera: React.FC = () => {
       .filter((f) => filterEspecialidade === "all" || (f as any).especialidadeDestino === filterEspecialidade)
       .sort((a, b) => {
         if (sortField === "prioridade") {
-          // Manchester classification first
+          // 1º Manchester classification
           const aManchester = manchesterOrder[(a as any).classificacaoRisco] ?? 6;
           const bManchester = manchesterOrder[(b as any).classificacaoRisco] ?? 6;
           if (aManchester !== bManchester) return aManchester - bManchester;
-          // Then special priority
-          if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
-            return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
-          if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
-            return a.dataSolicitacaoOriginal.localeCompare(b.dataSolicitacaoOriginal);
-          if (a.dataSolicitacaoOriginal) return -1;
-          if (b.dataSolicitacaoOriginal) return 1;
+
+          // 2º Prioridade Especial: 80+ years
+          const aAge = getAge(a.pacienteId);
+          const bAge = getAge(b.pacienteId);
+          const aIs80Plus = aAge >= 80 ? 0 : 1;
+          const bIs80Plus = bAge >= 80 ? 0 : 1;
+          if (aIs80Plus !== bIs80Plus) return aIs80Plus - bIs80Plus;
+
+          // 3º Prioridade Legal: idoso 60+, gestante, PCD, criança de colo
+          const aHasLegal = ['gestante', 'idoso', 'pcd', 'crianca'].includes(a.prioridade);
+          const bHasLegal = ['gestante', 'idoso', 'pcd', 'crianca'].includes(b.prioridade);
+          if (aHasLegal !== bHasLegal) return aHasLegal ? -1 : 1;
+          if (aHasLegal && bHasLegal) {
+            const aLegal = legalPrioOrder[a.prioridade] ?? 99;
+            const bLegal = legalPrioOrder[b.prioridade] ?? 99;
+            if (aLegal !== bLegal) return aLegal - bLegal;
+          }
+
+          // 4º Horário de chegada
           return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
         }
         if (sortField === "tempo") {
@@ -378,7 +402,7 @@ const FilaEspera: React.FC = () => {
         }
         return (a.criadoEm || a.horaChegada).localeCompare(b.criadoEm || b.horaChegada);
       });
-  }, [fila, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery]);
+  }, [fila, pacientes, filterUnidade, filterProf, filterStatus, filterEspecialidade, sortField, now, debouncedSearchQuery]);
 
   const activeQueue = fila.filter((f) => ["aguardando", "chamado", "em_atendimento"].includes(f.status));
   const aguardandoCount = fila.filter((f) => f.status === "aguardando").length;
