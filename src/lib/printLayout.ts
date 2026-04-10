@@ -17,7 +17,7 @@ const resolveLogoUrl = (): string => {
 /** Standard institutional CSS shared across all documents */
 export const institutionalCSS = `
 <style>
-  @page { size: A4; margin: 15mm 12mm; }
+  @page { size: A4; margin: 15mm 12mm; @bottom-center { content: "Página " counter(page) " de " counter(pages); font-size: 8px; color: #94a3b8; } }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Georgia', 'Times New Roman', serif; padding: 24px; color: #1e293b; font-size: 12px; line-height: 1.6; }
 

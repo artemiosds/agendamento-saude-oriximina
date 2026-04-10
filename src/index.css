@@ -97,7 +97,9 @@
   nav, aside, header, footer,
   button, .no-print,
   [data-radix-scroll-area-viewport],
-  .sidebar, .mobile-overlay {
+  [data-sonner-toaster],
+  .sidebar, .mobile-overlay,
+  .toaster {
     display: none !important;
   }
   body {
@@ -122,5 +124,12 @@
   }
   thead {
     display: table-header-group;
+  }
+  /* Signature and carimbo should not break across pages */
+  .doc-sign-footer,
+  .e-signature-box,
+  .carimbo-digital,
+  .signature {
+    page-break-inside: avoid;
   }
 }
