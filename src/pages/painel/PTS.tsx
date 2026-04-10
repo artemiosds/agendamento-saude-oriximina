@@ -347,7 +347,7 @@ const PTS: React.FC = () => {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
-  const showSigtap = (isFisioterapeuta || isMaster) && sigtapProcs.length > 0;
+  const showSigtap = (hasSigtapProfession || isMaster) && sigtapProcs.length > 0;
 
   return (
     <div className="space-y-4 animate-fade-in">
