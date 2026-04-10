@@ -181,9 +181,9 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       <div class="content-block" style="margin-top:20px;">
         <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;white-space:pre-wrap;">${html}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px;">
-        <div style="flex:1;">${signatureHtml}</div>
-        <div>${carimboHtml}</div>
+      <div class="doc-sign-footer">
+        <div class="sign-block">${signatureHtml}</div>
+        <div class="carimbo-block">${carimboHtml}</div>
       </div>
     `;
   };
