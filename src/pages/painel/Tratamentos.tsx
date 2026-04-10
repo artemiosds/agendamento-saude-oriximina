@@ -717,15 +717,17 @@ const Tratamentos: React.FC = () => {
     setRemarcarSaving(true);
     try {
       const oldDate = remarcarTarget.scheduled_date;
-      const { data: blocked } = await supabase.rpc("is_date_blocked", {
-        p_date: remarcarData,
-        p_profissional_id: selectedCycle.professional_id,
-        p_unidade_id: selectedCycle.unit_id,
-      });
-      if (blocked === true) {
-        toast.error("Data bloqueada.");
-        setRemarcarSaving(false);
-        return;
+      if (!isMaster) {
+        const { data: blocked } = await supabase.rpc("is_date_blocked", {
+          p_date: remarcarData,
+          p_profissional_id: selectedCycle.professional_id,
+          p_unidade_id: selectedCycle.unit_id,
+        });
+        if (blocked === true) {
+          toast.error("Data bloqueada.");
+          setRemarcarSaving(false);
+          return;
+        }
       }
 
       const { error } = await supabase
@@ -1760,12 +1762,14 @@ const Tratamentos: React.FC = () => {
             setRemarcarSaving(true);
             try {
               const oldDate = remarcarTarget.scheduled_date;
-              const { data: blocked } = await supabase.rpc("is_date_blocked", {
-                p_date: data,
-                p_profissional_id: selectedCycle.professional_id,
-                p_unidade_id: selectedCycle.unit_id,
-              });
-              if (blocked === true) { toast.error("Data bloqueada."); return; }
+              if (user?.role !== 'master') {
+                const { data: blocked } = await supabase.rpc("is_date_blocked", {
+                  p_date: data,
+                  p_profissional_id: selectedCycle.professional_id,
+                  p_unidade_id: selectedCycle.unit_id,
+                });
+                if (blocked === true) { toast.error("Data bloqueada."); return; }
+              }
               const { error } = await supabase
                 .from("treatment_sessions")
                 .update({ scheduled_date: data })
