@@ -118,7 +118,7 @@ const HorariosSection: React.FC = () => {
 
 // ─── Section 2: Regras ────────────────────────────────────────────────────────
 const RegrasSection: React.FC = () => {
-  const { configuracoes, setConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes } = useData();
   const [regras, setRegras] = useState({
     antecedencia_minima_horas: 2,
     antecedencia_maxima_dias: 90,
@@ -128,22 +128,13 @@ const RegrasSection: React.FC = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (configuracoes?.regras_agendamento) {
-      setRegras(prev => ({ ...prev, ...configuracoes.regras_agendamento }));
-    }
+    const saved = (configuracoes as any)?.regras_agendamento;
+    if (saved) setRegras(prev => ({ ...prev, ...saved }));
   }, [configuracoes]);
 
   const saveRegras = async () => {
-    const updated = { ...configuracoes, regras_agendamento: regras };
-    const { error } = await supabase.from("system_config").upsert({
-      id: "default",
-      configuracoes: updated as any,
-      updated_at: new Date().toISOString(),
-    });
-    if (!error) {
-      setConfiguracoes(updated);
-      toast.success("✅ Regras de agendamento salvas!");
-    } else toast.error("Erro ao salvar regras");
+    await updateConfiguracoes({ ...configuracoes, regras_agendamento: regras } as any);
+    toast.success("✅ Regras de agendamento salvas!");
     setConfirmOpen(false);
   };
 
