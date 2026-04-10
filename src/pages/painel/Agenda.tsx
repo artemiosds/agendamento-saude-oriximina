@@ -1621,8 +1621,8 @@ const Agenda: React.FC = () => {
                       ehPendenteOnline && "ring-1 ring-warning/40",
                     )}
                   >
-                    <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
+                    <CardContent className="p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">
+                      <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <Tooltip>
                           <TooltipTrigger asChild>
