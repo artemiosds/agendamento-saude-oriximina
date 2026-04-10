@@ -10,6 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { User, Building2, Stethoscope, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -197,10 +198,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
           </div>
           <div>
-            <Label>Telefone</Label>
+            <Label>Telefone *</Label>
             <Input
-              value={form.telefone}
-              onChange={(e) => set("telefone", e.target.value)}
+              value={form.telefone.length > 0 && !/[()-]/.test(form.telefone) ? formatPhoneForDisplay(form.telefone) : form.telefone}
+              onChange={(e) => set("telefone", applyPhoneMask(e.target.value))}
               placeholder="(93) 99999-0000"
             />
             {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}

@@ -282,8 +282,20 @@ const Pacientes: React.FC = () => {
   };
 
   const handleSave = async () => {
+    const { normalizePhone } = await import("@/lib/phoneUtils");
     const newErrors: Record<string, string> = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
+
+    // Validate and normalize phone
+    const rawPhone = form.telefone?.trim();
+    if (!rawPhone) {
+      newErrors.telefone = "Informe o telefone com DDD ex: (93) 99999-0000";
+    } else {
+      const normalized = normalizePhone(rawPhone);
+      if (!normalized) {
+        newErrors.telefone = "Informe o telefone com DDD ex: (93) 99999-0000";
+      }
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -293,12 +305,14 @@ const Pacientes: React.FC = () => {
     setErrors({});
     setSaving(true);
 
+    const normalizedPhone = normalizePhone(rawPhone!) || "";
+
     const dbFields: any = {
       nome: form.nome,
       cpf: form.cpf,
       cns: form.cns,
       nome_mae: form.nomeMae,
-      telefone: form.telefone,
+      telefone: normalizedPhone,
       data_nascimento: form.dataNascimento,
       email: form.email,
       endereco: form.endereco,
