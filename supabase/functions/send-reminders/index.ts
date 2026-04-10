@@ -17,6 +17,13 @@ interface GmailConfig {
   smtpPort: number;
 }
 
+interface EvolutionConfig {
+  evolution_base_url: string;
+  evolution_api_key: string;
+  evolution_instance_name: string;
+  nome_clinica: string;
+}
+
 async function getConfig(supabase: any) {
   const { data } = await supabase
     .from("system_config")
@@ -26,15 +33,91 @@ async function getConfig(supabase: any) {
   return data?.configuracoes || {};
 }
 
-async function sendNotification(supabase: any, config: any, payload: any) {
+async function getEvolutionConfig(supabase: any): Promise<EvolutionConfig | null> {
+  const { data } = await supabase
+    .from("clinica_config")
+    .select("evolution_base_url, evolution_api_key, evolution_instance_name, nome_clinica")
+    .limit(1)
+    .maybeSingle();
+  if (!data || !data.evolution_instance_name) return null;
+  return data as EvolutionConfig;
+}
+
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("55")) return digits;
+  return "55" + digits;
+}
+
+function buildWhatsAppMessage(tipo: string, data: {
+  paciente_nome: string;
+  data_consulta: string;
+  hora_consulta: string;
+  profissional: string;
+  unidade: string;
+  nome_clinica: string;
+}): string {
+  const header = `🏥 *${data.nome_clinica || "SMS Oriximiná"}*\n`;
+  if (tipo === "lembrete_24h") {
+    return `${header}\n⏰ *Lembrete - Consulta Amanhã*\n\nOlá, *${data.paciente_nome}*!\n\n📅 *Data:* ${data.data_consulta}\n🕐 *Horário:* ${data.hora_consulta}\n👨‍⚕️ *Profissional:* ${data.profissional}\n🏥 *Unidade:* ${data.unidade}\n\nChegue com 15 min de antecedência.\n\n_Mensagem automática._`;
+  }
+  return `${header}\n⏰ *Consulta em 1 hora!*\n\nOlá, *${data.paciente_nome}*!\n\n📅 *Data:* ${data.data_consulta}\n🕐 *Horário:* ${data.hora_consulta}\n👨‍⚕️ *Profissional:* ${data.profissional}\n🏥 *Unidade:* ${data.unidade}\n\nEstamos aguardando você!\n\n_Mensagem automática._`;
+}
+
+async function sendEvolutionWhatsApp(
+  config: EvolutionConfig,
+  telefone: string,
+  message: string
+): Promise<boolean> {
+  try {
+    const phone = formatPhone(telefone);
+    const resp = await fetch(
+      `${config.evolution_base_url}/message/sendText/${config.evolution_instance_name}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: config.evolution_api_key },
+        body: JSON.stringify({ number: phone, text: message }),
+      }
+    );
+    return resp.ok;
+  } catch (err) {
+    console.error("[reminders] Evolution API error:", err);
+    return false;
+  }
+}
+
+async function sendNotification(
+  supabase: any,
+  config: any,
+  evolutionConfig: EvolutionConfig | null,
+  payload: any
+) {
   const canal = config.canalNotificacao || "webhook";
   const gmailConfig: GmailConfig | null = config.gmail?.ativo ? config.gmail : null;
   const webhookUrl = config.webhook?.url;
   const webhookAtivo = config.webhook?.ativo;
-  
-  let sent = false;
 
-  // Send via webhook
+  let sent = false;
+  let whatsappSent = false;
+
+  // === WhatsApp via Evolution API ===
+  if (evolutionConfig && payload.telefone) {
+    const msg = buildWhatsAppMessage(payload.evento, {
+      paciente_nome: payload.paciente_nome,
+      data_consulta: payload.data_consulta,
+      hora_consulta: payload.hora_consulta,
+      profissional: payload.profissional,
+      unidade: payload.unidade || "",
+      nome_clinica: evolutionConfig.nome_clinica,
+    });
+    whatsappSent = await sendEvolutionWhatsApp(evolutionConfig, payload.telefone, msg);
+    if (whatsappSent) {
+      sent = true;
+      console.log(`[reminders] WhatsApp sent for ${payload.evento} to ${payload.telefone}`);
+    }
+  }
+
+  // === Webhook ===
   if ((canal === "webhook" || canal === "ambos") && webhookAtivo && webhookUrl) {
     try {
       const resp = await fetch(webhookUrl, {
@@ -51,7 +134,7 @@ async function sendNotification(supabase: any, config: any, payload: any) {
     }
   }
 
-  // Send via Gmail
+  // === Gmail ===
   if ((canal === "gmail" || canal === "ambos") && gmailConfig && payload.email) {
     try {
       const transporter = nodemailer.createTransport({
@@ -118,12 +201,20 @@ async function sendNotification(supabase: any, config: any, payload: any) {
     } catch { /* fallback failed */ }
   }
 
+  // Determine canal used
+  const canaisUsados: string[] = [];
+  if (whatsappSent) canaisUsados.push("whatsapp_evolution");
+  if (sent && !whatsappSent) canaisUsados.push(canal);
+  else if (sent && whatsappSent) {
+    if (canal !== "webhook" || webhookAtivo) canaisUsados.push(canal);
+  }
+
   // Log
   try {
     await supabase.from("notification_logs").insert({
       agendamento_id: payload.id_agendamento || "",
       evento: payload.evento,
-      canal: sent ? (canal === "ambos" ? "gmail+webhook" : canal) : "falha",
+      canal: canaisUsados.length > 0 ? canaisUsados.join("+") : "falha",
       destinatario_email: payload.email || "",
       destinatario_telefone: payload.telefone || "",
       payload,
@@ -146,22 +237,23 @@ serve(async (req) => {
 
   try {
     const config = await getConfig(supabase);
+    const evolutionConfig = await getEvolutionConfig(supabase);
     const now = new Date();
-    
+
     // Calculate tomorrow's date (for 24h reminder)
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().split("T")[0];
-    
+
     // Today's date (for 1h reminder)
     const todayStr = now.toISOString().split("T")[0];
-    
+
     // Current time components for 1h window
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const oneHourFromNow = currentMinutes + 60;
 
     let sent24h = 0;
     let sent1h = 0;
+    let sentWhatsApp = 0;
 
     // 24h reminders: appointments tomorrow that haven't been reminded
     const { data: ag24h } = await supabase
@@ -174,24 +266,25 @@ serve(async (req) => {
     if (ag24h && ag24h.length > 0) {
       console.log(`[reminders] Found ${ag24h.length} appointments for 24h reminder`);
       for (const ag of ag24h) {
-        // Get patient email
         const { data: paciente } = await supabase
           .from("pacientes")
           .select("email, telefone")
           .eq("id", ag.paciente_id)
           .maybeSingle();
 
-        if (!paciente?.email) {
-          console.warn(`[reminders] Paciente ${ag.paciente_id} sem e-mail, pulando 24h reminder`);
+        if (!paciente?.email && !paciente?.telefone) {
+          console.warn(`[reminders] Paciente ${ag.paciente_id} sem contato, pulando`);
           continue;
         }
 
-        const unidade = ag.unidade_id ? (await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle())?.data?.nome : "";
+        const unidade = ag.unidade_id
+          ? (await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle())?.data?.nome
+          : "";
 
-        const success = await sendNotification(supabase, config, {
+        const success = await sendNotification(supabase, config, evolutionConfig, {
           evento: "lembrete_24h",
           paciente_nome: ag.paciente_nome,
-          email: paciente.email,
+          email: paciente.email || "",
           telefone: paciente.telefone || "",
           data_consulta: ag.data,
           hora_consulta: ag.hora,
@@ -219,11 +312,9 @@ serve(async (req) => {
 
     if (agToday && agToday.length > 0) {
       for (const ag of agToday) {
-        // Parse appointment time
         const [hStr, mStr] = (ag.hora || "00:00").split(":");
         const agMinutes = parseInt(hStr) * 60 + parseInt(mStr);
-        
-        // Check if appointment is within 50-70 minutes from now
+
         if (agMinutes >= currentMinutes + 50 && agMinutes <= currentMinutes + 70) {
           const { data: paciente } = await supabase
             .from("pacientes")
@@ -231,14 +322,16 @@ serve(async (req) => {
             .eq("id", ag.paciente_id)
             .maybeSingle();
 
-          if (!paciente?.email) continue;
+          if (!paciente?.email && !paciente?.telefone) continue;
 
-          const unidade = ag.unidade_id ? (await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle())?.data?.nome : "";
+          const unidade = ag.unidade_id
+            ? (await supabase.from("unidades").select("nome").eq("id", ag.unidade_id).maybeSingle())?.data?.nome
+            : "";
 
-          const success = await sendNotification(supabase, config, {
+          const success = await sendNotification(supabase, config, evolutionConfig, {
             evento: "lembrete_1h",
             paciente_nome: ag.paciente_nome,
-            email: paciente.email,
+            email: paciente.email || "",
             telefone: paciente.telefone || "",
             data_consulta: ag.data,
             hora_consulta: ag.hora,
@@ -257,7 +350,7 @@ serve(async (req) => {
       }
     }
 
-    const message = `Lembretes processados: ${sent24h} de 24h, ${sent1h} de 1h`;
+    const message = `Lembretes processados: ${sent24h} de 24h, ${sent1h} de 1h${evolutionConfig ? " (WhatsApp Evolution ativo)" : ""}`;
     console.log(`[reminders] ${message}`);
 
     return new Response(

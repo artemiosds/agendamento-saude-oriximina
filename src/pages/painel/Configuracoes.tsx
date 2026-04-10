@@ -82,6 +82,22 @@ const Configuracoes: React.FC = () => {
   const [cancelSaving, setCancelSaving] = useState(false);
   const [novoMotivo, setNovoMotivo] = useState('');
 
+  // Evolution API WhatsApp
+  const [evolutionConfig, setEvolutionConfig] = useState({
+    nome_clinica: '',
+    logo_url: '',
+    telefone: '',
+    evolution_base_url: 'https://api.agendamento-saude-sms-oriximina.site',
+    evolution_api_key: 'ee602586e9594a126109ceae5759d19c',
+    evolution_instance_name: '',
+  });
+  const [evolutionConfigId, setEvolutionConfigId] = useState<string | null>(null);
+  const [evolutionInstances, setEvolutionInstances] = useState<{ instanceName: string; state: string }[]>([]);
+  const [evolutionLoading, setEvolutionLoading] = useState(true);
+  const [evolutionSaving, setEvolutionSaving] = useState(false);
+  const [evolutionTesting, setEvolutionTesting] = useState(false);
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+
   const isMaster = user?.role === 'master';
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
@@ -301,6 +317,144 @@ const Configuracoes: React.FC = () => {
     });
   }, []);
 
+  // Load Evolution API config
+  useEffect(() => {
+    if (!isMaster) { setEvolutionLoading(false); return; }
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('clinica_config')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+        if (data) {
+          setEvolutionConfigId(data.id);
+          setEvolutionConfig({
+            nome_clinica: data.nome_clinica || '',
+            logo_url: data.logo_url || '',
+            telefone: data.telefone || '',
+            evolution_base_url: data.evolution_base_url || 'https://api.agendamento-saude-sms-oriximina.site',
+            evolution_api_key: data.evolution_api_key || '',
+            evolution_instance_name: data.evolution_instance_name || '',
+          });
+          // Check connection status
+          if (data.evolution_instance_name && data.evolution_api_key) {
+            try {
+              const resp = await fetch(
+                `${data.evolution_base_url}/instance/connectionState/${data.evolution_instance_name}`,
+                { headers: { apikey: data.evolution_api_key } }
+              );
+              if (resp.ok) {
+                const state = await resp.json();
+                setEvolutionStatus(state?.instance?.state === 'open' ? 'connected' : 'disconnected');
+              } else {
+                setEvolutionStatus('error');
+              }
+            } catch {
+              setEvolutionStatus('error');
+            }
+          }
+        }
+        // Fetch available instances
+        try {
+          const baseUrl = data?.evolution_base_url || evolutionConfig.evolution_base_url;
+          const apiKey = data?.evolution_api_key || evolutionConfig.evolution_api_key;
+          if (apiKey) {
+            const resp = await fetch(`${baseUrl}/instance/fetchInstances`, {
+              headers: { apikey: apiKey },
+            });
+            if (resp.ok) {
+              const instances = await resp.json();
+              if (Array.isArray(instances)) {
+                setEvolutionInstances(instances.map((i: any) => ({
+                  instanceName: i.instance?.instanceName || i.instanceName || '',
+                  state: i.instance?.state || i.state || 'unknown',
+                })).filter((i: any) => i.instanceName));
+              }
+            }
+          }
+        } catch {}
+      } catch {}
+      setEvolutionLoading(false);
+    })();
+  }, [isMaster]);
+
+  const saveEvolutionConfig = async () => {
+    setEvolutionSaving(true);
+    try {
+      if (evolutionConfigId) {
+        const { error } = await supabase
+          .from('clinica_config')
+          .update({
+            ...evolutionConfig,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', evolutionConfigId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from('clinica_config')
+          .insert(evolutionConfig)
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (data) setEvolutionConfigId(data.id);
+      }
+      toast.success('Configurações da Evolution API salvas!');
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+    } finally {
+      setEvolutionSaving(false);
+    }
+  };
+
+  const testEvolutionWhatsApp = async () => {
+    setEvolutionTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp-evolution', {
+        body: { tipo: 'teste', telefone_teste: evolutionConfig.telefone || user?.email },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast.success('Mensagem de teste enviada com sucesso!');
+        setEvolutionStatus('connected');
+      } else {
+        toast.error(data?.error || 'Erro ao enviar teste');
+        setEvolutionStatus('error');
+      }
+    } catch (err: any) {
+      toast.error(`Erro: ${err.message}`);
+      setEvolutionStatus('error');
+    } finally {
+      setEvolutionTesting(false);
+    }
+  };
+
+  const checkEvolutionConnection = async () => {
+    if (!evolutionConfig.evolution_instance_name || !evolutionConfig.evolution_api_key) {
+      toast.error('Configure a instância e API Key primeiro.');
+      return;
+    }
+    try {
+      const resp = await fetch(
+        `${evolutionConfig.evolution_base_url}/instance/connectionState/${evolutionConfig.evolution_instance_name}`,
+        { headers: { apikey: evolutionConfig.evolution_api_key } }
+      );
+      if (resp.ok) {
+        const state = await resp.json();
+        const connected = state?.instance?.state === 'open';
+        setEvolutionStatus(connected ? 'connected' : 'disconnected');
+        toast[connected ? 'success' : 'warning'](connected ? 'Instância conectada!' : 'Instância desconectada. Verifique o QR Code.');
+      } else {
+        setEvolutionStatus('error');
+        toast.error('Erro ao verificar conexão.');
+      }
+    } catch {
+      setEvolutionStatus('error');
+      toast.error('Não foi possível conectar à Evolution API.');
+    }
+  };
+
   const updateWhatsapp = (data: Partial<typeof whatsapp>) => {
     updateConfiguracoes({ whatsapp: { ...whatsapp, ...data } });
   };
@@ -434,7 +588,152 @@ const Configuracoes: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Google Calendar */}
+          {/* Evolution API WhatsApp */}
+          {isMaster && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-success" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold font-display text-foreground">WhatsApp Evolution API</h3>
+                    <p className="text-sm text-muted-foreground">Envio direto de mensagens via Evolution API</p>
+                  </div>
+                  {evolutionStatus === 'connected' ? (
+                    <Badge className="bg-success/10 text-success border-0">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Conectado
+                    </Badge>
+                  ) : evolutionStatus === 'disconnected' ? (
+                    <Badge variant="secondary" className="border-0">
+                      <XCircle className="w-3 h-3 mr-1" /> Desconectado
+                    </Badge>
+                  ) : evolutionStatus === 'error' ? (
+                    <Badge variant="destructive" className="border-0">
+                      <AlertCircle className="w-3 h-3 mr-1" /> Erro
+                    </Badge>
+                  ) : null}
+                </div>
+
+                {evolutionLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Nome da Clínica</Label>
+                        <Input
+                          placeholder="SMS Oriximiná"
+                          value={evolutionConfig.nome_clinica}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, nome_clinica: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Telefone da Clínica</Label>
+                        <Input
+                          placeholder="5593999990000"
+                          value={evolutionConfig.telefone}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, telefone: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Base URL da Evolution API</Label>
+                        <Input
+                          placeholder="https://api.example.com"
+                          value={evolutionConfig.evolution_base_url}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>API Key</Label>
+                        <Input
+                          type="password"
+                          placeholder="Cole a API Key"
+                          value={evolutionConfig.evolution_api_key}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Instância</Label>
+                      {evolutionInstances.length > 0 ? (
+                        <Select
+                          value={evolutionConfig.evolution_instance_name}
+                          onValueChange={v => setEvolutionConfig(p => ({ ...p, evolution_instance_name: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a instância" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {evolutionInstances.map(inst => (
+                              <SelectItem key={inst.instanceName} value={inst.instanceName}>
+                                {inst.instanceName} {inst.state === 'open' ? '✅' : '⚠️'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder="Nome da instância (ex: clinica-principal)"
+                          value={evolutionConfig.evolution_instance_name}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_instance_name: e.target.value }))}
+                        />
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {evolutionInstances.length > 0
+                          ? `${evolutionInstances.length} instância(s) encontrada(s)`
+                          : 'Nenhuma instância detectada. Digite o nome manualmente.'}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        className="gradient-primary text-primary-foreground flex-1"
+                        disabled={evolutionSaving || !evolutionConfig.evolution_instance_name}
+                        onClick={saveEvolutionConfig}
+                      >
+                        {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                        Salvar Configuração
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={!evolutionConfig.evolution_instance_name}
+                        onClick={checkEvolutionConnection}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Verificar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={evolutionTesting || !evolutionConfig.evolution_instance_name || !evolutionConfig.telefone}
+                        onClick={testEvolutionWhatsApp}
+                      >
+                        {evolutionTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                        Testar
+                      </Button>
+                    </div>
+
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground">
+                        <Info className="w-3 h-3 inline mr-1" />
+                        A Evolution API envia mensagens WhatsApp automaticamente nos lembretes de 24h e 1h antes da consulta, além de confirmações e cancelamentos.
+                        O telefone do paciente deve estar cadastrado com DDD completo.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-4">

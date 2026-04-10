@@ -245,6 +245,42 @@ export type Database = {
         }
         Relationships: []
       }
+      clinica_config: {
+        Row: {
+          created_at: string
+          evolution_api_key: string
+          evolution_base_url: string
+          evolution_instance_name: string
+          id: string
+          logo_url: string
+          nome_clinica: string
+          telefone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          evolution_api_key?: string
+          evolution_base_url?: string
+          evolution_instance_name?: string
+          id?: string
+          logo_url?: string
+          nome_clinica?: string
+          telefone?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          evolution_api_key?: string
+          evolution_base_url?: string
+          evolution_instance_name?: string
+          id?: string
+          logo_url?: string
+          nome_clinica?: string
+          telefone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       disponibilidades: {
         Row: {
           criado_em: string | null
