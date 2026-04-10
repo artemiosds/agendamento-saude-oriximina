@@ -159,7 +159,7 @@ const Relatorios: React.FC = () => {
           { data: triageData },
           { data: procData },
           { data: cyclesData },
-          { data: sessionsData },
+          sessionsData,
           { data: nursingData },
           { data: multiData },
           { data: ptsDataResult },
