@@ -238,7 +238,7 @@ const Agenda: React.FC = () => {
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
 
-  const { unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
+  const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
@@ -277,15 +277,16 @@ const Agenda: React.FC = () => {
     return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
   }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
 
-  // Clear selected hora when it's no longer in available slots
+  // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
+    if (isMaster) return;
     if (newAg.hora && newAgSlots.length > 0 && !newAgSlots.includes(newAg.hora)) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
     if (newAgSlots.length === 0 && newAg.hora) {
       setNewAg((p) => ({ ...p, hora: "" }));
     }
-  }, [newAgSlots, newAg.hora]);
+  }, [newAgSlots, newAg.hora, isMaster]);
 
   const retornoAvailableDates = React.useMemo(() => {
     if (!user || !retornoDialogOpen) return [];
@@ -1303,13 +1304,25 @@ const Agenda: React.FC = () => {
                       />
                     )}
                     {newAgSlots.length === 0 ? (
-                      <p className="text-sm text-warning mt-1">
-                        {!newAg.profissionalId
-                          ? "Selecione um profissional."
-                          : selectedDate === todayLocalStr()
-                            ? "Não há horários livres restantes para hoje. Selecione outro dia."
-                            : "Não há horários livres nesta data. Selecione outro dia."}
-                      </p>
+                      isMaster ? (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
+                          <Input
+                            type="time"
+                            value={newAg.hora}
+                            onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
+                            className="w-32"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-warning mt-1">
+                          {!newAg.profissionalId
+                            ? "Selecione um profissional."
+                            : selectedDate === todayLocalStr()
+                              ? "Não há horários livres restantes para hoje. Selecione outro dia."
+                              : "Não há horários livres nesta data. Selecione outro dia."}
+                        </p>
+                      )
                     ) : (
                       <div className="grid grid-cols-4 gap-2 mt-2">
                         {newAgSlots.map((slot) => (
@@ -1323,6 +1336,18 @@ const Agenda: React.FC = () => {
                             {slot}
                           </Button>
                         ))}
+                        {isMaster && (
+                          <div className="col-span-4 mt-2 flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Ou digite:</span>
+                            <Input
+                              type="time"
+                              value={newAgSlots.includes(newAg.hora) ? "" : newAg.hora}
+                              onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
+                              className="w-32"
+                              placeholder="HH:MM"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2039,7 +2064,19 @@ const Agenda: React.FC = () => {
                 <div>
                   <Label>Horário</Label>
                   {retornoAvailableSlots.length === 0 ? (
-                    <p className="text-sm text-warning mt-1">Não há horários disponíveis para esta data.</p>
+                    isMaster ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-muted-foreground">Master: digite o horário manualmente.</p>
+                        <Input
+                          type="time"
+                          value={retornoForm.hora}
+                          onChange={(e) => setRetornoForm((p) => ({ ...p, hora: e.target.value }))}
+                          className="w-32"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-warning mt-1">Não há horários disponíveis para esta data.</p>
+                    )
                   ) : (
                     <div className="grid grid-cols-4 gap-2 mt-2">
                       {retornoAvailableSlots.map((slot) => (
@@ -2114,7 +2151,19 @@ const Agenda: React.FC = () => {
               <div>
                 <Label>Horário</Label>
                 {editAvailableSlots.length === 0 ? (
-                  <p className="text-sm text-warning mt-1">Sem horários disponíveis para esta data/profissional.</p>
+                  isMaster ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-muted-foreground">Master: digite o horário manualmente.</p>
+                      <Input
+                        type="time"
+                        value={editAg.hora}
+                        onChange={(e) => setEditAg((p) => p ? { ...p, hora: e.target.value } : p)}
+                        className="w-32"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-warning mt-1">Sem horários disponíveis para esta data/profissional.</p>
+                  )
                 ) : (
                   <div className="grid grid-cols-4 gap-2 mt-2">
                     {editAvailableSlots.map((slot) => (
@@ -2128,6 +2177,17 @@ const Agenda: React.FC = () => {
                         {slot}
                       </Button>
                     ))}
+                    {isMaster && (
+                      <div className="col-span-4 mt-2 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Ou digite:</span>
+                        <Input
+                          type="time"
+                          value={editAvailableSlots.includes(editAg.hora) ? "" : editAg.hora}
+                          onChange={(e) => setEditAg((p) => p ? { ...p, hora: e.target.value } : p)}
+                          className="w-32"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
