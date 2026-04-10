@@ -19,7 +19,7 @@ export const institutionalCSS = `
 <style>
   @page { size: A4; margin: 15mm 12mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; padding: 24px; color: #1e293b; font-size: 11px; line-height: 1.5; }
+  body { font-family: 'Georgia', 'Times New Roman', serif; padding: 24px; color: #1e293b; font-size: 12px; line-height: 1.6; }
 
   /* HEADER */
   .doc-header {
