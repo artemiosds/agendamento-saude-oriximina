@@ -245,6 +245,30 @@ export type Database = {
         }
         Relationships: []
       }
+      cid10_codigos: {
+        Row: {
+          codigo: string
+          created_at: string
+          descricao: string
+          especialidade: string
+          id: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          descricao?: string
+          especialidade?: string
+          id?: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          descricao?: string
+          especialidade?: string
+          id?: string
+        }
+        Relationships: []
+      }
       clinica_config: {
         Row: {
           created_at: string
@@ -1504,6 +1528,71 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sigtap_procedimento_cids: {
+        Row: {
+          cid_codigo: string
+          cid_descricao: string
+          created_at: string
+          id: string
+          procedimento_codigo: string
+        }
+        Insert: {
+          cid_codigo: string
+          cid_descricao?: string
+          created_at?: string
+          id?: string
+          procedimento_codigo: string
+        }
+        Update: {
+          cid_codigo?: string
+          cid_descricao?: string
+          created_at?: string
+          id?: string
+          procedimento_codigo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sigtap_procedimento_cids_procedimento_codigo_fkey"
+            columns: ["procedimento_codigo"]
+            isOneToOne: false
+            referencedRelation: "sigtap_procedimentos"
+            referencedColumns: ["codigo"]
+          },
+        ]
+      }
+      sigtap_procedimentos: {
+        Row: {
+          ativo: boolean
+          codigo: string
+          created_at: string
+          especialidade: string
+          id: string
+          nome: string
+          total_cids: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo: string
+          created_at?: string
+          especialidade?: string
+          id?: string
+          nome: string
+          total_cids?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string
+          created_at?: string
+          especialidade?: string
+          id?: string
+          nome?: string
+          total_cids?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       system_config: {
         Row: {

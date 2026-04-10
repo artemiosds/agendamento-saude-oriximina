@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Plus, Search, Eye, FileText } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, Plus, Search, Eye, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
@@ -36,6 +37,19 @@ interface PTSRecord {
   updated_at: string;
 }
 
+interface SigtapProcedimento {
+  id: string;
+  codigo: string;
+  nome: string;
+  especialidade: string;
+  total_cids: number;
+}
+
+interface SigtapCid {
+  cid_codigo: string;
+  cid_descricao: string;
+}
+
 const PTS: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -46,6 +60,22 @@ const PTS: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailPts, setDetailPts] = useState<PTSRecord | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // SIGTAP state
+  const [sigtapProcs, setSigtapProcs] = useState<SigtapProcedimento[]>([]);
+  const [selectedProcCodigo, setSelectedProcCodigo] = useState('');
+  const [validCids, setValidCids] = useState<SigtapCid[]>([]);
+  const [cidSearch, setCidSearch] = useState('');
+  const [selectedCid, setSelectedCid] = useState('');
+  const [selectedCidDesc, setSelectedCidDesc] = useState('');
+  const [cidWarning, setCidWarning] = useState(false);
+  const [loadingCids, setLoadingCids] = useState(false);
+
+  const isFisioterapeuta = useMemo(() => {
+    if (!user) return false;
+    const prof = user.profissao?.toLowerCase().trim() || '';
+    return prof.includes('fisioterapi') || prof === 'fisioterapia';
+  }, [user]);
 
   const [form, setForm] = useState({
     patient_id: '', patient_name: '',
@@ -61,7 +91,63 @@ const PTS: React.FC = () => {
     setLoading(false);
   }, []);
 
+  // Load SIGTAP procedures for fisioterapia
+  const loadSigtapProcs = useCallback(async () => {
+    if (!isFisioterapeuta) return;
+    const { data } = await (supabase as any)
+      .from('sigtap_procedimentos')
+      .select('*')
+      .eq('especialidade', 'fisioterapia')
+      .eq('ativo', true)
+      .order('codigo');
+    if (data) setSigtapProcs(data);
+  }, [isFisioterapeuta]);
+
   useEffect(() => { loadPts(); }, [loadPts]);
+  useEffect(() => { loadSigtapProcs(); }, [loadSigtapProcs]);
+
+  // Load valid CIDs when procedure is selected
+  useEffect(() => {
+    if (!selectedProcCodigo) {
+      setValidCids([]);
+      return;
+    }
+    setLoadingCids(true);
+    (supabase as any)
+      .from('sigtap_procedimento_cids')
+      .select('cid_codigo, cid_descricao')
+      .eq('procedimento_codigo', selectedProcCodigo)
+      .order('cid_codigo')
+      .then(({ data }: any) => {
+        setValidCids(data || []);
+        setLoadingCids(false);
+      });
+  }, [selectedProcCodigo]);
+
+  // Check if typed CID is valid for selected procedure
+  useEffect(() => {
+    if (!selectedProcCodigo || !cidSearch.trim()) {
+      setCidWarning(false);
+      return;
+    }
+    const typed = cidSearch.trim().toUpperCase();
+    if (typed.length >= 3) {
+      const found = validCids.some(c =>
+        c.cid_codigo.toUpperCase() === typed || c.cid_codigo.toUpperCase().startsWith(typed)
+      );
+      setCidWarning(!found);
+    } else {
+      setCidWarning(false);
+    }
+  }, [cidSearch, validCids, selectedProcCodigo]);
+
+  const filteredCids = useMemo(() => {
+    if (!cidSearch.trim()) return validCids.slice(0, 20);
+    const q = cidSearch.trim().toUpperCase();
+    return validCids
+      .filter(c => c.cid_codigo.toUpperCase().includes(q) || c.cid_descricao.toUpperCase().includes(q))
+      .slice(0, 30);
+  }, [validCids, cidSearch]);
 
   const filtered = useMemo(() => {
     if (!search) return ptsList;
@@ -81,6 +167,20 @@ const PTS: React.FC = () => {
     }));
   };
 
+  const handleSelectCid = (cid: SigtapCid) => {
+    setSelectedCid(cid.cid_codigo);
+    setSelectedCidDesc(cid.cid_descricao);
+    setCidSearch(cid.cid_codigo);
+    setCidWarning(false);
+  };
+
+  const handleForceUseCid = () => {
+    setSelectedCid(cidSearch.trim().toUpperCase());
+    setSelectedCidDesc('CID informado manualmente');
+    setCidWarning(false);
+    toast.info('CID aceito manualmente (fora da tabela SIGTAP).');
+  };
+
   const handleSave = async () => {
     if (!form.patient_id || !form.diagnostico_funcional || !form.objetivos_terapeuticos) {
       toast.error('Preencha paciente, diagnóstico funcional e objetivos.');
@@ -88,6 +188,8 @@ const PTS: React.FC = () => {
     }
     setSaving(true);
     try {
+      const selectedProcNome = sigtapProcs.find(p => p.codigo === selectedProcCodigo)?.nome || '';
+
       await (supabase as any).from('pts').insert({
         patient_id: form.patient_id,
         professional_id: user?.id || '',
@@ -100,7 +202,9 @@ const PTS: React.FC = () => {
         especialidades_envolvidas: form.especialidades_envolvidas,
       });
 
-      // Save as prontuário entry
+      const cidInfo = selectedCid ? ` | CID: ${selectedCid} - ${selectedCidDesc}` : '';
+      const procInfo = selectedProcCodigo ? `Procedimento SIGTAP: ${selectedProcCodigo} - ${selectedProcNome}` : '';
+
       await (supabase as any).from('prontuarios').insert({
         paciente_id: form.patient_id,
         paciente_nome: form.patient_name,
@@ -114,17 +218,26 @@ const PTS: React.FC = () => {
         anamnese: form.diagnostico_funcional,
         hipotese: form.objetivos_terapeuticos,
         conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
-        observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}`,
+        observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\n${procInfo}` : ''}${cidInfo}`,
       });
 
       await logAction({
         acao: 'criar_pts', entidade: 'pts', entidadeId: form.patient_id,
         modulo: 'pts', user,
-        detalhes: { paciente_nome: form.patient_name, especialidades: form.especialidades_envolvidas },
+        detalhes: {
+          paciente_nome: form.patient_name,
+          especialidades: form.especialidades_envolvidas,
+          ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
+          ...(selectedCid && { cid: selectedCid }),
+        },
       });
 
       toast.success('PTS criado e registrado no prontuário!');
       setDialogOpen(false);
+      setSelectedProcCodigo('');
+      setSelectedCid('');
+      setSelectedCidDesc('');
+      setCidSearch('');
       loadPts();
     } catch (err: any) {
       toast.error('Erro: ' + (err?.message || 'erro'));
@@ -145,6 +258,10 @@ const PTS: React.FC = () => {
         </div>
         <Button onClick={() => {
           setForm({ patient_id: '', patient_name: '', diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades_envolvidas: [] });
+          setSelectedProcCodigo('');
+          setSelectedCid('');
+          setSelectedCidDesc('');
+          setCidSearch('');
           setDialogOpen(true);
         }}>
           <Plus className="w-4 h-4 mr-1" /> Novo PTS
@@ -200,6 +317,95 @@ const PTS: React.FC = () => {
               <BuscaPaciente pacientes={pacientes} value={form.patient_id}
                 onChange={(id, nome) => setForm(p => ({ ...p, patient_id: id, patient_name: nome }))} />
             </div>
+
+            {/* SIGTAP Section - Only for Fisioterapeutas */}
+            {isFisioterapeuta && sigtapProcs.length > 0 && (
+              <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  📋 Procedimento SIGTAP (Fisioterapia)
+                </Label>
+                <Select value={selectedProcCodigo} onValueChange={v => {
+                  setSelectedProcCodigo(v);
+                  setSelectedCid('');
+                  setSelectedCidDesc('');
+                  setCidSearch('');
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sigtapProcs.map(p => (
+                      <SelectItem key={p.codigo} value={p.codigo}>
+                        <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
+                        <span className="text-xs">{p.nome}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedProcCodigo && (
+                  <div className="space-y-2">
+                    <Label className="text-xs">
+                      Buscar CID vinculado ao procedimento ({validCids.length} CIDs válidos)
+                    </Label>
+                    <Input
+                      placeholder="Digite código ou descrição do CID..."
+                      value={cidSearch}
+                      onChange={e => setCidSearch(e.target.value)}
+                      className="text-sm"
+                    />
+
+                    {cidWarning && (
+                      <div className="flex items-start gap-2 p-2 rounded bg-warning/10 border border-warning/30 text-xs">
+                        <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-warning">
+                            ⚠️ Este CID não está vinculado ao procedimento selecionado conforme tabela SIGTAP oficial.
+                          </p>
+                          <Button size="sm" variant="outline" className="mt-1 h-6 text-xs" onClick={handleForceUseCid}>
+                            Usar mesmo assim?
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {loadingCids ? (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Carregando CIDs...
+                      </div>
+                    ) : (
+                      cidSearch.trim() && filteredCids.length > 0 && !selectedCid && (
+                        <div className="max-h-40 overflow-y-auto border rounded text-xs divide-y">
+                          {filteredCids.map(c => (
+                            <button
+                              key={c.cid_codigo}
+                              className="w-full text-left px-2 py-1.5 hover:bg-accent/50 flex gap-2"
+                              onClick={() => handleSelectCid(c)}
+                            >
+                              <span className="font-mono font-medium text-primary shrink-0">{c.cid_codigo}</span>
+                              <span className="text-muted-foreground truncate">{c.cid_descricao}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    )}
+
+                    {selectedCid && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge variant="secondary" className="font-mono">{selectedCid}</Badge>
+                        <span className="text-muted-foreground truncate">{selectedCidDesc}</span>
+                        <Button size="sm" variant="ghost" className="h-5 text-xs px-1" onClick={() => {
+                          setSelectedCid('');
+                          setSelectedCidDesc('');
+                          setCidSearch('');
+                        }}>✕</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label>Diagnóstico Funcional Global *</Label>
               <Textarea rows={3} value={form.diagnostico_funcional}
