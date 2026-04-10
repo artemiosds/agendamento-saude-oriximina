@@ -12,11 +12,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Eye, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { MANCHESTER_LEVELS, getManchesterConfig } from "@/lib/manchesterProtocol";
 
 interface TriageRecord {
   id: string;
   agendamento_id: string;
   tecnico_id: string;
+  classificacao_risco: string;
   peso: number | null;
   altura: number | null;
   pressao_arterial: string | null;
@@ -42,11 +44,16 @@ interface EnrichedRecord extends TriageRecord {
 const PAGE_SIZE = 20;
 
 const riskBadge = (risk: string) => {
-  const r = risk?.toLowerCase() || "";
-  if (r === "alto") return <Badge className="bg-red-600 text-white hover:bg-red-700">ALTO</Badge>;
-  if (r === "medio") return <Badge className="bg-yellow-500 text-white hover:bg-yellow-600">MÉDIO</Badge>;
-  if (r === "baixo") return <Badge className="bg-green-600 text-white hover:bg-green-700">BAIXO</Badge>;
-  return <Badge variant="outline">{risk || "—"}</Badge>;
+  const config = getManchesterConfig(risk);
+  if (!config) return <Badge variant="outline">—</Badge>;
+  return (
+    <Badge
+      className={`text-white hover:opacity-90 ${config.pulse ? 'animate-[pulse-manchester_1.5s_infinite]' : ''}`}
+      style={{ backgroundColor: config.color }}
+    >
+      {config.subtitle}
+    </Badge>
+  );
 };
 
 const HistoricoTriagem: React.FC = () => {
@@ -79,13 +86,11 @@ const HistoricoTriagem: React.FC = () => {
       const agMap = new Map<string, string>();
       (agRes.data || []).forEach((a: any) => agMap.set(a.id, a.paciente_nome));
 
-      // We don't have classificacao_risco in the DB — we'll show "—" for now
-      // unless it's stored somewhere else. The triage form doesn't persist it to triage_records.
       const enriched: EnrichedRecord[] = (trRes.data || []).map((r: any) => ({
         ...r,
         pacienteNome: agMap.get(r.agendamento_id) || "Paciente",
         profissionalNome: funcMap.get(r.tecnico_id) || "—",
-        classificacaoRisco: "", // not stored in triage_records table
+        classificacaoRisco: r.classificacao_risco || "",
       }));
 
       setRecords(enriched);
@@ -171,9 +176,11 @@ const HistoricoTriagem: React.FC = () => {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="baixo">Baixo</SelectItem>
-                  <SelectItem value="medio">Médio</SelectItem>
-                  <SelectItem value="alto">Alto</SelectItem>
+                  {MANCHESTER_LEVELS.map((m) => (
+                    <SelectItem key={m.level} value={m.level}>
+                      <span style={{ color: m.color }}>●</span> {m.subtitle}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
