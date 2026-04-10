@@ -865,7 +865,7 @@ const ProntuarioPage: React.FC = () => {
           </h1>
           <p className="text-muted-foreground text-sm">{filtered.length} registro(s)</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           {queryPacienteId && (
             <>
               <Button variant="outline" onClick={() => setShowHistorico(!showHistorico)}>
