@@ -522,6 +522,10 @@ const Configuracoes: React.FC = () => {
               Documentos
             </TabsTrigger>
           )}
+          <TabsTrigger value="carimbo" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
+            <Stamp className="w-4 h-4 hidden sm:block" />
+            Carimbo
+          </TabsTrigger>
           {isMaster && (
             <TabsTrigger value="admin" className="flex items-center gap-1.5 text-xs sm:text-sm flex-1 min-w-[100px]">
               <ShieldAlert className="w-4 h-4 hidden sm:block" />
@@ -1269,6 +1273,11 @@ const Configuracoes: React.FC = () => {
             <ModelosDocumentos />
           </TabsContent>
         )}
+
+        {/* ═══ ABA CARIMBO ═══ */}
+        <TabsContent value="carimbo" className="space-y-4 mt-4">
+          <CarimboConfig />
+        </TabsContent>
 
         {/* ═══ ABA ADMINISTRAÇÃO (MASTER) ═══ */}
         {isMaster && (
