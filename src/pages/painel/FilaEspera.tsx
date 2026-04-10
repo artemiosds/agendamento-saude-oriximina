@@ -323,6 +323,14 @@ const FilaEspera: React.FC = () => {
     });
   }, [now, reservas, fila, expirarReserva, user]);
 
+  const manchesterOrder: Record<string, number> = {
+    vermelho: 1,
+    laranja: 2,
+    amarelo: 3,
+    verde: 4,
+    azul: 5,
+  };
+
   const filteredFila = useMemo(() => {
     const prioOrder: Record<string, number> = {
       urgente: 0,
@@ -342,6 +350,11 @@ const FilaEspera: React.FC = () => {
       .filter((f) => filterEspecialidade === "all" || (f as any).especialidadeDestino === filterEspecialidade)
       .sort((a, b) => {
         if (sortField === "prioridade") {
+          // Manchester classification first
+          const aManchester = manchesterOrder[(a as any).classificacaoRisco] ?? 6;
+          const bManchester = manchesterOrder[(b as any).classificacaoRisco] ?? 6;
+          if (aManchester !== bManchester) return aManchester - bManchester;
+          // Then special priority
           if ((prioOrder[a.prioridade] ?? 6) !== (prioOrder[b.prioridade] ?? 6))
             return (prioOrder[a.prioridade] ?? 6) - (prioOrder[b.prioridade] ?? 6);
           if (a.dataSolicitacaoOriginal && b.dataSolicitacaoOriginal)
