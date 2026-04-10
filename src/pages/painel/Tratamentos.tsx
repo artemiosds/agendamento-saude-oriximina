@@ -1640,6 +1640,26 @@ const Tratamentos: React.FC = () => {
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
                         )}
+                        {isMaster && isRealizada && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-primary text-primary hover:bg-primary/10 shrink-0"
+                              onClick={() => openEditRealizada(s)}
+                            >
+                              <Pencil className="w-3 h-3 mr-1" /> Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10 shrink-0"
+                              onClick={() => handleClearRealizada(s)}
+                            >
+                              <Eraser className="w-3 h-3 mr-1" /> Limpar
+                            </Button>
+                          </>
+                        )}
                       </div>
                       {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
                     </div>
