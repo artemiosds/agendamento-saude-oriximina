@@ -1841,7 +1841,70 @@ const Tratamentos: React.FC = () => {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
+        <Dialog open={editRealizadaOpen} onOpenChange={(open) => { if (!open) { setEditRealizadaOpen(false); setEditRealizadaTarget(null); } }}>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Sessão Realizada (Modo Master)</DialogTitle>
+            </DialogHeader>
+            <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning mb-2">
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Você está editando uma sessão já finalizada (Modo Master)
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label>Data da Sessão</Label>
+                <Input
+                  type="date"
+                  value={editRealizadaDate}
+                  onChange={(e) => setEditRealizadaDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Procedimento Realizado *</Label>
+                {sessionProcedimentos.length > 0 ? (
+                  <Select value={editRealizadaProcedure} onValueChange={setEditRealizadaProcedure}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o procedimento" /></SelectTrigger>
+                    <SelectContent>
+                      {sessionProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>{proc.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={editRealizadaProcedure}
+                    onChange={(e) => setEditRealizadaProcedure(e.target.value)}
+                    placeholder="Nome do procedimento"
+                  />
+                )}
+              </div>
+              <div className="space-y-3 border-t pt-3">
+                <p className="text-sm font-semibold text-foreground">Prontuário SOAP <span className="text-destructive">*</span></p>
+                <div>
+                  <Label className="text-xs font-semibold">S — Subjetivo <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.subjetivo} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, subjetivo: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">O — Objetivo <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.objetivo} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, objetivo: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">A — Avaliação <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.avaliacao} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, avaliacao: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">P — Plano <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.plano} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, plano: e.target.value }))} rows={2} />
+                </div>
+              </div>
+              <Button onClick={handleEditRealizada} disabled={editRealizadaSaving} className="w-full gradient-primary text-primary-foreground">
+                {editRealizadaSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                Salvar Alterações
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Solicitar Extensão</DialogTitle>
