@@ -1561,7 +1561,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
-            <div className="max-h-[calc(100vh-380px)] overflow-y-auto scrollbar-thin">
+            <div className="max-h-[500px] overflow-y-auto border rounded-lg">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
