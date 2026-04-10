@@ -1734,7 +1734,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="agendar"
-          isMaster={user?.role === 'master'}
+          isMaster={isMaster}
         />
 
         <ModalAgendarSessao
@@ -1804,7 +1804,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="remarcar"
-          isMaster={user?.role === 'master'}
+          isMaster={isMaster}
         />
 
         <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
