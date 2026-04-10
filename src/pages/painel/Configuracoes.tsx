@@ -588,7 +588,152 @@ const Configuracoes: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Google Calendar */}
+          {/* Evolution API WhatsApp */}
+          {isMaster && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5 text-success" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold font-display text-foreground">WhatsApp Evolution API</h3>
+                    <p className="text-sm text-muted-foreground">Envio direto de mensagens via Evolution API</p>
+                  </div>
+                  {evolutionStatus === 'connected' ? (
+                    <Badge className="bg-success/10 text-success border-0">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> Conectado
+                    </Badge>
+                  ) : evolutionStatus === 'disconnected' ? (
+                    <Badge variant="secondary" className="border-0">
+                      <XCircle className="w-3 h-3 mr-1" /> Desconectado
+                    </Badge>
+                  ) : evolutionStatus === 'error' ? (
+                    <Badge variant="destructive" className="border-0">
+                      <AlertCircle className="w-3 h-3 mr-1" /> Erro
+                    </Badge>
+                  ) : null}
+                </div>
+
+                {evolutionLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Nome da Clínica</Label>
+                        <Input
+                          placeholder="SMS Oriximiná"
+                          value={evolutionConfig.nome_clinica}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, nome_clinica: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Telefone da Clínica</Label>
+                        <Input
+                          placeholder="5593999990000"
+                          value={evolutionConfig.telefone}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, telefone: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Base URL da Evolution API</Label>
+                        <Input
+                          placeholder="https://api.example.com"
+                          value={evolutionConfig.evolution_base_url}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>API Key</Label>
+                        <Input
+                          type="password"
+                          placeholder="Cole a API Key"
+                          value={evolutionConfig.evolution_api_key}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Instância</Label>
+                      {evolutionInstances.length > 0 ? (
+                        <Select
+                          value={evolutionConfig.evolution_instance_name}
+                          onValueChange={v => setEvolutionConfig(p => ({ ...p, evolution_instance_name: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a instância" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {evolutionInstances.map(inst => (
+                              <SelectItem key={inst.instanceName} value={inst.instanceName}>
+                                {inst.instanceName} {inst.state === 'open' ? '✅' : '⚠️'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          placeholder="Nome da instância (ex: clinica-principal)"
+                          value={evolutionConfig.evolution_instance_name}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_instance_name: e.target.value }))}
+                        />
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {evolutionInstances.length > 0
+                          ? `${evolutionInstances.length} instância(s) encontrada(s)`
+                          : 'Nenhuma instância detectada. Digite o nome manualmente.'}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        className="gradient-primary text-primary-foreground flex-1"
+                        disabled={evolutionSaving || !evolutionConfig.evolution_instance_name}
+                        onClick={saveEvolutionConfig}
+                      >
+                        {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                        Salvar Configuração
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={!evolutionConfig.evolution_instance_name}
+                        onClick={checkEvolutionConnection}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-1" />
+                        Verificar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={evolutionTesting || !evolutionConfig.evolution_instance_name || !evolutionConfig.telefone}
+                        onClick={testEvolutionWhatsApp}
+                      >
+                        {evolutionTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+                        Testar
+                      </Button>
+                    </div>
+
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground">
+                        <Info className="w-3 h-3 inline mr-1" />
+                        A Evolution API envia mensagens WhatsApp automaticamente nos lembretes de 24h e 1h antes da consulta, além de confirmações e cancelamentos.
+                        O telefone do paciente deve estar cadastrado com DDD completo.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-4">
