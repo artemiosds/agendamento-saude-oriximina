@@ -1327,17 +1327,33 @@ const Tratamentos: React.FC = () => {
 
         <Card className="shadow-card border-0">
           <CardContent className="p-5">
-            <h3 className="font-semibold text-foreground mb-3">Sessões</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-foreground">Sessões</h3>
+              {isMaster && selectedCycle.status === "em_andamento" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setAddIntermediateOpen(true)}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Sessão Intermediária
+                </Button>
+              )}
+            </div>
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
-                  // Cross-reference: check if this session has a matching agendamento
                   const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
                   const matchedAg = isPendente ? agendamentoMap[agKey] : null;
                   const effectiveStatus = matchedAg ? "agendada" : s.status;
                   const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
                   const isAgendada = effectiveStatus === "agendada";
+
+                  // Master can reschedule ANY session (except realizada)
+                  const canRemarcarThis = isMaster
+                    ? s.status !== "realizada"
+                    : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
 
                   return (
                     <div
@@ -1388,22 +1404,20 @@ const Tratamentos: React.FC = () => {
                           </Button>
                         )}
 
-                        {canAgendarSessao &&
-                          (isAgendada || effectiveIsPendente) &&
-                          selectedCycle.status === "em_andamento" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
-                              onClick={() => {
-                                setRemarcarTarget(s);
-                                setRemarcarData("");
-                                setRemarcarBlockedMsg("");
-                              }}
-                            >
-                              <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
-                            </Button>
-                          )}
+                        {canRemarcarThis && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                            onClick={() => {
+                              setRemarcarTarget(s);
+                              setRemarcarData("");
+                              setRemarcarBlockedMsg("");
+                            }}
+                          >
+                            <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                          </Button>
+                        )}
                       </div>
                       {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
                     </div>
