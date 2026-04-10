@@ -196,6 +196,11 @@ const Tratamentos: React.FC = () => {
   const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
   const [remarcarSaving, setRemarcarSaving] = useState(false);
 
+  // Master: add intermediate session
+  const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
+  const [intermediateDate, setIntermediateDate] = useState("");
+  const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
     professional_id: "",
@@ -771,6 +776,80 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const handleAddIntermediateSession = async () => {
+    if (!selectedCycle || !intermediateDate || intermediateAfterSession < 0) {
+      toast.error("Selecione a data e a posição da sessão.");
+      return;
+    }
+    try {
+      const currentSessions = sessions
+        .filter((s) => s.cycle_id === selectedCycle.id)
+        .sort((a, b) => a.session_number - b.session_number);
+
+      const insertPos = intermediateAfterSession; // insert after this session number
+      const newTotal = selectedCycle.total_sessions + 1;
+
+      // 1. Renumber sessions after insertPos
+      const toRenumber = currentSessions.filter((s) => s.session_number > insertPos);
+      for (const s of toRenumber) {
+        await supabase
+          .from("treatment_sessions")
+          .update({ session_number: s.session_number + 1, total_sessions: newTotal })
+          .eq("id", s.id);
+      }
+
+      // Update total_sessions for existing sessions at or before insertPos
+      const toUpdateTotal = currentSessions.filter((s) => s.session_number <= insertPos);
+      for (const s of toUpdateTotal) {
+        await supabase
+          .from("treatment_sessions")
+          .update({ total_sessions: newTotal })
+          .eq("id", s.id);
+      }
+
+      // 2. Insert new session
+      const { error: insertError } = await supabase.from("treatment_sessions").insert({
+        cycle_id: selectedCycle.id,
+        patient_id: selectedCycle.patient_id,
+        professional_id: selectedCycle.professional_id,
+        session_number: insertPos + 1,
+        total_sessions: newTotal,
+        scheduled_date: intermediateDate,
+        status: "pendente_agendamento",
+      });
+      if (insertError) throw insertError;
+
+      // 3. Update cycle total
+      await supabase
+        .from("treatment_cycles")
+        .update({ total_sessions: newTotal })
+        .eq("id", selectedCycle.id);
+
+      await logAction({
+        acao: "adicionar_sessao_intermediaria",
+        entidade: "treatment_session",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          ciclo: selectedCycle.id,
+          posicao: insertPos + 1,
+          data: intermediateDate,
+          total_anterior: selectedCycle.total_sessions,
+          total_novo: newTotal,
+        },
+      });
+
+      toast.success(`Sessão intermediária ${insertPos + 1}/${newTotal} adicionada em ${new Date(intermediateDate + "T12:00:00").toLocaleDateString("pt-BR")}!`);
+      setAddIntermediateOpen(false);
+      setIntermediateDate("");
+      setIntermediateAfterSession(0);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
+    }
+  };
   const handleExtension = async () => {
     if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
       toast.error("Informe a quantidade de sessões e o motivo.");
@@ -1327,17 +1406,33 @@ const Tratamentos: React.FC = () => {
 
         <Card className="shadow-card border-0">
           <CardContent className="p-5">
-            <h3 className="font-semibold text-foreground mb-3">Sessões</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-foreground">Sessões</h3>
+              {isMaster && selectedCycle.status === "em_andamento" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setAddIntermediateOpen(true)}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Sessão Intermediária
+                </Button>
+              )}
+            </div>
             <ScrollArea className="max-h-[500px]">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
-                  // Cross-reference: check if this session has a matching agendamento
                   const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
                   const matchedAg = isPendente ? agendamentoMap[agKey] : null;
                   const effectiveStatus = matchedAg ? "agendada" : s.status;
                   const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
                   const isAgendada = effectiveStatus === "agendada";
+
+                  // Master can reschedule ANY session (except realizada)
+                  const canRemarcarThis = isMaster
+                    ? s.status !== "realizada"
+                    : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
 
                   return (
                     <div
@@ -1388,22 +1483,20 @@ const Tratamentos: React.FC = () => {
                           </Button>
                         )}
 
-                        {canAgendarSessao &&
-                          (isAgendada || effectiveIsPendente) &&
-                          selectedCycle.status === "em_andamento" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
-                              onClick={() => {
-                                setRemarcarTarget(s);
-                                setRemarcarData("");
-                                setRemarcarBlockedMsg("");
-                              }}
-                            >
-                              <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
-                            </Button>
-                          )}
+                        {canRemarcarThis && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-warning text-warning hover:bg-warning/10 shrink-0"
+                            onClick={() => {
+                              setRemarcarTarget(s);
+                              setRemarcarData("");
+                              setRemarcarBlockedMsg("");
+                            }}
+                          >
+                            <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
+                          </Button>
+                        )}
                       </div>
                       {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
                     </div>
@@ -1806,6 +1899,54 @@ const Tratamentos: React.FC = () => {
           mode="remarcar"
           isMaster={isMaster}
         />
+
+        {/* Dialog: Adicionar Sessão Intermediária (Master) */}
+        <Dialog open={addIntermediateOpen} onOpenChange={setAddIntermediateOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Adicionar Sessão Intermediária</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Insira uma nova sessão entre as existentes. A numeração será ajustada automaticamente.
+              </p>
+              <div>
+                <Label>Inserir após sessão nº</Label>
+                <Select
+                  value={String(intermediateAfterSession)}
+                  onValueChange={(v) => setIntermediateAfterSession(parseInt(v))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Antes da 1ª sessão</SelectItem>
+                    {cycleSessions.map((s) => (
+                      <SelectItem key={s.session_number} value={String(s.session_number)}>
+                        Após sessão {s.session_number} — {new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data da nova sessão</Label>
+                <Input
+                  type="date"
+                  value={intermediateDate}
+                  onChange={(e) => setIntermediateDate(e.target.value)}
+                />
+              </div>
+              <Button
+                onClick={handleAddIntermediateSession}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!intermediateDate}
+              >
+                <Plus className="w-4 h-4 mr-2" /> Adicionar Sessão
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
           <DialogContent className="sm:max-w-md">
