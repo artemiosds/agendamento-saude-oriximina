@@ -32,6 +32,7 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import { Stamp } from "lucide-react";
 
