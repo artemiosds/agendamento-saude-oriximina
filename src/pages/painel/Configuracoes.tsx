@@ -82,6 +82,22 @@ const Configuracoes: React.FC = () => {
   const [cancelSaving, setCancelSaving] = useState(false);
   const [novoMotivo, setNovoMotivo] = useState('');
 
+  // Evolution API WhatsApp
+  const [evolutionConfig, setEvolutionConfig] = useState({
+    nome_clinica: '',
+    logo_url: '',
+    telefone: '',
+    evolution_base_url: 'https://api.agendamento-saude-sms-oriximina.site',
+    evolution_api_key: 'ee602586e9594a126109ceae5759d19c',
+    evolution_instance_name: '',
+  });
+  const [evolutionConfigId, setEvolutionConfigId] = useState<string | null>(null);
+  const [evolutionInstances, setEvolutionInstances] = useState<{ instanceName: string; state: string }[]>([]);
+  const [evolutionLoading, setEvolutionLoading] = useState(true);
+  const [evolutionSaving, setEvolutionSaving] = useState(false);
+  const [evolutionTesting, setEvolutionTesting] = useState(false);
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+
   const isMaster = user?.role === 'master';
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
