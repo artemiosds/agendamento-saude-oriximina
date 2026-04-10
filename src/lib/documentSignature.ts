@@ -55,20 +55,14 @@ export function formatSignatureBlock(sig: SignatureData): string {
   const hashCurto = sig.hash.substring(0, 32).toUpperCase();
 
   return `
-    <div class="signature-block" style="margin-top:40px;border:1px solid #94a3b8;border-radius:8px;padding:16px 20px;background:#f8fafc;page-break-inside:avoid;">
-      <div style="text-align:center;font-weight:700;font-size:11px;text-transform:uppercase;color:#0369a1;margin-bottom:10px;letter-spacing:.5px;">
-        Assinatura Eletrônica
-      </div>
-      <div style="font-size:10px;line-height:1.8;color:#334155;">
-        <div>Documento assinado eletronicamente por:</div>
-        <div style="font-weight:600;font-size:11px;">${sig.profissionalNome} — ${sig.conselho} ${sig.numeroRegistro}/${sig.uf}</div>
-        <div style="margin-top:6px;">Data/hora: ${dataFormatada} às ${horaFormatada}</div>
-        <div>Código de verificação: <span style="font-family:monospace;font-size:9px;background:#e2e8f0;padding:2px 6px;border-radius:3px;">${hashCurto}</span></div>
-        <div>ID do documento: <span style="font-family:monospace;font-size:9px;">${sig.documentId}</span></div>
-        <div style="margin-top:8px;font-size:9px;color:#64748b;font-style:italic;">
-          Este documento possui validade como assinatura eletrônica simples conforme Art. 10 da MP 2.200-2.
-        </div>
-      </div>
+    <div class="e-signature-box">
+      <div class="sig-title">ASSINATURA ELETRÔNICA</div>
+      <div>Documento assinado eletronicamente por:</div>
+      <div style="font-weight:600;font-size:10px;margin:4px 0;">${sig.profissionalNome} — ${sig.conselho} ${sig.numeroRegistro}/${sig.uf}</div>
+      <div>Data/hora: ${dataFormatada} às ${horaFormatada}</div>
+      <div>Código de verificação: <span style="font-family:monospace;font-size:8px;background:#e2e8f0;padding:1px 4px;border-radius:2px;">${hashCurto}</span></div>
+      <div>ID do documento: <span style="font-family:monospace;font-size:8px;">${sig.documentId}</span></div>
+      <div class="sig-legal">Este documento possui validade como assinatura eletrônica simples conforme Art. 10 da MP 2.200-2.</div>
     </div>`;
 }
 
@@ -87,22 +81,17 @@ export function formatCarimboBlock(carimbo: CarimboData | null): string {
   if (!carimbo) return '';
 
   if (carimbo.tipo === 'imagem' && carimbo.imagem_url) {
-    return `
-      <div class="carimbo-block" style="text-align:right;margin-top:30px;">
-        <img src="${carimbo.imagem_url}" alt="Carimbo" style="max-width:250px;max-height:120px;" />
-      </div>`;
+    return `<img src="${carimbo.imagem_url}" alt="Carimbo" style="max-width:250px;max-height:120px;" />`;
   }
 
   if (carimbo.tipo === 'digital') {
     return `
-      <div class="carimbo-block" style="margin-top:30px;text-align:right;">
-        <div style="display:inline-block;border:1px solid #334155;border-radius:6px;padding:10px 18px;text-align:center;font-size:10px;line-height:1.6;">
-          <div style="font-weight:700;font-size:11px;">${carimbo.nome}</div>
-          <div>${carimbo.conselho} / ${carimbo.numero_registro}-${carimbo.uf}</div>
-          <div>${carimbo.especialidade}</div>
-          ${carimbo.cargo ? `<div>${carimbo.cargo}</div>` : ''}
-          <div style="font-size:9px;color:#64748b;">CER II — Oriximiná/PA</div>
-        </div>
+      <div class="carimbo-digital">
+        <div class="carimbo-nome">${carimbo.nome}</div>
+        <div class="carimbo-info">${carimbo.conselho} / ${carimbo.numero_registro}-${carimbo.uf}</div>
+        <div class="carimbo-info">${carimbo.especialidade}</div>
+        ${carimbo.cargo ? `<div class="carimbo-info">${carimbo.cargo}</div>` : ''}
+        <div style="font-size:9px;color:#64748b;">CER II — Oriximiná/PA</div>
       </div>`;
   }
 
