@@ -575,18 +575,43 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 };
 
 // Helper components
-const Field: React.FC<{ label: string; value?: string; onChange: (v: string) => void; type?: string; disabled?: boolean }> = ({ label, value, onChange, type = 'text', disabled }) => (
-  <div className="space-y-1">
-    <Label className="text-xs font-semibold">{label}</Label>
-    <Input type={type} value={value || ''} onChange={e => onChange(e.target.value)} className="h-8 text-xs" disabled={disabled} />
-  </div>
-);
+type FieldProps = {
+  label: string;
+  value?: string;
+  onChange: (v: string) => void;
+  type?: string;
+  disabled?: boolean;
+};
 
-const FieldArea: React.FC<{ label: string; value?: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
+const Field = React.forwardRef<HTMLInputElement, FieldProps>(({ label, value, onChange, type = 'text', disabled }, ref) => (
   <div className="space-y-1">
     <Label className="text-xs font-semibold">{label}</Label>
-    <Textarea value={value || ''} onChange={e => onChange(e.target.value)} className="min-h-[60px] text-xs" />
+    <Input
+      ref={ref}
+      type={type}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      className="h-8 text-xs"
+      disabled={disabled}
+    />
   </div>
-);
+));
+
+Field.displayName = 'Field';
+
+type FieldAreaProps = {
+  label: string;
+  value?: string;
+  onChange: (v: string) => void;
+};
+
+const FieldArea = React.forwardRef<HTMLTextAreaElement, FieldAreaProps>(({ label, value, onChange }, ref) => (
+  <div className="space-y-1">
+    <Label className="text-xs font-semibold">{label}</Label>
+    <Textarea ref={ref} value={value || ''} onChange={e => onChange(e.target.value)} className="min-h-[60px] text-xs" />
+  </div>
+));
+
+FieldArea.displayName = 'FieldArea';
 
 export default GerarDocumentoModal;
