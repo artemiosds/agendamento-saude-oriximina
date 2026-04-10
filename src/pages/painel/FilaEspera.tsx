@@ -1067,7 +1067,7 @@ const FilaEspera: React.FC = () => {
       </div>
 
       {activeQueue.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card className="shadow-card border-0">
             <CardContent className="p-3 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-success-foreground font-bold text-sm">
@@ -1113,7 +1113,7 @@ const FilaEspera: React.FC = () => {
           className="pl-9"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger>
             <SelectValue placeholder="Unidade" />

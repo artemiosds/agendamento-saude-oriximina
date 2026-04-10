@@ -892,7 +892,7 @@ const Pacientes: React.FC = () => {
                       </p>
                     )}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 flex-wrap">
                     <ContactActionButton
                       phone={p.telefone}
                       patientName={p.nome}
@@ -973,15 +973,15 @@ const Pacientes: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5" />
-                    {p.telefone}
+                <div className="flex items-center gap-2 sm:gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
+                  <span className="flex items-center gap-1 min-w-0">
+                    <Phone className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{p.telefone}</span>
                   </span>
                   {p.email && (
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5" />
-                      {p.email}
+                    <span className="flex items-center gap-1 min-w-0">
+                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{p.email}</span>
                     </span>
                   )}
                 </div>

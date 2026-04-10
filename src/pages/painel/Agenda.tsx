@@ -1446,7 +1446,7 @@ const Agenda: React.FC = () => {
       {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
             {/* NOVO: componente de calendário no lugar dos botões e input de data */}
             <CalendarioAgenda
               selectedDate={selectedDate}
@@ -1470,7 +1470,7 @@ const Agenda: React.FC = () => {
                   setFilterProf("all");
                 }}
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1485,7 +1485,7 @@ const Agenda: React.FC = () => {
             )}
             {!isProfissional && (
               <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="w-52">
+                <SelectTrigger className="w-full sm:w-52">
                   <SelectValue placeholder="Profissional" />
                 </SelectTrigger>
                 <SelectContent>
