@@ -194,7 +194,7 @@ const Tratamentos: React.FC = () => {
   const [remarcarTarget, setRemarcarTarget] = useState<TreatmentSession | null>(null);
   const [remarcarData, setRemarcarData] = useState("");
   const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
-  const [remarcarSaving, setRemarcarSaving] = false);
+  const [remarcarSaving, setRemarcarSaving] = useState(false);
 
   // Master: add intermediate session
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
