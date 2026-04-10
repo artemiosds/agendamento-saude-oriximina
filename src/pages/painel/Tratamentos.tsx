@@ -248,8 +248,8 @@ const Tratamentos: React.FC = () => {
   const isProfissional = user?.role === "profissional";
   const canAgendarSessao = can('tratamento', 'can_execute');
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       let qCycles = supabase.from("treatment_cycles").select("*").order("created_at", { ascending: false });
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
@@ -289,21 +289,23 @@ const Tratamentos: React.FC = () => {
       }
     } catch (err) {
       console.error("Error loading treatments:", err);
-      toast.error("Erro ao carregar dados de tratamento.");
+      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [user]);
 
   useEffect(() => {
     loadData();
-  }, [loadData]); // loadData already depends on user?.id and user?.role via useCallback
+  }, [loadData]);
 
-  // Auto-refresh when agendamentos or treatment_sessions change
+  // Silent background refresh on realtime changes — no loading spinner
+  const silentRefresh = useCallback(() => loadData(true), [loadData]);
+
   useRealtimeSubscription({
     tables: ['agendamentos', 'treatment_sessions'],
-    onchange: loadData,
+    onchange: silentRefresh,
     enabled: true,
-    debounceMs: 500,
+    debounceMs: 1000,
   });
 
   const filteredCycles = useMemo(() => {
