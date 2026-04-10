@@ -1854,29 +1854,30 @@ const FilaEspera: React.FC = () => {
                   borderLeft: manchesterRisco ? `6px solid ${manchesterRisco.color}` : isActive && waitMin > 60 ? '6px solid hsl(var(--destructive))' : isActive && waitMin >= 30 ? '6px solid hsl(var(--warning))' : isActive ? '6px solid hsl(var(--success))' : undefined,
                 }}
               >
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-                        isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
-                      )}
-                    >
-                      {i + 1}
-                    </div>
-                    {isActive && (
-                      <span
+                <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <div
                         className={cn(
-                          "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                          waitColor.bg,
-                          waitColor.text,
+                          "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
+                          isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
                         )}
                       >
-                        {formatWaitTime(waitMin)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
+                        {i + 1}
+                      </div>
+                      {isActive && (
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                            waitColor.bg,
+                            waitColor.text,
+                          )}
+                        >
+                          {formatWaitTime(waitMin)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
                       {f.origemCadastro === "demanda_reprimida" && (
