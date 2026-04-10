@@ -181,7 +181,7 @@ const RegrasSection: React.FC = () => {
 
 // ─── Section 3: Notificações ──────────────────────────────────────────────────
 const NotificacoesSection: React.FC = () => {
-  const { configuracoes, setConfiguracoes } = useData();
+  const { configuracoes, updateConfiguracoes } = useData();
   const [notif, setNotif] = useState({
     enviar_confirmacao: true,
     enviar_lembrete_24h: true,
@@ -198,22 +198,13 @@ const NotificacoesSection: React.FC = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (configuracoes?.regras_notificacao) {
-      setNotif(prev => ({ ...prev, ...configuracoes.regras_notificacao }));
-    }
+    const saved = (configuracoes as any)?.regras_notificacao;
+    if (saved) setNotif(prev => ({ ...prev, ...saved }));
   }, [configuracoes]);
 
   const saveNotif = async () => {
-    const updated = { ...configuracoes, regras_notificacao: notif };
-    const { error } = await supabase.from("system_config").upsert({
-      id: "default",
-      configuracoes: updated as any,
-      updated_at: new Date().toISOString(),
-    });
-    if (!error) {
-      setConfiguracoes(updated);
-      toast.success("✅ Configurações de notificação salvas!");
-    } else toast.error("Erro ao salvar");
+    await updateConfiguracoes({ ...configuracoes, regras_notificacao: notif } as any);
+    toast.success("✅ Configurações de notificação salvas!");
     setConfirmOpen(false);
   };
 
