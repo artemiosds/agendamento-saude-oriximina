@@ -194,7 +194,12 @@ const Tratamentos: React.FC = () => {
   const [remarcarTarget, setRemarcarTarget] = useState<TreatmentSession | null>(null);
   const [remarcarData, setRemarcarData] = useState("");
   const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
-  const [remarcarSaving, setRemarcarSaving] = useState(false);
+  const [remarcarSaving, setRemarcarSaving] = false);
+
+  // Master: add intermediate session
+  const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
+  const [intermediateDate, setIntermediateDate] = useState("");
+  const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
 
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
