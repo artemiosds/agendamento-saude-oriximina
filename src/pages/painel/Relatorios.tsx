@@ -118,10 +118,36 @@ const Relatorios: React.FC = () => {
           .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
 
         let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-        let qSessions = supabase.from('treatment_sessions').select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type');
+        const loadAllTreatmentSessions = async () => {
+          const pageSize = 1000;
+          let from = 0;
+          let allSessions: any[] = [];
+
+          while (true) {
+            let query = supabase
+              .from('treatment_sessions')
+              .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+              .range(from, from + pageSize - 1);
+
+            if (user?.role === 'profissional') {
+              query = query.eq('professional_id', user.id);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+
+            allSessions = allSessions.concat(data);
+
+            if (data.length < pageSize) break;
+            from += pageSize;
+          }
+
+          return allSessions;
+        };
+
         if (user?.role === 'profissional') {
           qCycles = qCycles.eq('professional_id', user.id);
-          qSessions = qSessions.eq('professional_id', user.id);
         }
         if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
           qCycles = qCycles.eq('unit_id', user.unidadeId);
@@ -133,7 +159,7 @@ const Relatorios: React.FC = () => {
           { data: triageData },
           { data: procData },
           { data: cyclesData },
-          { data: sessionsData },
+          sessionsData,
           { data: nursingData },
           { data: multiData },
           { data: ptsDataResult },
@@ -143,7 +169,7 @@ const Relatorios: React.FC = () => {
           qTriage,
           qProc,
           qCycles,
-          qSessions,
+          loadAllTreatmentSessions(),
           supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
           supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
           supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),

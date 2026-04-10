@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
+import { treatmentService } from "@/services/treatmentService";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -254,9 +255,9 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
-      const [{ data: cData }, { data: sData }, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
+      const [{ data: cData }, sData, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
         qCycles,
-        supabase.from("treatment_sessions").select("*").order("session_number", { ascending: true }),
+        treatmentService.getSessions(),
         supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
         procedureService.getActive(),
         supabase.from("pts").select("*").order("created_at", { ascending: false }),
