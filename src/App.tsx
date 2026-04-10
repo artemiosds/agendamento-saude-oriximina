@@ -8,39 +8,59 @@ import { DataProvider } from "@/contexts/DataContext";
 import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/PermissionsContext";
 import React, { Suspense } from "react";
 
+// Helper: retry dynamic import once, then force full reload to bust stale chunks
+function lazyRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+): React.LazyExoticComponent<T> {
+  return React.lazy(() =>
+    factory().catch(() => {
+      // If the chunk 404'd, the deploy changed — reload from server once
+      const key = 'chunk_reload';
+      const last = sessionStorage.getItem(key);
+      const now = String(Date.now());
+      if (!last || Number(now) - Number(last) > 10_000) {
+        sessionStorage.setItem(key, now);
+        window.location.reload();
+      }
+      // fallback: re-throw so ErrorBoundary catches it
+      return factory();
+    }),
+  );
+}
+
 // Eagerly loaded
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 
-// Lazy loaded
-const AgendarOnline               = React.lazy(() => import("./pages/AgendarOnline"));
-const PortalPaciente              = React.lazy(() => import("./pages/PortalPaciente"));
-const PainelLayout                = React.lazy(() => import("./components/PainelLayout"));
-const Dashboard                   = React.lazy(() => import("./pages/painel/Dashboard"));
-const Agenda                      = React.lazy(() => import("./pages/painel/Agenda"));
-const FilaEspera                  = React.lazy(() => import("./pages/painel/FilaEspera"));
-const Pacientes                   = React.lazy(() => import("./pages/painel/Pacientes"));
-const Atendimentos                = React.lazy(() => import("./pages/painel/Atendimentos"));
-const Relatorios                  = React.lazy(() => import("./pages/painel/Relatorios"));
-const Funcionarios                = React.lazy(() => import("./pages/painel/Funcionarios"));
-const UnidadesSalas               = React.lazy(() => import("./pages/painel/UnidadesSalas"));
-const Disponibilidade             = React.lazy(() => import("./pages/painel/Disponibilidade"));
-const Configuracoes               = React.lazy(() => import("./pages/painel/Configuracoes"));
-const Prontuario                  = React.lazy(() => import("./pages/painel/Prontuario"));
-const Auditoria                   = React.lazy(() => import("./pages/painel/Auditoria"));
-const Triagem                     = React.lazy(() => import("./pages/painel/Triagem"));
-const Bloqueios                   = React.lazy(() => import("./pages/painel/Bloqueios"));
-const Tratamentos                 = React.lazy(() => import("./pages/painel/Tratamentos"));
-const Regulacao                   = React.lazy(() => import("./pages/painel/Regulacao"));
-const AvaliacaoEnfermagem         = React.lazy(() => import("./pages/painel/AvaliacaoEnfermagem"));
-const AvaliacaoMultiprofissional  = React.lazy(() => import("./pages/painel/AvaliacaoMultiprofissional"));
-const PTSPage                     = React.lazy(() => import("./pages/painel/PTS"));
-const Permissoes                  = React.lazy(() => import("./pages/painel/Permissoes"));
-const HistoricoTriagem            = React.lazy(() => import("./pages/painel/HistoricoTriagem"));
-const RelatorioAlta               = React.lazy(() => import("./pages/painel/RelatorioAlta"));
-const Encaminhamentos             = React.lazy(() => import("./pages/painel/Encaminhamentos"));
-const ConfiguracoesAvancadas   = React.lazy(() => import("./pages/painel/ConfiguracoesAvancadas"));
-const NotFound                    = React.lazy(() => import("./pages/NotFound"));
+// Lazy loaded with retry
+const AgendarOnline               = lazyRetry(() => import("./pages/AgendarOnline"));
+const PortalPaciente              = lazyRetry(() => import("./pages/PortalPaciente"));
+const PainelLayout                = lazyRetry(() => import("./components/PainelLayout"));
+const Dashboard                   = lazyRetry(() => import("./pages/painel/Dashboard"));
+const Agenda                      = lazyRetry(() => import("./pages/painel/Agenda"));
+const FilaEspera                  = lazyRetry(() => import("./pages/painel/FilaEspera"));
+const Pacientes                   = lazyRetry(() => import("./pages/painel/Pacientes"));
+const Atendimentos                = lazyRetry(() => import("./pages/painel/Atendimentos"));
+const Relatorios                  = lazyRetry(() => import("./pages/painel/Relatorios"));
+const Funcionarios                = lazyRetry(() => import("./pages/painel/Funcionarios"));
+const UnidadesSalas               = lazyRetry(() => import("./pages/painel/UnidadesSalas"));
+const Disponibilidade             = lazyRetry(() => import("./pages/painel/Disponibilidade"));
+const Configuracoes               = lazyRetry(() => import("./pages/painel/Configuracoes"));
+const Prontuario                  = lazyRetry(() => import("./pages/painel/Prontuario"));
+const Auditoria                   = lazyRetry(() => import("./pages/painel/Auditoria"));
+const Triagem                     = lazyRetry(() => import("./pages/painel/Triagem"));
+const Bloqueios                   = lazyRetry(() => import("./pages/painel/Bloqueios"));
+const Tratamentos                 = lazyRetry(() => import("./pages/painel/Tratamentos"));
+const Regulacao                   = lazyRetry(() => import("./pages/painel/Regulacao"));
+const AvaliacaoEnfermagem         = lazyRetry(() => import("./pages/painel/AvaliacaoEnfermagem"));
+const AvaliacaoMultiprofissional  = lazyRetry(() => import("./pages/painel/AvaliacaoMultiprofissional"));
+const PTSPage                     = lazyRetry(() => import("./pages/painel/PTS"));
+const Permissoes                  = lazyRetry(() => import("./pages/painel/Permissoes"));
+const HistoricoTriagem            = lazyRetry(() => import("./pages/painel/HistoricoTriagem"));
+const RelatorioAlta               = lazyRetry(() => import("./pages/painel/RelatorioAlta"));
+const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
+const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
+const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
