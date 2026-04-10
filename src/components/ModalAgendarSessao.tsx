@@ -155,7 +155,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
   const getDayStatus = (dateStr: string) => {
     const isPast = dateStr < todayStr;
-    if (isPast) return 'past' as const;
+    if (isPast && !isMaster) return 'past' as const;
     const isSuggested = dateStr === suggestedDate;
     const conflict = conflictMap[dateStr];
     const hasSameProf = conflict?.sameProf && conflict.sameProf.length > 0;
