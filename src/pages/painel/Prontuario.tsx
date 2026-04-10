@@ -32,6 +32,7 @@ import { openPrintDocument } from "@/lib/printLayout";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import { Stamp } from "lucide-react";
 
@@ -903,6 +904,17 @@ const ProntuarioPage: React.FC = () => {
               pacienteNome={queryPacienteNome || ""}
               currentProfissionalId={user?.id}
               unidades={unidades}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {queryPacienteId && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <DocumentosHistorico
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || "Paciente"}
             />
           </CardContent>
         </Card>

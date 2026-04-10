@@ -329,6 +329,75 @@ export type Database = {
         }
         Relationships: []
       }
+      documentos_gerados: {
+        Row: {
+          assinado_em: string | null
+          campos_formulario: Json
+          cancelado_em: string | null
+          cancelado_por: string
+          conteudo_html: string
+          conteudo_original: string
+          created_at: string
+          hash_assinatura: string
+          id: string
+          ip_assinatura: string
+          modelo_id: string
+          motivo_cancelamento: string
+          paciente_id: string
+          paciente_nome: string
+          profissional_id: string
+          profissional_nome: string
+          status: string
+          tipo_documento: string
+          unidade_id: string
+          updated_at: string
+        }
+        Insert: {
+          assinado_em?: string | null
+          campos_formulario?: Json
+          cancelado_em?: string | null
+          cancelado_por?: string
+          conteudo_html?: string
+          conteudo_original?: string
+          created_at?: string
+          hash_assinatura?: string
+          id?: string
+          ip_assinatura?: string
+          modelo_id?: string
+          motivo_cancelamento?: string
+          paciente_id?: string
+          paciente_nome?: string
+          profissional_id?: string
+          profissional_nome?: string
+          status?: string
+          tipo_documento?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Update: {
+          assinado_em?: string | null
+          campos_formulario?: Json
+          cancelado_em?: string | null
+          cancelado_por?: string
+          conteudo_html?: string
+          conteudo_original?: string
+          created_at?: string
+          hash_assinatura?: string
+          id?: string
+          ip_assinatura?: string
+          modelo_id?: string
+          motivo_cancelamento?: string
+          paciente_id?: string
+          paciente_nome?: string
+          profissional_id?: string
+          profissional_nome?: string
+          status?: string
+          tipo_documento?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       episodios_clinicos: {
         Row: {
           atualizado_em: string
@@ -1161,6 +1230,51 @@ export type Database = {
           item_id?: string
           profissional_id?: string
           tipo?: string
+        }
+        Relationships: []
+      }
+      profissionais_carimbo: {
+        Row: {
+          cargo: string
+          conselho: string
+          created_at: string
+          especialidade: string
+          id: string
+          imagem_url: string
+          nome: string
+          numero_registro: string
+          profissional_id: string
+          tipo: string
+          uf: string
+          updated_at: string
+        }
+        Insert: {
+          cargo?: string
+          conselho?: string
+          created_at?: string
+          especialidade?: string
+          id?: string
+          imagem_url?: string
+          nome?: string
+          numero_registro?: string
+          profissional_id: string
+          tipo?: string
+          uf?: string
+          updated_at?: string
+        }
+        Update: {
+          cargo?: string
+          conselho?: string
+          created_at?: string
+          especialidade?: string
+          id?: string
+          imagem_url?: string
+          nome?: string
+          numero_registro?: string
+          profissional_id?: string
+          tipo?: string
+          uf?: string
+          updated_at?: string
         }
         Relationships: []
       }
