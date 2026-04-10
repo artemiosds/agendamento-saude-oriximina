@@ -1955,23 +1955,26 @@ const FilaEspera: React.FC = () => {
                         Reserva expirada!
                       </div>
                     )}
+                    </div>
                   </div>
-                  <ContactActionButton
-                    phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
-                    patientName={f.pacienteNome}
-                    unitName={unidade?.nome}
-                  />
-                  <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
-                    {prioridadeLabel[f.prioridade] || f.prioridade}
-                  </Badge>
-                  <span
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                      statusLabels[f.status]?.color,
-                    )}
-                  >
-                    {statusLabels[f.status]?.label}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ContactActionButton
+                      phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
+                      patientName={f.pacienteNome}
+                      unitName={unidade?.nome}
+                    />
+                    <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
+                      {prioridadeLabel[f.prioridade] || f.prioridade}
+                    </Badge>
+                    <span
+                      className={cn(
+                        "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
+                        statusLabels[f.status]?.color,
+                      )}
+                    >
+                      {statusLabels[f.status]?.label}
+                    </span>
+                  </div>
                   {canManage && (
                     <div className="flex gap-1 shrink-0 flex-wrap">
                       {isChamado && reservaTime?.slot && (
