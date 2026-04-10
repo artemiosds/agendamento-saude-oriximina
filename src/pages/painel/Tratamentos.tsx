@@ -691,10 +691,13 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const isMaster = user?.role === 'master';
+
   const handleCheckRemarcarDate = async (newDate: string) => {
     setRemarcarData(newDate);
     setRemarcarBlockedMsg("");
     if (!newDate || !selectedCycle) return;
+    if (isMaster) return; // Master bypasses block checks
     try {
       const { data: result } = await supabase.rpc("is_date_blocked", {
         p_date: newDate,
