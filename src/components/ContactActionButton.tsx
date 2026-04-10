@@ -2,17 +2,15 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MessageCircle, Phone } from 'lucide-react';
+import { normalizePhone, isValidNormalizedPhone } from '@/lib/phoneUtils';
 
 function cleanPhoneNumber(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('55')) return digits;
-  if (digits.length >= 10) return `55${digits}`;
-  return digits;
+  return normalizePhone(phone) || phone.replace(/\D/g, '');
 }
 
 function isValidPhone(phone: string): boolean {
-  const digits = phone.replace(/\D/g, '');
-  return digits.length >= 10;
+  const normalized = normalizePhone(phone);
+  return isValidNormalizedPhone(normalized);
 }
 
 interface ContactActionButtonProps {
