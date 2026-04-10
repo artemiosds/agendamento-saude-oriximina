@@ -31,6 +31,8 @@ import {
   FileText,
   Link2,
   Unlink,
+  Pencil,
+  Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -200,6 +202,14 @@ const Tratamentos: React.FC = () => {
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
   const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+
+  // Master: edit realized session
+  const [editRealizadaOpen, setEditRealizadaOpen] = useState(false);
+  const [editRealizadaTarget, setEditRealizadaTarget] = useState<TreatmentSession | null>(null);
+  const [editRealizadaDate, setEditRealizadaDate] = useState("");
+  const [editRealizadaProcedure, setEditRealizadaProcedure] = useState("");
+  const [editRealizadaSoap, setEditRealizadaSoap] = useState({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+  const [editRealizadaSaving, setEditRealizadaSaving] = useState(false);
 
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
@@ -621,6 +631,138 @@ const Tratamentos: React.FC = () => {
       console.error(err);
       toast.error("Erro ao registrar sessão: " + err.message);
     }
+  };
+
+  const handleEditRealizada = async () => {
+    if (!editRealizadaTarget || !selectedCycle) return;
+    if (
+      !editRealizadaSoap.subjetivo?.trim() ||
+      !editRealizadaSoap.objetivo?.trim() ||
+      !editRealizadaSoap.avaliacao?.trim() ||
+      !editRealizadaSoap.plano?.trim()
+    ) {
+      toast.error("Preencha todos os campos SOAP.");
+      return;
+    }
+    if (!editRealizadaProcedure?.trim()) {
+      toast.error("Informe o procedimento realizado.");
+      return;
+    }
+    setEditRealizadaSaving(true);
+    try {
+      const clinicalNotesJson = JSON.stringify({
+        tipo: "soap",
+        subjetivo: editRealizadaSoap.subjetivo,
+        objetivo: editRealizadaSoap.objetivo,
+        avaliacao: editRealizadaSoap.avaliacao,
+        plano: editRealizadaSoap.plano,
+        editado_em: new Date().toISOString(),
+        editado_por: user?.id,
+      });
+
+      const updatePayload: any = {
+        clinical_notes: clinicalNotesJson,
+        procedure_done: editRealizadaProcedure,
+      };
+      if (editRealizadaDate && editRealizadaDate !== editRealizadaTarget.scheduled_date) {
+        updatePayload.scheduled_date = editRealizadaDate;
+      }
+
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update(updatePayload)
+        .eq("id", editRealizadaTarget.id);
+
+      if (error) throw error;
+
+      await logAction({
+        acao: "editar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: editRealizadaTarget.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { ciclo: selectedCycle.id, sessao: editRealizadaTarget.session_number },
+      });
+
+      toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada (Modo Master).`);
+      setEditRealizadaOpen(false);
+      setEditRealizadaTarget(null);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao editar sessão: " + err.message);
+    } finally {
+      setEditRealizadaSaving(false);
+    }
+  };
+
+  const handleClearRealizada = async (session: TreatmentSession) => {
+    if (!selectedCycle) return;
+    const confirmed = window.confirm(
+      `Tem certeza que deseja limpar a sessão ${session.session_number}/${session.total_sessions}?\n\nIsto reverterá o status para "Agendada" e apagará os dados clínicos.`
+    );
+    if (!confirmed) return;
+    try {
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "agendada",
+          clinical_notes: "",
+          procedure_done: "",
+          absence_type: null,
+        })
+        .eq("id", session.id);
+
+      if (error) throw error;
+
+      // Decrement sessions_done
+      const newDone = Math.max(0, selectedCycle.sessions_done - 1);
+      await supabase
+        .from("treatment_cycles")
+        .update({
+          sessions_done: newDone,
+          status: "em_andamento",
+        })
+        .eq("id", selectedCycle.id);
+
+      await logAction({
+        acao: "limpar_sessao_realizada",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { ciclo: selectedCycle.id, sessao: session.session_number },
+      });
+
+      toast.success(`Sessão ${session.session_number} revertida para "Agendada" (Modo Master).`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao limpar sessão: " + err.message);
+    }
+  };
+
+  const openEditRealizada = (session: TreatmentSession) => {
+    setEditRealizadaTarget(session);
+    setEditRealizadaDate(session.scheduled_date);
+    setEditRealizadaProcedure(session.procedure_done || "");
+    // Parse existing SOAP notes
+    try {
+      const parsed = JSON.parse(session.clinical_notes);
+      if (parsed.tipo === "soap") {
+        setEditRealizadaSoap({
+          subjetivo: parsed.subjetivo || "",
+          objetivo: parsed.objetivo || "",
+          avaliacao: parsed.avaliacao || "",
+          plano: parsed.plano || "",
+        });
+      } else {
+        setEditRealizadaSoap({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+      }
+    } catch {
+      setEditRealizadaSoap({ subjetivo: session.clinical_notes || "", objetivo: "", avaliacao: "", plano: "" });
+    }
+    setEditRealizadaOpen(true);
   };
 
   const handleAgendarSessao = async () => {
@@ -1429,10 +1571,11 @@ const Tratamentos: React.FC = () => {
                   const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
                   const isAgendada = effectiveStatus === "agendada";
 
-                  // Master can reschedule ANY session (except realizada)
+                  // Master can reschedule ANY session (including realizada)
                   const canRemarcarThis = isMaster
-                    ? s.status !== "realizada"
+                    ? true
                     : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
+                  const isRealizada = s.status === "realizada";
 
                   return (
                     <div
@@ -1496,6 +1639,26 @@ const Tratamentos: React.FC = () => {
                           >
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
+                        )}
+                        {isMaster && isRealizada && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-primary text-primary hover:bg-primary/10 shrink-0"
+                              onClick={() => openEditRealizada(s)}
+                            >
+                              <Pencil className="w-3 h-3 mr-1" /> Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10 shrink-0"
+                              onClick={() => handleClearRealizada(s)}
+                            >
+                              <Eraser className="w-3 h-3 mr-1" /> Limpar
+                            </Button>
+                          </>
                         )}
                       </div>
                       {s.clinical_notes && renderSessionNotes(s.clinical_notes)}
@@ -1673,6 +1836,70 @@ const Tratamentos: React.FC = () => {
 
               <Button onClick={handleRegisterSession} className="w-full gradient-primary text-primary-foreground">
                 Registrar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={editRealizadaOpen} onOpenChange={(open) => { if (!open) { setEditRealizadaOpen(false); setEditRealizadaTarget(null); } }}>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Sessão Realizada (Modo Master)</DialogTitle>
+            </DialogHeader>
+            <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning mb-2">
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Você está editando uma sessão já finalizada (Modo Master)
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label>Data da Sessão</Label>
+                <Input
+                  type="date"
+                  value={editRealizadaDate}
+                  onChange={(e) => setEditRealizadaDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Procedimento Realizado *</Label>
+                {sessionProcedimentos.length > 0 ? (
+                  <Select value={editRealizadaProcedure} onValueChange={setEditRealizadaProcedure}>
+                    <SelectTrigger><SelectValue placeholder="Selecione o procedimento" /></SelectTrigger>
+                    <SelectContent>
+                      {sessionProcedimentos.map((proc) => (
+                        <SelectItem key={proc.id} value={proc.nome}>{proc.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={editRealizadaProcedure}
+                    onChange={(e) => setEditRealizadaProcedure(e.target.value)}
+                    placeholder="Nome do procedimento"
+                  />
+                )}
+              </div>
+              <div className="space-y-3 border-t pt-3">
+                <p className="text-sm font-semibold text-foreground">Prontuário SOAP <span className="text-destructive">*</span></p>
+                <div>
+                  <Label className="text-xs font-semibold">S — Subjetivo <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.subjetivo} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, subjetivo: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">O — Objetivo <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.objetivo} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, objetivo: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">A — Avaliação <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.avaliacao} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, avaliacao: e.target.value }))} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">P — Plano <span className="text-destructive">*</span></Label>
+                  <Textarea value={editRealizadaSoap.plano} onChange={(e) => setEditRealizadaSoap(p => ({ ...p, plano: e.target.value }))} rows={2} />
+                </div>
+              </div>
+              <Button onClick={handleEditRealizada} disabled={editRealizadaSaving} className="w-full gradient-primary text-primary-foreground">
+                {editRealizadaSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+                Salvar Alterações
               </Button>
             </div>
           </DialogContent>
