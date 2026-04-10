@@ -1785,6 +1785,7 @@ export type Database = {
           agendamento_id: string
           alergias: string[] | null
           altura: number | null
+          classificacao_risco: string
           confirmado_em: string | null
           criado_em: string | null
           frequencia_cardiaca: number | null
@@ -1804,6 +1805,7 @@ export type Database = {
           agendamento_id: string
           alergias?: string[] | null
           altura?: number | null
+          classificacao_risco?: string
           confirmado_em?: string | null
           criado_em?: string | null
           frequencia_cardiaca?: number | null
@@ -1823,6 +1825,7 @@ export type Database = {
           agendamento_id?: string
           alergias?: string[] | null
           altura?: number | null
+          classificacao_risco?: string
           confirmado_em?: string | null
           criado_em?: string | null
           frequencia_cardiaca?: number | null
