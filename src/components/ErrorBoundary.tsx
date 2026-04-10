@@ -14,9 +14,30 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
 
   public componentDidCatch(error: Error) {
     console.error("Unhandled render error:", error);
+
+    // Auto-reload once on chunk load failures (stale deploy)
+    const isChunkError =
+      error?.message?.includes("dynamically imported module") ||
+      error?.message?.includes("Failed to fetch") ||
+      error?.message?.includes("Loading chunk") ||
+      error?.message?.includes("Loading CSS chunk");
+
+    if (isChunkError) {
+      const key = "chunk_error_reload";
+      const last = sessionStorage.getItem(key);
+      const now = Date.now();
+      if (!last || now - Number(last) > 10_000) {
+        sessionStorage.setItem(key, String(now));
+        window.location.reload();
+        return;
+      }
+    }
   }
 
   private handleReload = () => {
+    // Clear caches and force reload
+    sessionStorage.removeItem("chunk_reload");
+    sessionStorage.removeItem("chunk_error_reload");
     window.location.reload();
   };
 
