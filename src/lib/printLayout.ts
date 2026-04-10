@@ -89,6 +89,30 @@ export const institutionalCSS = `
   .signature .name { font-size: 12px; font-weight: 600; }
   .signature .role { font-size: 10px; color: #64748b; }
 
+  /* DOCUMENT FOOTER: carimbo + assinatura side by side */
+  .doc-sign-footer {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-top: 40px; gap: 20px;
+  }
+  .doc-sign-footer .sign-block { flex: 1; }
+  .doc-sign-footer .carimbo-block { text-align: right; }
+
+  /* ELECTRONIC SIGNATURE BLOCK */
+  .e-signature-box {
+    border: 1px solid #94a3b8; border-radius: 6px; padding: 10px 14px;
+    font-size: 9px; line-height: 1.5; color: #475569; max-width: 380px;
+  }
+  .e-signature-box .sig-title { font-weight: 700; font-size: 10px; color: #0369a1; margin-bottom: 4px; text-align: center; }
+  .e-signature-box .sig-legal { font-size: 8px; color: #94a3b8; margin-top: 6px; font-style: italic; }
+
+  /* CARIMBO BLOCK */
+  .carimbo-digital {
+    border: 2px solid #1e293b; border-radius: 6px; padding: 8px 14px;
+    text-align: center; font-size: 11px; display: inline-block;
+  }
+  .carimbo-digital .carimbo-nome { font-weight: 700; font-size: 12px; }
+  .carimbo-digital .carimbo-info { font-size: 10px; color: #475569; }
+
   /* FOOTER */
   .doc-footer {
     margin-top: 30px; padding-top: 10px;
@@ -103,6 +127,9 @@ export const institutionalCSS = `
     body { padding: 10px; }
     .doc-header { border-radius: 0; }
     .no-print { display: none !important; }
+    nav, .sidebar, button, .toaster, [data-sonner-toaster] { display: none !important; }
+    .doc-sign-footer { page-break-inside: avoid; }
+    .e-signature-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>`;
 

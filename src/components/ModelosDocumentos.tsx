@@ -434,6 +434,42 @@ const ModelosDocumentos: React.FC = () => {
                 />
                 <Label className="text-sm">Modelo ativo</Label>
               </div>
+
+              {/* Version History */}
+              {current.versoes && current.versoes.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Histórico de versões ({current.versoes.length})</Label>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {current.versoes.map((v, i) => (
+                      <div key={i} className="flex items-center justify-between border rounded p-2 bg-muted/30 text-xs">
+                        <div>
+                          <span className="font-medium">Versão {current.versoes!.length - i}</span>
+                          <span className="text-muted-foreground ml-2">{new Date(v.salvo_em).toLocaleString('pt-BR')}</span>
+                          <p className="text-muted-foreground line-clamp-1 mt-0.5">{v.conteudo.slice(0, 80)}...</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 shrink-0"
+                          onClick={() => {
+                            if (confirm('Restaurar esta versão? O conteúdo atual será salvo no histórico.')) {
+                              const versoes = [...(current.versoes || [])];
+                              versoes.unshift({ conteudo: current.conteudo, salvo_em: current.atualizado_em });
+                              setCurrent({
+                                ...current,
+                                conteudo: v.conteudo,
+                                versoes: versoes.slice(0, 5),
+                              });
+                            }
+                          }}
+                        >
+                          Restaurar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
