@@ -74,11 +74,56 @@ const PTS: React.FC = () => {
 
   const isMaster = user?.role === 'master';
 
-  const isFisioterapeuta = useMemo(() => {
-    if (!user) return false;
-    const prof = user.profissao?.toLowerCase().trim() || '';
-    return prof.includes('fisioterapi') || prof === 'fisioterapia';
+  // Map user profissao to SIGTAP especialidade dynamically
+  const sigtapEspecialidade = useMemo(() => {
+    if (!user) return '';
+    const prof = (user.profissao || '').toLowerCase().trim();
+    // Map profession names to SIGTAP especialidade keys
+    const mapping: Record<string, string> = {
+      fisioterapeuta: 'fisioterapia',
+      fisioterapia: 'fisioterapia',
+      fonoaudiologa: 'fonoaudiologia',
+      fonoaudiologo: 'fonoaudiologia',
+      fonoaudiologia: 'fonoaudiologia',
+      psicologa: 'psicologia',
+      psicologo: 'psicologia',
+      psicologia: 'psicologia',
+      'terapeuta ocupacional': 'terapia ocupacional',
+      'terapia ocupacional': 'terapia ocupacional',
+      nutricionista: 'nutricao',
+      nutricao: 'nutricao',
+      enfermeiro: 'enfermagem',
+      enfermeira: 'enfermagem',
+      enfermagem: 'enfermagem',
+    };
+    // Normalize removing accents for matching
+    const profNorm = prof.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    for (const [key, value] of Object.entries(mapping)) {
+      const keyNorm = key.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (profNorm === keyNorm || profNorm.includes(keyNorm) || keyNorm.includes(profNorm)) {
+        return value;
+      }
+    }
+    return '';
   }, [user]);
+
+  const hasSigtapProfession = sigtapEspecialidade !== '';
+
+  // Load SIGTAP procedures matching user's profession
+  const loadSigtapProcs = useCallback(async () => {
+    if (!hasSigtapProfession && !isMaster) return;
+    let query = (supabase as any)
+      .from('sigtap_procedimentos')
+      .select('*')
+      .eq('ativo', true)
+      .order('codigo');
+    // If not master, filter by the professional's specialty
+    if (!isMaster && sigtapEspecialidade) {
+      query = query.eq('especialidade', sigtapEspecialidade);
+    }
+    const { data } = await query;
+    if (data) setSigtapProcs(data);
+  }, [hasSigtapProfession, isMaster, sigtapEspecialidade]);
 
   const [form, setForm] = useState({
     patient_id: '', patient_name: '',
@@ -90,7 +135,6 @@ const PTS: React.FC = () => {
   const loadPts = useCallback(async () => {
     setLoading(true);
     let query = (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
-    // Profissional (non-master) sees only their own PTS
     if (!isMaster && user?.role === 'profissional') {
       query = query.eq('professional_id', user.id);
     }
@@ -98,18 +142,6 @@ const PTS: React.FC = () => {
     if (data) setPtsList(data);
     setLoading(false);
   }, [isMaster, user]);
-
-  // Load SIGTAP procedures for fisioterapia
-  const loadSigtapProcs = useCallback(async () => {
-    if (!isFisioterapeuta && !isMaster) return;
-    const { data } = await (supabase as any)
-      .from('sigtap_procedimentos')
-      .select('*')
-      .eq('especialidade', 'fisioterapia')
-      .eq('ativo', true)
-      .order('codigo');
-    if (data) setSigtapProcs(data);
-  }, [isFisioterapeuta, isMaster]);
 
   useEffect(() => { loadPts(); }, [loadPts]);
   useEffect(() => { loadSigtapProcs(); }, [loadSigtapProcs]);
@@ -315,7 +347,7 @@ const PTS: React.FC = () => {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
-  const showSigtap = (isFisioterapeuta || isMaster) && sigtapProcs.length > 0;
+  const showSigtap = (hasSigtapProfession || isMaster) && sigtapProcs.length > 0;
 
   return (
     <div className="space-y-4 animate-fade-in">
