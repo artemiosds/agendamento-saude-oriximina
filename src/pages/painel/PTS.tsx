@@ -82,15 +82,27 @@ const PTS: React.FC = () => {
 
   // Load SIGTAP procedures for fisioterapia only
   const loadSigtapProcs = useCallback(async () => {
-    if (!isFisioterapeuta && !isMaster) return;
-    const { data } = await (supabase as any)
-      .from('sigtap_procedimentos')
-      .select('*')
-      .eq('especialidade', 'fisioterapia')
-      .eq('ativo', true)
-      .order('codigo');
-    if (data) setSigtapProcs(data);
-  }, [isFisioterapeuta, isMaster]);
+    if (!user) return;
+    if (!isFisioterapeuta && !isMaster) {
+      setSigtapProcs([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('sigtap_procedimentos')
+        .select('*')
+        .eq('especialidade', 'fisioterapia')
+        .eq('ativo', true)
+        .order('codigo');
+      if (error) {
+        console.error('Erro ao carregar SIGTAP:', error);
+        return;
+      }
+      setSigtapProcs(data || []);
+    } catch (err) {
+      console.error('Erro SIGTAP:', err);
+    }
+  }, [user, isFisioterapeuta, isMaster]);
 
   const [form, setForm] = useState({
     patient_id: '', patient_name: '',
