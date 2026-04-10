@@ -1900,7 +1900,54 @@ const Tratamentos: React.FC = () => {
           isMaster={isMaster}
         />
 
-        <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
+        {/* Dialog: Adicionar Sessão Intermediária (Master) */}
+        <Dialog open={addIntermediateOpen} onOpenChange={setAddIntermediateOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Adicionar Sessão Intermediária</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Insira uma nova sessão entre as existentes. A numeração será ajustada automaticamente.
+              </p>
+              <div>
+                <Label>Inserir após sessão nº</Label>
+                <Select
+                  value={String(intermediateAfterSession)}
+                  onValueChange={(v) => setIntermediateAfterSession(parseInt(v))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Antes da 1ª sessão</SelectItem>
+                    {cycleSessions.map((s) => (
+                      <SelectItem key={s.session_number} value={String(s.session_number)}>
+                        Após sessão {s.session_number} — {new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Data da nova sessão</Label>
+                <Input
+                  type="date"
+                  value={intermediateDate}
+                  onChange={(e) => setIntermediateDate(e.target.value)}
+                />
+              </div>
+              <Button
+                onClick={handleAddIntermediateSession}
+                className="w-full gradient-primary text-primary-foreground"
+                disabled={!intermediateDate}
+              >
+                <Plus className="w-4 h-4 mr-2" /> Adicionar Sessão
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Vincular PTS ao Ciclo</DialogTitle>
