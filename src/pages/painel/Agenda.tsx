@@ -1621,69 +1621,71 @@ const Agenda: React.FC = () => {
                       ehPendenteOnline && "ring-1 ring-warning/40",
                     )}
                   >
-                    <CardContent className="p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">
+                    <CardContent className="p-3 sm:p-4 space-y-2">
                       <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <p className="font-semibold text-foreground cursor-default">
-                              {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                              {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
-                            </p>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">
-                              <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                            </p>
-                            {paciente?.telefone && (
-                              <p className="text-xs">
-                                <strong>Tel:</strong> {paciente.telefone}
+                        <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
+                        <div className="flex-1 min-w-0">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="font-semibold text-foreground cursor-default">
+                                {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
+                                {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                               </p>
-                            )}
-                            {paciente?.cpf && (
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
                               <p className="text-xs">
-                                <strong>CPF:</strong> {paciente.cpf}
+                                <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                               </p>
-                            )}
-                            {paciente?.cns && (
-                              <p className="text-xs">
-                                <strong>CNS:</strong> {paciente.cns}
-                              </p>
-                            )}
-                            <p className="text-xs">
-                              <strong>Tipo:</strong> {tipoInfo.label}
-                            </p>
-                            <p className="text-xs">
-                              <strong>Origem:</strong> {ag.origem}
-                            </p>
-                            {lastAppt && (
-                              <>
-                                <hr className="my-1 border-border" />
-                                <p className="text-xs font-semibold">Último atendimento:</p>
+                              {paciente?.telefone && (
                                 <p className="text-xs">
-                                  {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
-                                  {lastAppt.profissional}
+                                  <strong>Tel:</strong> {paciente.telefone}
                                 </p>
-                                {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
-                                {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
-                              </>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                        <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
-                        {lastAppt && isProfissional && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
-                            {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || "sem resumo"}
-                          </p>
-                        )}
-                        {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
+                              )}
+                              {paciente?.cpf && (
+                                <p className="text-xs">
+                                  <strong>CPF:</strong> {paciente.cpf}
+                                </p>
+                              )}
+                              {paciente?.cns && (
+                                <p className="text-xs">
+                                  <strong>CNS:</strong> {paciente.cns}
+                                </p>
+                              )}
+                              <p className="text-xs">
+                                <strong>Tipo:</strong> {tipoInfo.label}
+                              </p>
+                              <p className="text-xs">
+                                <strong>Origem:</strong> {ag.origem}
+                              </p>
+                              {lastAppt && (
+                                <>
+                                  <hr className="my-1 border-border" />
+                                  <p className="text-xs font-semibold">Último atendimento:</p>
+                                  <p className="text-xs">
+                                    {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
+                                    {lastAppt.profissional}
+                                  </p>
+                                  {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
+                                  {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
+                                </>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                          <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                          {lastAppt && isProfissional && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
+                              {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || "sem resumo"}
+                            </p>
+                          )}
+                          {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
+                        </div>
+                        <ContactActionButton
+                          phone={paciente?.telefone}
+                          patientName={ag.pacienteNome}
+                          unitName={unidades.find((u) => u.id === ag.unidadeId)?.nome}
+                        />
                       </div>
-                      <ContactActionButton
-                        phone={paciente?.telefone}
-                        patientName={ag.pacienteNome}
-                        unitName={unidades.find((u) => u.id === ag.unidadeId)?.nome}
-                      />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}
