@@ -1304,13 +1304,25 @@ const Agenda: React.FC = () => {
                       />
                     )}
                     {newAgSlots.length === 0 ? (
-                      <p className="text-sm text-warning mt-1">
-                        {!newAg.profissionalId
-                          ? "Selecione um profissional."
-                          : selectedDate === todayLocalStr()
-                            ? "Não há horários livres restantes para hoje. Selecione outro dia."
-                            : "Não há horários livres nesta data. Selecione outro dia."}
-                      </p>
+                      isMaster ? (
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
+                          <Input
+                            type="time"
+                            value={newAg.hora}
+                            onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
+                            className="w-32"
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-warning mt-1">
+                          {!newAg.profissionalId
+                            ? "Selecione um profissional."
+                            : selectedDate === todayLocalStr()
+                              ? "Não há horários livres restantes para hoje. Selecione outro dia."
+                              : "Não há horários livres nesta data. Selecione outro dia."}
+                        </p>
+                      )
                     ) : (
                       <div className="grid grid-cols-4 gap-2 mt-2">
                         {newAgSlots.map((slot) => (
@@ -1324,6 +1336,18 @@ const Agenda: React.FC = () => {
                             {slot}
                           </Button>
                         ))}
+                        {isMaster && (
+                          <div className="col-span-4 mt-2 flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Ou digite:</span>
+                            <Input
+                              type="time"
+                              value={newAgSlots.includes(newAg.hora) ? "" : newAg.hora}
+                              onChange={(e) => setNewAg((p) => ({ ...p, hora: e.target.value }))}
+                              className="w-32"
+                              placeholder="HH:MM"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
