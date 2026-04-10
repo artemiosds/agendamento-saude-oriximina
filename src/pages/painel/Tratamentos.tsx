@@ -1561,7 +1561,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
-            <ScrollArea className="h-auto" style={{ maxHeight: 'calc(100vh - 380px)' }}>
+            <div className="max-h-[calc(100vh-380px)] overflow-y-auto scrollbar-thin">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
@@ -1666,7 +1666,7 @@ const Tratamentos: React.FC = () => {
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
 
