@@ -1863,6 +1863,14 @@ const FilaEspera: React.FC = () => {
                           <FileUp className="w-3 h-3 mr-0.5" /> DEMANDA REPRIMIDA
                         </Badge>
                       )}
+                      {manchesterRisco && (
+                        <Badge
+                          className={`text-white text-[10px] px-1.5 py-0 ${manchesterRisco.pulse ? 'animate-[pulse-manchester_1.5s_infinite]' : ''}`}
+                          style={{ backgroundColor: manchesterRisco.color }}
+                        >
+                          {manchesterRisco.subtitle}
+                        </Badge>
+                      )}
                       {isActive && (
                         <span
                           className={cn(
