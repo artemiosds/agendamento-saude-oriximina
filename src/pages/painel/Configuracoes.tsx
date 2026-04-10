@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { MessageSquare, Calendar, QrCode, Settings as SettingsIcon, Loader2, CheckCircle2, XCircle, Webhook, Send, Pencil, Mail, AlertCircle, HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw, ArrowRightLeft, User, Clock, CalendarDays, Info, FileText, Globe, Ban, Plus, Trash2 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import ModelosDocumentos from '@/components/ModelosDocumentos';
+import CarimboConfig from '@/components/CarimboConfig';
 import { Stamp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';

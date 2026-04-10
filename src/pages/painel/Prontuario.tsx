@@ -908,6 +908,17 @@ const ProntuarioPage: React.FC = () => {
         </Card>
       )}
 
+      {queryPacienteId && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <DocumentosHistorico
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || "Paciente"}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {!queryPacienteId && (
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
