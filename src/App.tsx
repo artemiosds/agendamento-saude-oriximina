@@ -39,6 +39,7 @@ const Permissoes                  = React.lazy(() => import("./pages/painel/Perm
 const HistoricoTriagem            = React.lazy(() => import("./pages/painel/HistoricoTriagem"));
 const RelatorioAlta               = React.lazy(() => import("./pages/painel/RelatorioAlta"));
 const Encaminhamentos             = React.lazy(() => import("./pages/painel/Encaminhamentos"));
+const ConfiguracoesAvancadas   = React.lazy(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const NotFound                    = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
