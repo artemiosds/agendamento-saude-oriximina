@@ -132,12 +132,13 @@ const PTS: React.FC = () => {
       return;
     }
     setLoadingCids(true);
-    (supabase as any)
+    supabase
       .from('sigtap_procedimento_cids')
       .select('cid_codigo, cid_descricao')
       .eq('procedimento_codigo', selectedProcCodigo)
       .order('cid_codigo')
-      .then(({ data }: any) => {
+      .then(({ data, error }) => {
+        if (error) console.error('Erro ao carregar CIDs:', error);
         setValidCids(data || []);
         setLoadingCids(false);
       });
