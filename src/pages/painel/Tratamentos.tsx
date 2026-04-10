@@ -1949,6 +1949,7 @@ const Tratamentos: React.FC = () => {
         </Dialog>
 
         <Dialog open={vincularPtsOpen} onOpenChange={setVincularPtsOpen}>
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Vincular PTS ao Ciclo</DialogTitle>
             </DialogHeader>
