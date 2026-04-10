@@ -248,6 +248,11 @@ const App = () => (
                         <Permissoes />
                       </ModuleRoute>
                     } />
+                    <Route path="configuracoes-avancadas" element={
+                      <ModuleRoute modulo="usuarios" masterOnly>
+                        <ConfiguracoesAvancadas />
+                      </ModuleRoute>
+                    } />
                     <Route path="alta" element={
                       <ModuleRoute modulo="prontuario">
                         <RelatorioAlta />
