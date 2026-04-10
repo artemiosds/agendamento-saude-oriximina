@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Search, Eye, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Search, Eye, Edit2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
@@ -58,6 +58,7 @@ const PTS: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingPts, setEditingPts] = useState<PTSRecord | null>(null);
   const [detailPts, setDetailPts] = useState<PTSRecord | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -70,6 +71,8 @@ const PTS: React.FC = () => {
   const [selectedCidDesc, setSelectedCidDesc] = useState('');
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
+
+  const isMaster = user?.role === 'master';
 
   const isFisioterapeuta = useMemo(() => {
     if (!user) return false;
@@ -86,14 +89,19 @@ const PTS: React.FC = () => {
 
   const loadPts = useCallback(async () => {
     setLoading(true);
-    const { data } = await (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
+    let query = (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
+    // Profissional (non-master) sees only their own PTS
+    if (!isMaster && user?.role === 'profissional') {
+      query = query.eq('professional_id', user.id);
+    }
+    const { data } = await query;
     if (data) setPtsList(data);
     setLoading(false);
-  }, []);
+  }, [isMaster, user]);
 
   // Load SIGTAP procedures for fisioterapia
   const loadSigtapProcs = useCallback(async () => {
-    if (!isFisioterapeuta) return;
+    if (!isFisioterapeuta && !isMaster) return;
     const { data } = await (supabase as any)
       .from('sigtap_procedimentos')
       .select('*')
@@ -101,7 +109,7 @@ const PTS: React.FC = () => {
       .eq('ativo', true)
       .order('codigo');
     if (data) setSigtapProcs(data);
-  }, [isFisioterapeuta]);
+  }, [isFisioterapeuta, isMaster]);
 
   useEffect(() => { loadPts(); }, [loadPts]);
   useEffect(() => { loadSigtapProcs(); }, [loadSigtapProcs]);
@@ -158,6 +166,12 @@ const PTS: React.FC = () => {
     });
   }, [ptsList, search, pacientes]);
 
+  const canEditPts = (pts: PTSRecord) => {
+    if (isMaster) return true;
+    // Profissional can edit only their own PTS
+    return pts.professional_id === user?.id;
+  };
+
   const toggleSpec = (spec: string) => {
     setForm(p => ({
       ...p,
@@ -181,6 +195,37 @@ const PTS: React.FC = () => {
     toast.info('CID aceito manualmente (fora da tabela SIGTAP).');
   };
 
+  const resetSigtapState = () => {
+    setSelectedProcCodigo('');
+    setSelectedCid('');
+    setSelectedCidDesc('');
+    setCidSearch('');
+  };
+
+  const openNewDialog = () => {
+    setEditingPts(null);
+    setForm({ patient_id: '', patient_name: '', diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades_envolvidas: [] });
+    resetSigtapState();
+    setDialogOpen(true);
+  };
+
+  const openEditDialog = (pts: PTSRecord) => {
+    const pac = pacientes.find(p => p.id === pts.patient_id);
+    setEditingPts(pts);
+    setForm({
+      patient_id: pts.patient_id,
+      patient_name: pac?.nome || pts.patient_id,
+      diagnostico_funcional: pts.diagnostico_funcional,
+      objetivos_terapeuticos: pts.objetivos_terapeuticos,
+      metas_curto_prazo: pts.metas_curto_prazo,
+      metas_medio_prazo: pts.metas_medio_prazo,
+      metas_longo_prazo: pts.metas_longo_prazo,
+      especialidades_envolvidas: pts.especialidades_envolvidas || [],
+    });
+    resetSigtapState();
+    setDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!form.patient_id || !form.diagnostico_funcional || !form.objetivos_terapeuticos) {
       toast.error('Preencha paciente, diagnóstico funcional e objetivos.');
@@ -189,10 +234,12 @@ const PTS: React.FC = () => {
     setSaving(true);
     try {
       const selectedProcNome = sigtapProcs.find(p => p.codigo === selectedProcCodigo)?.nome || '';
+      const cidInfo = selectedCid ? ` | CID: ${selectedCid} - ${selectedCidDesc}` : '';
+      const procInfo = selectedProcCodigo ? `Procedimento SIGTAP: ${selectedProcCodigo} - ${selectedProcNome}` : '';
 
-      await (supabase as any).from('pts').insert({
+      const ptsPayload = {
         patient_id: form.patient_id,
-        professional_id: user?.id || '',
+        professional_id: editingPts ? editingPts.professional_id : (user?.id || ''),
         unit_id: user?.unidadeId || '',
         diagnostico_funcional: form.diagnostico_funcional,
         objetivos_terapeuticos: form.objetivos_terapeuticos,
@@ -200,44 +247,63 @@ const PTS: React.FC = () => {
         metas_medio_prazo: form.metas_medio_prazo,
         metas_longo_prazo: form.metas_longo_prazo,
         especialidades_envolvidas: form.especialidades_envolvidas,
-      });
+      };
 
-      const cidInfo = selectedCid ? ` | CID: ${selectedCid} - ${selectedCidDesc}` : '';
-      const procInfo = selectedProcCodigo ? `Procedimento SIGTAP: ${selectedProcCodigo} - ${selectedProcNome}` : '';
+      if (editingPts) {
+        // UPDATE
+        const { error } = await (supabase as any)
+          .from('pts')
+          .update(ptsPayload)
+          .eq('id', editingPts.id);
+        if (error) throw error;
 
-      await (supabase as any).from('prontuarios').insert({
-        paciente_id: form.patient_id,
-        paciente_nome: form.patient_name,
-        profissional_id: user?.id || '',
-        profissional_nome: user?.nome || '',
-        unidade_id: user?.unidadeId || '',
-        data_atendimento: new Date().toISOString().split('T')[0],
-        hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        tipo_registro: 'pts',
-        queixa_principal: 'Projeto Terapêutico Singular',
-        anamnese: form.diagnostico_funcional,
-        hipotese: form.objetivos_terapeuticos,
-        conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
-        observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\n${procInfo}` : ''}${cidInfo}`,
-      });
+        await logAction({
+          acao: 'editar_pts', entidade: 'pts', entidadeId: editingPts.id,
+          modulo: 'pts', user,
+          detalhes: {
+            paciente_nome: form.patient_name,
+            especialidades: form.especialidades_envolvidas,
+            ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
+            ...(selectedCid && { cid: selectedCid }),
+          },
+        });
+        toast.success('PTS atualizado com sucesso!');
+      } else {
+        // INSERT
+        await (supabase as any).from('pts').insert(ptsPayload);
 
-      await logAction({
-        acao: 'criar_pts', entidade: 'pts', entidadeId: form.patient_id,
-        modulo: 'pts', user,
-        detalhes: {
+        await (supabase as any).from('prontuarios').insert({
+          paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
-          especialidades: form.especialidades_envolvidas,
-          ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
-          ...(selectedCid && { cid: selectedCid }),
-        },
-      });
+          profissional_id: user?.id || '',
+          profissional_nome: user?.nome || '',
+          unidade_id: user?.unidadeId || '',
+          data_atendimento: new Date().toISOString().split('T')[0],
+          hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          tipo_registro: 'pts',
+          queixa_principal: 'Projeto Terapêutico Singular',
+          anamnese: form.diagnostico_funcional,
+          hipotese: form.objetivos_terapeuticos,
+          conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
+          observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\n${procInfo}` : ''}${cidInfo}`,
+        });
 
-      toast.success('PTS criado e registrado no prontuário!');
+        await logAction({
+          acao: 'criar_pts', entidade: 'pts', entidadeId: form.patient_id,
+          modulo: 'pts', user,
+          detalhes: {
+            paciente_nome: form.patient_name,
+            especialidades: form.especialidades_envolvidas,
+            ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
+            ...(selectedCid && { cid: selectedCid }),
+          },
+        });
+        toast.success('PTS criado e registrado no prontuário!');
+      }
+
       setDialogOpen(false);
-      setSelectedProcCodigo('');
-      setSelectedCid('');
-      setSelectedCidDesc('');
-      setCidSearch('');
+      setEditingPts(null);
+      resetSigtapState();
       loadPts();
     } catch (err: any) {
       toast.error('Erro: ' + (err?.message || 'erro'));
@@ -249,6 +315,8 @@ const PTS: React.FC = () => {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
+  const showSigtap = (isFisioterapeuta || isMaster) && sigtapProcs.length > 0;
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -256,14 +324,7 @@ const PTS: React.FC = () => {
           <h1 className="text-2xl font-bold font-display text-foreground">PTS — Projeto Terapêutico Singular</h1>
           <p className="text-muted-foreground text-sm">{ptsList.length} projeto(s) registrado(s)</p>
         </div>
-        <Button onClick={() => {
-          setForm({ patient_id: '', patient_name: '', diagnostico_funcional: '', objetivos_terapeuticos: '', metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '', especialidades_envolvidas: [] });
-          setSelectedProcCodigo('');
-          setSelectedCid('');
-          setSelectedCidDesc('');
-          setCidSearch('');
-          setDialogOpen(true);
-        }}>
+        <Button onClick={openNewDialog}>
           <Plus className="w-4 h-4 mr-1" /> Novo PTS
         </Button>
       </div>
@@ -282,6 +343,7 @@ const PTS: React.FC = () => {
           {filtered.map(pts => {
             const pac = pacientes.find(p => p.id === pts.patient_id);
             const prof = funcionarios.find(f => f.id === pts.professional_id);
+            const editable = canEditPts(pts);
             return (
               <Card key={pts.id} className="hover:shadow-sm transition-shadow">
                 <CardContent className="p-3 flex flex-col sm:flex-row sm:items-center gap-2">
@@ -297,9 +359,16 @@ const PTS: React.FC = () => {
                       {pts.especialidades_envolvidas.length > 0 && ` • ${pts.especialidades_envolvidas.join(', ')}`}
                     </p>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => setDetailPts(pts)}>
-                    <Eye className="w-4 h-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    {editable && (
+                      <Button size="sm" variant="ghost" onClick={() => openEditDialog(pts)} title="Editar PTS">
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => setDetailPts(pts)} title="Visualizar">
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -307,19 +376,25 @@ const PTS: React.FC = () => {
         </div>
       )}
 
-      {/* New PTS Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* New / Edit PTS Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={v => { if (!v) { setDialogOpen(false); setEditingPts(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-display">Novo PTS</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="font-display">{editingPts ? 'Editar PTS' : 'Novo PTS'}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Paciente *</Label>
-              <BuscaPaciente pacientes={pacientes} value={form.patient_id}
-                onChange={(id, nome) => setForm(p => ({ ...p, patient_id: id, patient_name: nome }))} />
+              {editingPts ? (
+                <Input value={form.patient_name} disabled className="bg-muted" />
+              ) : (
+                <BuscaPaciente pacientes={pacientes} value={form.patient_id}
+                  onChange={(id, nome) => setForm(p => ({ ...p, patient_id: id, patient_name: nome }))} />
+              )}
             </div>
 
-            {/* SIGTAP Section - Only for Fisioterapeutas */}
-            {isFisioterapeuta && sigtapProcs.length > 0 && (
+            {/* SIGTAP Section - Fisioterapeutas + Master */}
+            {showSigtap && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold flex items-center gap-1.5">
                   📋 Procedimento SIGTAP (Fisioterapia)
@@ -451,7 +526,7 @@ const PTS: React.FC = () => {
             </div>
             <Button className="w-full" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Salvar PTS
+              {editingPts ? 'Salvar Alterações' : 'Salvar PTS'}
             </Button>
           </div>
         </DialogContent>
@@ -477,6 +552,11 @@ const PTS: React.FC = () => {
                     {detailPts.especialidades_envolvidas.map(s => <Badge key={s} variant="outline">{s}</Badge>)}
                   </div>
                 </div>
+              )}
+              {canEditPts(detailPts) && (
+                <Button variant="outline" className="w-full mt-2" onClick={() => { setDetailPts(null); openEditDialog(detailPts); }}>
+                  <Edit2 className="w-4 h-4 mr-2" /> Editar este PTS
+                </Button>
               )}
             </div>
           )}
