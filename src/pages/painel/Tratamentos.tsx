@@ -1242,7 +1242,7 @@ const Tratamentos: React.FC = () => {
     } catch {
       /* not JSON, render as text */
     }
-    return <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{notes}</p>;
+    return <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{notes}</p>;
   };
 
   if (loading) {
@@ -1276,7 +1276,7 @@ const Tratamentos: React.FC = () => {
     }).length;
 
     return (
-      <div className="space-y-4 animate-fade-in">
+      <div className="space-y-4 animate-fade-in overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => setSelectedCycle(null)}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
@@ -1561,7 +1561,7 @@ const Tratamentos: React.FC = () => {
                 </Button>
               )}
             </div>
-            <ScrollArea className="max-h-[calc(100vh-320px)]">
+            <div className="max-h-[calc(100vh-380px)] overflow-y-auto scrollbar-thin">
               <div className="space-y-2">
                 {cycleSessions.map((s) => {
                   const isPendente = s.status === "pendente_agendamento";
@@ -1666,7 +1666,7 @@ const Tratamentos: React.FC = () => {
                   );
                 })}
               </div>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
 
