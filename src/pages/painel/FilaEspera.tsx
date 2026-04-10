@@ -1067,7 +1067,7 @@ const FilaEspera: React.FC = () => {
       </div>
 
       {activeQueue.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card className="shadow-card border-0">
             <CardContent className="p-3 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-success flex items-center justify-center text-success-foreground font-bold text-sm">
@@ -1113,7 +1113,7 @@ const FilaEspera: React.FC = () => {
           className="pl-9"
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <Select value={filterUnidade} onValueChange={setFilterUnidade}>
           <SelectTrigger>
             <SelectValue placeholder="Unidade" />
@@ -1854,29 +1854,30 @@ const FilaEspera: React.FC = () => {
                   borderLeft: manchesterRisco ? `6px solid ${manchesterRisco.color}` : isActive && waitMin > 60 ? '6px solid hsl(var(--destructive))' : isActive && waitMin >= 30 ? '6px solid hsl(var(--warning))' : isActive ? '6px solid hsl(var(--success))' : undefined,
                 }}
               >
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex flex-col items-center gap-1 shrink-0">
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-                        isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
-                      )}
-                    >
-                      {i + 1}
-                    </div>
-                    {isActive && (
-                      <span
+                <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <div
                         className={cn(
-                          "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                          waitColor.bg,
-                          waitColor.text,
+                          "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
+                          isActive ? `${waitColor.bg} ${waitColor.text}` : "gradient-primary text-primary-foreground",
                         )}
                       >
-                        {formatWaitTime(waitMin)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
+                        {i + 1}
+                      </div>
+                      {isActive && (
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
+                            waitColor.bg,
+                            waitColor.text,
+                          )}
+                        >
+                          {formatWaitTime(waitMin)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-foreground">{resolvePaciente(f.pacienteId, f.pacienteNome)}</p>
                       {f.origemCadastro === "demanda_reprimida" && (
@@ -1954,23 +1955,26 @@ const FilaEspera: React.FC = () => {
                         Reserva expirada!
                       </div>
                     )}
+                    </div>
                   </div>
-                  <ContactActionButton
-                    phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
-                    patientName={f.pacienteNome}
-                    unitName={unidade?.nome}
-                  />
-                  <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
-                    {prioridadeLabel[f.prioridade] || f.prioridade}
-                  </Badge>
-                  <span
-                    className={cn(
-                      "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
-                      statusLabels[f.status]?.color,
-                    )}
-                  >
-                    {statusLabels[f.status]?.label}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ContactActionButton
+                      phone={pacientes.find((p) => p.id === f.pacienteId)?.telefone}
+                      patientName={f.pacienteNome}
+                      unitName={unidade?.nome}
+                    />
+                    <Badge className={cn("shrink-0", prioridadeColors[f.prioridade] || prioridadeColors.normal)}>
+                      {prioridadeLabel[f.prioridade] || f.prioridade}
+                    </Badge>
+                    <span
+                      className={cn(
+                        "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
+                        statusLabels[f.status]?.color,
+                      )}
+                    >
+                      {statusLabels[f.status]?.label}
+                    </span>
+                  </div>
                   {canManage && (
                     <div className="flex gap-1 shrink-0 flex-wrap">
                       {isChamado && reservaTime?.slot && (

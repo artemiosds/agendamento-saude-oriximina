@@ -1446,7 +1446,7 @@ const Agenda: React.FC = () => {
       {/* Agenda normal */}
       {abaAtiva === "agenda" && (
         <>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
             {/* NOVO: componente de calendário no lugar dos botões e input de data */}
             <CalendarioAgenda
               selectedDate={selectedDate}
@@ -1470,7 +1470,7 @@ const Agenda: React.FC = () => {
                   setFilterProf("all");
                 }}
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Unidade" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1485,7 +1485,7 @@ const Agenda: React.FC = () => {
             )}
             {!isProfissional && (
               <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="w-52">
+                <SelectTrigger className="w-full sm:w-52">
                   <SelectValue placeholder="Profissional" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1621,69 +1621,71 @@ const Agenda: React.FC = () => {
                       ehPendenteOnline && "ring-1 ring-warning/40",
                     )}
                   >
-                    <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      <span className="text-lg font-mono font-bold text-primary w-16 shrink-0">{ag.hora}</span>
-                      <div className="flex-1 min-w-0">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <p className="font-semibold text-foreground cursor-default">
-                              {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                              {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
-                            </p>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-xs">
-                              <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
-                            </p>
-                            {paciente?.telefone && (
-                              <p className="text-xs">
-                                <strong>Tel:</strong> {paciente.telefone}
+                    <CardContent className="p-3 sm:p-4 space-y-2">
+                      <div className="flex items-start gap-3">
+                        <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
+                        <div className="flex-1 min-w-0">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <p className="font-semibold text-foreground cursor-default">
+                                {tipoInfo.icon} {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
+                                {anexoUrl && <Paperclip className="w-3.5 h-3.5 inline ml-1 text-info" />}
                               </p>
-                            )}
-                            {paciente?.cpf && (
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
                               <p className="text-xs">
-                                <strong>CPF:</strong> {paciente.cpf}
+                                <strong>Paciente:</strong> {resolvePaciente(ag.pacienteId, ag.pacienteNome)}
                               </p>
-                            )}
-                            {paciente?.cns && (
-                              <p className="text-xs">
-                                <strong>CNS:</strong> {paciente.cns}
-                              </p>
-                            )}
-                            <p className="text-xs">
-                              <strong>Tipo:</strong> {tipoInfo.label}
-                            </p>
-                            <p className="text-xs">
-                              <strong>Origem:</strong> {ag.origem}
-                            </p>
-                            {lastAppt && (
-                              <>
-                                <hr className="my-1 border-border" />
-                                <p className="text-xs font-semibold">Último atendimento:</p>
+                              {paciente?.telefone && (
                                 <p className="text-xs">
-                                  {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
-                                  {lastAppt.profissional}
+                                  <strong>Tel:</strong> {paciente.telefone}
                                 </p>
-                                {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
-                                {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
-                              </>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                        <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
-                        {lastAppt && isProfissional && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                            📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
-                            {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || "sem resumo"}
-                          </p>
-                        )}
-                        {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
+                              )}
+                              {paciente?.cpf && (
+                                <p className="text-xs">
+                                  <strong>CPF:</strong> {paciente.cpf}
+                                </p>
+                              )}
+                              {paciente?.cns && (
+                                <p className="text-xs">
+                                  <strong>CNS:</strong> {paciente.cns}
+                                </p>
+                              )}
+                              <p className="text-xs">
+                                <strong>Tipo:</strong> {tipoInfo.label}
+                              </p>
+                              <p className="text-xs">
+                                <strong>Origem:</strong> {ag.origem}
+                              </p>
+                              {lastAppt && (
+                                <>
+                                  <hr className="my-1 border-border" />
+                                  <p className="text-xs font-semibold">Último atendimento:</p>
+                                  <p className="text-xs">
+                                    {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
+                                    {lastAppt.profissional}
+                                  </p>
+                                  {lastAppt.procedimentos && <p className="text-xs">📋 {lastAppt.procedimentos}</p>}
+                                  {lastAppt.queixa && <p className="text-xs">QP: {lastAppt.queixa.substring(0, 80)}</p>}
+                                </>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                          <p className="text-sm text-muted-foreground">{ag.profissionalNome}</p>
+                          {lastAppt && isProfissional && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              📋 Último: {new Date(lastAppt.data + "T12:00:00").toLocaleDateString("pt-BR")} —{" "}
+                              {lastAppt.queixa?.substring(0, 50) || lastAppt.procedimentos || "sem resumo"}
+                            </p>
+                          )}
+                          {ehPendenteOnline && <p className="text-xs text-warning mt-0.5">⏳ Aguardando aprovação</p>}
+                        </div>
+                        <ContactActionButton
+                          phone={paciente?.telefone}
+                          patientName={ag.pacienteNome}
+                          unitName={unidades.find((u) => u.id === ag.unidadeId)?.nome}
+                        />
                       </div>
-                      <ContactActionButton
-                        phone={paciente?.telefone}
-                        patientName={ag.pacienteNome}
-                        unitName={unidades.find((u) => u.id === ag.unidadeId)?.nome}
-                      />
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}
