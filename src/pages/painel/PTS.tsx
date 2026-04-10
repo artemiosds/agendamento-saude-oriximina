@@ -82,15 +82,27 @@ const PTS: React.FC = () => {
 
   // Load SIGTAP procedures for fisioterapia only
   const loadSigtapProcs = useCallback(async () => {
-    if (!isFisioterapeuta && !isMaster) return;
-    const { data } = await (supabase as any)
-      .from('sigtap_procedimentos')
-      .select('*')
-      .eq('especialidade', 'fisioterapia')
-      .eq('ativo', true)
-      .order('codigo');
-    if (data) setSigtapProcs(data);
-  }, [isFisioterapeuta, isMaster]);
+    if (!user) return;
+    if (!isFisioterapeuta && !isMaster) {
+      setSigtapProcs([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('sigtap_procedimentos')
+        .select('*')
+        .eq('especialidade', 'fisioterapia')
+        .eq('ativo', true)
+        .order('codigo');
+      if (error) {
+        console.error('Erro ao carregar SIGTAP:', error);
+        return;
+      }
+      setSigtapProcs(data || []);
+    } catch (err) {
+      console.error('Erro SIGTAP:', err);
+    }
+  }, [user, isFisioterapeuta, isMaster]);
 
   const [form, setForm] = useState({
     patient_id: '', patient_name: '',
@@ -101,7 +113,7 @@ const PTS: React.FC = () => {
 
   const loadPts = useCallback(async () => {
     setLoading(true);
-    let query = (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
+    let query = supabase.from('pts').select('*').order('created_at', { ascending: false });
     if (!isMaster && user?.role === 'profissional') {
       query = query.eq('professional_id', user.id);
     }
@@ -120,12 +132,13 @@ const PTS: React.FC = () => {
       return;
     }
     setLoadingCids(true);
-    (supabase as any)
+    supabase
       .from('sigtap_procedimento_cids')
       .select('cid_codigo, cid_descricao')
       .eq('procedimento_codigo', selectedProcCodigo)
       .order('cid_codigo')
-      .then(({ data }: any) => {
+      .then(({ data, error }) => {
+        if (error) console.error('Erro ao carregar CIDs:', error);
         setValidCids(data || []);
         setLoadingCids(false);
       });
