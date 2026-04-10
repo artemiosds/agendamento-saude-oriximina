@@ -38,6 +38,7 @@ interface ModalAgendarSessaoProps {
   onConfirm: (data: string, hora: string, salaId: string) => Promise<void>;
   onRemarcar?: (newDate: string, newHora: string, salaId: string) => Promise<void>;
   mode?: 'agendar' | 'remarcar';
+  isMaster?: boolean;
 }
 
 const WEEKDAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -62,6 +63,7 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
   onConfirm,
   onRemarcar,
   mode = 'agendar',
+  isMaster = false,
 }) => {
   const todayStr = todayLocalStr();
   const suggestedDate = session?.scheduled_date || '';
