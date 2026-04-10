@@ -1571,10 +1571,11 @@ const Tratamentos: React.FC = () => {
                   const effectiveIsPendente = effectiveStatus === "pendente_agendamento";
                   const isAgendada = effectiveStatus === "agendada";
 
-                  // Master can reschedule ANY session (except realizada)
+                  // Master can reschedule ANY session (including realizada)
                   const canRemarcarThis = isMaster
-                    ? s.status !== "realizada"
+                    ? true
                     : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
+                  const isRealizada = s.status === "realizada";
 
                   return (
                     <div
