@@ -31,6 +31,8 @@ import {
   FileText,
   Link2,
   Unlink,
+  Pencil,
+  Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -200,6 +202,14 @@ const Tratamentos: React.FC = () => {
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
   const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+
+  // Master: edit realized session
+  const [editRealizadaOpen, setEditRealizadaOpen] = useState(false);
+  const [editRealizadaTarget, setEditRealizadaTarget] = useState<TreatmentSession | null>(null);
+  const [editRealizadaDate, setEditRealizadaDate] = useState("");
+  const [editRealizadaProcedure, setEditRealizadaProcedure] = useState("");
+  const [editRealizadaSoap, setEditRealizadaSoap] = useState({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+  const [editRealizadaSaving, setEditRealizadaSaving] = useState(false);
 
   const [newCycle, setNewCycle] = useState({
     patient_id: "",
