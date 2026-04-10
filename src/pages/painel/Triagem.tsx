@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Search, Loader2, Play, CheckCircle, Save, X, Plus, Clock } from "lucide-react";
+import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtocol";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMinutes } from "date-fns";
@@ -252,6 +252,7 @@ const Triagem: React.FC = () => {
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
+        classificacao_risco: form.classificacaoRisco || '',
         iniciado_em: new Date().toISOString(),
       };
 
@@ -302,6 +303,7 @@ const Triagem: React.FC = () => {
         alergias: form.alergias,
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
+        classificacao_risco: form.classificacaoRisco || '',
         confirmado_em: new Date().toISOString(),
       };
 
@@ -498,17 +500,40 @@ const Triagem: React.FC = () => {
               </div>
             </div>
             <div>
-              <Label className="text-base font-semibold">Classificação de Risco *</Label>
-              <Select value={form.classificacaoRisco} onValueChange={(v) => setForm((p) => ({ ...p, classificacaoRisco: v }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecionar classificação..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="baixo">BAIXO</SelectItem>
-                  <SelectItem value="medio">MÉDIO</SelectItem>
-                  <SelectItem value="alto">ALTO</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-base font-semibold">Classificação de Risco — Protocolo Manchester *</Label>
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {MANCHESTER_LEVELS.map((m) => {
+                  const isSelected = form.classificacaoRisco === m.level;
+                  return (
+                    <button
+                      key={m.level}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, classificacaoRisco: m.level }))}
+                      className={`flex flex-col items-center justify-center gap-1 rounded-xl border-2 p-3 transition-all text-center ${
+                        isSelected
+                          ? `border-[3px] shadow-lg`
+                          : 'border-muted hover:border-muted-foreground/30'
+                      }`}
+                      style={{
+                        borderColor: isSelected ? m.color : undefined,
+                        backgroundColor: isSelected ? `${m.color}15` : undefined,
+                      }}
+                    >
+                      <span
+                        className="text-xs font-bold tracking-wide"
+                        style={{ color: m.color }}
+                      >
+                        {m.label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground leading-tight">{m.subtitle}</span>
+                      <span className="text-[10px] text-muted-foreground">{m.tempo}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {!form.classificacaoRisco && (
+                <p className="mt-1 text-xs text-destructive">Seleção obrigatória</p>
+              )}
             </div>
             <div>
               <Label>Queixa Principal</Label>
