@@ -125,6 +125,24 @@ const PTS: React.FC = () => {
     if (data) setSigtapProcs(data);
   }, [hasSigtapProfession, isMaster, sigtapEspecialidade]);
 
+  const [form, setForm] = useState({
+    patient_id: '', patient_name: '',
+    diagnostico_funcional: '', objetivos_terapeuticos: '',
+    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
+    especialidades_envolvidas: [] as string[],
+  });
+
+  const loadPts = useCallback(async () => {
+    setLoading(true);
+    let query = (supabase as any).from('pts').select('*').order('created_at', { ascending: false });
+    if (!isMaster && user?.role === 'profissional') {
+      query = query.eq('professional_id', user.id);
+    }
+    const { data } = await query;
+    if (data) setPtsList(data);
+    setLoading(false);
+  }, [isMaster, user]);
+
   useEffect(() => { loadPts(); }, [loadPts]);
   useEffect(() => { loadSigtapProcs(); }, [loadSigtapProcs]);
 
