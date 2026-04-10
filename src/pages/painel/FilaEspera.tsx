@@ -62,6 +62,7 @@ import { toast } from "sonner";
 import { validatePacienteFields } from "@/lib/validation";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { supabase } from "@/integrations/supabase/client";
+import { getManchesterConfig, getManchesterBadgeStyle } from "@/lib/manchesterProtocol";
 
 const ABSENCE_REASONS = [
   { value: "saude", label: "Problema de Saúde" },
@@ -1816,17 +1817,18 @@ const FilaEspera: React.FC = () => {
             const isActive = ["aguardando", "chamado", "em_atendimento"].includes(f.status);
             const waitMin = getWaitMinutes(f, now);
             const waitColor = getWaitColor(waitMin, f.prioridade);
+            const manchesterRisco = getManchesterConfig((f as any).classificacaoRisco);
+            const manchesterStyle = getManchesterBadgeStyle((f as any).classificacaoRisco);
             return (
               <Card
                 key={f.id}
                 className={cn(
                   "shadow-card border-0 transition-all",
                   isChamado && "ring-2 ring-primary/30",
-                  isActive && waitMin > 60 && "border-l-4 border-l-destructive",
-                  isActive && waitMin >= 30 && waitMin <= 60 && "border-l-4 border-l-warning",
-                  isActive && waitMin < 30 && f.prioridade !== "urgente" && "border-l-4 border-l-success",
-                  isActive && f.prioridade === "urgente" && "border-l-4 border-l-destructive",
                 )}
+                style={{
+                  borderLeft: manchesterRisco ? `6px solid ${manchesterRisco.color}` : isActive && waitMin > 60 ? '6px solid hsl(var(--destructive))' : isActive && waitMin >= 30 ? '6px solid hsl(var(--warning))' : isActive ? '6px solid hsl(var(--success))' : undefined,
+                }}
               >
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <div className="flex flex-col items-center gap-1 shrink-0">
