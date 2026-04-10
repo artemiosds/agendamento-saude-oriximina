@@ -850,8 +850,7 @@ const Tratamentos: React.FC = () => {
       toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
     }
   };
-
-
+  const handleExtension = async () => {
     if (!selectedCycle || !extensionForm.reason || extensionForm.new_sessions <= 0) {
       toast.error("Informe a quantidade de sessões e o motivo.");
       return;
