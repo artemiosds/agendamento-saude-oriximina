@@ -76,8 +76,20 @@ const PTS: React.FC = () => {
 
   const isFisioterapeuta = useMemo(() => {
     if (!user) return false;
-    const prof = (user.profissao || '').toLowerCase().trim();
-    return prof.includes('fisioterapi') || prof === 'fisioterapia';
+
+    const normalize = (value: string) =>
+      value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    const prof = normalize(user.profissao || '');
+
+    return (
+      prof.includes('fisioterap') ||
+      prof.includes('fisio')
+    );
   }, [user]);
 
   // Load SIGTAP procedures for fisioterapia only
