@@ -842,6 +842,7 @@ const Tratamentos: React.FC = () => {
   };
 
   const isMaster = user?.role === 'master';
+  const canControlSessions = isMaster || isProfissional;
 
   const handleCheckRemarcarDate = async (newDate: string) => {
     setRemarcarData(newDate);
