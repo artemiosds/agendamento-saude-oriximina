@@ -687,7 +687,7 @@ const Tratamentos: React.FC = () => {
         detalhes: { ciclo: selectedCycle.id, sessao: editRealizadaTarget.session_number },
       });
 
-      toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada (Modo Master).`);
+      toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada.`);
       setEditRealizadaOpen(false);
       setEditRealizadaTarget(null);
       loadData();
@@ -737,7 +737,7 @@ const Tratamentos: React.FC = () => {
         detalhes: { ciclo: selectedCycle.id, sessao: session.session_number },
       });
 
-      toast.success(`Sessão ${session.session_number} revertida para "Agendada" (Modo Master).`);
+      toast.success(`Sessão ${session.session_number} revertida para "Agendada".`);
       loadData();
     } catch (err: any) {
       console.error(err);
@@ -1554,7 +1554,7 @@ const Tratamentos: React.FC = () => {
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-foreground">Sessões</h3>
-              {isMaster && selectedCycle.status === "em_andamento" && (
+              {canControlSessions && selectedCycle.status === "em_andamento" && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -1576,7 +1576,7 @@ const Tratamentos: React.FC = () => {
                   const isAgendada = effectiveStatus === "agendada";
 
                   // Master can reschedule ANY session (including realizada)
-                  const canRemarcarThis = isMaster
+                  const canRemarcarThis = canControlSessions
                     ? true
                     : canAgendarSessao && (isAgendada || effectiveIsPendente) && selectedCycle.status === "em_andamento";
                   const isRealizada = s.status === "realizada";
@@ -1644,7 +1644,7 @@ const Tratamentos: React.FC = () => {
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
                         )}
-                        {isMaster && isRealizada && (
+                        {canControlSessions && isRealizada && (
                           <>
                             <Button
                               size="sm"
@@ -1848,11 +1848,11 @@ const Tratamentos: React.FC = () => {
         <Dialog open={editRealizadaOpen} onOpenChange={(open) => { if (!open) { setEditRealizadaOpen(false); setEditRealizadaTarget(null); } }}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Editar Sessão Realizada (Modo Master)</DialogTitle>
+              <DialogTitle>Editar Sessão Realizada</DialogTitle>
             </DialogHeader>
             <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning mb-2">
               <AlertTriangle className="w-4 h-4 inline mr-1" />
-              Você está editando uma sessão já finalizada (Modo Master)
+              Você está editando uma sessão já finalizada{isMaster ? " (Modo Master)" : ""}
             </div>
             <div className="space-y-4">
               <div>
@@ -2086,7 +2086,7 @@ const Tratamentos: React.FC = () => {
             setRemarcarSaving(true);
             try {
               const oldDate = remarcarTarget.scheduled_date;
-              if (user?.role !== 'master') {
+              if (!isMaster && !isProfissional) {
                 const { data: blocked } = await supabase.rpc("is_date_blocked", {
                   p_date: data,
                   p_profissional_id: selectedCycle.professional_id,
@@ -2128,7 +2128,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="remarcar"
-          isMaster={isMaster}
+          isMaster={canControlSessions}
         />
 
         {/* Dialog: Adicionar Sessão Intermediária (Master) */}
