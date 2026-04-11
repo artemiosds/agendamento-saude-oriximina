@@ -21,6 +21,17 @@ const SPECIALTIES = [
   'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
 ];
 
+// Map display specialty names to sigtap_procedimentos.especialidade values
+const SPECIALTY_TO_SIGTAP: Record<string, string> = {
+  'Fisioterapia': 'fisioterapia',
+  'Fonoaudiologia': 'fonoaudiologia',
+  'Psicologia': 'psicologia',
+  'Terapia Ocupacional': 'terapia_ocupacional',
+  'Nutrição': 'nutricao',
+  'Serviço Social': 'assistencia_social',
+  'Enfermagem': 'enfermagem',
+};
+
 interface PTSRecord {
   id: string;
   patient_id: string;
@@ -71,40 +82,48 @@ const PTS: React.FC = () => {
   const [selectedCidDesc, setSelectedCidDesc] = useState('');
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
+  const [loadingProcs, setLoadingProcs] = useState(false);
 
   const isMaster = user?.role === 'master';
 
+  const normalize = useCallback((value: string) =>
+    value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(), []);
+
   const isFisioterapeuta = useMemo(() => {
     if (!user) return false;
-
-    const normalize = (value: string) =>
-      value
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
-
     const prof = normalize(user.profissao || '');
+    return prof.includes('fisioterap') || prof.includes('fisio');
+  }, [user, normalize]);
 
-    return (
-      prof.includes('fisioterap') ||
-      prof.includes('fisio')
-    );
-  }, [user]);
+  const [form, setForm] = useState({
+    patient_id: '', patient_name: '',
+    diagnostico_funcional: '', objetivos_terapeuticos: '',
+    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
+    especialidades_envolvidas: [] as string[],
+  });
 
-  // Load SIGTAP procedures for fisioterapia only
-  const loadSigtapProcs = useCallback(async () => {
+  // Load SIGTAP procedures dynamically based on selected specialties
+  const loadSigtapProcsForSpecialties = useCallback(async (specialties: string[]) => {
     if (!user) return;
-    if (!isFisioterapeuta && !isMaster) {
+    
+    // Get the sigtap keys for the selected specialties
+    const sigtapKeys = specialties
+      .map(s => SPECIALTY_TO_SIGTAP[s])
+      .filter(Boolean);
+    
+    if (sigtapKeys.length === 0) {
       setSigtapProcs([]);
       return;
     }
+
+    setLoadingProcs(true);
     try {
       const { data, error } = await supabase
         .from('sigtap_procedimentos')
         .select('*')
-        .eq('especialidade', 'fisioterapia')
+        .in('especialidade', sigtapKeys)
         .eq('ativo', true)
+        .order('especialidade')
         .order('codigo');
       if (error) {
         console.error('Erro ao carregar SIGTAP:', error);
@@ -113,15 +132,20 @@ const PTS: React.FC = () => {
       setSigtapProcs(data || []);
     } catch (err) {
       console.error('Erro SIGTAP:', err);
+    } finally {
+      setLoadingProcs(false);
     }
-  }, [user, isFisioterapeuta, isMaster]);
+  }, [user]);
 
-  const [form, setForm] = useState({
-    patient_id: '', patient_name: '',
-    diagnostico_funcional: '', objetivos_terapeuticos: '',
-    metas_curto_prazo: '', metas_medio_prazo: '', metas_longo_prazo: '',
-    especialidades_envolvidas: [] as string[],
-  });
+  // Reload procs when specialties change
+  useEffect(() => {
+    if (!dialogOpen) return;
+    if (!isFisioterapeuta && !isMaster) {
+      setSigtapProcs([]);
+      return;
+    }
+    loadSigtapProcsForSpecialties(form.especialidades_envolvidas);
+  }, [form.especialidades_envolvidas, dialogOpen, isFisioterapeuta, isMaster, loadSigtapProcsForSpecialties]);
 
   const loadPts = useCallback(async () => {
     setLoading(true);
@@ -135,7 +159,6 @@ const PTS: React.FC = () => {
   }, [isMaster, user]);
 
   useEffect(() => { loadPts(); }, [loadPts]);
-  useEffect(() => { loadSigtapProcs(); }, [loadSigtapProcs]);
 
   // Load valid CIDs when procedure is selected
   useEffect(() => {
@@ -192,17 +215,21 @@ const PTS: React.FC = () => {
 
   const canEditPts = (pts: PTSRecord) => {
     if (isMaster) return true;
-    // Profissional can edit only their own PTS
     return pts.professional_id === user?.id;
   };
 
   const toggleSpec = (spec: string) => {
-    setForm(p => ({
-      ...p,
-      especialidades_envolvidas: p.especialidades_envolvidas.includes(spec)
+    setForm(p => {
+      const newSpecs = p.especialidades_envolvidas.includes(spec)
         ? p.especialidades_envolvidas.filter(s => s !== spec)
-        : [...p.especialidades_envolvidas, spec],
-    }));
+        : [...p.especialidades_envolvidas, spec];
+      return { ...p, especialidades_envolvidas: newSpecs };
+    });
+    // Reset proc/cid selection when specialties change
+    setSelectedProcCodigo('');
+    setSelectedCid('');
+    setSelectedCidDesc('');
+    setCidSearch('');
   };
 
   const handleSelectCid = (cid: SigtapCid) => {
@@ -224,6 +251,7 @@ const PTS: React.FC = () => {
     setSelectedCid('');
     setSelectedCidDesc('');
     setCidSearch('');
+    setSigtapProcs([]);
   };
 
   const openNewDialog = () => {
@@ -274,7 +302,6 @@ const PTS: React.FC = () => {
       };
 
       if (editingPts) {
-        // UPDATE
         const { error } = await (supabase as any)
           .from('pts')
           .update(ptsPayload)
@@ -293,7 +320,6 @@ const PTS: React.FC = () => {
         });
         toast.success('PTS atualizado com sucesso!');
       } else {
-        // INSERT
         await (supabase as any).from('pts').insert(ptsPayload);
 
         await (supabase as any).from('prontuarios').insert({
@@ -339,7 +365,22 @@ const PTS: React.FC = () => {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
-  const showSigtap = (isFisioterapeuta || isMaster) && sigtapProcs.length > 0;
+  const showSigtap = (isFisioterapeuta || isMaster) && (sigtapProcs.length > 0 || loadingProcs);
+
+  // Group procedures by specialty for display
+  const procsBySpecialty = useMemo(() => {
+    const map: Record<string, SigtapProcedimento[]> = {};
+    for (const p of sigtapProcs) {
+      if (!map[p.especialidade]) map[p.especialidade] = [];
+      map[p.especialidade].push(p);
+    }
+    return map;
+  }, [sigtapProcs]);
+
+  const getSpecLabelForSigtap = (key: string): string => {
+    const entry = Object.entries(SPECIALTY_TO_SIGTAP).find(([, v]) => v === key);
+    return entry ? entry[0] : key;
+  };
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -417,30 +458,58 @@ const PTS: React.FC = () => {
               )}
             </div>
 
-            {/* SIGTAP Section - Fisioterapeutas + Master */}
+            <div>
+              <Label>Especialidades Envolvidas</Label>
+              <p className="text-xs text-muted-foreground mb-1">Selecione as especialidades para carregar procedimentos SIGTAP correspondentes</p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {SPECIALTIES.map(spec => (
+                  <label key={spec} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <Checkbox checked={form.especialidades_envolvidas.includes(spec)} onCheckedChange={() => toggleSpec(spec)} />
+                    {spec}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* SIGTAP Section - Dynamic per specialty */}
             {showSigtap && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold flex items-center gap-1.5">
-                  📋 Procedimento SIGTAP (Fisioterapia)
+                  📋 Procedimento SIGTAP
+                  {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
                 </Label>
-                <Select value={selectedProcCodigo} onValueChange={v => {
-                  setSelectedProcCodigo(v);
-                  setSelectedCid('');
-                  setSelectedCidDesc('');
-                  setCidSearch('');
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sigtapProcs.map(p => (
-                      <SelectItem key={p.codigo} value={p.codigo}>
-                        <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
-                        <span className="text-xs">{p.nome}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+                {sigtapProcs.length > 0 && (
+                  <Select value={selectedProcCodigo} onValueChange={v => {
+                    setSelectedProcCodigo(v);
+                    setSelectedCid('');
+                    setSelectedCidDesc('');
+                    setCidSearch('');
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(procsBySpecialty).map(([esp, procs]) => (
+                        <React.Fragment key={esp}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                            {getSpecLabelForSigtap(esp)} ({procs.length})
+                          </div>
+                          {procs.map(p => (
+                            <SelectItem key={p.codigo} value={p.codigo}>
+                              <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
+                              <span className="text-xs">{p.nome}</span>
+                            </SelectItem>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {sigtapProcs.length === 0 && !loadingProcs && (
+                  <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado para as especialidades selecionadas. Execute a sincronização DATASUS nas Configurações.</p>
+                )}
 
                 {selectedProcCodigo && (
                   <div className="space-y-2">
@@ -537,17 +606,7 @@ const PTS: React.FC = () => {
                   placeholder="6-12 meses..." />
               </div>
             </div>
-            <div>
-              <Label>Especialidades Envolvidas</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {SPECIALTIES.map(spec => (
-                  <label key={spec} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                    <Checkbox checked={form.especialidades_envolvidas.includes(spec)} onCheckedChange={() => toggleSpec(spec)} />
-                    {spec}
-                  </label>
-                ))}
-              </div>
-            </div>
+
             <Button className="w-full" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               {editingPts ? 'Salvar Alterações' : 'Salvar PTS'}
