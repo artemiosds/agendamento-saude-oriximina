@@ -361,12 +361,6 @@ const PTS: React.FC = () => {
     setSaving(false);
   };
 
-  if (!can('tratamento', 'can_view')) {
-    return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
-  }
-
-  const showSigtap = (isFisioterapeuta || isMaster) && (sigtapProcs.length > 0 || loadingProcs);
-
   // Group procedures by specialty for display
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
@@ -377,10 +371,16 @@ const PTS: React.FC = () => {
     return map;
   }, [sigtapProcs]);
 
-  const getSpecLabelForSigtap = (key: string): string => {
+  const getSpecLabelForSigtap = useCallback((key: string): string => {
     const entry = Object.entries(SPECIALTY_TO_SIGTAP).find(([, v]) => v === key);
     return entry ? entry[0] : key;
-  };
+  }, []);
+
+  if (!can('tratamento', 'can_view')) {
+    return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
+  }
+
+  const showSigtap = (isFisioterapeuta || isMaster) && (sigtapProcs.length > 0 || loadingProcs);
 
   return (
     <div className="space-y-4 animate-fade-in">
