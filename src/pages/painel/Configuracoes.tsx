@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useData } from '@/contexts/DataContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
+import SigtapSyncPanel from '@/components/SigtapSyncPanel';
 import ConfiguracaoTriagem from '@/components/ConfiguracaoTriagem';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
@@ -1166,6 +1167,9 @@ const Configuracoes: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* SIGTAP Sync Panel - Master only */}
+          {user?.role === 'master' && <SigtapSyncPanel />}
 
           {/* Procedimentos Clínicos */}
           <GerenciarProcedimentos />
