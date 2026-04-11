@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { RefreshCw, CheckCircle2, AlertCircle, Loader2, Database, XCircle, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import SigtapZipImport from '@/components/SigtapZipImport';
 
 const ALL_SPECIALTIES = [
   { key: 'fisioterapia', label: 'Fisioterapia' },
@@ -705,6 +706,8 @@ const SigtapSyncPanel: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      {/* ZIP Import Fallback */}
+      <SigtapZipImport />
     </div>
   );
 };
