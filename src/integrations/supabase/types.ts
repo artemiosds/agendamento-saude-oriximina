@@ -1497,6 +1497,39 @@ export type Database = {
         }
         Relationships: []
       }
+      pts_import_log: {
+        Row: {
+          competencia: string
+          detalhes: Json
+          especialidade: string
+          id: string
+          importado_em: string
+          tipo: string
+          total_cids: number
+          total_procedimentos: number
+        }
+        Insert: {
+          competencia?: string
+          detalhes?: Json
+          especialidade?: string
+          id?: string
+          importado_em?: string
+          tipo?: string
+          total_cids?: number
+          total_procedimentos?: number
+        }
+        Update: {
+          competencia?: string
+          detalhes?: Json
+          especialidade?: string
+          id?: string
+          importado_em?: string
+          tipo?: string
+          total_cids?: number
+          total_procedimentos?: number
+        }
+        Relationships: []
+      }
       salas: {
         Row: {
           ativo: boolean
