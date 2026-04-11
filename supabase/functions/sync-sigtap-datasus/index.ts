@@ -6,73 +6,75 @@ const corsHeaders = {
 };
 
 const SPECIALTY_MAP = [
-  { grupo: '03', subgrupo: '0205', especialidade: 'fisioterapia' },
-  { grupo: '03', subgrupo: '0206', especialidade: 'fisioterapia' },
-  { grupo: '03', subgrupo: '0207', especialidade: 'nutricao' },
-  { grupo: '03', subgrupo: '0208', especialidade: 'psicologia' },
-  { grupo: '03', subgrupo: '0209', especialidade: 'terapia_ocupacional' },
-  { grupo: '03', subgrupo: '0210', especialidade: 'fonoaudiologia' },
-  { grupo: '03', subgrupo: '0211', especialidade: 'assistencia_social' },
-  { grupo: '03', subgrupo: '0101', especialidade: 'enfermagem' },
-  { grupo: '03', subgrupo: '0201', especialidade: 'medico' },
+  { grupo: '03', subgrupo: '05', especialidade: 'fisioterapia', label: 'Fisioterapia - Pré/Pós Op e Alterações Motoras' },
+  { grupo: '03', subgrupo: '06', especialidade: 'fisioterapia', label: 'Fisioterapia - Neuro e Desenvolvimento' },
+  { grupo: '03', subgrupo: '07', especialidade: 'nutricao', label: 'Nutrição' },
+  { grupo: '03', subgrupo: '08', especialidade: 'psicologia', label: 'Psicologia' },
+  { grupo: '03', subgrupo: '09', especialidade: 'terapia_ocupacional', label: 'Terapia Ocupacional' },
+  { grupo: '03', subgrupo: '10', especialidade: 'fonoaudiologia', label: 'Fonoaudiologia' },
+  { grupo: '03', subgrupo: '11', especialidade: 'assistencia_social', label: 'Assistência Social' },
+  { grupo: '03', subgrupo: '01', especialidade: 'enfermagem', label: 'Enfermagem' },
+  { grupo: '03', subgrupo: '02', especialidade: 'medico', label: 'Médico - Consultas e Atendimentos' },
 ];
 
 const DATASUS_URL = "https://servicos.saude.gov.br/sigtap/ProcedimentoService/v1";
 
-function buildSearchEnvelope(grupo: string, subgrupo: string, competencia: string, regInicial: number): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope 
-  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-  xmlns:proc="http://servicos.saude.gov.br/sigtap/v1/procedimentoservice"
-  xmlns:grup="http://servicos.saude.gov.br/schema/sigtap/procedimento/nivelagregacao/v1/grupo"
-  xmlns:sub="http://servicos.saude.gov.br/schema/sigtap/procedimento/nivelagregacao/v1/subgrupo"
-  xmlns:com="http://servicos.saude.gov.br/schema/corporativo/v1/competencia"
+function buildPesquisarRequest(grupo: string, subgrupo: string, competencia: string): string {
+  return `<soap:Envelope 
+  xmlns:soap="http://www.w3.org/2003/05/soap-envelope" 
+  xmlns:proc="http://servicos.saude.gov.br/sigtap/v1/procedimentoservice" 
+  xmlns:grup="http://servicos.saude.gov.br/schema/sigtap/procedimento/nivelagregacao/v1/grupo" 
+  xmlns:sub="http://servicos.saude.gov.br/schema/sigtap/procedimento/nivelagregacao/v1/subgrupo" 
+  xmlns:com="http://servicos.saude.gov.br/schema/corporativo/v1/competencia" 
   xmlns:pag="http://servicos.saude.gov.br/wsdl/mensageria/v1/paginacao">
-  <soapenv:Header>
+  <soap:Header>
     <wsse:Security 
-      xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-      xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-      <wsse:UsernameToken wsu:Id="UsernameToken-1">
+      xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+      <wsse:UsernameToken 
+        wsu:Id="Id-0001334008436683-000000002c4a1908-1" 
+        xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
         <wsse:Username>SIGTAP.PUBLICO</wsse:Username>
-        <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">sigtap#2015public</wsse:Password>
+        <wsse:Password 
+          Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">sigtap#2015public</wsse:Password>
       </wsse:UsernameToken>
     </wsse:Security>
-  </soapenv:Header>
-  <soapenv:Body>
+  </soap:Header>
+  <soap:Body>
     <proc:requestPesquisarProcedimentos>
       <grup:codigoGrupo>${grupo}</grup:codigoGrupo>
       <sub:codigoSubgrupo>${subgrupo}</sub:codigoSubgrupo>
       <com:competencia>${competencia}</com:competencia>
       <pag:Paginacao>
-        <pag:registroInicial>${regInicial}</pag:registroInicial>
+        <pag:registroInicial>01</pag:registroInicial>
         <pag:quantidadeRegistros>100</pag:quantidadeRegistros>
-        <pag:totalRegistros>0</pag:totalRegistros>
+        <pag:totalRegistros>100</pag:totalRegistros>
       </pag:Paginacao>
     </proc:requestPesquisarProcedimentos>
-  </soapenv:Body>
-</soapenv:Envelope>`;
+  </soap:Body>
+</soap:Envelope>`;
 }
 
-function buildDetailEnvelope(codigoProcedimento: string, competencia: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-  xmlns:proc="http://servicos.saude.gov.br/sigtap/v1/procedimentoservice"
-  xmlns:proc1="http://servicos.saude.gov.br/schema/sigtap/procedimento/v1/procedimento"
-  xmlns:com="http://servicos.saude.gov.br/schema/corporativo/v1/competencia"
-  xmlns:det="http://servicos.saude.gov.br/wsdl/mensageria/sigtap/v1/detalheadicional"
+function buildDetalharRequest(codigoProcedimento: string, competencia: string): string {
+  return `<soap:Envelope 
+  xmlns:soap="http://www.w3.org/2003/05/soap-envelope" 
+  xmlns:proc="http://servicos.saude.gov.br/sigtap/v1/procedimentoservice" 
+  xmlns:proc1="http://servicos.saude.gov.br/schema/sigtap/procedimento/v1/procedimento" 
+  xmlns:com="http://servicos.saude.gov.br/schema/corporativo/v1/competencia" 
+  xmlns:det="http://servicos.saude.gov.br/wsdl/mensageria/sigtap/v1/detalheadicional" 
   xmlns:pag="http://servicos.saude.gov.br/wsdl/mensageria/v1/paginacao">
-  <soapenv:Header>
-    <wsse:Security
-      xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"
-      xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
-      <wsse:UsernameToken wsu:Id="UsernameToken-1">
+  <soap:Header>
+    <wsse:Security 
+      xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+      <wsse:UsernameToken 
+        wsu:Id="Id-0001334008436683-000000002c4a1908-1" 
+        xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
         <wsse:Username>SIGTAP.PUBLICO</wsse:Username>
-        <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">sigtap#2015public</wsse:Password>
+        <wsse:Password 
+          Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">sigtap#2015public</wsse:Password>
       </wsse:UsernameToken>
     </wsse:Security>
-  </soapenv:Header>
-  <soapenv:Body>
+  </soap:Header>
+  <soap:Body>
     <proc:requestDetalharProcedimento>
       <proc1:codigoProcedimento>${codigoProcedimento}</proc1:codigoProcedimento>
       <com:competencia>${competencia}</com:competencia>
@@ -82,20 +84,19 @@ function buildDetailEnvelope(codigoProcedimento: string, competencia: string): s
           <det:Paginacao>
             <pag:registroInicial>1</pag:registroInicial>
             <pag:quantidadeRegistros>999</pag:quantidadeRegistros>
-            <pag:totalRegistros>0</pag:totalRegistros>
+            <pag:totalRegistros>999</pag:totalRegistros>
           </det:Paginacao>
         </det:DetalheAdicional>
       </proc:DetalhesAdicionais>
     </proc:requestDetalharProcedimento>
-  </soapenv:Body>
-</soapenv:Envelope>`;
+  </soap:Body>
+</soap:Envelope>`;
 }
 
-// Extract text content from XML elements by local name (namespace-agnostic)
+// Namespace-agnostic XML element extraction by local name
 function extractByLocalName(xml: string, localName: string): string[] {
   const results: string[] = [];
-  // Match any namespace prefix (or none) before the local name
-  const regex = new RegExp(`<(?:[a-zA-Z0-9]+:)?${localName}[^>]*>([^<]*)</(?:[a-zA-Z0-9]+:)?${localName}>`, "gi");
+  const regex = new RegExp(`<(?:[a-zA-Z0-9]+:)?${localName}(?:\\s[^>]*)?>([^<]*)</(?:[a-zA-Z0-9]+:)?${localName}>`, "gi");
   let m: RegExpExecArray | null;
   while ((m = regex.exec(xml)) !== null) {
     const val = m[1].trim();
@@ -104,25 +105,34 @@ function extractByLocalName(xml: string, localName: string): string[] {
   return results;
 }
 
-function hasFault(xml: string): string | null {
-  const faultStrings = extractByLocalName(xml, "faultstring");
-  if (faultStrings.length > 0) return faultStrings[0];
-  // Also check for Fault element
-  if (xml.includes("Fault") && xml.includes("faultstring")) {
-    const match = xml.match(/<(?:[a-zA-Z0-9]+:)?faultstring[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?faultstring>/i);
-    if (match) return match[1].trim();
-  }
-  return null;
+function extractFault(xml: string): string | null {
+  if (!xml.includes("Fault") && !xml.includes("fault")) return null;
+  const match = xml.match(/<(?:[a-zA-Z0-9]+:)?faultstring[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?faultstring>/i);
+  if (match) return match[1].trim();
+  const reason = xml.match(/<(?:[a-zA-Z0-9]+:)?Text[^>]*>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?Text>/i);
+  if (reason) return reason[1].trim();
+  return "Erro desconhecido do DATASUS";
 }
 
 interface ProcInfo { codigo: string; nome: string; }
 
 function parseProcedimentos(xml: string): ProcInfo[] {
   const procs: ProcInfo[] = [];
-  const codigos = extractByLocalName(xml, "codigoProcedimento");
-  const nomes = extractByLocalName(xml, "nomeProcedimento");
+  // Try codigoProcedimento/nomeProcedimento first
+  let codigos = extractByLocalName(xml, "codigoProcedimento");
+  let nomes = extractByLocalName(xml, "nomeProcedimento");
+  
+  // Fallback: try just 'codigo' and 'nome' if specific ones not found
+  if (codigos.length === 0) {
+    codigos = extractByLocalName(xml, "codigo");
+    nomes = extractByLocalName(xml, "nome");
+  }
+  
   for (let i = 0; i < codigos.length; i++) {
-    procs.push({ codigo: codigos[i], nome: nomes[i] || codigos[i] });
+    // Filter: procedure codes are numeric strings like "0302050019"
+    if (/^\d{10}$/.test(codigos[i])) {
+      procs.push({ codigo: codigos[i], nome: nomes[i] || codigos[i] });
+    }
   }
   return procs;
 }
@@ -133,47 +143,44 @@ function parseCids(xml: string): CidInfo[] {
   const cids: CidInfo[] = [];
   const codigos = extractByLocalName(xml, "codigoCID");
   const descricoes = extractByLocalName(xml, "nomeCID");
-  for (let i = 0; i < codigos.length; i++) {
-    cids.push({ codigo: codigos[i], descricao: descricoes[i] || '' });
+  
+  if (codigos.length > 0) {
+    for (let i = 0; i < codigos.length; i++) {
+      cids.push({ codigo: codigos[i], descricao: descricoes[i] || '' });
+    }
+    return cids;
+  }
+  
+  // Fallback: scan for CID-like codes (e.g., G800, F840, M199)
+  const cidPattern = /([A-Z]\d{2,3}\.?\d*)/g;
+  const allCodes = [...new Set(xml.match(cidPattern) || [])];
+  for (const code of allCodes) {
+    // Only real CID codes, skip XML artifacts
+    if (/^[A-Z]\d{2,3}$/.test(code) || /^[A-Z]\d{2}\.\d{1,2}$/.test(code)) {
+      cids.push({ codigo: code, descricao: '' });
+    }
   }
   return cids;
 }
 
-async function soapSearch(body: string): Promise<string> {
+async function soapFetch(body: string): Promise<string> {
   const resp = await fetch(DATASUS_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "text/xml;charset=UTF-8",
-      "SOAPAction": '"http://servicos.saude.gov.br/sigtap/v1/procedimentoservice/pesquisarProcedimentos"',
+      "Content-Type": "application/soap+xml;charset=UTF-8",
+      "SOAPAction": "",
     },
     body,
   });
+  const text = await resp.text();
   if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`DATASUS HTTP ${resp.status}: ${txt.substring(0, 300)}`);
+    const fault = extractFault(text);
+    throw new Error(fault || `DATASUS HTTP ${resp.status}`);
   }
-  return await resp.text();
+  return text;
 }
 
-async function soapDetail(body: string): Promise<string> {
-  const resp = await fetch(DATASUS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml;charset=UTF-8",
-      "SOAPAction": '"http://servicos.saude.gov.br/sigtap/v1/procedimentoservice/detalharProcedimento"',
-    },
-    body,
-  });
-  if (!resp.ok) {
-    const txt = await resp.text();
-    throw new Error(`DATASUS HTTP ${resp.status}: ${txt.substring(0, 300)}`);
-  }
-  return await resp.text();
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
-}
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -191,13 +198,21 @@ Deno.serve(async (req) => {
     const now = new Date();
     const competencia = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const resultado: Array<{ especialidade: string; procedimentos: number; cids: number; error?: string }> = [];
+    const resultado: Array<{ especialidade: string; procedimentos: number; cids: number; error?: string; label?: string }> = [];
     let grandTotalProcs = 0;
     let grandTotalCids = 0;
 
+    // Group subgroups by specialty
+    const specSubgroups: Record<string, typeof SPECIALTY_MAP> = {};
+    for (const m of SPECIALTY_MAP) {
+      if (!requestedSpecs.includes(m.especialidade)) continue;
+      if (!specSubgroups[m.especialidade]) specSubgroups[m.especialidade] = [];
+      specSubgroups[m.especialidade].push(m);
+    }
+
     for (const esp of requestedSpecs) {
-      const mappings = SPECIALTY_MAP.filter(m => m.especialidade === esp);
-      if (mappings.length === 0) {
+      const mappings = specSubgroups[esp];
+      if (!mappings || mappings.length === 0) {
         resultado.push({ especialidade: esp, procedimentos: 0, cids: 0, error: "subgrupo_desconhecido" });
         continue;
       }
@@ -206,57 +221,50 @@ Deno.serve(async (req) => {
       let espTotalCids = 0;
 
       try {
-        // Fetch procedures from all subgroups for this specialty
         for (const mapping of mappings) {
-          let regInicial = 1;
-          let hasMore = true;
-          while (hasMore) {
-            console.log(`Fetching ${esp} grupo=${mapping.grupo} subgrupo=${mapping.subgrupo} reg=${regInicial}`);
-            const xml = await soapSearch(buildSearchEnvelope(mapping.grupo, mapping.subgrupo, competencia, regInicial));
-            
-            // Check for SOAP fault
-            const fault = hasFault(xml);
-            if (fault) {
-              console.error(`SOAP Fault for ${esp}/${mapping.subgrupo}: ${fault}`);
-              throw new Error(`DATASUS retornou erro: ${fault}`);
-            }
-
-            const found = parseProcedimentos(xml);
-            console.log(`Found ${found.length} procedures for ${esp}/${mapping.subgrupo}`);
-            espProcs.push(...found);
-            hasMore = found.length >= 100;
-            regInicial += found.length;
-            await delay(1000);
+          console.log(`[SIGTAP] Fetching ${esp} grupo=${mapping.grupo} subgrupo=${mapping.subgrupo}`);
+          
+          const xml = await soapFetch(buildPesquisarRequest(mapping.grupo, mapping.subgrupo, competencia));
+          
+          const fault = extractFault(xml);
+          if (fault) {
+            console.error(`[SIGTAP] SOAP Fault ${esp}/${mapping.subgrupo}: ${fault}`);
+            throw new Error(`DATASUS: ${fault}`);
           }
+
+          const found = parseProcedimentos(xml);
+          console.log(`[SIGTAP] Found ${found.length} procedures for ${esp}/${mapping.subgrupo}`);
+          espProcs.push(...found);
+          
+          await sleep(1500);
         }
 
-        // Deduplicate by codigo
+        // Deduplicate
         const uniqueMap = new Map<string, ProcInfo>();
         for (const p of espProcs) uniqueMap.set(p.codigo, p);
         espProcs = Array.from(uniqueMap.values());
 
         // Upsert procedures
-        if (espProcs.length > 0) {
-          for (const p of espProcs) {
-            await sb.from("sigtap_procedimentos").upsert({
-              codigo: p.codigo,
-              nome: p.nome,
-              especialidade: esp,
-              ativo: true,
-              updated_at: new Date().toISOString(),
-            }, { onConflict: "codigo" });
-          }
+        for (const p of espProcs) {
+          const { error: upsertErr } = await sb.from("sigtap_procedimentos").upsert({
+            codigo: p.codigo,
+            nome: p.nome,
+            especialidade: esp,
+            ativo: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "codigo" });
+          if (upsertErr) console.error(`[SIGTAP] Upsert error ${p.codigo}:`, upsertErr);
         }
 
         // Fetch CIDs for each procedure
         for (const proc of espProcs) {
           try {
-            const detailXml = await soapDetail(buildDetailEnvelope(proc.codigo, competencia));
+            const detailXml = await soapFetch(buildDetalharRequest(proc.codigo, competencia));
             
-            const fault = hasFault(detailXml);
+            const fault = extractFault(detailXml);
             if (fault) {
-              console.error(`CID fault for ${proc.codigo}: ${fault}`);
-              await delay(1000);
+              console.error(`[SIGTAP] CID fault ${proc.codigo}: ${fault}`);
+              await sleep(1500);
               continue;
             }
 
@@ -276,24 +284,23 @@ Deno.serve(async (req) => {
               espTotalCids += cids.length;
             }
 
-            // Update total_cids on the procedure
             await sb.from("sigtap_procedimentos")
               .update({ total_cids: cids.length })
               .eq("codigo", proc.codigo);
 
-            await delay(1000);
+            await sleep(1500);
           } catch (cidErr) {
-            console.error(`Error fetching CIDs for ${proc.codigo}:`, cidErr);
+            console.error(`[SIGTAP] CID error ${proc.codigo}:`, cidErr);
           }
         }
 
         if (espProcs.length === 0) {
-          const subgrupos = mappings.map(m => m.subgrupo).join(', ');
-          resultado.push({ 
-            especialidade: esp, 
-            procedimentos: 0, 
-            cids: 0, 
-            error: `nenhum_procedimento_subgrupo_${subgrupos}_competencia_${competencia}` 
+          resultado.push({
+            especialidade: esp,
+            procedimentos: 0,
+            cids: 0,
+            error: `nenhum_procedimento`,
+            label: mappings[0]?.label,
           });
         } else {
           resultado.push({ especialidade: esp, procedimentos: espProcs.length, cids: espTotalCids });
@@ -301,12 +308,13 @@ Deno.serve(async (req) => {
           grandTotalCids += espTotalCids;
         }
       } catch (espErr) {
-        console.error(`Error syncing ${esp}:`, espErr);
-        resultado.push({ 
-          especialidade: esp, 
-          procedimentos: 0, 
-          cids: 0, 
-          error: String(espErr).includes("DATASUS") ? String(espErr) : `conexao_falha` 
+        console.error(`[SIGTAP] Error syncing ${esp}:`, espErr);
+        const errMsg = String(espErr);
+        resultado.push({
+          especialidade: esp,
+          procedimentos: 0,
+          cids: 0,
+          error: errMsg.includes("DATASUS") ? errMsg : "conexao_falha",
         });
       }
     }
@@ -331,7 +339,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("sync-sigtap-datasus error:", err);
+    console.error("[SIGTAP] Fatal error:", err);
     return new Response(JSON.stringify({ success: false, error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
