@@ -163,21 +163,35 @@ function parseCids(xml: string): CidInfo[] {
   return cids;
 }
 
-async function soapFetch(body: string): Promise<string> {
-  const resp = await fetch(DATASUS_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/soap+xml;charset=UTF-8",
-      "SOAPAction": "",
-    },
-    body,
-  });
-  const text = await resp.text();
-  if (!resp.ok) {
-    const fault = extractFault(text);
-    throw new Error(fault || `DATASUS HTTP ${resp.status}`);
+async function soapFetch(body: string, timeoutMs = 30000): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    console.log(`[SIGTAP] Sending SOAP request to ${DATASUS_URL}`);
+    const resp = await fetch(DATASUS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/soap+xml;charset=UTF-8",
+        "SOAPAction": "",
+      },
+      body,
+      signal: controller.signal,
+    });
+    const text = await resp.text();
+    console.log(`[SIGTAP] Response status: ${resp.status}, length: ${text.length}`);
+    if (!resp.ok) {
+      const fault = extractFault(text);
+      throw new Error(fault || `DATASUS HTTP ${resp.status}: ${text.substring(0, 200)}`);
+    }
+    return text;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("DATASUS: Timeout - servidor não respondeu em 30s");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return text;
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
