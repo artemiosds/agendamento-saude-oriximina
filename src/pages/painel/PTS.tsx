@@ -213,10 +213,10 @@ const PTS: React.FC = () => {
     });
   }, [ptsList, search, pacientes]);
 
-  const canEditPts = (pts: PTSRecord) => {
+  const canEditPts = useCallback((pts: PTSRecord) => {
     if (isMaster) return true;
     return pts.professional_id === user?.id;
-  };
+  }, [isMaster, user]);
 
   const toggleSpec = (spec: string) => {
     setForm(p => {
