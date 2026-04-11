@@ -848,7 +848,7 @@ const Tratamentos: React.FC = () => {
     setRemarcarData(newDate);
     setRemarcarBlockedMsg("");
     if (!newDate || !selectedCycle) return;
-    if (isMaster) return; // Master bypasses block checks
+    if (canControlSessions) return; // Master and profissional bypass block checks
     try {
       const { data: result } = await supabase.rpc("is_date_blocked", {
         p_date: newDate,
