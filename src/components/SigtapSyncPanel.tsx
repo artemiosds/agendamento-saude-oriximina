@@ -40,11 +40,7 @@ interface SyncHistory {
 function formatErrorMessage(esp: string, error: string): string {
   const label = ALL_SPECIALTIES.find(s => s.key === esp)?.label || esp;
   if (error.includes('nenhum_procedimento')) {
-    const subMatch = error.match(/subgrupo_([0-9,\s]+)/);
-    const compMatch = error.match(/competencia_(\d+)/);
-    const sub = subMatch ? subMatch[1] : '';
-    const comp = compMatch ? compMatch[1] : '';
-    return `Nenhum procedimento encontrado para ${label} (subgrupo ${sub}) na competência ${comp}`;
+    return `Nenhum procedimento encontrado para ${label}`;
   }
   if (error.includes('conexao_falha')) {
     return `Falha na conexão com DATASUS`;
@@ -52,8 +48,8 @@ function formatErrorMessage(esp: string, error: string): string {
   if (error.includes('subgrupo_desconhecido')) {
     return `Subgrupo desconhecido para ${label}`;
   }
-  if (error.includes('DATASUS')) {
-    return error.replace(/DATASUS HTTP \d+:\s*/, 'Erro DATASUS: ').substring(0, 120);
+  if (error.includes('DATASUS:')) {
+    return error;
   }
   return `Erro: ${error.substring(0, 100)}`;
 }
@@ -76,11 +72,7 @@ const SigtapSyncPanel: React.FC = () => {
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
   const toggleAll = () => {
-    if (selected.size === ALL_SPECIALTIES.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(ALL_SPECIALTIES.map(s => s.key)));
-    }
+    setSelected(selected.size === ALL_SPECIALTIES.length ? new Set() : new Set(ALL_SPECIALTIES.map(s => s.key)));
   };
 
   const toggleOne = (key: string) => {
@@ -112,7 +104,18 @@ const SigtapSyncPanel: React.FC = () => {
 
       setResults(data.resultado);
       setShowResults(true);
-      toast.success(`Sincronização concluída! ${data.total_procedimentos} procedimentos, ${data.total_cids} CIDs`);
+
+      const successCount = data.resultado.filter((r: SyncResult) => !r.error).length;
+      const failCount = data.resultado.filter((r: SyncResult) => !!r.error).length;
+
+      if (failCount === 0) {
+        toast.success(`Sincronização concluída! ${data.total_procedimentos} procedimentos, ${data.total_cids} CIDs`);
+      } else if (successCount === 0) {
+        toast.error('O servidor do DATASUS está temporariamente indisponível. Tente novamente em alguns minutos.');
+      } else {
+        toast.warning(`${successCount} especialidades sincronizadas. ${failCount} falharam — tente novamente.`);
+      }
+
       loadHistory();
     } catch (err: any) {
       console.error('Sync error:', err);
@@ -141,10 +144,15 @@ const SigtapSyncPanel: React.FC = () => {
 
   const renderResultText = (r: SyncResult) => {
     if (r.error) {
-      return <span className="text-destructive text-xs">{formatErrorMessage(r.especialidade, r.error)}</span>;
+      return <span className="text-xs text-destructive">{formatErrorMessage(r.especialidade, r.error)}</span>;
     }
     return <span className="text-muted-foreground">{r.procedimentos} proc. | {r.cids.toLocaleString('pt-BR')} CIDs</span>;
   };
+
+  // Summary counts
+  const successCount = results?.filter(r => !r.error).length || 0;
+  const failCount = results?.filter(r => !!r.error).length || 0;
+  const allFailed = results && results.length > 0 && successCount === 0;
 
   return (
     <div className="space-y-4">
@@ -211,6 +219,7 @@ const SigtapSyncPanel: React.FC = () => {
           {syncing && (
             <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
               <p className="text-sm font-medium">Sincronizando com DATASUS...</p>
+              <p className="text-xs text-muted-foreground">Aguarde, este processo pode levar alguns minutos.</p>
               <div className="space-y-1.5">
                 {ALL_SPECIALTIES.filter(s => selected.has(s.key)).map(s => (
                   <div key={s.key} className="flex items-center gap-2 text-sm">
@@ -223,11 +232,40 @@ const SigtapSyncPanel: React.FC = () => {
             </div>
           )}
 
-          {showResults && results && !syncing && (
+          {/* All failed fallback */}
+          {showResults && allFailed && !syncing && (
+            <div className="space-y-3 p-4 bg-destructive/5 rounded-lg border border-destructive/20">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                <p className="text-sm font-semibold text-destructive">Sincronização falhou</p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                O servidor do DATASUS está temporariamente indisponível. Tente novamente em alguns minutos.
+                Os dados existentes no sistema não foram alterados.
+              </p>
+              <div className="space-y-1">
+                {results!.map(r => (
+                  <div key={r.especialidade} className="flex items-center gap-2 text-sm">
+                    {renderResultIcon(r)}
+                    <span className="min-w-[140px]">{getSpecLabel(r.especialidade)}:</span>
+                    {renderResultText(r)}
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowResults(false)}>Fechar</Button>
+            </div>
+          )}
+
+          {/* Partial or full success */}
+          {showResults && results && !allFailed && !syncing && (
             <div className="space-y-3 p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <p className="text-sm font-semibold text-green-700 dark:text-green-400">Sincronização concluída!</p>
+                <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                  {failCount === 0
+                    ? 'Sincronização concluída!'
+                    : `${successCount} especialidades sincronizadas. ${failCount} falharam.`}
+                </p>
               </div>
               <div className="space-y-1">
                 {results.map(r => (
@@ -282,7 +320,10 @@ const SigtapSyncPanel: React.FC = () => {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs">
-                        <Badge variant="outline" className="text-green-600 border-green-300 text-xs">✅</Badge>
+                        {h.total_procedimentos > 0
+                          ? <Badge variant="outline" className="text-green-600 border-green-300 text-xs">✅</Badge>
+                          : <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">⚠️</Badge>
+                        }
                       </TableCell>
                     </TableRow>
                   ))}
