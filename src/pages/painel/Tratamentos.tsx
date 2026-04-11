@@ -868,7 +868,7 @@ const Tratamentos: React.FC = () => {
     setRemarcarSaving(true);
     try {
       const oldDate = remarcarTarget.scheduled_date;
-      if (!isMaster) {
+      if (!isMaster && !isProfissional) {
         const { data: blocked } = await supabase.rpc("is_date_blocked", {
           p_date: remarcarData,
           p_profissional_id: selectedCycle.professional_id,
@@ -2058,7 +2058,7 @@ const Tratamentos: React.FC = () => {
             }
           }}
           mode="agendar"
-          isMaster={isMaster}
+          isMaster={canControlSessions}
         />
 
         <ModalAgendarSessao
