@@ -706,6 +706,8 @@ const SigtapSyncPanel: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      {/* ZIP Import Fallback */}
+      <SigtapZipImport />
     </div>
   );
 };
