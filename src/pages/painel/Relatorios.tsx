@@ -1006,9 +1006,10 @@ ${dataRows}
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
 
-    const tableRows = mapaData.map((r, i) =>
-      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
-    ).join('');
+    const tableRows = mapaData.map((r, i) => {
+      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+    }).join('');
 
     const body = `
       <h2>Mapa de Atendimentos Concluídos</h2>
@@ -1017,10 +1018,10 @@ ${dataRows}
           <th style="width:30px;text-align:center">Nº</th>
           <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
           <th>CNS</th><th>Telefone</th><th>Profissional</th>
-          <th>Especialidade</th><th style="width:50px">CID</th>
+          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
@@ -1074,10 +1075,12 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'CID'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
     const rows = mapaData.map(r => [
       r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
-      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade, r.cid,
+      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
+      r.cid,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
