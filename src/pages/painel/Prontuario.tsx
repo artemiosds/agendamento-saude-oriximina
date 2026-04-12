@@ -1251,7 +1251,7 @@ const ProntuarioPage: React.FC = () => {
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
             {/* SOAP Evolution — ALL 5 types */}
-            <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
+            <div ref={soapRef} className={`space-y-3 bg-primary/5 rounded-lg p-4 border transition-all duration-500 ${sessaoHighlightSOAP ? 'border-primary ring-2 ring-primary/30 animate-pulse' : 'border-primary/20'}`}>
               <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
               <div>
                 <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
