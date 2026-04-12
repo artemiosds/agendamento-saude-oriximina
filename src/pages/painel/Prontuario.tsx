@@ -36,6 +36,7 @@ import DocumentosHistorico from "@/components/DocumentosHistorico";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
+import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
