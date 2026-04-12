@@ -285,7 +285,13 @@ const Relatorios: React.FC = () => {
     });
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
-      .filter(d => filterCargoProd === 'all' || d.profissao.toLowerCase().includes(filterCargoProd))
+      .filter(d => {
+        if (filterCargoProd === 'all') return true;
+        const cat = CATEGORIAS.find(c => c.key === filterCargoProd);
+        if (!cat) return true;
+        const prof = removeAccents(d.profissao);
+        return cat.profissoes.some(k => prof.includes(removeAccents(k)));
+      })
       .map(d => ({
         id: d.id,
         nome: d.nome,
@@ -308,35 +314,35 @@ const Relatorios: React.FC = () => {
   }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
-  const categoriaCards = useMemo(() => {
-    const cargoMap: Record<string, { emoji: string; label: string; keywords: string[] }> = {
-      'medico': { emoji: '👨‍⚕️', label: 'Médicos', keywords: ['médico', 'medico', 'medicina'] },
-      'psicologo': { emoji: '🧠', label: 'Psicólogos', keywords: ['psicólogo', 'psicologo', 'psicologia'] },
-      'fonoaudiologo': { emoji: '🗣️', label: 'Fonoaudiólogos', keywords: ['fonoaudiólogo', 'fonoaudiologo', 'fonoaudiologia'] },
-      'fisioterapeuta': { emoji: '🦿', label: 'Fisioterapeutas', keywords: ['fisioterapeuta', 'fisioterapia'] },
-      'terapeuta_ocupacional': { emoji: '🖐️', label: 'T. Ocupacional', keywords: ['terapeuta ocupacional', 'terapia ocupacional'] },
-      'nutricionista': { emoji: '🥗', label: 'Nutrição', keywords: ['nutricionista', 'nutrição', 'nutricao'] },
-      'enfermeiro': { emoji: '👩‍⚕️', label: 'Enfermagem', keywords: ['enfermeiro', 'enfermeira', 'técnico de enfermagem', 'tecnico de enfermagem', 'enfermagem'] },
-      'assistente_social': { emoji: '👥', label: 'Serviço Social', keywords: ['assistente social', 'serviço social', 'servico social'] },
-    };
+  const removeAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+  const CATEGORIAS = [
+    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', profissoes: ['medico', 'medicina', 'cirurgiao', 'infectologista'] },
+    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', profissoes: ['psicologo', 'psicologia'] },
+    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', profissoes: ['fonoaudiologo', 'fonoaudiologia'] },
+    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', profissoes: ['fisioterapeuta', 'fisioterapia'] },
+    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', profissoes: ['terapeuta ocupacional', 'terapia ocupacional', 'terapeuta_ocupacional', 'terapia_ocupacional'] },
+    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', profissoes: ['nutricionista', 'nutricao', 'nutricao'] },
+    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', profissoes: ['enfermeiro', 'enfermagem', 'tecnico_enfermagem', 'tecnico de enfermagem'] },
+    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', profissoes: ['assistente social', 'assistente_social', 'servico social', 'servico_social'] },
+  ];
+
+  const categoriaCards = useMemo(() => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
     const counts: Record<string, number> = {};
 
     filtered.forEach(a => {
       const func = profMap.get(a.profissionalId);
-      const profissao = (func?.profissao || '').toLowerCase();
-      for (const [key, cfg] of Object.entries(cargoMap)) {
-        if (cfg.keywords.some(k => profissao.includes(k))) {
-          counts[key] = (counts[key] || 0) + 1;
+      const profissao = removeAccents(func?.profissao || '');
+      for (const cat of CATEGORIAS) {
+        if (cat.profissoes.some(k => profissao.includes(removeAccents(k)))) {
+          counts[cat.key] = (counts[cat.key] || 0) + 1;
           break;
         }
       }
     });
 
-    return Object.entries(cargoMap)
-      .filter(([key]) => (counts[key] || 0) > 0)
-      .map(([key, cfg]) => ({ key, ...cfg, total: counts[key] || 0 }));
+    return CATEGORIAS.map(cat => ({ ...cat, total: counts[cat.key] || 0 }));
   }, [filtered, funcionarios]);
 
   // === PROD TOTALS ===
@@ -973,22 +979,23 @@ ${dataRows}
     if (mapaData.length === 0) return;
     const now = new Date().toLocaleString('pt-BR');
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
 
     const tableRows = mapaData.map((r, i) =>
-      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${r.cns}</td><td>${r.telefone}</td><td>${formatDateBR(r.data)}</td><td>${r.profissional_nome}</td><td>${r.especialidade}</td><td>${r.cid}</td></tr>`
+      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
     ).join('');
 
     const body = `
       <h2>Mapa de Atendimentos Concluídos</h2>
       <table>
         <thead><tr>
-          <th style="width:35px;text-align:center">Nº</th>
-          <th>Nome do Paciente</th><th>CNS</th><th>Telefone</th>
-          <th style="width:85px">Data</th><th>Profissional</th>
-          <th>Especialidade</th><th style="width:60px">CID</th>
+          <th style="width:30px;text-align:center">Nº</th>
+          <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
+          <th>CNS</th><th>Telefone</th><th>Profissional</th>
+          <th>Especialidade</th><th style="width:50px">CID</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="8" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+        <tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
@@ -1041,10 +1048,11 @@ ${dataRows}
 
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
-    const headers = ['Nº', 'Nome do Paciente', 'CNS', 'Telefone', 'Data', 'Profissional', 'Especialidade', 'CID'];
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'CID'];
     const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, r.cns, r.telefone,
-      formatDateBR(r.data), r.profissional_nome, r.especialidade, r.cid,
+      r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
+      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade, r.cid,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1332,23 +1340,21 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          {categoriaCards.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-              {categoriaCards.map(c => (
-                <Card
-                  key={c.key}
-                  className={`shadow-card border-0 cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${filterCargoProd === c.keywords[0] ? 'ring-2 ring-primary' : ''}`}
-                  onClick={() => setFilterCargoProd(filterCargoProd === c.keywords[0] ? 'all' : c.keywords[0])}
-                >
-                  <CardContent className="p-2.5 text-center">
-                    <p className="text-lg">{c.emoji}</p>
-                    <p className="text-lg font-bold text-foreground">{c.total}</p>
-                    <p className="text-[10px] text-muted-foreground leading-tight">{c.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            {categoriaCards.map(c => (
+              <Card
+                key={c.key}
+                className={`shadow-card border-0 cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${filterCargoProd === c.key ? 'ring-2 ring-primary' : ''}`}
+                onClick={() => setFilterCargoProd(filterCargoProd === c.key ? 'all' : c.key)}
+              >
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg">{c.emoji}</p>
+                  <p className="text-lg font-bold text-foreground">{c.total}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{c.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
@@ -2169,6 +2175,36 @@ th{background:#f1f5f9;font-weight:600;}
                 <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
                   <Download className="w-4 h-4 mr-1" />CSV
                 </Button>
+                <Button variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" onClick={() => {
+                  const now = new Date().toLocaleString('pt-BR');
+                  const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                  const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                  const tableRows = mapaData.map((r, i) =>
+                    `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
+                  ).join('');
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const logoUrl = window.location.origin + '/logo-sms.jpeg';
+                  printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Georgia,serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #333;}
+.header img{width:48px;height:48px;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+</body></html>`);
+                  printWindow.document.close();
+                  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                }}>
+                  <Printer className="w-4 h-4 mr-1" />Imprimir
+                </Button>
               </div>
 
               {mapaGenerated && mapaData.length === 0 && (
@@ -2181,33 +2217,53 @@ th{background:#f1f5f9;font-weight:600;}
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-muted/60">
-                        <th className="border border-border px-2 py-1.5 text-center w-10">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-center w-8">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-center w-10">Foto</th>
                         <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
                         <th className="border border-border px-2 py-1.5 text-left">CNS</th>
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
-                        <th className="border border-border px-2 py-1.5 text-left w-24">Data</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {mapaData.map((r, i) => (
-                        <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                          <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
-                          <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
-                          <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
-                          <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
-                          <td className="border border-border px-2 py-1">{formatDateBR(r.data)}</td>
-                          <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
-                          <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
-                          <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
-                        </tr>
-                      ))}
+                      {mapaData.map((r, i) => {
+                        const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                        const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
+                        const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                        return (
+                          <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                            <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
+                            <td className="border border-border px-2 py-1 text-center">
+                              <div className="relative group inline-block">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white mx-auto" style={{ backgroundColor: hashColor }} title={r.profissional_nome}>
+                                  {initials}
+                                </div>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-foreground text-background text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                  {r.profissional_nome}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
+                            <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
+                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
+                            <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={8} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={11} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
                     </tfoot>
                   </table>
