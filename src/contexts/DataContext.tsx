@@ -1637,7 +1637,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [],
   );
 
-
+  const getAvailableDatesInternal = useCallback(
     (profissionalId: string, unidadeId: string): string[] => {
       const disps = disponibilidadesRef.current;
       const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
