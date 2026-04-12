@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/PermissionsContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import React, { Suspense } from "react";
 
 // Helper: retry dynamic import once, then force full reload to bust stale chunks
@@ -140,12 +141,13 @@ const ModuleRoute: React.FC<{
 // ─── APP ──────────────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <PermissionsProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <PermissionsProvider>
             <DataProvider>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -293,6 +295,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+  </ThemeProvider>
   </QueryClientProvider>
 );
 

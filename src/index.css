@@ -70,6 +70,66 @@
     --clinical-card: 0 0% 100%;
     --clinical-border: 216 20% 90%;
   }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 20% 90%;
+
+    --card: 220 40% 13%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 220 40% 13%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 168 60% 42%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 20%;
+    --accent-foreground: 217 91% 70%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+
+    --success: 160 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 10%;
+    --info: 199 89% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 47% 14%;
+    --sidebar-accent-foreground: 210 20% 85%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(217, 91%, 60%), hsl(168, 60%, 42%));
+    --gradient-hero: linear-gradient(135deg, hsl(222, 47%, 11%), hsl(217, 91%, 40%));
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+    --shadow-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+
+    --clinical-primary: 215 40% 70%;
+    --clinical-accent: 174 51% 50%;
+    --clinical-success: 147 44% 50%;
+    --clinical-warning: 36 75% 55%;
+    --clinical-danger: 0 56% 55%;
+    --clinical-surface: 220 30% 14%;
+    --clinical-card: 220 40% 13%;
+    --clinical-border: 217 33% 20%;
+  }
 }
 
 @layer base {
@@ -93,6 +153,11 @@
     overflow-x: hidden;
     width: 100%;
   }
+
+  /* Smooth scroll globally */
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 @layer utilities {
@@ -108,6 +173,64 @@
   .shadow-elevated {
     box-shadow: var(--shadow-elevated);
   }
+}
+
+/* ─── PREMIUM MICRO-INTERACTIONS ──────────────────────────────── */
+
+/* Card hover lift */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Button press effect */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Input focus glow */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="combobox"]:focus-visible {
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.15);
+  transition: box-shadow 0.2s ease;
+}
+
+/* Shimmer skeleton animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.08) 40%,
+    hsl(var(--muted)) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.35);
 }
 
 /* Global print styles — hide UI chrome when printing from the app */
@@ -143,7 +266,6 @@
   thead {
     display: table-header-group;
   }
-  /* Signature and carimbo should not break across pages */
   .doc-sign-footer,
   .e-signature-box,
   .carimbo-digital,
