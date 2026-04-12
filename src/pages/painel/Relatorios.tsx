@@ -73,8 +73,9 @@ const Relatorios: React.FC = () => {
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
     num: number; paciente_nome: string; cns: string; telefone: string;
-    data: string; profissional_nome: string; especialidade: string; cid: string;
+    profissional_nome: string; profissional_id: string; especialidade: string; cid: string;
     tipo: string; cpf: string; data_nascimento: string; endereco: string;
+    procedimento_sigtap: string; nome_procedimento: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -314,35 +315,58 @@ const Relatorios: React.FC = () => {
   }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
-  const removeAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const normalizarProfissao = (str: string) => {
+    if (!str) return '';
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  };
+  const removeAccents = normalizarProfissao;
 
   const CATEGORIAS = [
-    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', profissoes: ['medico', 'medicina', 'cirurgiao', 'infectologista'] },
-    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', profissoes: ['psicologo', 'psicologia'] },
-    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', profissoes: ['fonoaudiologo', 'fonoaudiologia'] },
-    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', profissoes: ['fisioterapeuta', 'fisioterapia'] },
-    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', profissoes: ['terapeuta ocupacional', 'terapia ocupacional', 'terapeuta_ocupacional', 'terapia_ocupacional'] },
-    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', profissoes: ['nutricionista', 'nutricao', 'nutricao'] },
-    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', profissoes: ['enfermeiro', 'enfermagem', 'tecnico_enfermagem', 'tecnico de enfermagem'] },
-    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', profissoes: ['assistente social', 'assistente_social', 'servico social', 'servico_social'] },
+    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', cor: '#1B3A5C',
+      termos: ['medico', 'medicina', 'doutora', 'doutor', 'clinicogeral', 'cirurgiao', 'cirurgia', 'infectologista', 'infectologia'] },
+    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', cor: '#6B4C9A',
+      termos: ['psicologo', 'psicologa', 'psicologia'] },
+    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', cor: '#2E8B8B',
+      termos: ['fonoaudiologo', 'fonoaudiologa', 'fonoaudiologia', 'fono'] },
+    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', cor: '#2D7A4F',
+      termos: ['fisioterapeuta', 'fisioterapia', 'fisio'] },
+    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', cor: '#C17B1A',
+      termos: ['terapeutaocupacional', 'terapiaocupacional', 'to'] },
+    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', cor: '#E05A2B',
+      termos: ['nutricionista', 'nutricao', 'nutri'] },
+    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', cor: '#B83232',
+      termos: ['enfermeiro', 'enfermeira', 'enfermagem', 'tecnicoenfermagem', 'auxiliarenfermagem'] },
+    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', cor: '#3A6B9A',
+      termos: ['assistentesocial', 'servicosocial', 'social'] },
   ];
+
+  const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
+    const norm = normalizarProfissao(profissao);
+    return cat.termos.some(termo => norm.includes(termo));
+  };
 
   const categoriaCards = useMemo(() => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
-    const counts: Record<string, number> = {};
+    const counts: Record<string, { total: number; concluidos: number }> = {};
 
     filtered.forEach(a => {
       const func = profMap.get(a.profissionalId);
-      const profissao = removeAccents(func?.profissao || '');
+      const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
-        if (cat.profissoes.some(k => profissao.includes(removeAccents(k)))) {
-          counts[cat.key] = (counts[cat.key] || 0) + 1;
+        if (profissionalPertenceCategoria(profissao, cat)) {
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          counts[cat.key].total++;
+          if (a.status === 'concluido') counts[cat.key].concluidos++;
           break;
         }
       }
     });
 
-    return CATEGORIAS.map(cat => ({ ...cat, total: counts[cat.key] || 0 }));
+    return CATEGORIAS.map(cat => ({
+      ...cat,
+      total: counts[cat.key]?.total || 0,
+      concluidos: counts[cat.key]?.concluidos || 0,
+    }));
   }, [filtered, funcionarios]);
 
   // === PROD TOTALS ===
