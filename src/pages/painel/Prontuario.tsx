@@ -1642,7 +1642,7 @@ const ProntuarioPage: React.FC = () => {
             )}
 
             {/* Procedimentos Realizados — checkboxes */}
-            {filteredProcedimentos.length > 0 && (
+            {isProfBlocoVisible('procedimentos') && filteredProcedimentos.length > 0 && (
               <div>
                 <Label className="mb-2 block">Procedimentos Realizados</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/30 rounded-lg p-3 border max-h-40 overflow-y-auto">
