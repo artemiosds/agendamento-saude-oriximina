@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Pencil, Save, X, Lock, Search } from "lucide-react";
+import { Pencil, Save, X, Lock, Search, User, Calendar, CreditCard, Heart, Activity, FileText, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -28,12 +28,20 @@ interface FichaPacienteCabecalhoProps {
   onPacienteUpdated?: () => void;
 }
 
-const RISCO_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  nao_urgente: { bg: "bg-green-100", text: "text-green-800", label: "🟢 Não urgente" },
-  pouco_urgente: { bg: "bg-yellow-100", text: "text-yellow-800", label: "🟡 Pouco urgente" },
-  urgente: { bg: "bg-orange-100", text: "text-orange-800", label: "🟠 Urgente" },
-  muito_urgente: { bg: "bg-red-100", text: "text-red-800", label: "🔴 Muito urgente" },
-  emergencia: { bg: "bg-red-200", text: "text-red-900", label: "🔴 Emergência" },
+const RISCO_COLORS: Record<string, { bg: string; text: string; label: string; border: string }> = {
+  nao_urgente: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", label: "Não urgente" },
+  pouco_urgente: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", label: "Pouco urgente" },
+  urgente: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", label: "Urgente" },
+  muito_urgente: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", label: "Muito urgente" },
+  emergencia: { bg: "bg-red-100", text: "text-red-800", border: "border-red-300", label: "Emergência" },
+};
+
+const RISCO_DOT: Record<string, string> = {
+  nao_urgente: "bg-emerald-500",
+  pouco_urgente: "bg-amber-500",
+  urgente: "bg-orange-500",
+  muito_urgente: "bg-red-500",
+  emergencia: "bg-red-600",
 };
 
 const calcularIdade = (dataNasc: string): string => {
@@ -62,7 +70,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
   const [editData, setEditData] = useState({ nome: "", data_nascimento: "", cns: "", cid: "", profissionalId: "" });
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
-  // CID autocomplete
   const [cidSearch, setCidSearch] = useState("");
   const [cidResults, setCidResults] = useState<{ codigo: string; descricao: string }[]>([]);
   const [cidOpen, setCidOpen] = useState(false);
@@ -96,7 +103,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
     setErrors({});
   };
 
-  // Debounced CID search
   useEffect(() => {
     if (!cidSearch || cidSearch.length < 2) { setCidResults([]); return; }
     const timer = setTimeout(async () => {
@@ -126,7 +132,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
 
       if (error) throw error;
 
-      // Update professional on appointment if changed
       if (agendamentoId && editData.profissionalId !== profissionalId) {
         const profFunc = funcionarios.find(f => f.id === editData.profissionalId);
         await supabase.from("agendamentos").update({
@@ -135,7 +140,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         }).eq("id", agendamentoId);
       }
 
-      // Reload patient data
       const { data } = await supabase.from("pacientes").select("*").eq("id", pacienteId).single();
       if (data) setPaciente(data);
 
@@ -153,188 +157,240 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
 
   const idade = calcularIdade(paciente.data_nascimento);
   const riscoData = triagem?.classificacao_risco ? RISCO_COLORS[triagem.classificacao_risco] : null;
+  const riscoDot = triagem?.classificacao_risco ? RISCO_DOT[triagem.classificacao_risco] : null;
   const activeProfessionals = funcionarios.filter(f => f.ativo && f.profissao);
-
-  const cidDisplay = paciente.cid
-    ? paciente.cid
-    : "—";
+  const cidDisplay = paciente.cid || "—";
 
   return (
-    <div className="bg-muted/30 border rounded-lg p-4 space-y-3">
-      {/* Header row */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold font-display uppercase tracking-wide text-foreground">
-          Ficha do Paciente
-        </h3>
+    <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <FileText className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold font-display text-foreground tracking-wide">
+              Ficha do Paciente
+            </h3>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              Nº {paciente.id?.slice(-6) || "000000"}
+            </span>
+          </div>
+        </div>
         {!editing ? (
-          <Button variant="ghost" size="sm" onClick={startEdit}>
-            <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+          <Button variant="outline" size="sm" onClick={startEdit} className="h-8 text-xs gap-1.5 rounded-lg border-border/60 hover:bg-accent/50">
+            <Pencil className="w-3 h-3" /> Editar
           </Button>
         ) : (
-          <div className="flex gap-1">
-            <Button variant="default" size="sm" onClick={handleSave} disabled={saving}>
-              <Save className="w-3.5 h-3.5 mr-1" /> {saving ? "Salvando..." : "Salvar"}
+          <div className="flex gap-1.5">
+            <Button size="sm" onClick={handleSave} disabled={saving} className="h-8 text-xs gap-1.5 rounded-lg">
+              <Save className="w-3 h-3" /> {saving ? "Salvando..." : "Salvar"}
             </Button>
-            <Button variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
-              <X className="w-3.5 h-3.5 mr-1" /> Cancelar
+            <Button variant="ghost" size="sm" onClick={cancelEdit} disabled={saving} className="h-8 text-xs gap-1.5 rounded-lg">
+              <X className="w-3 h-3" /> Cancelar
             </Button>
           </div>
         )}
       </div>
 
-      {/* Data grid */}
-      {!editing ? (
-        /* READ MODE */
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <div>
-            <span className="text-muted-foreground text-xs">Nome completo</span>
-            <p className="font-medium text-foreground">{paciente.nome}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs flex items-center gap-1">Nº Prontuário <Lock className="w-3 h-3" /></span>
-            <p className="font-mono text-foreground">#{paciente.id?.slice(-6) || "—"}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">Data de nascimento</span>
-            <p className="text-foreground">
-              {paciente.data_nascimento
-                ? new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")
-                : "—"}
-            </p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">Idade</span>
-            <p className="text-foreground">{idade}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">Cartão SUS (CNS)</span>
-            <p className="font-mono text-foreground">{paciente.cns || "—"}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">CPF</span>
-            <p className="font-mono text-foreground">{paciente.cpf || "—"}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">CID</span>
-            <p className="text-foreground">{cidDisplay}</p>
-          </div>
-          <div>
-            <span className="text-muted-foreground text-xs">Profissional responsável</span>
-            <p className="text-foreground">{profissionalNome || "—"}</p>
-          </div>
-        </div>
-      ) : (
-        /* EDIT MODE */
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <div>
-            <Label className="text-xs">Nome completo <span className="text-destructive">*</span></Label>
-            <Input
-              value={editData.nome}
-              onChange={e => { setEditData(d => ({ ...d, nome: e.target.value })); setErrors(e2 => ({ ...e2, nome: false })); }}
-              className={errors.nome ? "border-destructive" : ""}
-            />
-            {errors.nome && <p className="text-xs text-destructive mt-0.5">Nome é obrigatório</p>}
-          </div>
-          <div>
-            <Label className="text-xs flex items-center gap-1">Nº Prontuário <Lock className="w-3 h-3 text-muted-foreground" /></Label>
-            <Input value={`#${paciente.id?.slice(-6) || ""}`} disabled className="opacity-60" />
-          </div>
-          <div>
-            <Label className="text-xs">Data de nascimento</Label>
-            <Input
-              type="date"
-              value={editData.data_nascimento}
-              onChange={e => setEditData(d => ({ ...d, data_nascimento: e.target.value }))}
-            />
-          </div>
-          <div>
-            <Label className="text-xs flex items-center gap-1">Idade <Lock className="w-3 h-3 text-muted-foreground" /></Label>
-            <Input value={calcularIdade(editData.data_nascimento)} disabled className="opacity-60" />
-          </div>
-          <div>
-            <Label className="text-xs">Cartão SUS (CNS)</Label>
-            <Input
-              value={editData.cns}
-              onChange={e => setEditData(d => ({ ...d, cns: e.target.value }))}
-              placeholder="000 0000 0000 0000"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">CID</Label>
-            <Popover open={cidOpen} onOpenChange={setCidOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full justify-start text-left font-normal h-10 text-sm">
-                  <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-                  {editData.cid || "Buscar CID..."}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[320px] p-0" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Código ou nome da doença..."
-                    value={cidSearch}
-                    onValueChange={setCidSearch}
-                  />
-                  <CommandList>
-                    {cidLoading && <div className="p-3 text-xs text-muted-foreground text-center">Buscando...</div>}
-                    <CommandEmpty>{cidSearch.length < 2 ? "Digite pelo menos 2 caracteres" : "Nenhum CID encontrado"}</CommandEmpty>
-                    <CommandGroup>
-                      {cidResults.map(c => (
-                        <CommandItem
-                          key={c.codigo}
-                          value={c.codigo}
-                          onSelect={() => {
-                            setEditData(d => ({ ...d, cid: `${c.codigo} — ${c.descricao}` }));
-                            setCidOpen(false);
-                          }}
-                        >
-                          <span className="font-mono text-xs mr-2">{c.codigo}</span>
-                          <span className="text-xs truncate">{c.descricao}</span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="col-span-2">
-            <Label className="text-xs">Profissional responsável</Label>
-            <Select value={editData.profissionalId} onValueChange={v => setEditData(d => ({ ...d, profissionalId: v }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {activeProfessionals.map(f => (
-                  <SelectItem key={f.id} value={f.id}>{f.nome} — {f.profissao}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
+      {/* Body */}
+      <div className="px-5 py-4">
+        {!editing ? (
+          /* ── READ MODE ── */
+          <div className="space-y-4">
+            {/* Patient name row */}
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/8 border border-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <User className="w-5 h-5 text-primary/70" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-semibold text-foreground leading-tight truncate">
+                  {paciente.nome}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {paciente.data_nascimento
+                    ? `${new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")} · ${idade}`
+                    : "Data de nascimento não informada"}
+                </p>
+              </div>
+            </div>
 
-      {/* Vital signs from triage (read-only) */}
+            {/* Info grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <InfoField
+                icon={<CreditCard className="w-3.5 h-3.5" />}
+                label="Cartão SUS (CNS)"
+                value={paciente.cns || "—"}
+                mono
+              />
+              <InfoField
+                icon={<CreditCard className="w-3.5 h-3.5" />}
+                label="CPF"
+                value={paciente.cpf || "—"}
+                mono
+              />
+              <InfoField
+                icon={<Activity className="w-3.5 h-3.5" />}
+                label="CID-10"
+                value={cidDisplay}
+              />
+              <InfoField
+                icon={<Stethoscope className="w-3.5 h-3.5" />}
+                label="Profissional responsável"
+                value={profissionalNome || "—"}
+              />
+            </div>
+          </div>
+        ) : (
+          /* ── EDIT MODE ── */
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div className="col-span-2 sm:col-span-1">
+              <Label className="text-xs font-medium text-muted-foreground">Nome completo <span className="text-destructive">*</span></Label>
+              <Input
+                value={editData.nome}
+                onChange={e => { setEditData(d => ({ ...d, nome: e.target.value })); setErrors(e2 => ({ ...e2, nome: false })); }}
+                className={`mt-1 ${errors.nome ? "border-destructive" : ""}`}
+              />
+              {errors.nome && <p className="text-xs text-destructive mt-0.5">Nome é obrigatório</p>}
+            </div>
+            <div className="col-span-2 sm:col-span-1">
+              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Nº Prontuário <Lock className="w-3 h-3" /></Label>
+              <Input value={`#${paciente.id?.slice(-6) || ""}`} disabled className="opacity-50 mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Data de nascimento</Label>
+              <Input
+                type="date"
+                value={editData.data_nascimento}
+                onChange={e => setEditData(d => ({ ...d, data_nascimento: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Idade <Lock className="w-3 h-3" /></Label>
+              <Input value={calcularIdade(editData.data_nascimento)} disabled className="opacity-50 mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Cartão SUS (CNS)</Label>
+              <Input
+                value={editData.cns}
+                onChange={e => setEditData(d => ({ ...d, cns: e.target.value }))}
+                placeholder="000 0000 0000 0000"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">CID-10</Label>
+              <Popover open={cidOpen} onOpenChange={setCidOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal h-10 text-sm mt-1">
+                    <Search className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+                    {editData.cid || "Buscar CID..."}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Código ou nome da doença..."
+                      value={cidSearch}
+                      onValueChange={setCidSearch}
+                    />
+                    <CommandList>
+                      {cidLoading && <div className="p-3 text-xs text-muted-foreground text-center">Buscando...</div>}
+                      <CommandEmpty>{cidSearch.length < 2 ? "Digite pelo menos 2 caracteres" : "Nenhum CID encontrado"}</CommandEmpty>
+                      <CommandGroup>
+                        {cidResults.map(c => (
+                          <CommandItem
+                            key={c.codigo}
+                            value={c.codigo}
+                            onSelect={() => {
+                              setEditData(d => ({ ...d, cid: `${c.codigo} — ${c.descricao}` }));
+                              setCidOpen(false);
+                            }}
+                          >
+                            <span className="font-mono text-xs mr-2">{c.codigo}</span>
+                            <span className="text-xs truncate">{c.descricao}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs font-medium text-muted-foreground">Profissional responsável</Label>
+              <Select value={editData.profissionalId} onValueChange={v => setEditData(d => ({ ...d, profissionalId: v }))}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {activeProfessionals.map(f => (
+                    <SelectItem key={f.id} value={f.id}>{f.nome} — {f.profissao}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Vital signs section */}
       {triagem && (triagem.pressao_arterial || triagem.temperatura || triagem.saturacao_oxigenio || triagem.frequencia_cardiaca) && (
-        <div className="border-t pt-3 mt-1">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-              Sinais Vitais (Triagem) <Lock className="w-3 h-3" />
+        <div className="px-5 py-3 bg-muted/20 border-t border-border/40">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Heart className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Sinais Vitais
             </span>
             {riscoData && (
-              <Badge variant="outline" className={`${riscoData.bg} ${riscoData.text} text-xs border-0`}>
+              <Badge
+                variant="outline"
+                className={`${riscoData.bg} ${riscoData.text} ${riscoData.border} text-[10px] font-medium px-2 py-0 h-5 rounded-full`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${riscoDot} mr-1 inline-block`} />
                 {riscoData.label}
               </Badge>
             )}
           </div>
-          <div className="flex flex-wrap gap-3 text-xs font-mono text-foreground">
-            {triagem.pressao_arterial && <span>PA: <strong>{triagem.pressao_arterial}</strong></span>}
-            {triagem.temperatura && <span>Temp: <strong>{triagem.temperatura}°C</strong></span>}
-            {triagem.saturacao_oxigenio && <span>Sat: <strong>{triagem.saturacao_oxigenio}%</strong></span>}
-            {triagem.frequencia_cardiaca && <span>FC: <strong>{triagem.frequencia_cardiaca}bpm</strong></span>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {triagem.pressao_arterial && (
+              <VitalCard label="Pressão" value={triagem.pressao_arterial} unit="mmHg" />
+            )}
+            {triagem.temperatura && (
+              <VitalCard label="Temperatura" value={String(triagem.temperatura)} unit="°C" />
+            )}
+            {triagem.saturacao_oxigenio && (
+              <VitalCard label="Saturação" value={String(triagem.saturacao_oxigenio)} unit="%" />
+            )}
+            {triagem.frequencia_cardiaca && (
+              <VitalCard label="Freq. Cardíaca" value={String(triagem.frequencia_cardiaca)} unit="bpm" />
+            )}
           </div>
         </div>
       )}
     </div>
   );
 };
+
+/* ── Sub-components ── */
+
+const InfoField = ({ icon, label, value, mono }: { icon: React.ReactNode; label: string; value: string; mono?: boolean }) => (
+  <div className="flex items-start gap-2.5 rounded-lg bg-muted/30 px-3 py-2.5 border border-border/30">
+    <div className="text-muted-foreground mt-0.5 flex-shrink-0">{icon}</div>
+    <div className="min-w-0 flex-1">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium leading-none mb-1">{label}</p>
+      <p className={`text-sm text-foreground leading-tight truncate ${mono ? "font-mono" : "font-medium"}`}>{value}</p>
+    </div>
+  </div>
+);
+
+const VitalCard = ({ label, value, unit }: { label: string; value: string; unit: string }) => (
+  <div className="text-center rounded-lg bg-card border border-border/40 px-2 py-2">
+    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
+    <p className="text-sm font-semibold text-foreground font-mono">
+      {value}<span className="text-[10px] font-normal text-muted-foreground ml-0.5">{unit}</span>
+    </p>
+  </div>
+);
 
 export default FichaPacienteCabecalho;
