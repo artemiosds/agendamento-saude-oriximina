@@ -74,7 +74,7 @@ const Relatorios: React.FC = () => {
   const [mapaData, setMapaData] = useState<Array<{
     num: number; paciente_nome: string; cns: string; telefone: string;
     data: string; profissional_nome: string; especialidade: string; cid: string;
-    tipo: string;
+    tipo: string; cpf: string; data_nascimento: string; endereco: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
