@@ -10,6 +10,10 @@ export interface BlocoConfig {
   favorito: boolean;
   colapsado_padrao: boolean;
   ordem: number;
+  /** Admin locked this field as required — professional cannot unset */
+  admin_obrigatorio?: boolean;
+  /** Admin disabled this field — professional cannot re-enable */
+  admin_desabilitado?: boolean;
 }
 
 export interface ProntuarioConfigData {
@@ -31,6 +35,27 @@ export interface ProntuarioConfigData {
     mostrar_conselho: boolean;
     mostrar_logo: boolean;
   };
+}
+
+// Admin specialty field config (from system_config)
+interface AdminCampoEspecialidade {
+  id: string;
+  key: string;
+  label: string;
+  tipo: string;
+  obrigatorio: boolean;
+  habilitado: boolean;
+  isBuiltin: boolean;
+  order: number;
+  opcoes?: string[];
+}
+
+interface AdminEspecialidadeConfig {
+  key: string;
+  label: string;
+  ativa: boolean;
+  profissoes: string[];
+  campos: AdminCampoEspecialidade[];
 }
 
 // ─── Default blocks per type ────────────────────────────────────────────────
@@ -133,9 +158,73 @@ export const TIPOS_PRONTUARIO = [
   { value: 'procedimento', label: '🟣 Procedimento', color: 'bg-purple-500' },
 ] as const;
 
+// ─── Admin config loader ─────────────────────────────────────────────────────
+const ADMIN_CONFIG_KEY = 'config_especialidades_campos';
+
+async function loadAdminEspecialidadeConfig(): Promise<AdminEspecialidadeConfig[] | null> {
+  try {
+    const { data } = await supabase
+      .from('system_config')
+      .select('configuracoes')
+      .eq('id', 'default')
+      .maybeSingle();
+    const cfg = data?.configuracoes as any;
+    return cfg?.[ADMIN_CONFIG_KEY] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Merge admin base config with professional personal config.
+ * Rules:
+ * - Admin disabled field → professional cannot re-enable (admin_desabilitado=true)
+ * - Admin required field → professional cannot make optional (admin_obrigatorio=true)
+ * - Professional can hide fields admin left visible
+ * - Professional can reorder and set favorites freely
+ */
+export function mergeAdminAndProfConfig(
+  adminEspecialidades: AdminEspecialidadeConfig[] | null,
+  profissao: string | undefined,
+  profConfig: ProntuarioConfigData
+): ProntuarioConfigData {
+  if (!adminEspecialidades || !profissao) return profConfig;
+
+  const normalizedProf = profissao.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+  
+  // Find matching specialty config from admin
+  const adminEsp = adminEspecialidades.find(e =>
+    e.ativa && e.profissoes.some(p => p === normalizedProf)
+  );
+
+  if (!adminEsp) return profConfig;
+
+  // Apply admin constraints on blocos
+  const mergedBlocos = profConfig.blocos.map(bloco => {
+    // Find if admin has a matching campo config for specialty fields
+    const adminCampo = adminEsp.campos.find(c => c.key === bloco.id || c.id === bloco.id);
+    
+    if (adminCampo) {
+      return {
+        ...bloco,
+        // If admin disabled the field, professional cannot see it
+        admin_desabilitado: !adminCampo.habilitado,
+        visivel: !adminCampo.habilitado ? false : bloco.visivel,
+        // If admin marked required, professional cannot make optional
+        admin_obrigatorio: adminCampo.obrigatorio,
+        obrigatorio: adminCampo.obrigatorio ? true : bloco.obrigatorio,
+      };
+    }
+    return bloco;
+  });
+
+  return { ...profConfig, blocos: mergedBlocos };
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 export function useProntuarioConfig(profissionalId: string | undefined, tipoProntuario: string) {
   const [config, setConfig] = useState<ProntuarioConfigData | null>(null);
+  const [adminConfig, setAdminConfig] = useState<AdminEspecialidadeConfig[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -152,29 +241,34 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
     const load = async () => {
       setLoading(true);
       try {
-        const { data } = await (supabase as any)
-          .from('prontuario_config')
-          .select('config, versao')
-          .eq('profissional_id', profissionalId)
-          .eq('tipo_prontuario', tipoNormalized)
-          .maybeSingle();
+        // Load in parallel: professional config + admin specialty config
+        const [profResult, adminResult] = await Promise.all([
+          (supabase as any)
+            .from('prontuario_config')
+            .select('config, versao')
+            .eq('profissional_id', profissionalId)
+            .eq('tipo_prontuario', tipoNormalized)
+            .maybeSingle(),
+          loadAdminEspecialidadeConfig(),
+        ]);
 
         if (!cancelled) {
-          if (data?.config) {
-            // Merge with defaults to ensure new fields exist
-            const defaults = getDefaultConfig(tipoNormalized);
-            const loaded = data.config as ProntuarioConfigData;
+          setAdminConfig(adminResult);
+          
+          const defaults = getDefaultConfig(tipoNormalized);
+          if (profResult.data?.config) {
+            const loaded = profResult.data.config as ProntuarioConfigData;
             setConfig({
               ...defaults,
               ...loaded,
-              versao: data.versao || loaded.versao || 1,
+              versao: profResult.data.versao || loaded.versao || 1,
               blocos: loaded.blocos || defaults.blocos,
               catalogos: { ...defaults.catalogos, ...loaded.catalogos },
               ui: { ...defaults.ui, ...loaded.ui },
               impressao: { ...defaults.impressao, ...loaded.impressao },
             });
           } else {
-            setConfig(getDefaultConfig(tipoNormalized));
+            setConfig(defaults);
           }
         }
       } catch {
@@ -210,7 +304,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
     }, 800);
   }, [profissionalId, tipoNormalized]);
 
-  // Helpers
+  // Helpers — merge admin constraints into visible blocks
   const visibleBlocks = useMemo(() => {
     if (!config) return [];
     return [...config.blocos]
@@ -224,6 +318,7 @@ export function useProntuarioConfig(profissionalId: string | undefined, tipoPron
 
   return {
     config,
+    adminConfig,
     loading,
     saving,
     saveConfig,
