@@ -1353,6 +1353,42 @@ export type Database = {
         }
         Relationships: []
       }
+      prontuario_config: {
+        Row: {
+          config: Json
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          profissional_id: string
+          template_nome: string | null
+          tipo_prontuario: string
+          updated_at: string | null
+          versao: number
+        }
+        Insert: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          profissional_id: string
+          template_nome?: string | null
+          tipo_prontuario?: string
+          updated_at?: string | null
+          versao?: number
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          profissional_id?: string
+          template_nome?: string | null
+          tipo_prontuario?: string
+          updated_at?: string | null
+          versao?: number
+        }
+        Relationships: []
+      }
       prontuario_procedimentos: {
         Row: {
           criado_em: string
