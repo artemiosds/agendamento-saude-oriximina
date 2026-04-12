@@ -38,6 +38,12 @@ const SPECIALTY_CONFIG: Record<string, { title: string; icon: string }> = {
   medicina: { title: "Avaliação Médica", icon: "⚕️" },
   odontologia: { title: "Avaliação Odontológica", icon: "🦷" },
   enfermagem: { title: "Avaliação de Enfermagem", icon: "💉" },
+  servico_social: { title: "Avaliação Social", icon: "🤝" },
+  assistente_social: { title: "Avaliação Social", icon: "🤝" },
+  cirurgia_geral: { title: "Avaliação Cirúrgica", icon: "🔪" },
+  cirurgiao: { title: "Avaliação Cirúrgica", icon: "🔪" },
+  infectologia: { title: "Avaliação Infectológica", icon: "🦠" },
+  infectologista: { title: "Avaliação Infectológica", icon: "🦠" },
 };
 
 const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, values, onChange }) => {
@@ -207,6 +213,44 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
     </div>
   );
 
+  const renderServicoSocial = () => (
+    <div className="space-y-3">
+      <div><Label>Situação Socioeconômica</Label><Textarea rows={2} value={v("situacao_socioeconomica")} onChange={e => set("situacao_socioeconomica", e.target.value)} placeholder="Renda, moradia, composição familiar..." /></div>
+      <div><Label>Rede de Apoio</Label><Textarea rows={2} value={v("rede_apoio")} onChange={e => set("rede_apoio", e.target.value)} placeholder="Família, comunidade, serviços..." /></div>
+      <div><Label>Vulnerabilidade Social</Label>
+        <Select value={v("vulnerabilidade") || "baixa"} onValueChange={val => set("vulnerabilidade", val)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="baixa">Baixa</SelectItem>
+            <SelectItem value="media">Média</SelectItem>
+            <SelectItem value="alta">Alta</SelectItem>
+            <SelectItem value="extrema">Extrema ⚠️</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div><Label>Encaminhamentos Sociais</Label><Textarea rows={2} value={v("encaminhamentos_sociais")} onChange={e => set("encaminhamentos_sociais", e.target.value)} placeholder="CRAS, CREAS, benefícios..." /></div>
+      <div><Label>Parecer Social</Label><Textarea rows={2} value={v("parecer_social")} onChange={e => set("parecer_social", e.target.value)} /></div>
+    </div>
+  );
+
+  const renderCirurgiaGeral = () => (
+    <div className="space-y-3">
+      <div><Label>Indicação Cirúrgica</Label><Textarea rows={2} value={v("indicacao_cirurgica")} onChange={e => set("indicacao_cirurgica", e.target.value)} placeholder="Motivo e tipo de cirurgia indicada..." /></div>
+      <div><Label>Avaliação Pré-operatória</Label><Textarea rows={2} value={v("avaliacao_preop")} onChange={e => set("avaliacao_preop", e.target.value)} placeholder="Exames, risco cirúrgico..." /></div>
+      <div><Label>Descrição do Procedimento</Label><Textarea rows={2} value={v("descricao_procedimento")} onChange={e => set("descricao_procedimento", e.target.value)} /></div>
+      <div><Label>Orientações Pós-operatórias</Label><Textarea rows={2} value={v("orientacoes_posop")} onChange={e => set("orientacoes_posop", e.target.value)} /></div>
+    </div>
+  );
+
+  const renderInfectologia = () => (
+    <div className="space-y-3">
+      <div><Label>Agente Infeccioso / Suspeita</Label><Textarea rows={2} value={v("agente_infeccioso")} onChange={e => set("agente_infeccioso", e.target.value)} placeholder="Agente etiológico ou suspeita clínica..." /></div>
+      <div><Label>Exames Laboratoriais</Label><Textarea rows={2} value={v("exames_lab")} onChange={e => set("exames_lab", e.target.value)} placeholder="Resultados de sorologias, culturas..." /></div>
+      <div><Label>Esquema Terapêutico</Label><Textarea rows={2} value={v("esquema_terapeutico")} onChange={e => set("esquema_terapeutico", e.target.value)} placeholder="Antibióticos, antivirais, duração..." /></div>
+      <div><Label>Medidas de Controle</Label><Textarea rows={2} value={v("medidas_controle")} onChange={e => set("medidas_controle", e.target.value)} placeholder="Isolamento, notificação, profilaxia..." /></div>
+    </div>
+  );
+
   const renderFields = () => {
     switch (prof) {
       case 'fisioterapia': return renderFisioterapia();
@@ -217,6 +261,9 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       case 'medicina': return renderMedicina();
       case 'odontologia': return renderOdontologia();
       case 'enfermagem': return renderEnfermagem();
+      case 'servico_social': case 'assistente_social': return renderServicoSocial();
+      case 'cirurgia_geral': case 'cirurgiao': return renderCirurgiaGeral();
+      case 'infectologia': case 'infectologista': return renderInfectologia();
       default: return null;
     }
   };
