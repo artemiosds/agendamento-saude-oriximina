@@ -516,10 +516,12 @@ const ProntuarioPage: React.FC = () => {
         exame_fisico: form.exame_fisico,
         hipotese: form.hipotese,
         conduta: form.conduta,
-        prescricao: form.prescricao,
+        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
         solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
         evolucao: form.evolucao,
-        observacoes: form.observacoes,
+        observacoes: Object.keys(especialidadeFields).length > 0
+          ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
+          : form.observacoes,
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
