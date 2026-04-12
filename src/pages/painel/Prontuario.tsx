@@ -1664,6 +1664,7 @@ const ProntuarioPage: React.FC = () => {
               <Input value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
             </div>
 
+            {isProfBlocoVisible('indicacao_retorno') && (
             <div>
               <Label>Indicação de Retorno</Label>
               <Select value={form.indicacao_retorno || "no_indication"} onValueChange={(v) => setForm((p) => ({ ...p, indicacao_retorno: v === "no_indication" ? "" : v }))}>
@@ -1675,8 +1676,10 @@ const ProntuarioPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             {/* Prescrição de Medicamentos — ALL types */}
+            {isProfBlocoVisible('prescricao') && (
             <PrescricaoMedicamentos
               profissionalId={user?.id || ""}
               value={listaPrescricao}
@@ -1691,8 +1694,10 @@ const ProntuarioPage: React.FC = () => {
               profissionalUfConselho={user?.ufConselho}
               unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
             />
+            )}
 
             {/* Solicitação de Exames — ALL types */}
+            {isProfBlocoVisible('solicitacao_exames') && (
             <SolicitacaoExames
               profissionalId={user?.id || ""}
               value={listaExames}
@@ -1707,6 +1712,7 @@ const ProntuarioPage: React.FC = () => {
               profissionalUfConselho={user?.ufConselho}
               unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
             />
+            )}
 
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
