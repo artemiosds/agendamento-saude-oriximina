@@ -1365,20 +1365,47 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            {categoriaCards.map(c => (
-              <Card
-                key={c.key}
-                className={`shadow-card border-0 cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${filterCargoProd === c.key ? 'ring-2 ring-primary' : ''}`}
-                onClick={() => setFilterCargoProd(filterCargoProd === c.key ? 'all' : c.key)}
-              >
-                <CardContent className="p-2.5 text-center">
-                  <p className="text-lg">{c.emoji}</p>
-                  <p className="text-lg font-bold text-foreground">{c.total}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">{c.label}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {categoriaCards.map(c => {
+              const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
+              const isActive = filterCargoProd === c.key;
+              return (
+                <div
+                  key={c.key}
+                  className={`min-w-[180px] flex-shrink-0 rounded-xl border bg-card cursor-pointer transition-all hover:shadow-md ${isActive ? 'ring-2 shadow-md' : ''}`}
+                  style={{
+                    borderLeftWidth: '4px',
+                    borderLeftColor: c.cor,
+                    borderColor: isActive ? c.cor : undefined,
+                    backgroundColor: isActive ? c.cor + '08' : undefined,
+                  }}
+                  onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
+                >
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{c.emoji}</span>
+                      <span className="text-xs font-semibold text-muted-foreground">{c.label}</span>
+                    </div>
+                    <div className="flex items-baseline gap-4">
+                      <div>
+                        <p className="text-xl font-bold" style={{ color: '#1B3A5C' }}>{c.total}</p>
+                        <p className="text-[10px] text-muted-foreground">Total</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
+                        <p className="text-[10px] text-muted-foreground">Concluídos</p>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${taxa}%`, backgroundColor: c.cor }} />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{taxa}%</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <Card className="shadow-card border-0">
