@@ -1126,118 +1126,138 @@ ${dataRows}
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" /> Relatórios
+          <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
+            <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
-          <p className="text-muted-foreground text-sm">{filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados</p>
+          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
+          </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
+            <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
+          </span>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-foreground text-sm">Filtros</span></div>
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">Limpar filtros</Button>
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DDE3ED', background: '#FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div>
+            <Label className="text-xs">Unidade</Label>
+            <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div>
-              <Label className="text-xs">Unidade</Label>
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Profissional</Label>
-              <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Tipo</Label>
-              <Select value={filterTipo} onValueChange={setFilterTipo}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Setor</Label>
-              <Select value={filterSetor} onValueChange={setFilterSetor}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
-            <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div>
+            <Label className="text-xs">Profissional</Label>
+            <Select value={filterProf} onValueChange={setFilterProf}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <Label className="text-xs">Status</Label>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Tipo</Label>
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Setor</Label>
+            <Select value={filterSetor} onValueChange={setFilterSetor}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
-          { label: 'Total', value: stats.total, icon: CalendarDays, color: 'text-foreground' },
-          { label: 'Concluídos', value: stats.concluidos, icon: UserCheck, color: 'text-success' },
-          { label: 'Pendentes', value: stats.pendentes, icon: Clock, color: 'text-warning' },
-          { label: 'Faltas', value: stats.faltas, icon: AlertTriangle, color: 'text-destructive' },
-          { label: 'Cancelados', value: stats.cancelados, icon: null, color: 'text-muted-foreground' },
-          { label: 'Remarcados', value: stats.remarcados, icon: null, color: 'text-warning' },
-          { label: 'Retornos', value: stats.retornos, icon: null, color: 'text-info' },
-          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, icon: Clock, color: 'text-primary' },
-          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, icon: TrendingUp, color: 'text-success' },
-          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, icon: AlertTriangle, color: 'text-destructive' },
+          { label: 'Total', value: stats.total, color: '#1B3A5C' },
+          { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
+          { label: 'Pendentes', value: stats.pendentes, color: '#C17B1A' },
+          { label: 'Faltas', value: stats.faltas, color: '#B83232' },
+          { label: 'Cancelados', value: stats.cancelados, color: '#6B7280' },
+          { label: 'Remarcados', value: stats.remarcados, color: '#C17B1A' },
+          { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
+          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
+          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
+          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, color: '#B83232' },
         ].map(s => (
-          <Card key={s.label} className="shadow-card border-0">
-            <CardContent className="p-2.5 text-center">
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
-            </CardContent>
-          </Card>
+          <div
+            key={s.label}
+            className="rounded-xl border text-center"
+            style={{ borderColor: '#DDE3ED', background: '#FFFFFF', padding: '12px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
+          >
+            <p className="text-xl font-bold font-display" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: '#6B7280' }}>{s.label}</p>
+          </div>
         ))}
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-          <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
-          <TabsTrigger value="produtividade" className="text-xs">Produtividade</TabsTrigger>
-          <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
-          <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
-          <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
-          <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
-          <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
-          <TabsTrigger value="enfermagem" className="text-xs">Enfermagem</TabsTrigger>
-          <TabsTrigger value="multiprofissional" className="text-xs">Multiprofissional</TabsTrigger>
-          <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
-          <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
-          <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
-          <TabsTrigger value="mapa" className="text-xs"><MapPin className="w-3 h-3 mr-1" />Mapa Atendimento</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
+          {[
+            { value: 'geral', label: 'Geral' },
+            { value: 'produtividade', label: 'Produtividade' },
+            { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'faltas', label: 'Faltas' },
+            { value: 'pacientes', label: 'Pacientes' },
+            { value: 'fila', label: 'Fila de Espera' },
+            { value: 'triagem', label: 'Triagem' },
+            { value: 'enfermagem', label: 'Enfermagem' },
+            { value: 'multiprofissional', label: 'Multiprofissional' },
+            { value: 'pts_report', label: 'PTS' },
+            { value: 'tratamentos', label: 'Tratamentos' },
+            { value: 'detalhado', label: 'Detalhado' },
+            { value: 'mapa', label: '📍 Mapa Atendimento' },
+          ].map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+              style={{
+                color: activeTab === tab.value ? '#1B3A5C' : '#6B7280',
+                borderBottomColor: activeTab === tab.value ? '#2E8B8B' : 'transparent',
+                fontWeight: activeTab === tab.value ? 600 : 500,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </TabsList>
 
         {/* === GERAL === */}
