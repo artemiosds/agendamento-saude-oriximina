@@ -2244,9 +2244,10 @@ th{background:#f1f5f9;font-weight:600;}
                   const now = new Date().toLocaleString('pt-BR');
                   const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
                   const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                  const tableRows = mapaData.map((r, i) =>
-                    `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
-                  ).join('');
+                  const tableRows = mapaData.map((r, i) => {
+                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                  }).join('');
                   const printWindow = window.open('', '_blank');
                   if (!printWindow) return;
                   const logoUrl = window.location.origin + '/logo-sms.jpeg';
@@ -2262,8 +2263,8 @@ th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`);
                   printWindow.document.close();
                   setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
