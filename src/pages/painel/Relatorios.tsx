@@ -1529,13 +1529,8 @@ th{background:#f1f5f9;font-weight:600;}
             </CardContent>
           </Card>
         </TabsContent>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Profissional</th>
+
+
                       <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
                       <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
                       <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
