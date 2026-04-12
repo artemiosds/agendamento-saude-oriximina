@@ -255,12 +255,12 @@ const Relatorios: React.FC = () => {
 
   // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { id: string; nome: string; role: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
       const func = funcionarios.find(f => f.id === a.profissionalId);
       const key = a.profissionalId || a.profissionalNome;
-      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       const m = map[key];
       m.total++;
       m.pacientesSet.add(a.pacienteId);
@@ -275,7 +275,7 @@ const Relatorios: React.FC = () => {
       const un = unidades.find(u => u.id === at.unidade_id);
       const func = funcionarios.find(f => f.id === at.profissional_id);
       const key = at.profissional_id || at.profissional_nome;
-      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
@@ -285,10 +285,12 @@ const Relatorios: React.FC = () => {
     });
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
+      .filter(d => filterCargoProd === 'all' || d.profissao.toLowerCase().includes(filterCargoProd))
       .map(d => ({
         id: d.id,
         nome: d.nome,
         role: d.role,
+        profissao: d.profissao,
         unidade: d.unidade,
         total: d.total,
         concluidos: d.concluidos,
@@ -303,7 +305,63 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd]);
+  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+
+  // === CATEGORY CARDS (by profissao) ===
+  const categoriaCards = useMemo(() => {
+    const cargoMap: Record<string, { emoji: string; label: string; keywords: string[] }> = {
+      'medico': { emoji: '👨‍⚕️', label: 'Médicos', keywords: ['médico', 'medico', 'medicina'] },
+      'psicologo': { emoji: '🧠', label: 'Psicólogos', keywords: ['psicólogo', 'psicologo', 'psicologia'] },
+      'fonoaudiologo': { emoji: '🗣️', label: 'Fonoaudiólogos', keywords: ['fonoaudiólogo', 'fonoaudiologo', 'fonoaudiologia'] },
+      'fisioterapeuta': { emoji: '🦿', label: 'Fisioterapeutas', keywords: ['fisioterapeuta', 'fisioterapia'] },
+      'terapeuta_ocupacional': { emoji: '🖐️', label: 'T. Ocupacional', keywords: ['terapeuta ocupacional', 'terapia ocupacional'] },
+      'nutricionista': { emoji: '🥗', label: 'Nutrição', keywords: ['nutricionista', 'nutrição', 'nutricao'] },
+      'enfermeiro': { emoji: '👩‍⚕️', label: 'Enfermagem', keywords: ['enfermeiro', 'enfermeira', 'técnico de enfermagem', 'tecnico de enfermagem', 'enfermagem'] },
+      'assistente_social': { emoji: '👥', label: 'Serviço Social', keywords: ['assistente social', 'serviço social', 'servico social'] },
+    };
+
+    const profMap = new Map(funcionarios.map(f => [f.id, f]));
+    const counts: Record<string, number> = {};
+
+    filtered.forEach(a => {
+      const func = profMap.get(a.profissionalId);
+      const profissao = (func?.profissao || '').toLowerCase();
+      for (const [key, cfg] of Object.entries(cargoMap)) {
+        if (cfg.keywords.some(k => profissao.includes(k))) {
+          counts[key] = (counts[key] || 0) + 1;
+          break;
+        }
+      }
+    });
+
+    return Object.entries(cargoMap)
+      .filter(([key]) => (counts[key] || 0) > 0)
+      .map(([key, cfg]) => ({ key, ...cfg, total: counts[key] || 0 }));
+  }, [filtered, funcionarios]);
+
+  // === PROD TOTALS ===
+  const prodTotals = useMemo(() => {
+    return porProfissional.reduce((acc, p) => ({
+      total: acc.total + p.total,
+      concluidos: acc.concluidos + p.concluidos,
+      faltas: acc.faltas + p.faltas,
+      cancelados: acc.cancelados + p.cancelados,
+      remarcados: acc.remarcados + p.remarcados,
+      retornos: acc.retornos + p.retornos,
+    }), { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, retornos: 0 });
+  }, [porProfissional]);
+
+  // === SEGMENTED BAR CHART DATA ===
+  const prodChartData = useMemo(() => {
+    return porProfissional.filter(p => p.total > 0).map(p => ({
+      nome: p.nome.length > 20 ? p.nome.substring(0, 20) + '…' : p.nome,
+      nomeCompleto: p.nome,
+      concluidos: p.concluidos,
+      faltas: p.faltas,
+      cancelados: p.cancelados,
+      remarcados: p.remarcados,
+    }));
+  }, [porProfissional]);
 
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
