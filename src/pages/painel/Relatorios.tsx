@@ -868,7 +868,7 @@ ${dataRows}
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
-        .select('id, cns, telefone, cid')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco')
         .in('id', pacienteIds);
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
@@ -890,6 +890,9 @@ ${dataRows}
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
           cid: pac?.cid || '',
           tipo: a.tipo || '',
+          cpf: pac?.cpf || '',
+          data_nascimento: pac?.data_nascimento || '',
+          endereco: pac?.endereco || '',
         };
       });
 
