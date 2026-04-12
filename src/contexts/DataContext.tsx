@@ -1599,7 +1599,45 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [isSlotBlocked],
   );
 
-  const getAvailableDatesInternal = useCallback(
+  const getTurnoInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const turnoDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim &&
+          d.vagasPorHora === 0,
+      );
+      if (turnoDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      return turnoDisps.map((td) => {
+        const count = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
+        ).length;
+        const nome = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+        return {
+          turnoId: td.salaId || td.id, // salaId stores turno ID in turno mode
+          nome,
+          horaInicio: td.horaInicio,
+          horaFim: td.horaFim,
+          vagasTotal: td.vagasPorDia,
+          vagasOcupadas: count,
+          vagasLivres: Math.max(0, td.vagasPorDia - count),
+          lotado: count >= td.vagasPorDia,
+        };
+      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    },
+    [],
+  );
+
+
     (profissionalId: string, unidadeId: string): string[] => {
       const disps = disponibilidadesRef.current;
       const filteredDisps = disps.filter((d) => d.profissionalId === profissionalId && d.unidadeId === unidadeId);
