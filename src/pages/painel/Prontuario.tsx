@@ -36,6 +36,7 @@ import DocumentosHistorico from "@/components/DocumentosHistorico";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
+import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
@@ -216,6 +217,7 @@ const ProntuarioPage: React.FC = () => {
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
@@ -922,6 +924,10 @@ const ProntuarioPage: React.FC = () => {
                 <Activity className="w-4 h-4 mr-2" />
                 {showHistorico ? "Ocultar" : "Ver"} Histórico
               </Button>
+              <Button variant="default" onClick={() => setHistoricoCompletoOpen(true)} className="gradient-primary text-primary-foreground">
+                <FileText className="w-4 h-4 mr-2" />
+                Histórico Completo
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => handlePrintFullHistory(queryPacienteId, queryPacienteNome || "Paciente")}
@@ -1443,6 +1449,19 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {form.paciente_id && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoricoCompletoOpen(true)}
+                className="w-full"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Ver Histórico Completo do Paciente
+              </Button>
+            )}
+
             <div className="flex gap-2">
               {activeAtendimento ? (
                 <>
@@ -1762,6 +1781,18 @@ const ProntuarioPage: React.FC = () => {
           profissional={user ? { id: user.id, nome: user.nome, profissao: user.profissao, numero_conselho: user.numeroConselho, tipo_conselho: user.tipoConselho, uf_conselho: user.ufConselho } : undefined}
           unidade={unidades.find(u => u.id === user?.unidadeId)?.nome}
           dataAtendimento={new Date().toLocaleDateString('pt-BR')}
+        />
+      )}
+
+      {/* Histórico Completo Modal */}
+      {(queryPacienteId || form.paciente_id) && (
+        <HistoricoCompletoModal
+          open={historicoCompletoOpen}
+          onOpenChange={setHistoricoCompletoOpen}
+          pacienteId={queryPacienteId || form.paciente_id}
+          pacienteNome={queryPacienteNome || form.paciente_nome || "Paciente"}
+          unidades={unidades}
+          currentProfissionalId={user?.id}
         />
       )}
     </div>
