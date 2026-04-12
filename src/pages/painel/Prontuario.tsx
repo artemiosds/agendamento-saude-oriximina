@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
+import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useData } from "@/contexts/DataContext";
