@@ -61,6 +61,7 @@ const HistoricoTriagem            = lazyRetry(() => import("./pages/painel/Histo
 const RelatorioAlta               = lazyRetry(() => import("./pages/painel/RelatorioAlta"));
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
+const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -283,6 +284,11 @@ const App = () => (
                     <Route path="encaminhamentos" element={
                       <ModuleRoute modulo="encaminhamento">
                         <Encaminhamentos />
+                      </ModuleRoute>
+                    } />
+                    <Route path="meu-prontuario" element={
+                      <ModuleRoute modulo="prontuario">
+                        <MeuProntuario />
                       </ModuleRoute>
                     } />
                   </Route>

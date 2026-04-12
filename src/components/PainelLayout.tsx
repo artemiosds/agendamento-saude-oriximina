@@ -43,6 +43,7 @@ const menuItems: {
   { to: '/painel/disponibilidade',  label: 'Disponibilidade',        icon: CalendarClock,      modulo: 'usuarios' },
   { to: '/painel/bloqueios',        label: 'Feriados/Bloqueios',     icon: CalendarClock,      modulo: 'agenda' },
   { to: '/painel/auditoria',        label: 'Logs & Auditoria',       icon: ShieldCheck,        modulo: 'relatorios' },
+  { to: '/painel/meu-prontuario',   label: 'Meu Prontuário',         icon: Settings,           modulo: 'prontuario' },
   { to: '/painel/configuracoes',    label: 'Configurações',          icon: Settings,           modulo: null, roles_master_only: true },
   { to: '/painel/permissoes',       label: 'Permissões',             icon: Lock,               modulo: null, roles_master_only: true },
   { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,           modulo: null, roles_master_only: true },

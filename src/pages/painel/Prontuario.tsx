@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
+import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useData } from "@/contexts/DataContext";
@@ -24,7 +25,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -215,7 +216,7 @@ const ProntuarioPage: React.FC = () => {
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
-
+  const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [docModalOpen, setDocModalOpen] = useState(false);
@@ -1308,6 +1309,11 @@ const ProntuarioPage: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="flex items-center justify-end mt-1">
+                <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => navigate('/painel/meu-prontuario')}>
+                  <Settings className="w-3 h-3" /> Personalizar meu prontuário
+                </Button>
+              </div>
             </div>
 
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
@@ -1636,7 +1642,7 @@ const ProntuarioPage: React.FC = () => {
             )}
 
             {/* Procedimentos Realizados — checkboxes */}
-            {filteredProcedimentos.length > 0 && (
+            {isProfBlocoVisible('procedimentos') && filteredProcedimentos.length > 0 && (
               <div>
                 <Label className="mb-2 block">Procedimentos Realizados</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/30 rounded-lg p-3 border max-h-40 overflow-y-auto">
@@ -1658,6 +1664,7 @@ const ProntuarioPage: React.FC = () => {
               <Input value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
             </div>
 
+            {isProfBlocoVisible('indicacao_retorno') && (
             <div>
               <Label>Indicação de Retorno</Label>
               <Select value={form.indicacao_retorno || "no_indication"} onValueChange={(v) => setForm((p) => ({ ...p, indicacao_retorno: v === "no_indication" ? "" : v }))}>
@@ -1669,8 +1676,10 @@ const ProntuarioPage: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             {/* Prescrição de Medicamentos — ALL types */}
+            {isProfBlocoVisible('prescricao') && (
             <PrescricaoMedicamentos
               profissionalId={user?.id || ""}
               value={listaPrescricao}
@@ -1685,8 +1694,10 @@ const ProntuarioPage: React.FC = () => {
               profissionalUfConselho={user?.ufConselho}
               unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
             />
+            )}
 
             {/* Solicitação de Exames — ALL types */}
+            {isProfBlocoVisible('solicitacao_exames') && (
             <SolicitacaoExames
               profissionalId={user?.id || ""}
               value={listaExames}
@@ -1701,6 +1712,7 @@ const ProntuarioPage: React.FC = () => {
               profissionalUfConselho={user?.ufConselho}
               unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
             />
+            )}
 
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
