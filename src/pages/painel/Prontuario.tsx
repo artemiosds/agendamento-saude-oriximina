@@ -1354,14 +1354,167 @@ const ProntuarioPage: React.FC = () => {
             {/* 🟡 PRONTUÁRIO 3 — SESSÃO */}
             {form.tipo_registro === 'sessao' && (
               <div className="space-y-4">
-                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
-                  <div className="space-y-3">
-                    <div><Label>Procedimentos Realizados</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
-                    <div><Label>Resposta do Paciente</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
-                    <div><Label>Intercorrências</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Eventos adversos ou intercorrências..." /></div>
-                  </div>
-                </div>
+                {sessaoDataLoading ? (
+                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                ) : (
+                  <>
+                    {/* 1. CICLO DE TRATAMENTO ATIVO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
+                      </h4>
+                      {sessaoCycle ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div><span className="text-muted-foreground">Tipo:</span> <strong>{sessaoCycle.treatment_type}</strong></div>
+                            <div><span className="text-muted-foreground">Status:</span>{' '}
+                              <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-xs">
+                                {sessaoCycle.status === 'em_andamento' ? 'Ativo' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
+                              </Badge>
+                            </div>
+                            <div><span className="text-muted-foreground">Início:</span> <strong>{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></div>
+                            <div><span className="text-muted-foreground">Previsão:</span> <strong>{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
+                            <div><span className="text-muted-foreground">Frequência:</span> <strong>{sessaoCycle.frequency}</strong></div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Sessão {sessaoCycle.sessions_done} de {sessaoCycle.total_sessions} realizadas</span>
+                              <span>{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</span>
+                            </div>
+                            <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-2" />
+                          </div>
+                          {/* Session list */}
+                          {sessaoCycleSessions.length > 0 && (
+                            <div className="border rounded-md overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Nº</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Data</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Status</th>
+                                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Ação</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sessaoCycleSessions.map(s => {
+                                    const isCurrent = currentSessionForRegistration?.id === s.id;
+                                    const isRealizada = s.status === 'realizada';
+                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : '⏳';
+                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Em andamento' : s.status === 'falta' ? '❌ Falta' : 'Aguardando';
+                                    return (
+                                      <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
+                                        <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
+                                        <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                                        <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          {isCurrent && (
+                                            <Button size="sm" variant="default" className="h-6 text-xs px-2" onClick={handleRegistrarSessaoClick}>
+                                              Registrar
+                                            </Button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="space-y-2">
+                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Nenhum ciclo ativo</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Criar ciclo de tratamento
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {sessaoCycle?.status === 'concluido' && (
+                        <div className="space-y-2">
+                          <Badge variant="secondary" className="bg-green-500/10 text-green-700 border-green-500/30">Ciclo concluído</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Iniciar novo ciclo
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. PTS VINCULADO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
+                      </h4>
+                      {sessaoPts ? (() => {
+                        const createdAt = new Date(sessaoPts.created_at);
+                        const now = new Date();
+                        const monthsDiff = (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
+                        const isOutdated = monthsDiff >= 12;
+                        const metaPeriod = monthsDiff < 3 ? 'curto' : monthsDiff < 6 ? 'medio' : 'longo';
+                        const profName = funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '';
+                        return (
+                          <>
+                            {isOutdated && (
+                              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> PTS desatualizado — revisar
+                              </Badge>
+                            )}
+                            <div className="text-sm space-y-2">
+                              <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
+                              <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
+                              {/* Highlighted meta based on period */}
+                              <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  {metaPeriod === 'curto' ? '🎯 Metas Curto Prazo (1-3 meses)' : metaPeriod === 'medio' ? '📋 Metas Médio Prazo (3-6 meses)' : '🔭 Metas Longo Prazo (6+ meses)'}
+                                </span>
+                                <p className="text-foreground text-sm mt-1">
+                                  {metaPeriod === 'curto' ? sessaoPts.metas_curto_prazo : metaPeriod === 'medio' ? sessaoPts.metas_medio_prazo : sessaoPts.metas_longo_prazo}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {sessaoPts.especialidades_envolvidas.map(e => (
+                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                ))}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Criado em {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
+                                {profName && ` por ${profName}`}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })() : (
+                        <div className="space-y-2">
+                          <Badge variant="outline">PTS não cadastrado</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                              <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3-5. Sessão fields */}
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
+                      {currentSessionForRegistration && sessaoHighlightSOAP && (
+                        <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
+                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        <div><Label>Procedimentos Realizados</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
+                        <div><Label>Resposta do Paciente</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
+                        <div><Label>Intercorrências</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
