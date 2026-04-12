@@ -33,6 +33,19 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 
 interface BloqueioAgenda {
+
+export interface TurnoInfoResult {
+  turnoId: string;
+  nome: string;
+  horaInicio: string;
+  horaFim: string;
+  vagasTotal: number;
+  vagasOcupadas: number;
+  vagasLivres: number;
+  lotado: boolean;
+}
+
+interface BloqueioAgendaInternal {
   id: string;
   titulo: string;
   tipo: "feriado" | "ferias" | "reuniao" | "indisponibilidade";
