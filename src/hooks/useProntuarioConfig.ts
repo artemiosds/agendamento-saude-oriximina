@@ -16,6 +16,18 @@ export interface BlocoConfig {
   admin_desabilitado?: boolean;
 }
 
+export interface CampoExtraConfig {
+  id: string;
+  label: string;
+  tipo: string;
+  obrigatorio: boolean;
+  posicao_bloco: string;
+  ordem: number;
+  opcoes?: string[];
+  config_campo?: { min?: number; max?: number; cor_dinamica?: boolean };
+  tipos_prontuario?: string[];
+}
+
 export interface ProntuarioConfigData {
   versao: number;
   layout: 'padrao' | 'compacto' | 'detalhado';
@@ -24,6 +36,9 @@ export interface ProntuarioConfigData {
     medicamentos: { favoritos: string[]; desabilitados: string[] };
     exames: { favoritos: string[]; desabilitados: string[] };
   };
+  escalas_ativas?: string[];
+  campos_especialidade?: Record<string, { visivel: boolean; favorito: boolean; ordem: number }>;
+  campos_extras?: CampoExtraConfig[];
   ui: {
     densidade: 'confortavel' | 'compacto';
     animacoes: boolean;
