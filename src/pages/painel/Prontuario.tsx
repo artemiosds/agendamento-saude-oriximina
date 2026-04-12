@@ -86,14 +86,16 @@ interface ProcedimentoDB {
 }
 
 const TIPOS_REGISTRO = [
-  { value: 'consulta', label: 'Consulta' },
-  { value: 'avaliacao_inicial', label: 'Avaliação Inicial' },
-  { value: 'sessao', label: 'Sessão (SOAP)' },
-  { value: 'retorno', label: 'Retorno' },
-  { value: 'reavaliacao', label: 'Reavaliação' },
-  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem' },
-  { value: 'pts', label: 'PTS' },
-  { value: 'triagem_inicial', label: 'Triagem Inicial' },
+  { value: 'avaliacao_inicial', label: '🟢 Avaliação Inicial' },
+  { value: 'retorno', label: '🔵 Retorno' },
+  { value: 'sessao', label: '🟡 Sessão' },
+  { value: 'urgencia', label: '🔴 Urgência' },
+  { value: 'procedimento', label: '🟣 Procedimento' },
+  { value: 'consulta', label: 'Consulta (legado)' },
+  { value: 'reavaliacao', label: 'Reavaliação (legado)' },
+  { value: 'avaliacao_enfermagem', label: 'Avaliação de Enfermagem (legado)' },
+  { value: 'pts', label: 'PTS (legado)' },
+  { value: 'triagem_inicial', label: 'Triagem Inicial (legado)' },
 ];
 
 const emptyForm = {
