@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useProntuarioConfig, getDefaultConfig, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
+import { useData } from '@/contexts/DataContext';
+import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,25 +10,33 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import {
   Eye, EyeOff, Star, Lock, ChevronUp, ChevronDown, GripVertical,
-  Settings, Save, Loader2, CheckCircle, LayoutGrid, Printer, Palette,
-  FileText
+  Settings, Loader2, CheckCircle, LayoutGrid, Printer, Palette, ShieldAlert, Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const MeuProntuario: React.FC = () => {
   const { user } = useAuth();
+  const { funcionarios } = useData();
   const [tipo, setTipo] = useState('sessao');
-  const { config, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo);
+  const { config, adminConfig, loading, saving, saveConfig } = useProntuarioConfig(user?.id, tipo);
   const [localConfig, setLocalConfig] = useState<ProntuarioConfigData | null>(null);
   const [activeTab, setActiveTab] = useState<'blocos' | 'visual' | 'impressao'>('blocos');
 
+  // Find professional's profissao for admin config merge
+  const meuFuncionario = funcionarios.find(f => f.id === user?.id);
+  const profissao = meuFuncionario?.profissao;
+
   useEffect(() => {
-    if (config) setLocalConfig(JSON.parse(JSON.stringify(config)));
-  }, [config]);
+    if (config) {
+      // Apply admin constraints when merging
+      const merged = mergeAdminAndProfConfig(adminConfig, profissao, JSON.parse(JSON.stringify(config)));
+      setLocalConfig(merged);
+    }
+  }, [config, adminConfig, profissao]);
 
   const persist = useCallback((updated: ProntuarioConfigData) => {
     setLocalConfig(updated);
@@ -36,6 +45,19 @@ const MeuProntuario: React.FC = () => {
 
   const updateBloco = useCallback((blocoId: string, patch: Partial<BlocoConfig>) => {
     if (!localConfig) return;
+    const bloco = localConfig.blocos.find(b => b.id === blocoId);
+    if (!bloco) return;
+
+    // Enforce admin constraints
+    if (bloco.admin_desabilitado && patch.visivel === true) {
+      toast.error('Este campo foi desabilitado pelo administrador');
+      return;
+    }
+    if (bloco.admin_obrigatorio && patch.obrigatorio === false) {
+      toast.error('Este campo foi marcado como obrigatório pelo administrador');
+      return;
+    }
+
     const updated = {
       ...localConfig,
       blocos: localConfig.blocos.map(b =>
@@ -52,7 +74,6 @@ const MeuProntuario: React.FC = () => {
     if (idx < 0) return;
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= blocos.length) return;
-    // Swap ordens
     const tmp = blocos[idx].ordem;
     blocos[idx] = { ...blocos[idx], ordem: blocos[newIdx].ordem };
     blocos[newIdx] = { ...blocos[newIdx], ordem: tmp };
@@ -61,9 +82,10 @@ const MeuProntuario: React.FC = () => {
 
   const resetToDefault = useCallback(() => {
     const defaults = getDefaultConfig(tipo);
-    persist(defaults);
+    const merged = mergeAdminAndProfConfig(adminConfig, profissao, defaults);
+    persist(merged);
     toast.success('Configuração restaurada ao padrão');
-  }, [tipo, persist]);
+  }, [tipo, persist, adminConfig, profissao]);
 
   if (!user) return null;
 
@@ -87,8 +109,13 @@ const MeuProntuario: React.FC = () => {
             Meu Prontuário
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Personalize a estrutura e aparência do seu prontuário clínico
+            Personalize a estrutura do seu prontuário. Configurações do admin são respeitadas automaticamente.
           </p>
+          {profissao && (
+            <Badge variant="outline" className="mt-1 text-xs">
+              Especialidade: {profissao}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {saving ? (
@@ -100,6 +127,15 @@ const MeuProntuario: React.FC = () => {
               <CheckCircle className="w-3 h-3" /> Salvo
             </Badge>
           ) : null}
+        </div>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border/60 text-xs text-muted-foreground">
+        <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+        <div>
+          <strong className="text-foreground">Hierarquia de configuração:</strong> O admin define o modelo base da sua especialidade.
+          Você pode ocultar campos visíveis, reordenar e marcar favoritos. Campos desabilitados ou obrigatórios pelo admin são bloqueados.
         </div>
       </div>
 
@@ -157,80 +193,102 @@ const MeuProntuario: React.FC = () => {
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     Configure quais seções aparecem no prontuário, a ordem e quais ficam expandidas por padrão.
+                    <br />
+                    <ShieldAlert className="w-3 h-3 inline mr-1" />
+                    Campos com <Lock className="w-3 h-3 inline" /> foram bloqueados pelo admin.
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-1">
-                  {sortedBlocos.map((bloco, idx) => (
-                    <div
-                      key={bloco.id}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all',
-                        bloco.visivel
-                          ? 'bg-card border-border/60 hover:border-primary/30'
-                          : 'bg-muted/30 border-border/30 opacity-60'
-                      )}
-                    >
-                      {/* Drag handle (visual only) */}
-                      <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                  <TooltipProvider>
+                    {sortedBlocos.map((bloco, idx) => {
+                      const isAdminDisabled = !!bloco.admin_desabilitado;
+                      const isAdminRequired = !!bloco.admin_obrigatorio;
 
-                      {/* Label */}
-                      <span className={cn(
-                        'text-sm font-medium flex-1 truncate',
-                        !bloco.visivel && 'line-through text-muted-foreground'
-                      )}>
-                        {bloco.label}
-                      </span>
-
-                      {/* Badges */}
-                      {bloco.obrigatorio && (
-                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">OBR</Badge>
-                      )}
-
-                      {/* Controls */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {/* Move up */}
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7"
-                          disabled={idx === 0}
-                          onClick={() => moveBloco(bloco.id, -1)}
+                      return (
+                        <div
+                          key={bloco.id}
+                          className={cn(
+                            'flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all',
+                            isAdminDisabled
+                              ? 'bg-muted/20 border-border/20 opacity-40'
+                              : bloco.visivel
+                                ? 'bg-card border-border/60 hover:border-primary/30'
+                                : 'bg-muted/30 border-border/30 opacity-60'
+                          )}
                         >
-                          <ChevronUp className="w-3.5 h-3.5" />
-                        </Button>
-                        {/* Move down */}
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7"
-                          disabled={idx === sortedBlocos.length - 1}
-                          onClick={() => moveBloco(bloco.id, 1)}
-                        >
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </Button>
+                          <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0" />
 
-                        {/* Visible toggle */}
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7"
-                          disabled={bloco.obrigatorio}
-                          onClick={() => updateBloco(bloco.id, { visivel: !bloco.visivel })}
-                          title={bloco.visivel ? 'Ocultar' : 'Mostrar'}
-                        >
-                          {bloco.visivel ? <Eye className="w-3.5 h-3.5 text-primary" /> : <EyeOff className="w-3.5 h-3.5" />}
-                        </Button>
+                          <span className={cn(
+                            'text-sm font-medium flex-1 truncate',
+                            (isAdminDisabled || !bloco.visivel) && 'line-through text-muted-foreground'
+                          )}>
+                            {bloco.label}
+                          </span>
 
-                        {/* Favorito (expanded by default) */}
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7"
-                          onClick={() => updateBloco(bloco.id, { favorito: !bloco.favorito })}
-                          title={bloco.favorito ? 'Remover dos favoritos' : 'Marcar como favorito (expandido ao abrir)'}
-                        >
-                          <Star className={cn('w-3.5 h-3.5', bloco.favorito ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground')} />
-                        </Button>
+                          {/* Badges */}
+                          {isAdminDisabled && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0 gap-1 text-muted-foreground">
+                                  <ShieldAlert className="w-3 h-3" /> Admin
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Desabilitado pelo administrador — não pode ser reativado</TooltipContent>
+                            </Tooltip>
+                          )}
+                          {isAdminRequired && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1">
+                                  <Lock className="w-3 h-3" /> OBR
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>Obrigatório pelo administrador — não pode ser removido</TooltipContent>
+                            </Tooltip>
+                          )}
+                          {bloco.obrigatorio && !isAdminRequired && (
+                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">OBR</Badge>
+                          )}
 
-                        {/* Obrigatório lock */}
-                        {bloco.obrigatorio && (
-                          <Lock className="w-3.5 h-3.5 text-muted-foreground/50" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                          {/* Controls */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              disabled={idx === 0 || isAdminDisabled}
+                              onClick={() => moveBloco(bloco.id, -1)}
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              disabled={idx === sortedBlocos.length - 1 || isAdminDisabled}
+                              onClick={() => moveBloco(bloco.id, 1)}
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </Button>
+
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              disabled={isAdminDisabled || isAdminRequired}
+                              onClick={() => updateBloco(bloco.id, { visivel: !bloco.visivel })}
+                              title={isAdminDisabled ? 'Bloqueado pelo admin' : bloco.visivel ? 'Ocultar' : 'Mostrar'}
+                            >
+                              {bloco.visivel ? <Eye className="w-3.5 h-3.5 text-primary" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            </Button>
+
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7"
+                              disabled={isAdminDisabled}
+                              onClick={() => updateBloco(bloco.id, { favorito: !bloco.favorito })}
+                              title={bloco.favorito ? 'Remover dos favoritos' : 'Marcar como favorito (expandido ao abrir)'}
+                            >
+                              <Star className={cn('w-3.5 h-3.5', bloco.favorito ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground')} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </TooltipProvider>
                 </CardContent>
               </Card>
             )}

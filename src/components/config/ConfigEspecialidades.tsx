@@ -92,9 +92,34 @@ const DEFAULT_ESPECIALIDADES: EspecialidadeConfig[] = [
       { id: 'e3', key: 'intercorrencias', label: 'Intercorrências', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 3 },
     ],
   },
+  { key: 'servico_social', label: 'Serviço Social', ativa: true, profissoes: ['servico_social', 'assistente_social'],
+    campos: [
+      { id: 'ss1', key: 'situacao_socioeconomica', label: 'Situação Socioeconômica', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 1 },
+      { id: 'ss2', key: 'rede_apoio', label: 'Rede de Apoio', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 2 },
+      { id: 'ss3', key: 'vulnerabilidade', label: 'Vulnerabilidade Social', tipo: 'select', obrigatorio: false, habilitado: true, isBuiltin: true, order: 3, opcoes: ['Baixa', 'Média', 'Alta', 'Extrema'] },
+      { id: 'ss4', key: 'encaminhamentos_sociais', label: 'Encaminhamentos Sociais', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 4 },
+      { id: 'ss5', key: 'parecer_social', label: 'Parecer Social', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 5 },
+    ],
+  },
+  { key: 'cirurgia_geral', label: 'Cirurgia Geral', ativa: true, profissoes: ['cirurgia_geral', 'cirurgiao'],
+    campos: [
+      { id: 'cg1', key: 'indicacao_cirurgica', label: 'Indicação Cirúrgica', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 1 },
+      { id: 'cg2', key: 'avaliacao_preop', label: 'Avaliação Pré-operatória', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 2 },
+      { id: 'cg3', key: 'descricao_procedimento', label: 'Descrição do Procedimento', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 3 },
+      { id: 'cg4', key: 'orientacoes_posop', label: 'Orientações Pós-operatórias', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 4 },
+    ],
+  },
+  { key: 'infectologia', label: 'Infectologia', ativa: true, profissoes: ['infectologia', 'infectologista'],
+    campos: [
+      { id: 'inf1', key: 'agente_infeccioso', label: 'Agente Infeccioso / Suspeita', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 1 },
+      { id: 'inf2', key: 'exames_lab', label: 'Exames Laboratoriais', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 2 },
+      { id: 'inf3', key: 'esquema_terapeutico', label: 'Esquema Terapêutico', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 3 },
+      { id: 'inf4', key: 'medidas_controle', label: 'Medidas de Controle', tipo: 'textarea', obrigatorio: false, habilitado: true, isBuiltin: true, order: 4 },
+    ],
+  },
 ];
 
-const PROFISSOES = ['fisioterapia', 'psicologia', 'fonoaudiologia', 'nutricao', 'terapia_ocupacional', 'medicina', 'odontologia', 'enfermagem'];
+const PROFISSOES = ['fisioterapia', 'psicologia', 'fonoaudiologia', 'nutricao', 'terapia_ocupacional', 'medicina', 'odontologia', 'enfermagem', 'servico_social', 'assistente_social', 'cirurgia_geral', 'cirurgiao', 'infectologia', 'infectologista'];
 
 const ConfigEspecialidades: React.FC = () => {
   const [especialidades, setEspecialidades] = useState<EspecialidadeConfig[]>(DEFAULT_ESPECIALIDADES);
