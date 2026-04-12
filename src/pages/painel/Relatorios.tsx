@@ -48,6 +48,8 @@ const Relatorios: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
+  const [filterCargoProd, setFilterCargoProd] = useState('all');
+  const [prodViewMode, setProdViewMode] = useState<'tabela' | 'grafico'>('tabela');
   const [timelineGroup, setTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
