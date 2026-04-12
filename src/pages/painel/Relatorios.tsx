@@ -1531,15 +1531,6 @@ th{background:#f1f5f9;font-weight:600;}
         </TabsContent>
 
 
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Cancelados</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Remarcados</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Tempo Médio</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Retorno</th>
                     </tr>
                   </thead>
                   <tbody>
