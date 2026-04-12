@@ -1122,6 +1122,26 @@ const ProntuarioPage: React.FC = () => {
             />
           )}
 
+          {form.paciente_id && (
+            <FichaPacienteCabecalho
+              pacienteId={form.paciente_id}
+              profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
+              profissionalId={searchParams.get("profissionalId") || user?.id || ""}
+              agendamentoId={form.agendamento_id || undefined}
+              triagem={triagem ? {
+                pressao_arterial: triagem.pressao_arterial,
+                temperatura: triagem.temperatura,
+                saturacao_oxigenio: triagem.saturacao_oxigenio,
+                frequencia_cardiaca: triagem.frequencia_cardiaca,
+                classificacao_risco: (triagem as any).classificacao_risco,
+              } : null}
+              funcionarios={funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true }))}
+              onPacienteUpdated={() => {
+                loadProntuarios();
+              }}
+            />
+          )}
+
           {triagem && (
             <div className="space-y-3 pointer-events-none select-text">
               {triagem.alergias && triagem.alergias.length > 0 && (
