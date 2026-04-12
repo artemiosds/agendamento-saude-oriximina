@@ -1829,6 +1829,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateBloqueio,
     deleteBloqueio,
     getAvailableSlots,
+    getTurnoInfo,
     getAvailableDates,
     getNextAvailableSlots,
     getBlockingInfo,
