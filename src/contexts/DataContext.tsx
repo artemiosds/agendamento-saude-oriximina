@@ -1491,7 +1491,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const dayOfWeek = isoDayOfWeek(date);
       const disps = disponibilidadesRef.current;
-      const disp = disps.find(
+      // Find ALL matching disponibilidades for this prof/unit/date
+      const allDisps = disps.filter(
         (d) =>
           d.profissionalId === profissionalId &&
           d.unidadeId === unidadeId &&
@@ -1499,64 +1500,89 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           date >= d.dataInicio &&
           date <= d.dataFim,
       );
-      if (!disp) return [];
+      if (allDisps.length === 0) return [];
 
-      const slots: string[] = [];
-      const startHour = parseInt(disp.horaInicio.split(":")[0]);
-      const startMin = parseInt(disp.horaInicio.split(":")[1] || "0");
-      const endHour = parseInt(disp.horaFim.split(":")[0]);
-      const endMin = parseInt(disp.horaFim.split(":")[1] || "0");
       const key = `${profissionalId}|${unidadeId}|${date}`;
       const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
-      if (dayAppointments.length >= disp.vagasPorDia) return [];
 
-      const hourCounts = new Map<string, number>();
-      const slotCounts = new Map<string, number>();
-      for (const a of dayAppointments) {
-        const hKey = a.hora.substring(0, 3);
-        hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
-        slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
-      }
+      const turnoDisps = allDisps.filter((d) => d.vagasPorHora === 0);
+      const horaDisps = allDisps.filter((d) => d.vagasPorHora > 0);
 
-      const funcs = funcionariosRef.current;
-      const prof = funcs.find((f) => f.id === profissionalId);
-      const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
+      const slots: string[] = [];
       const ehHoje = date === todayStr;
       const limiteMinutos = ehHoje ? nowMinutesInBrazil() + 30 : -1;
 
-      let h = startHour;
-      let m = startMin;
-      while (h < endHour || (h === endHour && m < endMin)) {
-        const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-        if (ehHoje && h * 60 + m <= limiteMinutos) {
-          m += intervalMinutes;
-          while (m >= 60) {
-            m -= 60;
-            h++;
-          }
-          continue;
-        }
+      // --- TURNO MODE: generate one slot per turno that still has capacity ---
+      for (const td of turnoDisps) {
+        const turnoStart = td.horaInicio;
+        const turnoEnd = td.horaFim;
+        // Count appointments whose hora falls within this turno range
+        const turnoAppCount = dayAppointments.filter(
+          (a) => a.hora >= turnoStart && a.hora < turnoEnd,
+        ).length;
+        if (turnoAppCount >= td.vagasPorDia) continue;
 
-        const hourStr = `${String(h).padStart(2, "0")}:`;
-        const hourCount = hourCounts.get(hourStr) || 0;
-        const slotCount = slotCounts.get(timeStr) || 0;
-        const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
-        if (!blocked && hourCount < disp.vagasPorHora) {
-          if (isPublic) {
-            if (slotCount === 0) slots.push(timeStr);
-          } else if (slotCount < disp.vagasPorHora) {
-            slots.push(timeStr);
-          }
-        }
+        // Parse start time for today check
+        const sh = parseInt(turnoStart.split(":")[0]);
+        const sm = parseInt(turnoStart.split(":")[1] || "0");
+        if (ehHoje && sh * 60 + sm <= limiteMinutos) continue;
 
-        m += intervalMinutes;
-        while (m >= 60) {
-          m -= 60;
-          h++;
+        const blocked = isSlotBlocked(profissionalId, unidadeId, date, turnoStart);
+        if (!blocked && !slots.includes(turnoStart)) {
+          slots.push(turnoStart);
         }
       }
 
-      return slots;
+      // --- HORA MODE: existing per-hour/per-slot logic ---
+      if (horaDisps.length > 0) {
+        const disp = horaDisps[0];
+        if (dayAppointments.length < disp.vagasPorDia) {
+          const hourCounts = new Map<string, number>();
+          const slotCounts = new Map<string, number>();
+          for (const a of dayAppointments) {
+            const hKey = a.hora.substring(0, 3);
+            hourCounts.set(hKey, (hourCounts.get(hKey) || 0) + 1);
+            slotCounts.set(a.hora, (slotCounts.get(a.hora) || 0) + 1);
+          }
+
+          const funcs = funcionariosRef.current;
+          const prof = funcs.find((f) => f.id === profissionalId);
+          const intervalMinutes = Math.max(15, prof?.tempoAtendimento || 30);
+
+          const startHour = parseInt(disp.horaInicio.split(":")[0]);
+          const startMin = parseInt(disp.horaInicio.split(":")[1] || "0");
+          const endHour = parseInt(disp.horaFim.split(":")[0]);
+          const endMin = parseInt(disp.horaFim.split(":")[1] || "0");
+
+          let h = startHour;
+          let m = startMin;
+          while (h < endHour || (h === endHour && m < endMin)) {
+            const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            if (ehHoje && h * 60 + m <= limiteMinutos) {
+              m += intervalMinutes;
+              while (m >= 60) { m -= 60; h++; }
+              continue;
+            }
+
+            const hourStr = `${String(h).padStart(2, "0")}:`;
+            const hourCount = hourCounts.get(hourStr) || 0;
+            const slotCount = slotCounts.get(timeStr) || 0;
+            const blocked = isSlotBlocked(profissionalId, unidadeId, date, timeStr);
+            if (!blocked && hourCount < disp.vagasPorHora) {
+              if (isPublic) {
+                if (slotCount === 0) slots.push(timeStr);
+              } else if (slotCount < disp.vagasPorHora) {
+                slots.push(timeStr);
+              }
+            }
+
+            m += intervalMinutes;
+            while (m >= 60) { m -= 60; h++; }
+          }
+        }
+      }
+
+      return slots.sort();
     },
     [isSlotBlocked],
   );
@@ -1570,16 +1596,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const dates: string[] = [];
       const todayStr = todayLocalStr();
 
+      // Pre-compute total vagasPorDia per date (aggregating turno records)
+      const processedDates = new Set<string>();
+
       for (const disp of filteredDisps) {
         let currentDate = disp.dataInicio > todayStr ? disp.dataInicio : todayStr;
         while (currentDate <= disp.dataFim) {
           const dayOfWeek = isoDayOfWeek(currentDate);
-          if (disp.diasSemana.includes(dayOfWeek)) {
+          if (disp.diasSemana.includes(dayOfWeek) && !processedDates.has(currentDate)) {
             const key = `${profissionalId}|${unidadeId}|${currentDate}`;
             const dayCount = appointmentCountsByKeyRef.current.get(key) || 0;
-            if (dayCount < disp.vagasPorDia && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
-              if (!dates.includes(currentDate)) dates.push(currentDate);
+            // Sum vagasPorDia across ALL matching disps for this date
+            const dateDisps = filteredDisps.filter(
+              (d) => d.diasSemana.includes(dayOfWeek) && currentDate >= d.dataInicio && currentDate <= d.dataFim,
+            );
+            const totalVagas = dateDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
+            if (dayCount < totalVagas && !isSlotBlocked(profissionalId, unidadeId, currentDate)) {
+              dates.push(currentDate);
             }
+            processedDates.add(currentDate);
           }
           currentDate = addDaysToDateStr(currentDate, 1);
         }
