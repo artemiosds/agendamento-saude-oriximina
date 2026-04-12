@@ -14,11 +14,14 @@ interface SlotInfoBadgeProps {
 export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>(({
   profissionalId, unidadeId, date, hora, compact, className,
 }, ref) => {
-  const { agendamentos, disponibilidades, getAvailableSlots } = useData();
+  const { agendamentos, disponibilidades, getAvailableSlots, getTurnoInfo } = useData();
+
+  const turnoData = useMemo(() => {
+    return getTurnoInfo(profissionalId, unidadeId, date);
+  }, [getTurnoInfo, profissionalId, unidadeId, date]);
 
   const info = useMemo(() => {
     const dayOfWeek = isoDayOfWeek(date);
-    // Find ALL matching disponibilidades for this prof/unit/date (turno mode may have multiple)
     const allDisps = disponibilidades.filter(
       d => d.profissionalId === profissionalId &&
         d.unidadeId === unidadeId &&
@@ -37,7 +40,6 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     );
 
     const dayOccupied = active.length;
-    // Sum vagasPorDia across all matching disps (turno records are independent)
     const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const availableSlotOptions = getAvailableSlots(profissionalId, unidadeId, date).length;
@@ -61,6 +63,68 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   const isNearFull = info.dayAvailable <= 2 && !isFull;
   const hasAvailableSlotOptions = info.availableSlotOptions > 0;
   const hasNoRemainingSlotOptions = !isFull && !hasAvailableSlotOptions;
+
+  // Turno mode: show per-turno breakdown
+  if (info.isTurnoMode && turnoData.length > 0 && !compact) {
+    const totalOcupadas = turnoData.reduce((s, t) => s + t.vagasOcupadas, 0);
+    const totalVagas = turnoData.reduce((s, t) => s + t.vagasTotal, 0);
+    return (
+      <div ref={ref as React.Ref<HTMLDivElement>} className={cn('space-y-1.5', className)}>
+        <span className="text-xs font-medium text-muted-foreground">
+          📊 {totalOcupadas} de {totalVagas} vagas ocupadas no dia
+        </span>
+        <div className="flex flex-col gap-1">
+          {turnoData.map((t) => {
+            const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+            return (
+              <div
+                key={t.turnoId}
+                className={cn(
+                  'flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border',
+                  t.lotado
+                    ? 'bg-destructive/5 border-destructive/20 text-destructive'
+                    : pct > 60
+                      ? 'bg-warning/5 border-warning/20 text-warning'
+                      : 'bg-success/5 border-success/20 text-success',
+                )}
+              >
+                <span>{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
+                <span className="font-medium">{t.nome}</span>
+                <span className="text-muted-foreground">{t.horaInicio}–{t.horaFim}</span>
+                <span className="ml-auto font-semibold">
+                  {t.vagasLivres} de {t.vagasTotal} livres
+                </span>
+                {t.lotado && (
+                  <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
+                    Lotado
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (info.isTurnoMode && turnoData.length > 0 && compact) {
+    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivres, 0);
+    const allFull = turnoData.every(t => t.lotado);
+    return (
+      <span
+        ref={ref as React.Ref<HTMLSpanElement>}
+        className={cn(
+          'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full',
+          allFull && 'bg-destructive/10 text-destructive',
+          !allFull && totalLivres <= 2 && 'bg-warning/10 text-warning',
+          !allFull && totalLivres > 2 && 'bg-success/10 text-success',
+          className,
+        )}
+      >
+        {allFull ? '🔴 Lotado' : `${totalLivres} vaga${totalLivres !== 1 ? 's' : ''}`}
+      </span>
+    );
+  }
 
   if (compact) {
     return (
