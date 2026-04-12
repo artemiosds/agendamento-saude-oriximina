@@ -2292,6 +2292,7 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
                       </tr>
                     </thead>
@@ -2300,6 +2301,7 @@ th{background:#f1f5f9;font-weight:600;}
                         const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
                         const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
                         const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
                         return (
                           <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
                             <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
@@ -2321,6 +2323,7 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{procSigtap}</td>
                             <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
                           </tr>
                         );
@@ -2328,7 +2331,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={11} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
                     </tfoot>
                   </table>
