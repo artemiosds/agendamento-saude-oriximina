@@ -1302,17 +1302,75 @@ const Agenda: React.FC = () => {
                     </Select>
                   </div>
                   <div>
-                    <Label>Horário Disponível</Label>
+                     <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {newAg.profissionalId && (
                       <SlotInfoBadge
                         profissionalId={newAg.profissionalId}
-                        unidadeId={profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || ""}
+                        unidadeId={selectedProfUnit}
                         date={selectedDate}
                         hora={newAg.hora}
                         className="mt-1 mb-2"
                       />
                     )}
-                    {newAgSlots.length === 0 ? (
+                    {isTurnoMode ? (
+                      /* === TURNO MODE: show turno cards === */
+                      <div className="space-y-2 mt-2">
+                        {newAgTurnoInfo.map((t) => {
+                          const isSelected = newAg.hora === t.horaInicio;
+                          const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+                          return (
+                            <button
+                              key={t.turnoId}
+                              type="button"
+                              disabled={t.lotado}
+                              onClick={() => setNewAg((p) => ({ ...p, hora: t.horaInicio }))}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all',
+                                isSelected && !t.lotado && 'border-primary bg-primary/5 shadow-sm',
+                                !isSelected && !t.lotado && 'border-border hover:border-primary/40 hover:bg-muted/30',
+                                t.lotado && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
+                              )}
+                            >
+                              <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-sm text-foreground">{t.nome}</span>
+                                  <span className="text-xs text-muted-foreground">{t.horaInicio} – {t.horaFim}</span>
+                                </div>
+                                <div className="mt-1.5 w-full bg-muted rounded-full h-1.5">
+                                  <div
+                                    className={cn(
+                                      'h-1.5 rounded-full transition-all',
+                                      pct >= 90 ? 'bg-destructive' : pct >= 60 ? 'bg-warning' : 'bg-success',
+                                    )}
+                                    style={{ width: `${Math.min(100, pct)}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                {t.lotado ? (
+                                  <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-1 rounded-full">
+                                    Lotado
+                                  </span>
+                                ) : (
+                                  <span className={cn(
+                                    'text-sm font-bold',
+                                    pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
+                                  )}>
+                                    {t.vagasLivres} de {t.vagasTotal}
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {newAgTurnoInfo.every(t => t.lotado) && (
+                          <p className="text-sm text-destructive mt-1">
+                            Todos os turnos estão lotados para esta data. Selecione outro dia.
+                          </p>
+                        )}
+                      </div>
+                    ) : newAgSlots.length === 0 ? (
                       isMaster ? (
                         <div className="mt-2 space-y-1">
                           <p className="text-xs text-muted-foreground">Sem horários pré-configurados. Como Master, digite o horário manualmente:</p>
