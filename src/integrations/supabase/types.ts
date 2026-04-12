@@ -76,11 +76,13 @@ export type Database = {
           id: string
           lembrete_24h_enviado_em: string | null
           lembrete_proximo_enviado_em: string | null
+          nome_procedimento: string | null
           observacoes: string
           origem: string
           paciente_id: string
           paciente_nome: string
           prioridade_perfil: string
+          procedimento_sigtap: string | null
           profissional_id: string
           profissional_nome: string
           sala_id: string
@@ -100,11 +102,13 @@ export type Database = {
           id: string
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          nome_procedimento?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
@@ -124,11 +128,13 @@ export type Database = {
           id?: string
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          nome_procedimento?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
