@@ -454,6 +454,21 @@ const ProntuarioPage: React.FC = () => {
       if (parsed?.exames && Array.isArray(parsed.exames)) setListaExames(parsed.exames);
       else setListaExames([]);
     } catch { setListaExames([]); }
+    // Load prescriptions from prescricao JSON
+    try {
+      const parsed = p.prescricao ? JSON.parse(p.prescricao) : null;
+      if (parsed?.medicamentos && Array.isArray(parsed.medicamentos)) setListaPrescricao(parsed.medicamentos);
+      else setListaPrescricao([]);
+    } catch { setListaPrescricao([]); }
+    // Load specialty fields from observacoes JSON
+    try {
+      const parsed = p.observacoes ? JSON.parse(p.observacoes) : null;
+      if (parsed?.especialidade_fields && typeof parsed.especialidade_fields === 'object') {
+        setEspecialidadeFields(parsed.especialidade_fields);
+      } else {
+        setEspecialidadeFields({});
+      }
+    } catch { setEspecialidadeFields({}); }
     setDialogOpen(true);
     const pac = pacientes.find((px) => px.id === p.paciente_id);
     logAction({
