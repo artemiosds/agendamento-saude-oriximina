@@ -1770,6 +1770,18 @@ const ProntuarioPage: React.FC = () => {
           dataAtendimento={new Date().toLocaleDateString('pt-BR')}
         />
       )}
+
+      {/* Histórico Completo Modal */}
+      {queryPacienteId && (
+        <HistoricoCompletoModal
+          open={historicoCompletoOpen}
+          onOpenChange={setHistoricoCompletoOpen}
+          pacienteId={queryPacienteId}
+          pacienteNome={queryPacienteNome || "Paciente"}
+          unidades={unidades}
+          currentProfissionalId={user?.id}
+        />
+      )}
     </div>
   );
 };
