@@ -737,6 +737,48 @@ export type Database = {
         }
         Relationships: []
       }
+      medications: {
+        Row: {
+          apresentacao: string
+          ativo: boolean
+          classe_terapeutica: string
+          created_at: string
+          dosagem_padrao: string
+          id: string
+          is_global: boolean
+          nome: string
+          principio_ativo: string
+          profissional_id: string | null
+          via_padrao: string
+        }
+        Insert: {
+          apresentacao?: string
+          ativo?: boolean
+          classe_terapeutica?: string
+          created_at?: string
+          dosagem_padrao?: string
+          id?: string
+          is_global?: boolean
+          nome: string
+          principio_ativo?: string
+          profissional_id?: string | null
+          via_padrao?: string
+        }
+        Update: {
+          apresentacao?: string
+          ativo?: boolean
+          classe_terapeutica?: string
+          created_at?: string
+          dosagem_padrao?: string
+          id?: string
+          is_global?: boolean
+          nome?: string
+          principio_ativo?: string
+          profissional_id?: string | null
+          via_padrao?: string
+        }
+        Relationships: []
+      }
       multiprofessional_evaluations: {
         Row: {
           agendamento_id: string | null
