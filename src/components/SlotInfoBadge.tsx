@@ -18,13 +18,16 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
 
   const info = useMemo(() => {
     const dayOfWeek = isoDayOfWeek(date);
-    const disp = disponibilidades.find(
+    // Find ALL matching disponibilidades for this prof/unit/date (turno mode may have multiple)
+    const allDisps = disponibilidades.filter(
       d => d.profissionalId === profissionalId &&
         d.unidadeId === unidadeId &&
         d.diasSemana.includes(dayOfWeek) &&
         date >= d.dataInicio && date <= d.dataFim,
     );
-    if (!disp) return null;
+    if (allDisps.length === 0) return null;
+
+    const isTurnoMode = allDisps.some(d => d.vagasPorHora === 0);
 
     const active = agendamentos.filter(
       a => a.profissionalId === profissionalId &&
@@ -34,19 +37,21 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
     );
 
     const dayOccupied = active.length;
-    const dayTotal = disp.vagasPorDia;
+    // Sum vagasPorDia across all matching disps (turno records are independent)
+    const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
     const availableSlotOptions = getAvailableSlots(profissionalId, unidadeId, date).length;
 
     let hourOccupied: number | undefined;
     let hourTotal: number | undefined;
-    if (hora) {
+    if (hora && !isTurnoMode) {
+      const disp = allDisps[0];
       const hPrefix = hora.substring(0, 3);
       hourOccupied = active.filter(a => a.hora.startsWith(hPrefix)).length;
       hourTotal = disp.vagasPorHora;
     }
 
-    return { dayOccupied, dayTotal, dayAvailable, hourOccupied, hourTotal, availableSlotOptions };
+    return { dayOccupied, dayTotal, dayAvailable, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
   }, [profissionalId, unidadeId, date, hora, agendamentos, disponibilidades, getAvailableSlots]);
 
   if (!info) return null;
