@@ -23,9 +23,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Progress } from "@/components/ui/progress";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
@@ -222,6 +223,66 @@ const ProntuarioPage: React.FC = () => {
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
+  // Sessão: cycle + PTS state
+  interface CycleSession { id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; appointment_id: string | null; }
+  interface ActiveCycle { id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; }
+  interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; }
+  const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+  const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
+  const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
+  const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
+  const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
+  const soapRef = useRef<HTMLDivElement>(null);
+
+  const loadSessaoData = async (patientId: string, professionalId: string) => {
+    setSessaoDataLoading(true);
+    try {
+      const [cycleRes, ptsRes] = await Promise.all([
+        (supabase as any).from('treatment_cycles').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .in('status', ['em_andamento', 'ativo'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('pts').select('*')
+          .eq('patient_id', patientId)
+          .eq('status', 'ativo')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      const cycle = cycleRes.data;
+      setSessaoCycle(cycle || null);
+      if (cycle) {
+        const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
+          .eq('cycle_id', cycle.id)
+          .order('session_number', { ascending: true });
+        setSessaoCycleSessions(sessions || []);
+      } else {
+        setSessaoCycleSessions([]);
+      }
+      setSessaoPts(ptsRes.data as ActivePTS | null);
+    } catch (err) {
+      console.error('[loadSessaoData]', err);
+    }
+    setSessaoDataLoading(false);
+  };
+
+  const handleRegistrarSessaoClick = () => {
+    setSessaoHighlightSOAP(true);
+    setTimeout(() => {
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+    setTimeout(() => setSessaoHighlightSOAP(false), 4000);
+  };
+
+  const currentSessionForRegistration = useMemo(() => {
+    if (!sessaoCycle || sessaoCycleSessions.length === 0) return null;
+    // Find the first session that is not 'realizada' and not 'falta'
+    return sessaoCycleSessions.find(s => !['realizada', 'falta', 'falta_justificada'].includes(s.status)) || null;
+  }, [sessaoCycle, sessaoCycleSessions]);
+
   // Medications & exam types state
   interface MedicationDB {
     id: string; nome: string; principio_ativo: string; classe_terapeutica: string;
@@ -396,6 +457,13 @@ const ProntuarioPage: React.FC = () => {
       setSearch(pacienteNome);
     }
   }, [searchParams, prontuarios.length]);
+
+  // Load cycle + PTS data when sessao type is selected
+  useEffect(() => {
+    if (form.tipo_registro === 'sessao' && form.paciente_id && user?.id) {
+      loadSessaoData(form.paciente_id, user.id);
+    }
+  }, [form.tipo_registro, form.paciente_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patientHistory = useMemo(() => {
     if (!form.paciente_id) return [];
@@ -610,6 +678,47 @@ const ProntuarioPage: React.FC = () => {
         if (selectedProcIds.length > 0) {
           const links = selectedProcIds.map((pid) => ({ prontuario_id: prontuarioId, procedimento_id: pid }));
           await (supabase as any).from("prontuario_procedimentos").insert(links);
+        }
+      }
+
+      // Session registration for sessao type
+      if (form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle) {
+        const soapFilled = form.soap_subjetivo?.trim() && form.soap_objetivo?.trim() && form.soap_avaliacao?.trim() && form.soap_plano?.trim();
+        if (soapFilled) {
+          // Register session as realizada
+          await (supabase as any).from('treatment_sessions').update({
+            status: 'realizada',
+            clinical_notes: `S: ${form.soap_subjetivo}\nO: ${form.soap_objetivo}\nA: ${form.soap_avaliacao}\nP: ${form.soap_plano}`,
+            appointment_id: form.agendamento_id || null,
+          }).eq('id', currentSessionForRegistration.id);
+
+          // Update sessions_done on cycle
+          const newDone = sessaoCycle.sessions_done + 1;
+          const updatePayload: any = { sessions_done: newDone };
+          // Check if it was the last session
+          const remainingAfter = sessaoCycleSessions.filter(
+            s => !['realizada', 'falta', 'falta_justificada'].includes(s.status) && s.id !== currentSessionForRegistration.id
+          );
+          if (remainingAfter.length === 0) {
+            updatePayload.status = 'concluido';
+            toast.info('🎉 Ciclo de tratamento concluído!');
+          }
+          await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+
+          // Finalize the appointment if linked
+          if (form.agendamento_id) {
+            await (supabase as any).from('agendamentos').update({ status: 'concluido', atualizado_em: new Date().toISOString() }).eq('id', form.agendamento_id);
+          }
+
+          await logAction({
+            acao: 'sessao_registrada',
+            entidade: 'treatment_session',
+            entidadeId: currentSessionForRegistration.id,
+            modulo: 'prontuario',
+            user,
+            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+          });
+          toast.success(`Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
         }
       }
 
@@ -1183,7 +1292,7 @@ const ProntuarioPage: React.FC = () => {
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
             {/* SOAP Evolution — ALL 5 types */}
-            <div className="space-y-3 bg-primary/5 rounded-lg p-4 border border-primary/20">
+            <div ref={soapRef} className={`space-y-3 bg-primary/5 rounded-lg p-4 border transition-all duration-500 ${sessaoHighlightSOAP ? 'border-primary ring-2 ring-primary/30 animate-pulse' : 'border-primary/20'}`}>
               <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
               <div>
                 <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
@@ -1286,14 +1395,167 @@ const ProntuarioPage: React.FC = () => {
             {/* 🟡 PRONTUÁRIO 3 — SESSÃO */}
             {form.tipo_registro === 'sessao' && (
               <div className="space-y-4">
-                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
-                  <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
-                  <div className="space-y-3">
-                    <div><Label>Procedimentos Realizados</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
-                    <div><Label>Resposta do Paciente</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
-                    <div><Label>Intercorrências</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Eventos adversos ou intercorrências..." /></div>
-                  </div>
-                </div>
+                {sessaoDataLoading ? (
+                  <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+                ) : (
+                  <>
+                    {/* 1. CICLO DE TRATAMENTO ATIVO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-primary" /> Ciclo de Tratamento Ativo
+                      </h4>
+                      {sessaoCycle ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div><span className="text-muted-foreground">Tipo:</span> <strong>{sessaoCycle.treatment_type}</strong></div>
+                            <div><span className="text-muted-foreground">Status:</span>{' '}
+                              <Badge variant={sessaoCycle.status === 'em_andamento' ? 'default' : sessaoCycle.status === 'concluido' ? 'secondary' : 'outline'} className="text-xs">
+                                {sessaoCycle.status === 'em_andamento' ? 'Ativo' : sessaoCycle.status === 'concluido' ? 'Concluído' : sessaoCycle.status}
+                              </Badge>
+                            </div>
+                            <div><span className="text-muted-foreground">Início:</span> <strong>{new Date(sessaoCycle.start_date + 'T12:00:00').toLocaleDateString('pt-BR')}</strong></div>
+                            <div><span className="text-muted-foreground">Previsão:</span> <strong>{sessaoCycle.end_date_predicted ? new Date(sessaoCycle.end_date_predicted + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
+                            <div><span className="text-muted-foreground">Frequência:</span> <strong>{sessaoCycle.frequency}</strong></div>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Sessão {sessaoCycle.sessions_done} de {sessaoCycle.total_sessions} realizadas</span>
+                              <span>{Math.round((sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100)}%</span>
+                            </div>
+                            <Progress value={(sessaoCycle.sessions_done / sessaoCycle.total_sessions) * 100} className="h-2" />
+                          </div>
+                          {/* Session list */}
+                          {sessaoCycleSessions.length > 0 && (
+                            <div className="border rounded-md overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Nº</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Data</th>
+                                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Status</th>
+                                    <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Ação</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sessaoCycleSessions.map(s => {
+                                    const isCurrent = currentSessionForRegistration?.id === s.id;
+                                    const isRealizada = s.status === 'realizada';
+                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : '⏳';
+                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Em andamento' : s.status === 'falta' ? '❌ Falta' : 'Aguardando';
+                                    return (
+                                      <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
+                                        <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
+                                        <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                                        <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          {isCurrent && (
+                                            <Button size="sm" variant="default" className="h-6 text-xs px-2" onClick={handleRegistrarSessaoClick}>
+                                              Registrar
+                                            </Button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="space-y-2">
+                          <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">Nenhum ciclo ativo</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Criar ciclo de tratamento
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {sessaoCycle?.status === 'concluido' && (
+                        <div className="space-y-2">
+                          <Badge variant="secondary" className="bg-green-500/10 text-green-700 border-green-500/30">Ciclo concluído</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setCycleOpen(true)}>
+                              <Activity className="w-3.5 h-3.5 mr-1" /> Iniciar novo ciclo
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. PTS VINCULADO */}
+                    <div className="rounded-lg border bg-card p-4 space-y-3">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-primary" /> PTS Vinculado
+                      </h4>
+                      {sessaoPts ? (() => {
+                        const createdAt = new Date(sessaoPts.created_at);
+                        const now = new Date();
+                        const monthsDiff = (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
+                        const isOutdated = monthsDiff >= 12;
+                        const metaPeriod = monthsDiff < 3 ? 'curto' : monthsDiff < 6 ? 'medio' : 'longo';
+                        const profName = funcionarios.find(f => f.id === sessaoPts.professional_id)?.nome || '';
+                        return (
+                          <>
+                            {isOutdated && (
+                              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                                <AlertTriangle className="w-3 h-3 mr-1" /> PTS desatualizado — revisar
+                              </Badge>
+                            )}
+                            <div className="text-sm space-y-2">
+                              <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
+                              <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
+                              {/* Highlighted meta based on period */}
+                              <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
+                                <span className="text-xs font-semibold text-muted-foreground">
+                                  {metaPeriod === 'curto' ? '🎯 Metas Curto Prazo (1-3 meses)' : metaPeriod === 'medio' ? '📋 Metas Médio Prazo (3-6 meses)' : '🔭 Metas Longo Prazo (6+ meses)'}
+                                </span>
+                                <p className="text-foreground text-sm mt-1">
+                                  {metaPeriod === 'curto' ? sessaoPts.metas_curto_prazo : metaPeriod === 'medio' ? sessaoPts.metas_medio_prazo : sessaoPts.metas_longo_prazo}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {sessaoPts.especialidades_envolvidas.map(e => (
+                                  <Badge key={e} variant="secondary" className="text-xs">{e}</Badge>
+                                ))}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Criado em {new Date(sessaoPts.created_at).toLocaleDateString('pt-BR')}
+                                {profName && ` por ${profName}`}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })() : (
+                        <div className="space-y-2">
+                          <Badge variant="outline">PTS não cadastrado</Badge>
+                          <div>
+                            <Button type="button" variant="outline" size="sm" onClick={() => setPtsOpen(true)}>
+                              <ClipboardList className="w-3.5 h-3.5 mr-1" /> Criar PTS
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3-5. Sessão fields */}
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                      <h4 className="text-sm font-semibold text-foreground mb-3">🟡 Sessão</h4>
+                      {currentSessionForRegistration && sessaoHighlightSOAP && (
+                        <div className="bg-primary/10 border border-primary/30 rounded-md p-2 mb-3 text-sm text-primary font-medium">
+                          Preencha a evolução para registrar esta sessão (Sessão {currentSessionForRegistration.session_number})
+                        </div>
+                      )}
+                      <div className="space-y-3">
+                        <div><Label>Procedimentos Realizados</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
+                        <div><Label>Resposta do Paciente</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
+                        <div><Label>Intercorrências</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
