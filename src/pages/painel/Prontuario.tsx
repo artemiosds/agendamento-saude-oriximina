@@ -217,6 +217,8 @@ const ProntuarioPage: React.FC = () => {
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
+  const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
+  const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
   // Medications & exam types state
   interface MedicationDB {
