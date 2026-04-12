@@ -90,6 +90,7 @@ export type Database = {
           status: string
           sync_status: string | null
           tipo: string
+          turno: string | null
           unidade_id: string
         }
         Insert: {
@@ -116,6 +117,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          turno?: string | null
           unidade_id?: string
         }
         Update: {
@@ -142,6 +144,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          turno?: string | null
           unidade_id?: string
         }
         Relationships: []
