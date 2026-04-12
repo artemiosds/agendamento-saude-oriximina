@@ -98,111 +98,131 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentos]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-        let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-        let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-        if (user?.role === 'coordenador' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'recepcao' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'profissional' && user.id) {
-          qAt = qAt.eq('profissional_id', user.id);
-          qFila = qFila.eq('profissional_id', user.id);
-        }
-        if (user?.role === 'tecnico' && user.id) {
-          qTriage = qTriage.eq('tecnico_id', user.id);
-        }
+  const loadReportData = useCallback(async () => {
+    try {
+      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
+      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
+      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
+      if (user?.role === 'coordenador' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'recepcao' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'profissional' && user.id) {
+        qAt = qAt.eq('profissional_id', user.id);
+        qFila = qFila.eq('profissional_id', user.id);
+      }
+      if (user?.role === 'tecnico' && user.id) {
+        qTriage = qTriage.eq('tecnico_id', user.id);
+      }
 
-        let qProc = (supabase as any).from('prontuario_procedimentos')
-          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+      let qProc = (supabase as any).from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
 
-        let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-        const loadAllTreatmentSessions = async () => {
-          const pageSize = 1000;
-          let from = 0;
-          let allSessions: any[] = [];
+      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
+      const loadAllTreatmentSessions = async () => {
+        const pageSize = 1000;
+        let from = 0;
+        let allSessions: any[] = [];
 
-          while (true) {
-            let query = supabase
-              .from('treatment_sessions')
-              .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-              .range(from, from + pageSize - 1);
+        while (true) {
+          let query = supabase
+            .from('treatment_sessions')
+            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+            .range(from, from + pageSize - 1);
 
-            if (user?.role === 'profissional') {
-              query = query.eq('professional_id', user.id);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-
-            allSessions = allSessions.concat(data);
-
-            if (data.length < pageSize) break;
-            from += pageSize;
+          if (user?.role === 'profissional') {
+            query = query.eq('professional_id', user.id);
           }
 
-          return allSessions;
-        };
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
 
-        if (user?.role === 'profissional') {
-          qCycles = qCycles.eq('professional_id', user.id);
-        }
-        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
-          qCycles = qCycles.eq('unit_id', user.unidadeId);
+          allSessions = allSessions.concat(data);
+
+          if (data.length < pageSize) break;
+          from += pageSize;
         }
 
-        const [
-          { data: atData },
-          { data: filaData },
-          { data: triageData },
-          { data: procData },
-          { data: cyclesData },
-          sessionsData,
-          { data: nursingData },
-          { data: multiData },
-          { data: ptsDataResult },
-        ] = await Promise.all([
-          qAt,
-          qFila,
-          qTriage,
-          qProc,
-          qCycles,
-          loadAllTreatmentSessions(),
-          supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
-          supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
-          supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
-        ]);
+        return allSessions;
+      };
 
-        if (atData) setAtendimentosDB(atData);
-        if (filaData) setFilaDB(filaData);
-        if (triageData) setTriagensDB(triageData as TriagemDB[]);
-        if (procData) {
-          setProcedimentosDB(procData.map((r: any) => ({
-            prontuario_id: r.prontuario_id,
-            procedimento_id: r.procedimento_id,
-            proc_nome: r.procedimentos?.nome || '',
-            prof_nome: r.prontuarios?.profissional_nome || '',
-            unidade_id: r.prontuarios?.unidade_id || '',
-            data: r.prontuarios?.data_atendimento || '',
-          })));
-        }
-        if (cyclesData) setTreatmentCycles(cyclesData);
-        if (sessionsData) setTreatmentSessions(sessionsData);
-        if (nursingData) setNursingEvals(nursingData);
-        if (multiData) setMultiEvals(multiData);
-        if (ptsDataResult) setPtsData(ptsDataResult);
-      } catch (err) { console.error('Error loading report data:', err); }
-    };
-    load();
+      if (user?.role === 'profissional') {
+        qCycles = qCycles.eq('professional_id', user.id);
+      }
+      if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+        qCycles = qCycles.eq('unit_id', user.unidadeId);
+      }
+
+      const [
+        { data: atData },
+        { data: filaData },
+        { data: triageData },
+        { data: procData },
+        { data: cyclesData },
+        sessionsData,
+        { data: nursingData },
+        { data: multiData },
+        { data: ptsDataResult },
+      ] = await Promise.all([
+        qAt,
+        qFila,
+        qTriage,
+        qProc,
+        qCycles,
+        loadAllTreatmentSessions(),
+        supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
+        supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
+        supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+      ]);
+
+      if (atData) setAtendimentosDB(atData);
+      if (filaData) setFilaDB(filaData);
+      if (triageData) setTriagensDB(triageData as TriagemDB[]);
+      if (procData) {
+        setProcedimentosDB(procData.map((r: any) => ({
+          prontuario_id: r.prontuario_id,
+          procedimento_id: r.procedimento_id,
+          proc_nome: r.procedimentos?.nome || '',
+          prof_nome: r.prontuarios?.profissional_nome || '',
+          unidade_id: r.prontuarios?.unidade_id || '',
+          data: r.prontuarios?.data_atendimento || '',
+        })));
+      }
+      if (cyclesData) setTreatmentCycles(cyclesData);
+      if (sessionsData) setTreatmentSessions(sessionsData);
+      if (nursingData) setNursingEvals(nursingData);
+      if (multiData) setMultiEvals(multiData);
+      if (ptsDataResult) setPtsData(ptsDataResult);
+      setLastUpdated(new Date());
+    } catch (err) { console.error('Error loading report data:', err); }
   }, [user]);
+
+  useEffect(() => { loadReportData(); }, [loadReportData]);
+
+  // Realtime subscription for auto-refresh
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
+    onchange: loadReportData,
+    enabled: true,
+    debounceMs: 2000,
+  });
+
+  // Update "last updated" label every 10s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
+      if (diffSec < 10) setLastUpdatedLabel('agora');
+      else if (diffSec < 60) setLastUpdatedLabel(`há ${diffSec}s`);
+      else if (diffSec < 3600) setLastUpdatedLabel(`há ${Math.floor(diffSec / 60)}min`);
+      else setLastUpdatedLabel(`há ${Math.floor(diffSec / 3600)}h`);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   // === FILTERS ===
   const filtered = useMemo(() => {
