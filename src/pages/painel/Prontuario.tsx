@@ -1449,6 +1449,19 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {form.paciente_id && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoricoCompletoOpen(true)}
+                className="w-full"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Ver Histórico Completo do Paciente
+              </Button>
+            )}
+
             <div className="flex gap-2">
               {activeAtendimento ? (
                 <>
