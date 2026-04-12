@@ -32,8 +32,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 
-interface BloqueioAgenda {
-
 export interface TurnoInfoResult {
   turnoId: string;
   nome: string;
@@ -45,7 +43,7 @@ export interface TurnoInfoResult {
   lotado: boolean;
 }
 
-interface BloqueioAgendaInternal {
+interface BloqueioAgenda {
   id: string;
   titulo: string;
   tipo: "feriado" | "ferias" | "reuniao" | "indisponibilidade";
