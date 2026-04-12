@@ -34,6 +34,8 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
+import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
+import CamposEspecialidade from "@/components/CamposEspecialidade";
 import { Stamp } from "lucide-react";
 
 const PTS_SPECIALTIES = [
