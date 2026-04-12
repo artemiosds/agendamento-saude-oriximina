@@ -214,13 +214,38 @@ const ProntuarioPage: React.FC = () => {
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
 
+  // Medications & exam types state
+  interface MedicationDB {
+    id: string; nome: string; principio_ativo: string; classe_terapeutica: string;
+    apresentacao: string; dosagem_padrao: string; via_padrao: string; is_global: boolean;
+    profissional_id: string | null; ativo: boolean;
+  }
+  const [medications, setMedications] = useState<MedicationDB[]>([]);
+  const [profPreferences, setProfPreferences] = useState<{ tipo: string; item_id: string; desabilitado: boolean }[]>([]);
+
+  // Derived: active medications (filtered by preferences)
+  const activeMedications = useMemo(() => {
+    const disabledMedIds = new Set(
+      profPreferences.filter(p => p.tipo === 'medication' && p.desabilitado).map(p => p.item_id)
+    );
+    return medications.filter(m => m.ativo && !disabledMedIds.has(m.id));
+  }, [medications, profPreferences]);
+
   useEffect(() => {
-    const loadProcs = async () => {
-      const { data } = await supabase.from("procedimentos").select("*").eq("ativo", true);
-      if (data) setProcedimentos(data as ProcedimentoDB[]);
+    if (!user?.id) return;
+    const profId = user.id;
+    const loadAll = async () => {
+      const [procsRes, medsRes, prefsRes] = await Promise.all([
+        supabase.from("procedimentos").select("*").eq("ativo", true),
+        (supabase as any).from("medications").select("*").or(`is_global.eq.true,profissional_id.eq.${profId}`),
+        supabase.from("professional_preferences").select("tipo,item_id,desabilitado").eq("profissional_id", profId),
+      ]);
+      if (procsRes.data) setProcedimentos(procsRes.data as ProcedimentoDB[]);
+      if (medsRes.data) setMedications(medsRes.data as MedicationDB[]);
+      if (prefsRes.data) setProfPreferences(prefsRes.data as any[]);
     };
-    loadProcs();
-  }, []);
+    loadAll();
+  }, [user?.id]);
 
   const filteredProcedimentos = useMemo(() => {
     if (!user) return [];
