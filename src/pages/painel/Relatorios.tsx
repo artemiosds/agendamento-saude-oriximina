@@ -68,6 +68,8 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
   // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
