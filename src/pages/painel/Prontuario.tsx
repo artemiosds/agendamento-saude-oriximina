@@ -1309,6 +1309,11 @@ const ProntuarioPage: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="flex items-center justify-end mt-1">
+                <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => navigate('/painel/meu-prontuario')}>
+                  <Settings className="w-3 h-3" /> Personalizar meu prontuário
+                </Button>
+              </div>
             </div>
 
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
