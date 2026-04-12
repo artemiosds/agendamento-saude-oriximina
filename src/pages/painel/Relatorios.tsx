@@ -1331,11 +1331,30 @@ ${dataRows}
 
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
+          {/* Category cards */}
+          {categoriaCards.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+              {categoriaCards.map(c => (
+                <Card
+                  key={c.key}
+                  className={`shadow-card border-0 cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${filterCargoProd === c.keywords[0] ? 'ring-2 ring-primary' : ''}`}
+                  onClick={() => setFilterCargoProd(filterCargoProd === c.keywords[0] ? 'all' : c.keywords[0])}
+                >
+                  <CardContent className="p-2.5 text-center">
+                    <p className="text-lg">{c.emoji}</p>
+                    <p className="text-lg font-bold text-foreground">{c.total}</p>
+                    <p className="text-[10px] text-muted-foreground leading-tight">{c.label}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
                     <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
                     <SelectContent>
@@ -1345,8 +1364,171 @@ ${dataRows}
                       <SelectItem value="master">Master</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant={prodViewMode === 'tabela' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}
+                  >
+                    {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    const now = new Date().toLocaleString('pt-BR');
+                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+                    const prodRows = porProfissional.map(p => {
+                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
+                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
+                    }).join('');
+                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    const logoUrl = window.location.origin + '/logo-sms.jpeg';
+                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Georgia,serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #333;}
+.header img{width:48px;height:48px;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:9px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
+</body></html>`);
+                    printWindow.document.close();
+                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
+                </div>
+              </div>
+
+              {prodViewMode === 'tabela' ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Profissional</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Cancelados</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Remarcados</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Tempo Médio</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Retorno</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porProfissional.map(p => {
+                        const roleBadge = p.role === 'master'
+                          ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
+                          : p.role === 'coordenador'
+                          ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
+                          : { label: 'Profissional', class: 'bg-success/10 text-success' };
+                        const taxaConcBg = p.taxaConclusao >= 70 ? 'bg-success/10 text-success border-success/30' : p.taxaConclusao >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
+                        const taxaRetBg = p.taxaRetorno > 30 ? 'bg-info/10 text-info border-info/30' : '';
+                        return (
+                          <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-2.5 px-3 text-foreground font-medium">
+                              <div className="flex items-center gap-2">
+                                {p.nome}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
+                            <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
+                            <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
+                            <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
+                            <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
+                            <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
+                            <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBg}`}>{p.taxaConclusao}%</span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaRetBg || 'text-muted-foreground'}`}>{p.taxaRetorno}%</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
+                    </tbody>
+                    {porProfissional.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-muted/60 font-bold border-t-2 border-primary/30">
+                          <td className="py-2.5 px-3 text-foreground">TOTAL</td>
+                          <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
+                          <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
+                          <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
+                          <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
+                          <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              ) : (
+                <div>
+                  {prodChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={Math.max(300, prodChartData.length * 45)}>
+                      <BarChart data={prodChartData} layout="vertical" margin={{ left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis dataKey="nome" type="category" width={140} tick={{ fontSize: 10 }} />
+                        <Tooltip content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload;
+                          return (
+                            <div className="bg-background border border-border p-2 rounded shadow text-xs">
+                              <p className="font-semibold mb-1">{d?.nomeCompleto}</p>
+                              {payload.map((p: any) => (
+                                <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
+                              ))}
+                            </div>
+                          );
+                        }} />
+                        <Legend />
+                        <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
+                        <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
+                        <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
+                        <Bar dataKey="remarcados" name="Remarcados" stackId="a" fill="hsl(45,93%,47%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráfico — Evolução Mensal */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4">Evolução Mensal</h3>
+              {evolucaoMensal.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={evolucaoMensal}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,89%,38%)" fill="hsl(199,89%,38%)" fillOpacity={0.2} strokeWidth={2} dot={{ r: 4, fill: 'hsl(199,89%,38%)' }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
                 </div>
               </div>
               <div className="overflow-x-auto">
