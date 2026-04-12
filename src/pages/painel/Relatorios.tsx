@@ -1413,43 +1413,53 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollBehavior: 'smooth' }}>
             {categoriaCards.map(c => {
               const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
               const isActive = filterCargoProd === c.key;
+              const activeBgMap: Record<string, string> = {
+                medico: '#EEF2F7', psicologo: '#F3EEF9', fonoaudiologo: '#EEF7F7',
+                fisioterapeuta: '#EEF7F2', terapeuta_ocupacional: '#FDF5E8',
+                nutricionista: '#FDF0EB', enfermeiro: '#FDEAEA',
+                assistente_social: '#EEF3F9', odontologia: '#ECFEFF',
+              };
               return (
                 <div
                   key={c.key}
-                  className={`min-w-[180px] flex-shrink-0 rounded-xl border bg-card cursor-pointer transition-all hover:shadow-md ${isActive ? 'ring-2 shadow-md' : ''}`}
+                  className="flex-shrink-0 cursor-pointer"
                   style={{
-                    borderLeftWidth: '4px',
-                    borderLeftColor: c.cor,
-                    borderColor: isActive ? c.cor : undefined,
-                    backgroundColor: isActive ? c.cor + '08' : undefined,
+                    minWidth: 190,
+                    borderRadius: 16,
+                    border: `1px solid ${isActive ? c.cor : '#DDE3ED'}`,
+                    borderLeft: `5px solid ${c.cor}`,
+                    padding: '20px 24px',
+                    background: isActive ? (activeBgMap[c.key] || '#F8FAFC') : '#FFFFFF',
+                    boxShadow: isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)',
+                    transition: 'box-shadow 0.2s, transform 0.2s',
                   }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.12)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
                   onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
                 >
-                  <div className="p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg">{c.emoji}</span>
-                      <span className="text-xs font-semibold text-muted-foreground">{c.label}</span>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span style={{ fontSize: 28 }}>{c.emoji}</span>
+                    <span className="uppercase tracking-wider font-semibold font-display" style={{ fontSize: 13, color: '#6B7280' }}>{c.label}</span>
+                  </div>
+                  <div className="flex items-baseline gap-6">
+                    <div>
+                      <p className="font-bold font-display" style={{ fontSize: 36, color: '#1B3A5C', lineHeight: 1 }}>{c.total}</p>
+                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Total</p>
                     </div>
-                    <div className="flex items-baseline gap-4">
-                      <div>
-                        <p className="text-xl font-bold" style={{ color: '#1B3A5C' }}>{c.total}</p>
-                        <p className="text-[10px] text-muted-foreground">Total</p>
-                      </div>
-                      <div>
-                        <p className="text-xl font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
-                        <p className="text-[10px] text-muted-foreground">Concluídos</p>
-                      </div>
+                    <div>
+                      <p className="font-bold" style={{ fontSize: 20, color: '#2D7A4F' }}>{c.concluidos}</p>
+                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Concluídos</p>
                     </div>
-                    <div className="mt-2">
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${taxa}%`, backgroundColor: c.cor }} />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{taxa}%</p>
+                  </div>
+                  <div className="mt-3">
+                    <div className="w-full overflow-hidden" style={{ height: 4, borderRadius: 2, background: '#E5E7EB' }}>
+                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 2, transition: 'width 0.3s' }} />
                     </div>
+                    <p className="text-right mt-1" style={{ fontSize: 12, color: '#6B7280' }}>{taxa}%</p>
                   </div>
                 </div>
               );
