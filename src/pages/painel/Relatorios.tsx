@@ -330,13 +330,15 @@ const Relatorios: React.FC = () => {
     { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', cor: '#2D7A4F',
       termos: ['fisioterapeuta', 'fisioterapia', 'fisio'] },
     { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', cor: '#C17B1A',
-      termos: ['terapeutaocupacional', 'terapiaocupacional', 'to'] },
+      termos: ['terapeutaocupacional', 'terapiaocupacional'] },
     { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', cor: '#E05A2B',
       termos: ['nutricionista', 'nutricao', 'nutri'] },
     { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', cor: '#B83232',
       termos: ['enfermeiro', 'enfermeira', 'enfermagem', 'tecnicoenfermagem', 'auxiliarenfermagem'] },
     { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', cor: '#3A6B9A',
-      termos: ['assistentesocial', 'servicosocial', 'social'] },
+      termos: ['assistentesocial', 'servicosocial'] },
+    { key: 'odontologia', emoji: '🦷', label: 'Odontologia', cor: '#0E7490',
+      termos: ['odontologo', 'odontologa', 'odontologia', 'odontopediatra', 'odontopediatria', 'dentista'] },
   ];
 
   const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
