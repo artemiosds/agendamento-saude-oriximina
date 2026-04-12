@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
@@ -57,8 +57,18 @@
     --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
     --shadow-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
 
-    --font-display: 'Plus Jakarta Sans', sans-serif;
+    --font-display: 'DM Sans', 'Plus Jakarta Sans', sans-serif;
     --font-body: 'Inter', sans-serif;
+    --font-clinical: 'JetBrains Mono', monospace;
+
+    --clinical-primary: 215 40% 24%;
+    --clinical-accent: 174 51% 36%;
+    --clinical-success: 147 44% 33%;
+    --clinical-warning: 36 75% 43%;
+    --clinical-danger: 0 56% 46%;
+    --clinical-surface: 220 20% 97%;
+    --clinical-card: 0 0% 100%;
+    --clinical-border: 216 20% 90%;
   }
 }
 
