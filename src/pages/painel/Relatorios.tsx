@@ -290,8 +290,7 @@ const Relatorios: React.FC = () => {
         if (filterCargoProd === 'all') return true;
         const cat = CATEGORIAS.find(c => c.key === filterCargoProd);
         if (!cat) return true;
-        const prof = removeAccents(d.profissao);
-        return cat.profissoes.some(k => prof.includes(removeAccents(k)));
+        return profissionalPertenceCategoria(d.profissao, cat);
       })
       .map(d => ({
         id: d.id,
@@ -933,7 +932,7 @@ ${dataRows}
     try {
       let query = supabase
         .from('agendamentos')
-        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id')
+        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
         .eq('status', 'concluido')
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
@@ -973,14 +972,16 @@ ${dataRows}
           paciente_nome: a.paciente_nome || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
-          data: a.data,
           profissional_nome: a.profissional_nome || '',
+          profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
           cid: pac?.cid || '',
           tipo: a.tipo || '',
           cpf: pac?.cpf || '',
           data_nascimento: pac?.data_nascimento || '',
           endereco: pac?.endereco || '',
+          procedimento_sigtap: (a as any).procedimento_sigtap || '',
+          nome_procedimento: (a as any).nome_procedimento || '',
         };
       });
 
