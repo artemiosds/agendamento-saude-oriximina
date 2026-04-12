@@ -270,12 +270,20 @@ const Agenda: React.FC = () => {
     return { isWeekend, hasAvailability };
   }, [selectedDate, disponibilidades]);
 
+  const selectedProfUnit = profissionais.find((p) => p.id === newAg.profissionalId)?.unidadeId || "";
+
+  const newAgTurnoInfo = React.useMemo(() => {
+    if (!newAg.profissionalId || !selectedProfUnit) return [];
+    return getTurnoInfo(newAg.profissionalId, selectedProfUnit, selectedDate);
+  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getTurnoInfo]);
+
+  const isTurnoMode = newAgTurnoInfo.length > 0;
+
   const newAgSlots = React.useMemo(() => {
     if (!newAg.profissionalId) return [];
-    const prof = profissionais.find((p) => p.id === newAg.profissionalId);
-    if (!prof?.unidadeId) return [];
-    return getAvailableSlots(newAg.profissionalId, prof.unidadeId, selectedDate);
-  }, [newAg.profissionalId, selectedDate, profissionais, getAvailableSlots]);
+    if (!selectedProfUnit) return [];
+    return getAvailableSlots(newAg.profissionalId, selectedProfUnit, selectedDate);
+  }, [newAg.profissionalId, selectedProfUnit, selectedDate, getAvailableSlots]);
 
   // Clear selected hora when it's no longer in available slots (skip for master — they can type any time)
   React.useEffect(() => {
