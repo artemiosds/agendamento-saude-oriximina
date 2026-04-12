@@ -1483,11 +1483,10 @@ th{background:#f1f5f9;font-weight:600;}
                     </thead>
                     <tbody>
                       {porProfissional.map(p => {
-                        const roleBadge = p.role === 'master'
-                          ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
-                          : p.role === 'coordenador'
-                          ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
-                          : { label: 'Profissional', class: 'bg-success/10 text-success' };
+                        const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
+                        const catBadge = catMatch
+                          ? { label: catMatch.label, cor: catMatch.cor }
+                          : { label: 'Outros', cor: '#888' };
                         const taxaConcBg = p.taxaConclusao >= 70 ? 'bg-success/10 text-success border-success/30' : p.taxaConclusao >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
                         const taxaRetBg = p.taxaRetorno > 30 ? 'bg-info/10 text-info border-info/30' : '';
                         return (
@@ -1495,7 +1494,7 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="py-2.5 px-3 text-foreground font-medium">
                               <div className="flex items-center gap-2">
                                 {p.nome}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
                               </div>
                             </td>
                             <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
@@ -1516,20 +1515,31 @@ th{background:#f1f5f9;font-weight:600;}
                       })}
                       {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
                     </tbody>
-                    {porProfissional.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-muted/60 font-bold border-t-2 border-primary/30">
-                          <td className="py-2.5 px-3 text-foreground">TOTAL</td>
-                          <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
-                          <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
-                          <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
-                          <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
-                          <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
-                          <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
-                          <td colSpan={3}></td>
-                        </tr>
-                      </tfoot>
-                    )}
+                    {porProfissional.length > 0 && (() => {
+                      const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
+                      const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
+                      const taxaConcBgG = taxaConcGeral >= 70 ? 'bg-success/10 text-success border-success/30' : taxaConcGeral >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
+                      return (
+                        <tfoot>
+                          <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
+                            <td className="py-2.5 px-3 text-foreground">TOTAL GERAL</td>
+                            <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
+                            <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
+                            <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
+                            <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
+                            <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
+                            <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
+                            <td className="py-2.5 px-2 text-center">-</td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBgG}`}>{taxaConcGeral}%</span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className="text-xs px-2 py-0.5 rounded-full border text-muted-foreground">{taxaRetGeral}%</span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      );
+                    })()}
                   </table>
                 </div>
               ) : (
