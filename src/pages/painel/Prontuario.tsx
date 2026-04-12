@@ -458,6 +458,13 @@ const ProntuarioPage: React.FC = () => {
     }
   }, [searchParams, prontuarios.length]);
 
+  // Load cycle + PTS data when sessao type is selected
+  useEffect(() => {
+    if (form.tipo_registro === 'sessao' && form.paciente_id && user?.id) {
+      loadSessaoData(form.paciente_id, user.id);
+    }
+  }, [form.tipo_registro, form.paciente_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const patientHistory = useMemo(() => {
     if (!form.paciente_id) return [];
     return prontuarios
