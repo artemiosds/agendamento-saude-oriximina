@@ -1526,73 +1526,89 @@ th{background:#f1f5f9;font-weight:600;}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Profissional</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Cancelados</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Remarcados</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Tempo Médio</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Retorno</th>
+                      <tr style={{ background: '#F4F6FA' }}>
+                        <th className="text-left py-3 px-4 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Profissional</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Total</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Concluídos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Faltas</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Cancelados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Remarcados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Retornos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Tempo Médio</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Conclusão</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Retorno</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {porProfissional.map(p => {
+                      {porProfissional.map((p, idx) => {
                         const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
                         const catBadge = catMatch
                           ? { label: catMatch.label, cor: catMatch.cor }
                           : { label: 'Outros', cor: '#888' };
-                        const taxaConcBg = p.taxaConclusao >= 70 ? 'bg-success/10 text-success border-success/30' : p.taxaConclusao >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
-                        const taxaRetBg = p.taxaRetorno > 30 ? 'bg-info/10 text-info border-info/30' : '';
+                        const taxaConcStyle = p.taxaConclusao >= 70
+                          ? { background: '#ECFDF5', color: '#2D7A4F' }
+                          : p.taxaConclusao >= 40
+                          ? { background: '#FFFBEB', color: '#C17B1A' }
+                          : { background: '#FEF2F2', color: '#B83232' };
+                        const taxaRetStyle = p.taxaRetorno > 30
+                          ? { background: '#EEF2F7', color: '#1B3A5C' }
+                          : {};
                         return (
-                          <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
-                            <td className="py-2.5 px-3 text-foreground font-medium">
+                          <tr
+                            key={p.id || p.nome}
+                            className="border-b last:border-0 transition-colors"
+                            style={{ background: idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#EEF2F7')}
+                            onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF')}
+                          >
+                            <td className="py-3 px-4 font-medium" style={{ color: '#1B3A5C' }}>
                               <div className="flex items-center gap-2">
                                 {p.nome}
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
                               </div>
                             </td>
-                            <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
-                            <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
-                            <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                            <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
-                            <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
-                            <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                            <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBg}`}>{p.taxaConclusao}%</span>
+                            <td className="py-3 px-2 text-center font-semibold" style={{ color: '#1B3A5C' }}>{p.total}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2D7A4F' }}>{p.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{p.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{p.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{p.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{p.retornos}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2E8B8B' }}>{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcStyle, borderRadius: 20 }}>{p.taxaConclusao}%</span>
                             </td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaRetBg || 'text-muted-foreground'}`}>{p.taxaRetorno}%</span>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaRetStyle, borderRadius: 20, color: taxaRetStyle.color || '#6B7280' }}>{p.taxaRetorno}%</span>
                             </td>
                           </tr>
                         );
                       })}
-                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
+                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8" style={{ color: '#6B7280' }}>Nenhum dado encontrado para o período selecionado</td></tr>}
                     </tbody>
                     {porProfissional.length > 0 && (() => {
                       const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
                       const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
-                      const taxaConcBgG = taxaConcGeral >= 70 ? 'bg-success/10 text-success border-success/30' : taxaConcGeral >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
+                      const taxaConcGeralStyle = taxaConcGeral >= 70
+                        ? { background: '#ECFDF5', color: '#2D7A4F' }
+                        : taxaConcGeral >= 40
+                        ? { background: '#FFFBEB', color: '#C17B1A' }
+                        : { background: '#FEF2F2', color: '#B83232' };
                       return (
                         <tfoot>
                           <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
-                            <td className="py-2.5 px-3 text-foreground">TOTAL GERAL</td>
-                            <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
-                            <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
-                            <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
-                            <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
-                            <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
-                            <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
-                            <td className="py-2.5 px-2 text-center">-</td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBgG}`}>{taxaConcGeral}%</span>
+                            <td className="py-3 px-4" style={{ color: '#1B3A5C' }}>TOTAL GERAL</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.total}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#2D7A4F' }}>{prodTotals.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{prodTotals.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{prodTotals.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{prodTotals.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.retornos}</td>
+                            <td className="py-3 px-2 text-center">-</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcGeralStyle, borderRadius: 20 }}>{taxaConcGeral}%</span>
                             </td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className="text-xs px-2 py-0.5 rounded-full border text-muted-foreground">{taxaRetGeral}%</span>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: '#6B7280', borderRadius: 20 }}>{taxaRetGeral}%</span>
                             </td>
                           </tr>
                         </tfoot>
