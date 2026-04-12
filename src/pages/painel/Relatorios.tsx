@@ -73,8 +73,9 @@ const Relatorios: React.FC = () => {
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
     num: number; paciente_nome: string; cns: string; telefone: string;
-    data: string; profissional_nome: string; especialidade: string; cid: string;
+    profissional_nome: string; profissional_id: string; especialidade: string; cid: string;
     tipo: string; cpf: string; data_nascimento: string; endereco: string;
+    procedimento_sigtap: string; nome_procedimento: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -289,8 +290,7 @@ const Relatorios: React.FC = () => {
         if (filterCargoProd === 'all') return true;
         const cat = CATEGORIAS.find(c => c.key === filterCargoProd);
         if (!cat) return true;
-        const prof = removeAccents(d.profissao);
-        return cat.profissoes.some(k => prof.includes(removeAccents(k)));
+        return profissionalPertenceCategoria(d.profissao, cat);
       })
       .map(d => ({
         id: d.id,
@@ -314,35 +314,58 @@ const Relatorios: React.FC = () => {
   }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
-  const removeAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const normalizarProfissao = (str: string) => {
+    if (!str) return '';
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  };
+  const removeAccents = normalizarProfissao;
 
   const CATEGORIAS = [
-    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', profissoes: ['medico', 'medicina', 'cirurgiao', 'infectologista'] },
-    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', profissoes: ['psicologo', 'psicologia'] },
-    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', profissoes: ['fonoaudiologo', 'fonoaudiologia'] },
-    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', profissoes: ['fisioterapeuta', 'fisioterapia'] },
-    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', profissoes: ['terapeuta ocupacional', 'terapia ocupacional', 'terapeuta_ocupacional', 'terapia_ocupacional'] },
-    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', profissoes: ['nutricionista', 'nutricao', 'nutricao'] },
-    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', profissoes: ['enfermeiro', 'enfermagem', 'tecnico_enfermagem', 'tecnico de enfermagem'] },
-    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', profissoes: ['assistente social', 'assistente_social', 'servico social', 'servico_social'] },
+    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', cor: '#1B3A5C',
+      termos: ['medico', 'medicina', 'doutora', 'doutor', 'clinicogeral', 'cirurgiao', 'cirurgia', 'infectologista', 'infectologia'] },
+    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', cor: '#6B4C9A',
+      termos: ['psicologo', 'psicologa', 'psicologia'] },
+    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', cor: '#2E8B8B',
+      termos: ['fonoaudiologo', 'fonoaudiologa', 'fonoaudiologia', 'fono'] },
+    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', cor: '#2D7A4F',
+      termos: ['fisioterapeuta', 'fisioterapia', 'fisio'] },
+    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', cor: '#C17B1A',
+      termos: ['terapeutaocupacional', 'terapiaocupacional', 'to'] },
+    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', cor: '#E05A2B',
+      termos: ['nutricionista', 'nutricao', 'nutri'] },
+    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', cor: '#B83232',
+      termos: ['enfermeiro', 'enfermeira', 'enfermagem', 'tecnicoenfermagem', 'auxiliarenfermagem'] },
+    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', cor: '#3A6B9A',
+      termos: ['assistentesocial', 'servicosocial', 'social'] },
   ];
+
+  const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
+    const norm = normalizarProfissao(profissao);
+    return cat.termos.some(termo => norm.includes(termo));
+  };
 
   const categoriaCards = useMemo(() => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
-    const counts: Record<string, number> = {};
+    const counts: Record<string, { total: number; concluidos: number }> = {};
 
     filtered.forEach(a => {
       const func = profMap.get(a.profissionalId);
-      const profissao = removeAccents(func?.profissao || '');
+      const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
-        if (cat.profissoes.some(k => profissao.includes(removeAccents(k)))) {
-          counts[cat.key] = (counts[cat.key] || 0) + 1;
+        if (profissionalPertenceCategoria(profissao, cat)) {
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          counts[cat.key].total++;
+          if (a.status === 'concluido') counts[cat.key].concluidos++;
           break;
         }
       }
     });
 
-    return CATEGORIAS.map(cat => ({ ...cat, total: counts[cat.key] || 0 }));
+    return CATEGORIAS.map(cat => ({
+      ...cat,
+      total: counts[cat.key]?.total || 0,
+      concluidos: counts[cat.key]?.concluidos || 0,
+    }));
   }, [filtered, funcionarios]);
 
   // === PROD TOTALS ===
@@ -909,7 +932,7 @@ ${dataRows}
     try {
       let query = supabase
         .from('agendamentos')
-        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id')
+        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
         .eq('status', 'concluido')
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
@@ -949,14 +972,16 @@ ${dataRows}
           paciente_nome: a.paciente_nome || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
-          data: a.data,
           profissional_nome: a.profissional_nome || '',
+          profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
           cid: pac?.cid || '',
           tipo: a.tipo || '',
           cpf: pac?.cpf || '',
           data_nascimento: pac?.data_nascimento || '',
           endereco: pac?.endereco || '',
+          procedimento_sigtap: (a as any).procedimento_sigtap || '',
+          nome_procedimento: (a as any).nome_procedimento || '',
         };
       });
 
@@ -981,9 +1006,10 @@ ${dataRows}
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
 
-    const tableRows = mapaData.map((r, i) =>
-      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
-    ).join('');
+    const tableRows = mapaData.map((r, i) => {
+      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+    }).join('');
 
     const body = `
       <h2>Mapa de Atendimentos Concluídos</h2>
@@ -992,10 +1018,10 @@ ${dataRows}
           <th style="width:30px;text-align:center">Nº</th>
           <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
           <th>CNS</th><th>Telefone</th><th>Profissional</th>
-          <th>Especialidade</th><th style="width:50px">CID</th>
+          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
@@ -1049,10 +1075,12 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'CID'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
     const rows = mapaData.map(r => [
       r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
-      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade, r.cid,
+      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
+      r.cid,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1340,20 +1368,47 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            {categoriaCards.map(c => (
-              <Card
-                key={c.key}
-                className={`shadow-card border-0 cursor-pointer transition-all hover:ring-2 hover:ring-primary/40 ${filterCargoProd === c.key ? 'ring-2 ring-primary' : ''}`}
-                onClick={() => setFilterCargoProd(filterCargoProd === c.key ? 'all' : c.key)}
-              >
-                <CardContent className="p-2.5 text-center">
-                  <p className="text-lg">{c.emoji}</p>
-                  <p className="text-lg font-bold text-foreground">{c.total}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">{c.label}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {categoriaCards.map(c => {
+              const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
+              const isActive = filterCargoProd === c.key;
+              return (
+                <div
+                  key={c.key}
+                  className={`min-w-[180px] flex-shrink-0 rounded-xl border bg-card cursor-pointer transition-all hover:shadow-md ${isActive ? 'ring-2 shadow-md' : ''}`}
+                  style={{
+                    borderLeftWidth: '4px',
+                    borderLeftColor: c.cor,
+                    borderColor: isActive ? c.cor : undefined,
+                    backgroundColor: isActive ? c.cor + '08' : undefined,
+                  }}
+                  onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
+                >
+                  <div className="p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{c.emoji}</span>
+                      <span className="text-xs font-semibold text-muted-foreground">{c.label}</span>
+                    </div>
+                    <div className="flex items-baseline gap-4">
+                      <div>
+                        <p className="text-xl font-bold" style={{ color: '#1B3A5C' }}>{c.total}</p>
+                        <p className="text-[10px] text-muted-foreground">Total</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
+                        <p className="text-[10px] text-muted-foreground">Concluídos</p>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${taxa}%`, backgroundColor: c.cor }} />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{taxa}%</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           <Card className="shadow-card border-0">
@@ -1431,11 +1486,10 @@ th{background:#f1f5f9;font-weight:600;}
                     </thead>
                     <tbody>
                       {porProfissional.map(p => {
-                        const roleBadge = p.role === 'master'
-                          ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
-                          : p.role === 'coordenador'
-                          ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
-                          : { label: 'Profissional', class: 'bg-success/10 text-success' };
+                        const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
+                        const catBadge = catMatch
+                          ? { label: catMatch.label, cor: catMatch.cor }
+                          : { label: 'Outros', cor: '#888' };
                         const taxaConcBg = p.taxaConclusao >= 70 ? 'bg-success/10 text-success border-success/30' : p.taxaConclusao >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
                         const taxaRetBg = p.taxaRetorno > 30 ? 'bg-info/10 text-info border-info/30' : '';
                         return (
@@ -1443,7 +1497,7 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="py-2.5 px-3 text-foreground font-medium">
                               <div className="flex items-center gap-2">
                                 {p.nome}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
                               </div>
                             </td>
                             <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
@@ -1464,20 +1518,31 @@ th{background:#f1f5f9;font-weight:600;}
                       })}
                       {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
                     </tbody>
-                    {porProfissional.length > 0 && (
-                      <tfoot>
-                        <tr className="bg-muted/60 font-bold border-t-2 border-primary/30">
-                          <td className="py-2.5 px-3 text-foreground">TOTAL</td>
-                          <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
-                          <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
-                          <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
-                          <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
-                          <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
-                          <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
-                          <td colSpan={3}></td>
-                        </tr>
-                      </tfoot>
-                    )}
+                    {porProfissional.length > 0 && (() => {
+                      const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
+                      const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
+                      const taxaConcBgG = taxaConcGeral >= 70 ? 'bg-success/10 text-success border-success/30' : taxaConcGeral >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
+                      return (
+                        <tfoot>
+                          <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
+                            <td className="py-2.5 px-3 text-foreground">TOTAL GERAL</td>
+                            <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
+                            <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
+                            <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
+                            <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
+                            <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
+                            <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
+                            <td className="py-2.5 px-2 text-center">-</td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBgG}`}>{taxaConcGeral}%</span>
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <span className="text-xs px-2 py-0.5 rounded-full border text-muted-foreground">{taxaRetGeral}%</span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      );
+                    })()}
                   </table>
                 </div>
               ) : (
@@ -2179,9 +2244,10 @@ th{background:#f1f5f9;font-weight:600;}
                   const now = new Date().toLocaleString('pt-BR');
                   const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
                   const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                  const tableRows = mapaData.map((r, i) =>
-                    `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${r.cid || '-'}</td></tr>`
-                  ).join('');
+                  const tableRows = mapaData.map((r, i) => {
+                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                  }).join('');
                   const printWindow = window.open('', '_blank');
                   if (!printWindow) return;
                   const logoUrl = window.location.origin + '/logo-sms.jpeg';
@@ -2197,8 +2263,8 @@ th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="10" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`);
                   printWindow.document.close();
                   setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
@@ -2227,6 +2293,7 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
                       </tr>
                     </thead>
@@ -2235,6 +2302,7 @@ th{background:#f1f5f9;font-weight:600;}
                         const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
                         const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
                         const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
                         return (
                           <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
                             <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
@@ -2256,6 +2324,7 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{procSigtap}</td>
                             <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
                           </tr>
                         );
@@ -2263,7 +2332,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={11} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
                     </tfoot>
                   </table>
