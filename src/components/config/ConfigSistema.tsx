@@ -71,12 +71,11 @@ const ConfigSistema: React.FC = () => {
 
   const exportAllData = async () => {
     toast.info('Exportação iniciada...');
-    const tables = ['pacientes', 'agendamentos', 'prontuarios', 'funcionarios'];
+    const tables = ['pacientes', 'agendamentos', 'prontuarios', 'funcionarios'] as const;
     const results: Record<string, any[]> = {};
-    await Promise.all(tables.map(async t => {
-      const { data } = await supabase.from(t).select('*');
-      results[t] = data || [];
-    }));
+    const queries = tables.map(t => supabase.from(t).select('*'));
+    const responses = await Promise.all(queries);
+    tables.forEach((t, i) => { results[t] = (responses[i].data as any[]) || []; });
     const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
