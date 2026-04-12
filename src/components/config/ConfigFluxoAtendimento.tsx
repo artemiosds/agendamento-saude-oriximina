@@ -10,11 +10,19 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Pencil, Clock } from 'lucide-react';
 import ConfiguracaoTriagem from '@/components/ConfiguracaoTriagem';
 import { toast } from 'sonner';
 
 const CONFIG_KEY = 'config_fluxo_atendimento';
+
+export interface TurnoDefinition {
+  id: string;
+  nome: string;
+  horaInicio: string;
+  horaFim: string;
+  ativo: boolean;
+}
 
 interface FluxoConfig {
   tiposAtendimento: { key: string; label: string; habilitado: boolean; isBuiltin: boolean }[];
@@ -34,6 +42,7 @@ interface FluxoConfig {
     alertarUltimaSessao: boolean; alertarPtsVencido: boolean;
     prazoAlertaPts: number;
   };
+  turnos: TurnoDefinition[];
 }
 
 const DEFAULT: FluxoConfig = {
@@ -74,6 +83,11 @@ const DEFAULT: FluxoConfig = {
     sessoesPadrao: 10, frequenciaPadrao: 'semanal',
     alertarUltimaSessao: true, alertarPtsVencido: true, prazoAlertaPts: 6,
   },
+  turnos: [
+    { id: 'turno_manha', nome: 'Manhã', horaInicio: '07:00', horaFim: '12:00', ativo: true },
+    { id: 'turno_tarde', nome: 'Tarde', horaInicio: '13:00', horaFim: '18:00', ativo: true },
+    { id: 'turno_noite', nome: 'Noite', horaInicio: '18:00', horaFim: '22:00', ativo: false },
+  ],
 };
 
 const ConfigFluxoAtendimento: React.FC = () => {
@@ -85,13 +99,21 @@ const ConfigFluxoAtendimento: React.FC = () => {
   const [triageLoading, setTriageLoading] = useState(true);
   const [triageSettingId, setTriageSettingId] = useState<string | null>(null);
 
+  // Turno editing
+  const [editingTurno, setEditingTurno] = useState<TurnoDefinition | null>(null);
+  const [newTurno, setNewTurno] = useState<{ nome: string; horaInicio: string; horaFim: string }>({ nome: '', horaInicio: '08:00', horaFim: '12:00' });
+  const [showNewTurno, setShowNewTurno] = useState(false);
+
   const loadConfig = useCallback(async () => {
     const [cfgRes, triageRes] = await Promise.all([
       supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle(),
       supabase.from('triage_settings').select('*').is('profissional_id', null).maybeSingle(),
     ]);
     const cfg = cfgRes.data?.configuracoes as any;
-    if (cfg?.[CONFIG_KEY]) setConfig({ ...DEFAULT, ...cfg[CONFIG_KEY] });
+    if (cfg?.[CONFIG_KEY]) {
+      const saved = cfg[CONFIG_KEY];
+      setConfig({ ...DEFAULT, ...saved, turnos: saved.turnos || DEFAULT.turnos });
+    }
     if (triageRes.data) { setTriageEnabled(triageRes.data.enabled ?? false); setTriageSettingId(triageRes.data.id); }
     setTriageLoading(false);
     setLoading(false);
@@ -109,6 +131,32 @@ const ConfigFluxoAtendimento: React.FC = () => {
     });
     setConfig(updated);
     toast.success('Configuração salva');
+  };
+
+  const handleAddTurno = () => {
+    if (!newTurno.nome.trim()) { toast.error('Informe o nome do turno'); return; }
+    const turno: TurnoDefinition = {
+      id: `turno_${Date.now()}`,
+      nome: newTurno.nome.trim(),
+      horaInicio: newTurno.horaInicio,
+      horaFim: newTurno.horaFim,
+      ativo: true,
+    };
+    const updated = { ...config, turnos: [...config.turnos, turno] };
+    save(updated);
+    setNewTurno({ nome: '', horaInicio: '08:00', horaFim: '12:00' });
+    setShowNewTurno(false);
+  };
+
+  const handleDeleteTurno = (id: string) => {
+    const updated = { ...config, turnos: config.turnos.filter(t => t.id !== id) };
+    save(updated);
+  };
+
+  const handleUpdateTurno = (id: string, changes: Partial<TurnoDefinition>) => {
+    const updated = { ...config, turnos: config.turnos.map(t => t.id === id ? { ...t, ...changes } : t) };
+    save(updated);
+    if (editingTurno?.id === id) setEditingTurno(null);
   };
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
@@ -266,6 +314,96 @@ const ConfigFluxoAtendimento: React.FC = () => {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 5.6 Turnos */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold font-display text-foreground">Turnos</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Turnos disponíveis para profissionais no modo "Por Turno"</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowNewTurno(true)}>
+              <Plus className="w-4 h-4 mr-1" />Adicionar
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+              <span>Turno</span>
+              <span className="text-center px-3">Início</span>
+              <span className="text-center px-3">Fim</span>
+              <span className="text-center px-3">Ativo</span>
+              <span className="text-center px-2">Ações</span>
+            </div>
+            {config.turnos.map(turno => (
+              <div key={turno.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-0 items-center px-3 py-2.5 border-b border-border last:border-b-0">
+                {editingTurno?.id === turno.id ? (
+                  <>
+                    <Input
+                      value={editingTurno.nome}
+                      onChange={e => setEditingTurno({ ...editingTurno, nome: e.target.value })}
+                      className="h-8 text-sm"
+                    />
+                    <Input type="time" value={editingTurno.horaInicio} onChange={e => setEditingTurno({ ...editingTurno, horaInicio: e.target.value })} className="h-8 text-xs mx-1 w-24" />
+                    <Input type="time" value={editingTurno.horaFim} onChange={e => setEditingTurno({ ...editingTurno, horaFim: e.target.value })} className="h-8 text-xs mx-1 w-24" />
+                    <div className="px-3 flex justify-center">
+                      <Switch checked={editingTurno.ativo} onCheckedChange={v => setEditingTurno({ ...editingTurno, ativo: v })} />
+                    </div>
+                    <div className="flex gap-1 px-2">
+                      <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => handleUpdateTurno(turno.id, editingTurno)}>Salvar</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingTurno(null)}>✕</Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                      {turno.nome}
+                    </span>
+                    <span className="text-xs text-muted-foreground text-center px-3">{turno.horaInicio}</span>
+                    <span className="text-xs text-muted-foreground text-center px-3">{turno.horaFim}</span>
+                    <div className="px-3 flex justify-center">
+                      <Switch checked={turno.ativo} onCheckedChange={v => handleUpdateTurno(turno.id, { ativo: v })} />
+                    </div>
+                    <div className="flex gap-1 px-2">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingTurno({ ...turno })}><Pencil className="w-3.5 h-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDeleteTurno(turno.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+            {config.turnos.length === 0 && (
+              <div className="px-3 py-4 text-sm text-muted-foreground text-center">Nenhum turno cadastrado</div>
+            )}
+          </div>
+
+          {showNewTurno && (
+            <div className="mt-3 p-3 rounded-lg border border-border bg-muted/30 space-y-3">
+              <h4 className="text-sm font-medium">Novo Turno</h4>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-xs">Nome</Label>
+                  <Input value={newTurno.nome} onChange={e => setNewTurno(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Integral" className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">Início</Label>
+                  <Input type="time" value={newTurno.horaInicio} onChange={e => setNewTurno(p => ({ ...p, horaInicio: e.target.value }))} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">Fim</Label>
+                  <Input type="time" value={newTurno.horaFim} onChange={e => setNewTurno(p => ({ ...p, horaFim: e.target.value }))} className="h-8 text-sm" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAddTurno}>Adicionar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowNewTurno(false)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
