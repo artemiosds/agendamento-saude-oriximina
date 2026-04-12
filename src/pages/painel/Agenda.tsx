@@ -144,6 +144,7 @@ const Agenda: React.FC = () => {
     disponibilidades,
     getAvailableSlots,
     getAvailableDates,
+    getTurnoInfo,
     bloqueios,
   } = useData();
   const [lastProntuarios, setLastProntuarios] = React.useState<
