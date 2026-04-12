@@ -681,6 +681,47 @@ const ProntuarioPage: React.FC = () => {
         }
       }
 
+      // Session registration for sessao type
+      if (form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle) {
+        const soapFilled = form.soap_subjetivo?.trim() && form.soap_objetivo?.trim() && form.soap_avaliacao?.trim() && form.soap_plano?.trim();
+        if (soapFilled) {
+          // Register session as realizada
+          await (supabase as any).from('treatment_sessions').update({
+            status: 'realizada',
+            clinical_notes: `S: ${form.soap_subjetivo}\nO: ${form.soap_objetivo}\nA: ${form.soap_avaliacao}\nP: ${form.soap_plano}`,
+            appointment_id: form.agendamento_id || null,
+          }).eq('id', currentSessionForRegistration.id);
+
+          // Update sessions_done on cycle
+          const newDone = sessaoCycle.sessions_done + 1;
+          const updatePayload: any = { sessions_done: newDone };
+          // Check if it was the last session
+          const remainingAfter = sessaoCycleSessions.filter(
+            s => !['realizada', 'falta', 'falta_justificada'].includes(s.status) && s.id !== currentSessionForRegistration.id
+          );
+          if (remainingAfter.length === 0) {
+            updatePayload.status = 'concluido';
+            toast.info('🎉 Ciclo de tratamento concluído!');
+          }
+          await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+
+          // Finalize the appointment if linked
+          if (form.agendamento_id) {
+            await (supabase as any).from('agendamentos').update({ status: 'concluido', atualizado_em: new Date().toISOString() }).eq('id', form.agendamento_id);
+          }
+
+          await logAction({
+            acao: 'sessao_registrada',
+            entidade: 'treatment_session',
+            entidadeId: currentSessionForRegistration.id,
+            modulo: 'prontuario',
+            user,
+            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+          });
+          toast.success(`Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+        }
+      }
+
       setDialogOpen(false);
       setPreviousForm(null);
       await loadProntuarios();
