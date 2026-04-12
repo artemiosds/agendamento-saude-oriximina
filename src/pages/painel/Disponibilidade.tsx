@@ -731,14 +731,39 @@ const Disponibilidade: React.FC = () => {
 
                     {/* Summary */}
                     <Card className="bg-muted/30 border border-border">
-                      <CardContent className="p-3">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resumo</h4>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span>Total de vagas/semana: <strong>{turnoWeeklySummary.totalVagas}</strong></span>
-                          <span className="text-muted-foreground">•</span>
-                          <span>{turnoWeeklySummary.diasAtivos} dia(s) ativo(s)</span>
-                          <span className="text-muted-foreground">•</span>
-                          <span>{turnoWeeklySummary.turnosConfig} turno(s) configurado(s)</span>
+                      <CardContent className="p-4">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumo de Disponibilidade</h4>
+                        <div className="space-y-2">
+                          {activeTurnos.filter(t => turnoVagas[t.id] !== undefined).map(turno => {
+                            const diasComTurno = turnoDays.filter(td => td.ativo && td.turnosAtivos.includes(turno.id)).length;
+                            const vagasTurno = turnoVagas[turno.id] || 0;
+                            return (
+                              <div key={turno.id} className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2">
+                                  <span>{turno.horaInicio < '12:00' ? '🌅' : turno.horaInicio < '18:00' ? '🌆' : '🌙'}</span>
+                                  <span className="font-medium">Turno {turno.nome}:</span>
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {vagasTurno} vagas/dia × {diasComTurno} dias = <strong className="text-foreground">{vagasTurno * diasComTurno} vagas/semana</strong>
+                                </span>
+                              </div>
+                            );
+                          })}
+                          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between text-sm font-semibold">
+                            <span>Total:</span>
+                            <span>{(() => {
+                              const totalPerDay = activeTurnos
+                                .filter(t => turnoVagas[t.id] !== undefined)
+                                .reduce((s, t) => s + (turnoVagas[t.id] || 0), 0);
+                              return `${totalPerDay} vagas/dia × ${turnoWeeklySummary.diasAtivos} dias = ${turnoWeeklySummary.totalVagas} vagas/semana`;
+                            })()}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            <span>Dias ativos: {turnoDays.map((td, i) => td.ativo ? diasSemanaLabels[i] : null).filter(Boolean).join(' / ')}</span>
+                            {turnoDays.some((td, i) => !td.ativo) && (
+                              <span className="ml-2">• {turnoDays.map((td, i) => !td.ativo ? diasSemanaFull[i] : null).filter(Boolean).join(' e ')}: sem atendimento</span>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>

@@ -32,6 +32,17 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, todayLocalStr } from "@/lib/utils";
 
+export interface TurnoInfoResult {
+  turnoId: string;
+  nome: string;
+  horaInicio: string;
+  horaFim: string;
+  vagasTotal: number;
+  vagasOcupadas: number;
+  vagasLivres: number;
+  lotado: boolean;
+}
+
 interface BloqueioAgenda {
   id: string;
   titulo: string;
@@ -132,6 +143,7 @@ interface DataContextType {
   updateBloqueio: (id: string, data: Partial<BloqueioAgenda>) => Promise<void>;
   deleteBloqueio: (id: string) => Promise<void>;
   getAvailableSlots: (profissionalId: string, unidadeId: string, date: string, isPublic?: boolean) => string[];
+  getTurnoInfo: (profissionalId: string, unidadeId: string, date: string) => TurnoInfoResult[];
   getAvailableDates: (profissionalId: string, unidadeId: string, isPublic?: boolean) => string[];
   getNextAvailableSlots: (
     profissionalId: string,
@@ -1587,6 +1599,44 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [isSlotBlocked],
   );
 
+  const getTurnoInfo = useCallback(
+    (profissionalId: string, unidadeId: string, date: string): TurnoInfoResult[] => {
+      const dayOfWeek = isoDayOfWeek(date);
+      const disps = disponibilidadesRef.current;
+      const turnoDisps = disps.filter(
+        (d) =>
+          d.profissionalId === profissionalId &&
+          d.unidadeId === unidadeId &&
+          d.diasSemana.includes(dayOfWeek) &&
+          date >= d.dataInicio &&
+          date <= d.dataFim &&
+          d.vagasPorHora === 0,
+      );
+      if (turnoDisps.length === 0) return [];
+
+      const key = `${profissionalId}|${unidadeId}|${date}`;
+      const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
+
+      return turnoDisps.map((td) => {
+        const count = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
+        ).length;
+        const nome = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+        return {
+          turnoId: td.salaId || td.id, // salaId stores turno ID in turno mode
+          nome,
+          horaInicio: td.horaInicio,
+          horaFim: td.horaFim,
+          vagasTotal: td.vagasPorDia,
+          vagasOcupadas: count,
+          vagasLivres: Math.max(0, td.vagasPorDia - count),
+          lotado: count >= td.vagasPorDia,
+        };
+      }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    },
+    [],
+  );
+
   const getAvailableDatesInternal = useCallback(
     (profissionalId: string, unidadeId: string): string[] => {
       const disps = disponibilidadesRef.current;
@@ -1736,6 +1786,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateBloqueio,
     deleteBloqueio,
     getAvailableSlots,
+    getTurnoInfo,
     getAvailableDates,
     getNextAvailableSlots,
     getBlockingInfo,
@@ -1778,6 +1829,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateBloqueio,
     deleteBloqueio,
     getAvailableSlots,
+    getTurnoInfo,
     getAvailableDates,
     getNextAvailableSlots,
     getBlockingInfo,
