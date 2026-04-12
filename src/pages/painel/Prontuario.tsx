@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -1118,6 +1119,26 @@ const ProntuarioPage: React.FC = () => {
               horaInicio={activeAtendimento.horaInicio}
               tempoLimite={tempoLimite}
               agendamentoId={activeAtendimento.agendamentoId}
+            />
+          )}
+
+          {form.paciente_id && (
+            <FichaPacienteCabecalho
+              pacienteId={form.paciente_id}
+              profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
+              profissionalId={searchParams.get("profissionalId") || user?.id || ""}
+              agendamentoId={form.agendamento_id || undefined}
+              triagem={triagem ? {
+                pressao_arterial: triagem.pressao_arterial,
+                temperatura: triagem.temperatura,
+                saturacao_oxigenio: triagem.saturacao_oxigenio,
+                frequencia_cardiaca: triagem.frequencia_cardiaca,
+                classificacao_risco: (triagem as any).classificacao_risco,
+              } : null}
+              funcionarios={funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true }))}
+              onPacienteUpdated={() => {
+                loadProntuarios();
+              }}
             />
           )}
 
