@@ -223,6 +223,66 @@ const ProntuarioPage: React.FC = () => {
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
+  // Sessão: cycle + PTS state
+  interface CycleSession { id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; appointment_id: string | null; }
+  interface ActiveCycle { id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; }
+  interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; }
+  const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
+  const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
+  const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
+  const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
+  const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
+  const soapRef = useRef<HTMLDivElement>(null);
+
+  const loadSessaoData = async (patientId: string, professionalId: string) => {
+    setSessaoDataLoading(true);
+    try {
+      const [cycleRes, ptsRes] = await Promise.all([
+        (supabase as any).from('treatment_cycles').select('*')
+          .eq('patient_id', patientId)
+          .eq('professional_id', professionalId)
+          .in('status', ['em_andamento', 'ativo'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('pts').select('*')
+          .eq('patient_id', patientId)
+          .eq('status', 'ativo')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      const cycle = cycleRes.data;
+      setSessaoCycle(cycle || null);
+      if (cycle) {
+        const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
+          .eq('cycle_id', cycle.id)
+          .order('session_number', { ascending: true });
+        setSessaoCycleSessions(sessions || []);
+      } else {
+        setSessaoCycleSessions([]);
+      }
+      setSessaoPts(ptsRes.data as ActivePTS | null);
+    } catch (err) {
+      console.error('[loadSessaoData]', err);
+    }
+    setSessaoDataLoading(false);
+  };
+
+  const handleRegistrarSessaoClick = () => {
+    setSessaoHighlightSOAP(true);
+    setTimeout(() => {
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+    setTimeout(() => setSessaoHighlightSOAP(false), 4000);
+  };
+
+  const currentSessionForRegistration = useMemo(() => {
+    if (!sessaoCycle || sessaoCycleSessions.length === 0) return null;
+    // Find the first session that is not 'realizada' and not 'falta'
+    return sessaoCycleSessions.find(s => !['realizada', 'falta', 'falta_justificada'].includes(s.status)) || null;
+  }, [sessaoCycle, sessaoCycleSessions]);
+
   // Medications & exam types state
   interface MedicationDB {
     id: string; nome: string; principio_ativo: string; classe_terapeutica: string;
