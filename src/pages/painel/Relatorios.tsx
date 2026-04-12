@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -67,6 +68,8 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
   // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
@@ -95,111 +98,131 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentos]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-        let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-        let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-        if (user?.role === 'coordenador' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'recepcao' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'profissional' && user.id) {
-          qAt = qAt.eq('profissional_id', user.id);
-          qFila = qFila.eq('profissional_id', user.id);
-        }
-        if (user?.role === 'tecnico' && user.id) {
-          qTriage = qTriage.eq('tecnico_id', user.id);
-        }
+  const loadReportData = useCallback(async () => {
+    try {
+      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
+      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
+      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
+      if (user?.role === 'coordenador' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'recepcao' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'profissional' && user.id) {
+        qAt = qAt.eq('profissional_id', user.id);
+        qFila = qFila.eq('profissional_id', user.id);
+      }
+      if (user?.role === 'tecnico' && user.id) {
+        qTriage = qTriage.eq('tecnico_id', user.id);
+      }
 
-        let qProc = (supabase as any).from('prontuario_procedimentos')
-          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+      let qProc = (supabase as any).from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
 
-        let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-        const loadAllTreatmentSessions = async () => {
-          const pageSize = 1000;
-          let from = 0;
-          let allSessions: any[] = [];
+      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
+      const loadAllTreatmentSessions = async () => {
+        const pageSize = 1000;
+        let from = 0;
+        let allSessions: any[] = [];
 
-          while (true) {
-            let query = supabase
-              .from('treatment_sessions')
-              .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-              .range(from, from + pageSize - 1);
+        while (true) {
+          let query = supabase
+            .from('treatment_sessions')
+            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+            .range(from, from + pageSize - 1);
 
-            if (user?.role === 'profissional') {
-              query = query.eq('professional_id', user.id);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-
-            allSessions = allSessions.concat(data);
-
-            if (data.length < pageSize) break;
-            from += pageSize;
+          if (user?.role === 'profissional') {
+            query = query.eq('professional_id', user.id);
           }
 
-          return allSessions;
-        };
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
 
-        if (user?.role === 'profissional') {
-          qCycles = qCycles.eq('professional_id', user.id);
-        }
-        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
-          qCycles = qCycles.eq('unit_id', user.unidadeId);
+          allSessions = allSessions.concat(data);
+
+          if (data.length < pageSize) break;
+          from += pageSize;
         }
 
-        const [
-          { data: atData },
-          { data: filaData },
-          { data: triageData },
-          { data: procData },
-          { data: cyclesData },
-          sessionsData,
-          { data: nursingData },
-          { data: multiData },
-          { data: ptsDataResult },
-        ] = await Promise.all([
-          qAt,
-          qFila,
-          qTriage,
-          qProc,
-          qCycles,
-          loadAllTreatmentSessions(),
-          supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
-          supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
-          supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
-        ]);
+        return allSessions;
+      };
 
-        if (atData) setAtendimentosDB(atData);
-        if (filaData) setFilaDB(filaData);
-        if (triageData) setTriagensDB(triageData as TriagemDB[]);
-        if (procData) {
-          setProcedimentosDB(procData.map((r: any) => ({
-            prontuario_id: r.prontuario_id,
-            procedimento_id: r.procedimento_id,
-            proc_nome: r.procedimentos?.nome || '',
-            prof_nome: r.prontuarios?.profissional_nome || '',
-            unidade_id: r.prontuarios?.unidade_id || '',
-            data: r.prontuarios?.data_atendimento || '',
-          })));
-        }
-        if (cyclesData) setTreatmentCycles(cyclesData);
-        if (sessionsData) setTreatmentSessions(sessionsData);
-        if (nursingData) setNursingEvals(nursingData);
-        if (multiData) setMultiEvals(multiData);
-        if (ptsDataResult) setPtsData(ptsDataResult);
-      } catch (err) { console.error('Error loading report data:', err); }
-    };
-    load();
+      if (user?.role === 'profissional') {
+        qCycles = qCycles.eq('professional_id', user.id);
+      }
+      if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+        qCycles = qCycles.eq('unit_id', user.unidadeId);
+      }
+
+      const [
+        { data: atData },
+        { data: filaData },
+        { data: triageData },
+        { data: procData },
+        { data: cyclesData },
+        sessionsData,
+        { data: nursingData },
+        { data: multiData },
+        { data: ptsDataResult },
+      ] = await Promise.all([
+        qAt,
+        qFila,
+        qTriage,
+        qProc,
+        qCycles,
+        loadAllTreatmentSessions(),
+        supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
+        supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
+        supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+      ]);
+
+      if (atData) setAtendimentosDB(atData);
+      if (filaData) setFilaDB(filaData);
+      if (triageData) setTriagensDB(triageData as TriagemDB[]);
+      if (procData) {
+        setProcedimentosDB(procData.map((r: any) => ({
+          prontuario_id: r.prontuario_id,
+          procedimento_id: r.procedimento_id,
+          proc_nome: r.procedimentos?.nome || '',
+          prof_nome: r.prontuarios?.profissional_nome || '',
+          unidade_id: r.prontuarios?.unidade_id || '',
+          data: r.prontuarios?.data_atendimento || '',
+        })));
+      }
+      if (cyclesData) setTreatmentCycles(cyclesData);
+      if (sessionsData) setTreatmentSessions(sessionsData);
+      if (nursingData) setNursingEvals(nursingData);
+      if (multiData) setMultiEvals(multiData);
+      if (ptsDataResult) setPtsData(ptsDataResult);
+      setLastUpdated(new Date());
+    } catch (err) { console.error('Error loading report data:', err); }
   }, [user]);
+
+  useEffect(() => { loadReportData(); }, [loadReportData]);
+
+  // Realtime subscription for auto-refresh
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
+    onchange: loadReportData,
+    enabled: true,
+    debounceMs: 2000,
+  });
+
+  // Update "last updated" label every 10s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
+      if (diffSec < 10) setLastUpdatedLabel('agora');
+      else if (diffSec < 60) setLastUpdatedLabel(`há ${diffSec}s`);
+      else if (diffSec < 3600) setLastUpdatedLabel(`há ${Math.floor(diffSec / 60)}min`);
+      else setLastUpdatedLabel(`há ${Math.floor(diffSec / 3600)}h`);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   // === FILTERS ===
   const filtered = useMemo(() => {
@@ -1103,118 +1126,138 @@ ${dataRows}
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" /> Relatórios
+          <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
+            <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
-          <p className="text-muted-foreground text-sm">{filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados</p>
+          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
+          </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
+            <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
+          </span>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-foreground text-sm">Filtros</span></div>
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">Limpar filtros</Button>
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DDE3ED', background: '#FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div>
+            <Label className="text-xs">Unidade</Label>
+            <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div>
-              <Label className="text-xs">Unidade</Label>
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Profissional</Label>
-              <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Tipo</Label>
-              <Select value={filterTipo} onValueChange={setFilterTipo}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Setor</Label>
-              <Select value={filterSetor} onValueChange={setFilterSetor}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
-            <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div>
+            <Label className="text-xs">Profissional</Label>
+            <Select value={filterProf} onValueChange={setFilterProf}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <Label className="text-xs">Status</Label>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Tipo</Label>
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Setor</Label>
+            <Select value={filterSetor} onValueChange={setFilterSetor}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+        </div>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
-          { label: 'Total', value: stats.total, icon: CalendarDays, color: 'text-foreground' },
-          { label: 'Concluídos', value: stats.concluidos, icon: UserCheck, color: 'text-success' },
-          { label: 'Pendentes', value: stats.pendentes, icon: Clock, color: 'text-warning' },
-          { label: 'Faltas', value: stats.faltas, icon: AlertTriangle, color: 'text-destructive' },
-          { label: 'Cancelados', value: stats.cancelados, icon: null, color: 'text-muted-foreground' },
-          { label: 'Remarcados', value: stats.remarcados, icon: null, color: 'text-warning' },
-          { label: 'Retornos', value: stats.retornos, icon: null, color: 'text-info' },
-          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, icon: Clock, color: 'text-primary' },
-          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, icon: TrendingUp, color: 'text-success' },
-          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, icon: AlertTriangle, color: 'text-destructive' },
+          { label: 'Total', value: stats.total, color: '#1B3A5C' },
+          { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
+          { label: 'Pendentes', value: stats.pendentes, color: '#C17B1A' },
+          { label: 'Faltas', value: stats.faltas, color: '#B83232' },
+          { label: 'Cancelados', value: stats.cancelados, color: '#6B7280' },
+          { label: 'Remarcados', value: stats.remarcados, color: '#C17B1A' },
+          { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
+          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
+          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
+          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, color: '#B83232' },
         ].map(s => (
-          <Card key={s.label} className="shadow-card border-0">
-            <CardContent className="p-2.5 text-center">
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
-            </CardContent>
-          </Card>
+          <div
+            key={s.label}
+            className="rounded-xl border text-center"
+            style={{ borderColor: '#DDE3ED', background: '#FFFFFF', padding: '12px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
+          >
+            <p className="text-xl font-bold font-display" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: '#6B7280' }}>{s.label}</p>
+          </div>
         ))}
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-          <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
-          <TabsTrigger value="produtividade" className="text-xs">Produtividade</TabsTrigger>
-          <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
-          <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
-          <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
-          <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
-          <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
-          <TabsTrigger value="enfermagem" className="text-xs">Enfermagem</TabsTrigger>
-          <TabsTrigger value="multiprofissional" className="text-xs">Multiprofissional</TabsTrigger>
-          <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
-          <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
-          <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
-          <TabsTrigger value="mapa" className="text-xs"><MapPin className="w-3 h-3 mr-1" />Mapa Atendimento</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
+          {[
+            { value: 'geral', label: 'Geral' },
+            { value: 'produtividade', label: 'Produtividade' },
+            { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'faltas', label: 'Faltas' },
+            { value: 'pacientes', label: 'Pacientes' },
+            { value: 'fila', label: 'Fila de Espera' },
+            { value: 'triagem', label: 'Triagem' },
+            { value: 'enfermagem', label: 'Enfermagem' },
+            { value: 'multiprofissional', label: 'Multiprofissional' },
+            { value: 'pts_report', label: 'PTS' },
+            { value: 'tratamentos', label: 'Tratamentos' },
+            { value: 'detalhado', label: 'Detalhado' },
+            { value: 'mapa', label: '📍 Mapa Atendimento' },
+          ].map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+              style={{
+                color: activeTab === tab.value ? '#1B3A5C' : '#6B7280',
+                borderBottomColor: activeTab === tab.value ? '#2E8B8B' : 'transparent',
+                fontWeight: activeTab === tab.value ? 600 : 500,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </TabsList>
 
         {/* === GERAL === */}
@@ -1370,43 +1413,53 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollBehavior: 'smooth' }}>
             {categoriaCards.map(c => {
               const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
               const isActive = filterCargoProd === c.key;
+              const activeBgMap: Record<string, string> = {
+                medico: '#EEF2F7', psicologo: '#F3EEF9', fonoaudiologo: '#EEF7F7',
+                fisioterapeuta: '#EEF7F2', terapeuta_ocupacional: '#FDF5E8',
+                nutricionista: '#FDF0EB', enfermeiro: '#FDEAEA',
+                assistente_social: '#EEF3F9', odontologia: '#ECFEFF',
+              };
               return (
                 <div
                   key={c.key}
-                  className={`min-w-[180px] flex-shrink-0 rounded-xl border bg-card cursor-pointer transition-all hover:shadow-md ${isActive ? 'ring-2 shadow-md' : ''}`}
+                  className="flex-shrink-0 cursor-pointer"
                   style={{
-                    borderLeftWidth: '4px',
-                    borderLeftColor: c.cor,
-                    borderColor: isActive ? c.cor : undefined,
-                    backgroundColor: isActive ? c.cor + '08' : undefined,
+                    minWidth: 190,
+                    borderRadius: 16,
+                    border: `1px solid ${isActive ? c.cor : '#DDE3ED'}`,
+                    borderLeft: `5px solid ${c.cor}`,
+                    padding: '20px 24px',
+                    background: isActive ? (activeBgMap[c.key] || '#F8FAFC') : '#FFFFFF',
+                    boxShadow: isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)',
+                    transition: 'box-shadow 0.2s, transform 0.2s',
                   }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.12)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
                   onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
                 >
-                  <div className="p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg">{c.emoji}</span>
-                      <span className="text-xs font-semibold text-muted-foreground">{c.label}</span>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span style={{ fontSize: 28 }}>{c.emoji}</span>
+                    <span className="uppercase tracking-wider font-semibold font-display" style={{ fontSize: 13, color: '#6B7280' }}>{c.label}</span>
+                  </div>
+                  <div className="flex items-baseline gap-6">
+                    <div>
+                      <p className="font-bold font-display" style={{ fontSize: 36, color: '#1B3A5C', lineHeight: 1 }}>{c.total}</p>
+                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Total</p>
                     </div>
-                    <div className="flex items-baseline gap-4">
-                      <div>
-                        <p className="text-xl font-bold" style={{ color: '#1B3A5C' }}>{c.total}</p>
-                        <p className="text-[10px] text-muted-foreground">Total</p>
-                      </div>
-                      <div>
-                        <p className="text-xl font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
-                        <p className="text-[10px] text-muted-foreground">Concluídos</p>
-                      </div>
+                    <div>
+                      <p className="font-bold" style={{ fontSize: 20, color: '#2D7A4F' }}>{c.concluidos}</p>
+                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Concluídos</p>
                     </div>
-                    <div className="mt-2">
-                      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${taxa}%`, backgroundColor: c.cor }} />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 text-right">{taxa}%</p>
+                  </div>
+                  <div className="mt-3">
+                    <div className="w-full overflow-hidden" style={{ height: 4, borderRadius: 2, background: '#E5E7EB' }}>
+                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 2, transition: 'width 0.3s' }} />
                     </div>
+                    <p className="text-right mt-1" style={{ fontSize: 12, color: '#6B7280' }}>{taxa}%</p>
                   </div>
                 </div>
               );
@@ -1473,73 +1526,89 @@ th{background:#f1f5f9;font-weight:600;}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Profissional</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Cancelados</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Remarcados</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Tempo Médio</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Retorno</th>
+                      <tr style={{ background: '#F4F6FA' }}>
+                        <th className="text-left py-3 px-4 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Profissional</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Total</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Concluídos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Faltas</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Cancelados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Remarcados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Retornos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Tempo Médio</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Conclusão</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Retorno</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {porProfissional.map(p => {
+                      {porProfissional.map((p, idx) => {
                         const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
                         const catBadge = catMatch
                           ? { label: catMatch.label, cor: catMatch.cor }
                           : { label: 'Outros', cor: '#888' };
-                        const taxaConcBg = p.taxaConclusao >= 70 ? 'bg-success/10 text-success border-success/30' : p.taxaConclusao >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
-                        const taxaRetBg = p.taxaRetorno > 30 ? 'bg-info/10 text-info border-info/30' : '';
+                        const taxaConcStyle = p.taxaConclusao >= 70
+                          ? { background: '#ECFDF5', color: '#2D7A4F' }
+                          : p.taxaConclusao >= 40
+                          ? { background: '#FFFBEB', color: '#C17B1A' }
+                          : { background: '#FEF2F2', color: '#B83232' };
+                        const taxaRetStyle = p.taxaRetorno > 30
+                          ? { background: '#EEF2F7', color: '#1B3A5C' }
+                          : {};
                         return (
-                          <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
-                            <td className="py-2.5 px-3 text-foreground font-medium">
+                          <tr
+                            key={p.id || p.nome}
+                            className="border-b last:border-0 transition-colors"
+                            style={{ background: idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#EEF2F7')}
+                            onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF')}
+                          >
+                            <td className="py-3 px-4 font-medium" style={{ color: '#1B3A5C' }}>
                               <div className="flex items-center gap-2">
                                 {p.nome}
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
                               </div>
                             </td>
-                            <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
-                            <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
-                            <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                            <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
-                            <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
-                            <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                            <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBg}`}>{p.taxaConclusao}%</span>
+                            <td className="py-3 px-2 text-center font-semibold" style={{ color: '#1B3A5C' }}>{p.total}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2D7A4F' }}>{p.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{p.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{p.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{p.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{p.retornos}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2E8B8B' }}>{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcStyle, borderRadius: 20 }}>{p.taxaConclusao}%</span>
                             </td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaRetBg || 'text-muted-foreground'}`}>{p.taxaRetorno}%</span>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaRetStyle, borderRadius: 20, color: taxaRetStyle.color || '#6B7280' }}>{p.taxaRetorno}%</span>
                             </td>
                           </tr>
                         );
                       })}
-                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
+                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8" style={{ color: '#6B7280' }}>Nenhum dado encontrado para o período selecionado</td></tr>}
                     </tbody>
                     {porProfissional.length > 0 && (() => {
                       const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
                       const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
-                      const taxaConcBgG = taxaConcGeral >= 70 ? 'bg-success/10 text-success border-success/30' : taxaConcGeral >= 40 ? 'bg-warning/10 text-warning border-warning/30' : 'bg-destructive/10 text-destructive border-destructive/30';
+                      const taxaConcGeralStyle = taxaConcGeral >= 70
+                        ? { background: '#ECFDF5', color: '#2D7A4F' }
+                        : taxaConcGeral >= 40
+                        ? { background: '#FFFBEB', color: '#C17B1A' }
+                        : { background: '#FEF2F2', color: '#B83232' };
                       return (
                         <tfoot>
                           <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
-                            <td className="py-2.5 px-3 text-foreground">TOTAL GERAL</td>
-                            <td className="py-2.5 px-2 text-center">{prodTotals.total}</td>
-                            <td className="py-2.5 px-2 text-center text-success">{prodTotals.concluidos}</td>
-                            <td className="py-2.5 px-2 text-center text-destructive">{prodTotals.faltas}</td>
-                            <td className="py-2.5 px-2 text-center text-muted-foreground">{prodTotals.cancelados}</td>
-                            <td className="py-2.5 px-2 text-center text-warning">{prodTotals.remarcados}</td>
-                            <td className="py-2.5 px-2 text-center text-info">{prodTotals.retornos}</td>
-                            <td className="py-2.5 px-2 text-center">-</td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${taxaConcBgG}`}>{taxaConcGeral}%</span>
+                            <td className="py-3 px-4" style={{ color: '#1B3A5C' }}>TOTAL GERAL</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.total}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#2D7A4F' }}>{prodTotals.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{prodTotals.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{prodTotals.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{prodTotals.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.retornos}</td>
+                            <td className="py-3 px-2 text-center">-</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcGeralStyle, borderRadius: 20 }}>{taxaConcGeral}%</span>
                             </td>
-                            <td className="py-2.5 px-2 text-center">
-                              <span className="text-xs px-2 py-0.5 rounded-full border text-muted-foreground">{taxaRetGeral}%</span>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: '#6B7280', borderRadius: 20 }}>{taxaRetGeral}%</span>
                             </td>
                           </tr>
                         </tfoot>
