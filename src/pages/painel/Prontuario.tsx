@@ -924,6 +924,10 @@ const ProntuarioPage: React.FC = () => {
                 <Activity className="w-4 h-4 mr-2" />
                 {showHistorico ? "Ocultar" : "Ver"} Histórico
               </Button>
+              <Button variant="default" onClick={() => setHistoricoCompletoOpen(true)} className="gradient-primary text-primary-foreground">
+                <FileText className="w-4 h-4 mr-2" />
+                Histórico Completo
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => handlePrintFullHistory(queryPacienteId, queryPacienteNome || "Paciente")}
