@@ -1785,12 +1785,12 @@ const ProntuarioPage: React.FC = () => {
       )}
 
       {/* Histórico Completo Modal */}
-      {queryPacienteId && (
+      {(queryPacienteId || form.paciente_id) && (
         <HistoricoCompletoModal
           open={historicoCompletoOpen}
           onOpenChange={setHistoricoCompletoOpen}
-          pacienteId={queryPacienteId}
-          pacienteNome={queryPacienteNome || "Paciente"}
+          pacienteId={queryPacienteId || form.paciente_id}
+          pacienteNome={queryPacienteNome || form.paciente_nome || "Paciente"}
           unidades={unidades}
           currentProfissionalId={user?.id}
         />
