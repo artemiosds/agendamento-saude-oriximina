@@ -9,6 +9,7 @@ import {
   ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 import logoSms from '@/assets/logo-sms.jpeg';
 
@@ -174,7 +175,8 @@ const PainelLayout: React.FC = () => {
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex-1" />
-          <span className="text-sm text-muted-foreground hidden sm:block">
+          <ThemeToggle />
+          <span className="text-sm text-muted-foreground hidden sm:block ml-2">
             {user?.setor && `${user.setor} • `}{user?.cargo}
           </span>
         </header>
