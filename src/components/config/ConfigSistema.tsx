@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useData } from '@/contexts/DataContext';
+import { useConfiguracao } from '@/hooks/useConfiguracao';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Download, Building2, Bell, Palette, Shield } from 'lucide-react';
+import { ConfigSyncIndicator } from '@/components/ConfigSyncIndicator';
 import { toast } from 'sonner';
 
 const CONFIG_KEY = 'config_sistema';
@@ -44,7 +44,7 @@ const DEFAULT: SistemaConfig = {
 };
 
 const ConfigSistema: React.FC = () => {
-  const { configuracoes, updateConfiguracoes } = useData();
+  const { atualizarConfiguracao, syncPendingDrafts } = useConfiguracao();
   const [config, setConfig] = useState<SistemaConfig>(DEFAULT);
   const [loading, setLoading] = useState(true);
 
@@ -55,18 +55,14 @@ const ConfigSistema: React.FC = () => {
     setLoading(false);
   }, []);
 
-  useEffect(() => { loadConfig(); }, [loadConfig]);
+  useEffect(() => {
+    loadConfig();
+    syncPendingDrafts();
+  }, [loadConfig, syncPendingDrafts]);
 
   const save = async (updated: SistemaConfig) => {
-    const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
-    const existingConfig = (existing?.configuracoes as any) || {};
-    await supabase.from('system_config').upsert({
-      id: 'default',
-      configuracoes: { ...existingConfig, [CONFIG_KEY]: updated },
-      updated_at: new Date().toISOString(),
-    });
-    setConfig(updated);
-    toast.success('Configuração salva');
+    setConfig(updated); // optimistic
+    await atualizarConfiguracao(CONFIG_KEY, updated, { auditAcao: 'ALTERAR_CONFIG_SISTEMA' });
   };
 
   const exportAllData = async () => {
@@ -88,6 +84,11 @@ const ConfigSistema: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Sync indicator */}
+      <div className="flex justify-end">
+        <ConfigSyncIndicator />
+      </div>
+
       {/* 9.1 Informações da instituição */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
