@@ -306,6 +306,21 @@ const Tratamentos: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  // ESC key to clear scheduling state
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && agendarSessaoTarget) {
+        setAgendarSessaoTarget(null);
+        setAgendarSessaoData("");
+        setAgendarSessaoHora("");
+        setAgendarSessaoSalaId("");
+        toast("Campos limpos", { icon: "🧹" });
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [agendarSessaoTarget]);
+
   // Silent background refresh on realtime changes — no loading spinner
   const silentRefresh = useCallback(() => loadData(true), [loadData]);
 
