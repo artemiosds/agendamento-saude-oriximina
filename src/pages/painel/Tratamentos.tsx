@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
-import { treatmentService } from "@/services/treatmentService";
+import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,7 @@ interface PTSRecord {
 
 const statusColors: Record<string, string> = {
   em_andamento: "bg-success/15 text-success border-success/30",
+  concluido: "bg-success/10 text-success border-success/30",
   aguardando_vaga: "bg-warning/15 text-warning border-warning/30",
   em_fila: "bg-info/15 text-info border-info/30",
   finalizado_alta: "bg-muted text-muted-foreground border-border",
@@ -118,6 +119,7 @@ const statusColors: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
   em_andamento: "Em Andamento",
+  concluido: "Concluído",
   aguardando_vaga: "Aguardando Vaga",
   em_fila: "Em Fila",
   finalizado_alta: "Finalizado (Alta)",
@@ -243,6 +245,8 @@ const Tratamentos: React.FC = () => {
 
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
+  const [dischargeFutureCount, setDischargeFutureCount] = useState(0);
+  const [dischargeLoading, setDischargeLoading] = useState(false);
 
   const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
@@ -263,7 +267,11 @@ const Tratamentos: React.FC = () => {
         supabase.from("pts").select("*").order("created_at", { ascending: false }),
       ]);
 
-      if (cData) setCycles(cData as TreatmentCycle[]);
+      if (cData) {
+        const nextCycles = cData as TreatmentCycle[];
+        setCycles(nextCycles);
+        setSelectedCycle((current) => (current ? nextCycles.find((cycle) => cycle.id === current.id) || null : current));
+      }
       if (sData) setSessions(sData as TreatmentSession[]);
       if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
@@ -418,6 +426,28 @@ const Tratamentos: React.FC = () => {
     });
   }, [procedimentos, selectedCycle, profissionais]);
 
+  const sessionSoapValidationError = useMemo(() => {
+    if (newSession.status !== "realizada") return null;
+    return getSoapValidationError(soapNotes);
+  }, [newSession.status, soapNotes]);
+
+  const sessionRegisterHint = useMemo(() => {
+    if (newSession.status !== "realizada") return null;
+    if (sessionSoapValidationError) return "❌ Preencha todos os campos do SOAP";
+    if (!newSession.procedure_done?.trim()) return "❌ Selecione o procedimento realizado";
+    return "✔ SOAP completo";
+  }, [newSession.status, newSession.procedure_done, sessionSoapValidationError]);
+
+  const canSubmitSessionRegistration = useMemo(() => {
+    if (newSession.status === "realizada") {
+      return !sessionSoapValidationError && !!newSession.procedure_done?.trim();
+    }
+    if (newSession.status === "paciente_faltou") {
+      return !!newSession.absence_type;
+    }
+    return true;
+  }, [newSession.absence_type, newSession.procedure_done, newSession.status, sessionSoapValidationError]);
+
   const handleCreateCycle = async () => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
       toast.error("Preencha paciente, profissional e tipo de tratamento.");
@@ -547,16 +577,24 @@ const Tratamentos: React.FC = () => {
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
 
+    const nextSession = cycleSessions
+      .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
+      .sort((a, b) => a.session_number - b.session_number)[0];
+
+    if (!nextSession) {
+      toast.error("Não há sessões pendentes neste ciclo.");
+      return;
+    }
+
     if (newSession.status === "realizada") {
-      if (
-        !soapNotes.subjetivo?.trim() ||
-        !soapNotes.objetivo?.trim() ||
-        !soapNotes.avaliacao?.trim() ||
-        !soapNotes.plano?.trim()
-      ) {
-        toast.error("Sessão realizada exige preenchimento completo do SOAP (Subjetivo, Objetivo, Avaliação, Plano).");
-        return;
-      }
+      const soapPayload = normalizeSoapPayload(soapNotes);
+      const soapError = getSoapValidationError(soapPayload);
+      console.log('[SOAP Tratamentos validation]', {
+        soap: soapPayload,
+        cycle_id: selectedCycle.id,
+        session_id: nextSession.id,
+      });
+      if (soapError) { toast.error(soapError); return; }
       if (!newSession.procedure_done) {
         toast.error("Selecione o procedimento realizado.");
         return;
@@ -568,49 +606,32 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    const nextSession = sessions
-      .filter((s) => s.cycle_id === selectedCycle.id && ["agendada", "pendente_agendamento"].includes(s.status))
-      .sort((a, b) => a.session_number - b.session_number)[0];
-
-    if (!nextSession) {
-      toast.error("Não há sessões pendentes neste ciclo.");
-      return;
-    }
-
-    const clinicalNotesJson =
-      newSession.status === "realizada"
-        ? JSON.stringify({
-            tipo: "soap",
-            subjetivo: soapNotes.subjetivo,
-            objetivo: soapNotes.objetivo,
-            avaliacao: soapNotes.avaliacao,
-            plano: soapNotes.plano,
-            registrado_em: new Date().toISOString(),
-            registrado_por: user?.id,
-          })
-        : newSession.clinical_notes;
-
     try {
-      await supabase
-        .from("treatment_sessions")
-        .update({
-          status: newSession.status,
-          clinical_notes: clinicalNotesJson,
-          procedure_done: newSession.procedure_done,
-          absence_type: newSession.status === "paciente_faltou" ? newSession.absence_type : null,
-        })
-        .eq("id", nextSession.id);
+      if (newSession.status === "realizada") {
+        const soapPayload = normalizeSoapPayload(soapNotes);
+        const result = await treatmentService.registerCompletedSession({
+          cycle: selectedCycle,
+          session: nextSession,
+          soap: soapPayload,
+          procedureDone: newSession.procedure_done,
+          userId: user?.id,
+          appointmentId: nextSession.appointment_id,
+        });
 
-      const newDone = newSession.status === "realizada" ? selectedCycle.sessions_done + 1 : selectedCycle.sessions_done;
-      const isComplete = newDone >= selectedCycle.total_sessions;
-
-      await supabase
-        .from("treatment_cycles")
-        .update({
-          sessions_done: newDone,
-          ...(isComplete ? { status: "finalizado_alta" } : {}),
-        })
-        .eq("id", selectedCycle.id);
+        if (result.cycleStatus === "concluido") {
+          toast.info("🎉 Ciclo de tratamento concluído!");
+        }
+      } else {
+        await supabase
+          .from("treatment_sessions")
+          .update({
+            status: newSession.status,
+            clinical_notes: newSession.clinical_notes,
+            procedure_done: newSession.procedure_done,
+            absence_type: newSession.status === "paciente_faltou" ? newSession.absence_type : null,
+          })
+          .eq("id", nextSession.id);
+      }
 
       await logAction({
         acao: "registrar_sessao",
@@ -625,14 +646,19 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      toast.success(`Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`);
+      await loadData(true);
+
+      toast.success(
+        newSession.status === "realizada"
+          ? `✅ Sessão ${nextSession.session_number} registrada com sucesso!`
+          : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
+      );
       setSessionOpen(false);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
       setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
-      loadData();
     } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao registrar sessão: " + err.message);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : "❌ Erro ao registrar sessão. Tente novamente.");
     }
   };
 
@@ -1085,12 +1111,27 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const loadDischargeFutureCount = async () => {
+    if (!selectedCycle || !user) return;
+    const today = new Date().toISOString().split("T")[0];
+    const { count } = await supabase
+      .from("agendamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("paciente_id", selectedCycle.patient_id)
+      .eq("profissional_id", user.id)
+      .gt("data", today)
+      .not("status", "in", '("cancelado","falta","remarcado")');
+    setDischargeFutureCount(count || 0);
+  };
+
   const handleDischarge = async () => {
     if (!selectedCycle || !dischargeForm.reason) {
       toast.error("Informe o motivo da alta.");
       return;
     }
+    setDischargeLoading(true);
     try {
+      // 1. Register discharge
       await supabase.from("patient_discharges").insert({
         cycle_id: selectedCycle.id,
         patient_id: selectedCycle.patient_id,
@@ -1100,7 +1141,42 @@ const Tratamentos: React.FC = () => {
         final_notes: dischargeForm.final_notes,
       });
 
+      // 2. Update cycle status
       await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
+
+      // 3. Cancel ONLY future appointments of this professional for this patient
+      const today = new Date().toISOString().split("T")[0];
+      const { data: futureAppts } = await supabase
+        .from("agendamentos")
+        .select("id")
+        .eq("paciente_id", selectedCycle.patient_id)
+        .eq("profissional_id", user?.id || "")
+        .gt("data", today)
+        .not("status", "in", '("cancelado","falta","remarcado")');
+
+      const cancelledCount = futureAppts?.length || 0;
+
+      if (futureAppts && futureAppts.length > 0) {
+        const ids = futureAppts.map((a) => a.id);
+        await supabase
+          .from("agendamentos")
+          .update({ status: "cancelado", observacoes: "Alta pelo profissional" })
+          .in("id", ids);
+
+        // Cancel pending sessions linked to those appointments
+        await supabase
+          .from("treatment_sessions")
+          .update({ status: "cancelada" })
+          .eq("cycle_id", selectedCycle.id)
+          .in("appointment_id", ids);
+      }
+
+      // 4. Cancel remaining pending sessions of this cycle
+      await supabase
+        .from("treatment_sessions")
+        .update({ status: "cancelada" })
+        .eq("cycle_id", selectedCycle.id)
+        .in("status", ["pendente_agendamento", "agendada"]);
 
       await logAction({
         acao: "alta_paciente",
@@ -1108,16 +1184,27 @@ const Tratamentos: React.FC = () => {
         entidadeId: selectedCycle.id,
         modulo: "tratamentos",
         user,
-        detalhes: { paciente: selectedCycle.patient_id, motivo: dischargeForm.reason },
+        detalhes: {
+          paciente: selectedCycle.patient_id,
+          motivo: dischargeForm.reason,
+          agendamentos_cancelados: cancelledCount,
+        },
       });
 
-      toast.success("Alta registrada com sucesso!");
+      toast.success(
+        cancelledCount > 0
+          ? `Alta realizada. ${cancelledCount} agendamento(s) deste profissional cancelado(s).`
+          : "Alta registrada com sucesso!"
+      );
       setDischargeOpen(false);
       setDischargeForm({ reason: "", final_notes: "" });
+      setDischargeFutureCount(0);
       loadData();
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar alta: " + err.message);
+    } finally {
+      setDischargeLoading(false);
     }
   };
 
@@ -1415,7 +1502,10 @@ const Tratamentos: React.FC = () => {
                     className="border-destructive text-destructive"
                     onClick={() => {
                       setDischargeForm({ reason: "", final_notes: "" });
+                      setDischargeFutureCount(0);
                       setDischargeOpen(true);
+                      // load count async
+                      setTimeout(() => loadDischargeFutureCount(), 0);
                     }}
                   >
                     <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
@@ -1699,7 +1789,7 @@ const Tratamentos: React.FC = () => {
         )}
 
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>Registrar Sessão</DialogTitle>
             </DialogHeader>
@@ -1780,9 +1870,10 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.subjetivo}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, subjetivo: e.target.value }))}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, subjetivo: val })); }}
                       rows={2}
                       placeholder="Ex: Paciente relata melhora da dor no joelho direito..."
+                      className={sessionSoapValidationError && !soapNotes.subjetivo?.trim() ? "border-destructive border-2" : ""}
                     />
                   </div>
                   <div>
@@ -1792,9 +1883,10 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Achados do exame, medições, testes realizados</p>
                     <Textarea
                       value={soapNotes.objetivo}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, objetivo: e.target.value }))}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, objetivo: val })); }}
                       rows={2}
                       placeholder="Ex: ADM flexão joelho D: 95° (anterior: 80°)..."
+                      className={sessionSoapValidationError && !soapNotes.objetivo?.trim() ? "border-destructive border-2" : ""}
                     />
                   </div>
                   <div>
@@ -1804,9 +1896,10 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Análise clínica, evolução do quadro</p>
                     <Textarea
                       value={soapNotes.avaliacao}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, avaliacao: e.target.value }))}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, avaliacao: val })); }}
                       rows={2}
                       placeholder="Ex: Evolução favorável, ganho funcional progressivo..."
+                      className={sessionSoapValidationError && !soapNotes.avaliacao?.trim() ? "border-destructive border-2" : ""}
                     />
                   </div>
                   <div>
@@ -1818,9 +1911,10 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.plano}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, plano: e.target.value }))}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, plano: val })); }}
                       rows={2}
-                      placeholder="Ex: Manter protocolo atual, progredir carga na próxima sessão..."
+                      placeholder="Ex: Manter protocolo atual, progrimir carga na próxima sessão..."
+                      className={sessionSoapValidationError && !soapNotes.plano?.trim() ? "border-destructive border-2" : ""}
                     />
                   </div>
                 </div>
@@ -1838,7 +1932,13 @@ const Tratamentos: React.FC = () => {
                 </div>
               )}
 
-              <Button onClick={handleRegisterSession} className="w-full gradient-primary text-primary-foreground">
+              {sessionRegisterHint && (
+                <p className={cn("text-xs", sessionRegisterHint.startsWith("✔") ? "text-success" : "text-destructive")}>
+                  {sessionRegisterHint}
+                </p>
+              )}
+
+              <Button onClick={handleRegisterSession} disabled={!canSubmitSessionRegistration} className="w-full gradient-primary text-primary-foreground">
                 Registrar
               </Button>
             </div>
@@ -1952,6 +2052,17 @@ const Tratamentos: React.FC = () => {
               <DialogTitle>Dar Alta</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {dischargeFutureCount > 0 && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
+                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+                  <p className="text-sm text-warning">
+                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você. 
+                    Todos serão cancelados automaticamente ao confirmar a alta.
+                    <br />
+                    <span className="text-xs opacity-80">Agendamentos com outros profissionais não serão afetados.</span>
+                  </p>
+                </div>
+              )}
               <div>
                 <Label>Motivo da alta *</Label>
                 <Input
@@ -1971,8 +2082,9 @@ const Tratamentos: React.FC = () => {
                 onClick={handleDischarge}
                 className="w-full"
                 variant="destructive"
-                disabled={!dischargeForm.reason}
+                disabled={!dischargeForm.reason || dischargeLoading}
               >
+                {dischargeLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Confirmar Alta
               </Button>
               <p className="text-xs text-muted-foreground text-center">
