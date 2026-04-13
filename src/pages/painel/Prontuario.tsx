@@ -231,6 +231,8 @@ const ProntuarioPage: React.FC = () => {
   const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const soapCustom = useSoapCustomOptions(user?.id);
+  const showSoapDropdown = hasDropdownSoap(user?.profissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
