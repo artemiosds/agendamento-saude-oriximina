@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
@@ -11,17 +11,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
-// roles_fallback = usado APENAS se o PermissionsContext ainda estiver carregando
 const menuItems: {
   to: string;
   label: string;
   icon: React.ElementType;
   modulo: ModuleName | null;
   roles_master_only?: boolean;
-  hide_from_master?: boolean;    // true = master NÃO vê (ex: Meu Prontuário)
+  hide_from_master?: boolean;
 }[] = [
   { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
   { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
@@ -62,10 +62,17 @@ const roleLabels: Record<string, string> = {
   enfermagem:         'Enfermagem',
 };
 
+const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+  exit: { opacity: 0, y: -4, transition: { duration: 0.15 } },
+};
+
 const PainelLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
@@ -75,21 +82,11 @@ const PainelLayout: React.FC = () => {
     navigate('/login');
   };
 
-  // Decide se o item aparece no menu
   const isItemVisible = (item: typeof menuItems[0]): boolean => {
-    // Itens só para master
     if (item.roles_master_only) return isMaster;
-
-    // Itens que master NÃO deve ver (ex: Meu Prontuário é exclusivo do profissional)
     if (item.hide_from_master && isMaster) return false;
-
-    // Master vê tudo (exceto os hide_from_master acima)
     if (isMaster) return true;
-
-    // Sem módulo definido = visível para todos autenticados
     if (item.modulo === null) return true;
-
-    // Usa PermissionsContext — respeita o que foi configurado na tela de permissões
     return can(item.modulo, 'can_view');
   };
 
@@ -98,20 +95,26 @@ const PainelLayout: React.FC = () => {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-foreground/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed lg:static inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col transition-transform duration-300",
+        "fixed lg:static inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
-          <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-lg object-cover" />
+          <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-xl object-cover ring-2 ring-sidebar-primary/20" />
           <div>
             <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight">CER II</h2>
             <p className="text-xs text-sidebar-foreground/60">Oriximiná</p>
@@ -121,12 +124,12 @@ const PainelLayout: React.FC = () => {
         {/* Loading de permissões */}
         {permLoading && (
           <div className="px-4 py-2 text-xs text-sidebar-foreground/40 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block" />
+            <span className="w-2 h-2 rounded-full bg-warning animate-pulse inline-block" />
             Carregando permissões...
           </div>
         )}
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {filteredMenu.map(item => (
             <NavLink
               key={item.to}
@@ -134,13 +137,13 @@ const PainelLayout: React.FC = () => {
               end={item.to === '/painel'}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) => cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
                 isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon className="w-4 h-4 shrink-0" />
+              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
               {item.label}
             </NavLink>
           ))}
@@ -170,7 +173,7 @@ const PainelLayout: React.FC = () => {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 bg-card border-b border-border flex items-center px-4 lg:px-6 shrink-0">
+        <header className="h-14 bg-card/80 backdrop-blur-md border-b border-border flex items-center px-4 lg:px-6 shrink-0 sticky top-0 z-30">
           <Button
             variant="ghost"
             size="icon"
@@ -187,7 +190,17 @@ const PainelLayout: React.FC = () => {
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
     </div>
