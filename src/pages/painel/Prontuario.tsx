@@ -411,8 +411,8 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const canConfirmSessionRegistration = useMemo(
-    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && !sessionSoapValidationError),
-    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError],
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && (!soapEnabled || !sessionSoapValidationError)),
+    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError, soapEnabled],
   );
 
   // Medications & exam types state
