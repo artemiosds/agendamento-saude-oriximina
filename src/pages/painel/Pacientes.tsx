@@ -628,7 +628,7 @@ const Pacientes: React.FC = () => {
       });
 
     // Executar todas as buscas em paralelo
-    const [paciente, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
+    const [pacienteResult, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
       pacientePromise,
       dadosClinicosPromise,
       sinaisVitaisPromise,
@@ -637,8 +637,8 @@ const Pacientes: React.FC = () => {
     ]);
 
     return {
-      paciente,
-      dadosClinicos,
+      paciente: pacienteResult.paciente,
+      dadosClinicos: { ...dadosClinicos, cid: pacienteResult.cid },
       sinaisVitais,
       profissional,
       evoluciones,
