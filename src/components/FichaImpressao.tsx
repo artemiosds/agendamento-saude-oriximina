@@ -374,18 +374,17 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     </div>
   </div>
 
-  ${somentePessoais ? '' : `
   <!-- ATENDIMENTO -->
   <div class="bloco">
     <div class="bloco-titulo">Dados do Atendimento</div>
     <div class="bloco-body">
       <div class="grid-4">
-        <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || '—'}</span></div>
-        <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || '—'}</span></div>
-        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || '—'}</span></div>
-        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || '—'}</span></div>
+        <div class="campo"><b>Tipo:</b> <span>${somentePessoais ? '_______________' : (v(data.dadosClinicos.tipo_atendimento) || '—')}</span></div>
+        <div class="campo"><b>CID:</b> <span>${somentePessoais ? '_______________' : (v(data.dadosClinicos.cid) || '—')}</span></div>
+        <div class="campo"><b>Profissional:</b> <span>${somentePessoais ? '_______________' : (v(data.profissional.nome) || '—')}</span></div>
+        <div class="campo"><b>Especialidade:</b> <span>${somentePessoais ? '_______________' : (v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || '—')}</span></div>
       </div>
-      <div class="campo"><b>Encaminhamento:</b> <span>${v(data.dadosClinicos.encaminhamento) || '—'}</span></div>
+      <div class="campo"><b>Encaminhamento:</b> <span>${somentePessoais ? '_______________' : (v(data.dadosClinicos.encaminhamento) || '—')}</span></div>
     </div>
   </div>
 
@@ -396,16 +395,16 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <table class="vitais-table">
         <tbody>
           <tr>
-            <td><b>PA</b><span>${v(data.sinaisVitais.pressao_arterial) || '___'}</span></td>
-            <td><b>FC</b><span>${v(data.sinaisVitais.frequencia_cardiaca) ? v(data.sinaisVitais.frequencia_cardiaca) + ' bpm' : '___'}</span></td>
-            <td><b>FR</b><span>${v(data.sinaisVitais.frequencia_respiratoria) || '___'}</span></td>
-            <td><b>Temp</b><span>${v(data.sinaisVitais.temperatura) ? v(data.sinaisVitais.temperatura) + ' °C' : '___'}</span></td>
+            <td><b>PA</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.pressao_arterial) || '___')}</span></td>
+            <td><b>FC</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.frequencia_cardiaca) ? v(data.sinaisVitais.frequencia_cardiaca) + ' bpm' : '___')}</span></td>
+            <td><b>FR</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.frequencia_respiratoria) || '___')}</span></td>
+            <td><b>Temp</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.temperatura) ? v(data.sinaisVitais.temperatura) + ' °C' : '___')}</span></td>
           </tr>
           <tr>
-            <td><b>SpO₂</b><span>${v(data.sinaisVitais.saturacao) ? v(data.sinaisVitais.saturacao) + ' %' : '___'}</span></td>
-            <td><b>Peso</b><span>${v(data.sinaisVitais.peso) ? v(data.sinaisVitais.peso) + ' kg' : '___'}</span></td>
-            <td><b>Altura</b><span>${v(data.sinaisVitais.altura) ? v(data.sinaisVitais.altura) + ' m' : '___'}</span></td>
-            <td><b>Glicemia</b><span>${v(data.sinaisVitais.glicemia) ? v(data.sinaisVitais.glicemia) + ' mg/dL' : '___'}</span></td>
+            <td><b>SpO₂</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.saturacao) ? v(data.sinaisVitais.saturacao) + ' %' : '___')}</span></td>
+            <td><b>Peso</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.peso) ? v(data.sinaisVitais.peso) + ' kg' : '___')}</span></td>
+            <td><b>Altura</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.altura) ? v(data.sinaisVitais.altura) + ' m' : '___')}</span></td>
+            <td><b>Glicemia</b><span>${somentePessoais ? '___' : (v(data.sinaisVitais.glicemia) ? v(data.sinaisVitais.glicemia) + ' mg/dL' : '___')}</span></td>
           </tr>
         </tbody>
       </table>
@@ -429,7 +428,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     <div class="bloco-titulo">Evolução Clínica</div>
     <div class="bloco-body">
       <div class="evo-area">
-        ${evolucaoHTML}
+        ${somentePessoais ? Array.from({ length: 8 }, () => '<div class="evo-line"></div>').join('') : evolucaoHTML}
       </div>
     </div>
   </div>
@@ -448,7 +447,6 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="conduta-linha"></div>
     </div>
   </div>
-  `}
 
   <!-- ASSINATURA -->
   <div class="assinatura-area">
