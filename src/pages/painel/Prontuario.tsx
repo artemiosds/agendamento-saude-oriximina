@@ -605,12 +605,12 @@ const ProntuarioPage: React.FC = () => {
     }
   }, [searchParams, prontuarios.length]);
 
-  // Load cycle + PTS data when sessao type is selected
+  // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
-    if (form.paciente_id && user?.id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
-      loadSessaoData(form.paciente_id, user.id);
+    if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
+      loadSessaoData(form.paciente_id);
     }
-  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
