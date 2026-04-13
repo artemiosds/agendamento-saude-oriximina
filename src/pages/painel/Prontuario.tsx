@@ -371,14 +371,15 @@ const ProntuarioPage: React.FC = () => {
     }));
 
     if (shouldSubmitSession) {
-      if (sessionSoapValidationError) {
+      const effectiveError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+      if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
         setTimeout(() => {
           soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
         setTimeout(() => setSessaoHighlightSOAP(false), 4000);
-        toast.error(sessionSoapValidationError);
+        toast.error(effectiveError);
         return;
       }
 
