@@ -914,8 +914,8 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        form.tipo_registro === 'sessao' && form.paciente_id && user?.id
-          ? loadSessaoData(form.paciente_id, user.id)
+        form.tipo_registro === 'sessao' && form.paciente_id
+          ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
       ]);
 
@@ -1139,7 +1139,7 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        loadSessaoData(form.paciente_id, user?.id || ''),
+        loadSessaoData(form.paciente_id),
       ]);
       setSessionRegistrationRequested(false);
     } catch (err: any) {
@@ -1187,7 +1187,7 @@ const ProntuarioPage: React.FC = () => {
 
       // Refresh data
       await Promise.all([
-        loadSessaoData(form.paciente_id, user?.id || ''),
+        loadSessaoData(form.paciente_id),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
