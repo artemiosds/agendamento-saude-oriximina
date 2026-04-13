@@ -565,17 +565,34 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     // SOAP validation — required for all record types
-    const soapS = (form.soap_subjetivo || '').trim();
-    const soapO = (form.soap_objetivo || '').trim();
-    const soapA = (form.soap_avaliacao || '').trim();
-    const soapP = (form.soap_plano || '').trim();
-    if (!soapS || !soapO || !soapA || !soapP) {
+    const soapS = (form.soap_subjetivo ?? '').trim();
+    const soapO = (form.soap_objetivo ?? '').trim();
+    const soapA = (form.soap_avaliacao ?? '').trim();
+    const soapP = (form.soap_plano ?? '').trim();
+    console.log('[SOAP validation]', { soapS: soapS.length, soapO: soapO.length, soapA: soapA.length, soapP: soapP.length });
+    if (!soapS) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      if (!soapS) { toast.error("Preencha o campo Subjetivo (S)"); return; }
-      if (!soapO) { toast.error("Preencha o campo Objetivo (O)"); return; }
-      if (!soapA) { toast.error("Preencha o campo Avaliação (A)"); return; }
-      if (!soapP) { toast.error("Preencha o campo Plano (P)"); return; }
+      toast.error("Preencha o campo Subjetivo (S)");
+      return;
+    }
+    if (!soapO) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error("Preencha o campo Objetivo (O)");
+      return;
+    }
+    if (!soapA) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error("Preencha o campo Avaliação (A)");
+      return;
+    }
+    if (!soapP) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error("Preencha o campo Plano (P)");
+      return;
     }
     setSoapErrors(false);
     setSaving(true);
@@ -1139,7 +1156,7 @@ const ProntuarioPage: React.FC = () => {
           if (!open) setActiveAtendimento(null);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
           </DialogHeader>
@@ -1352,22 +1369,22 @@ const ProntuarioPage: React.FC = () => {
               <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
               <div>
                 <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_subjetivo: e.target.value })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
+                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_subjetivo: val })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
                 {soapErrors && !form.soap_subjetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>O — Objetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_objetivo: e.target.value })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
+                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_objetivo: val })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
                 {soapErrors && !form.soap_objetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>A — Avaliação <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_avaliacao: e.target.value })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
+                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_avaliacao: val })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
                 {soapErrors && !form.soap_avaliacao?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>P — Plano <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_plano: e.target.value })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
+                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_plano: val })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
                 {soapErrors && !form.soap_plano?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
             </div>

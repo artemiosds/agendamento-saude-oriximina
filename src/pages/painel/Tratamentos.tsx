@@ -550,15 +550,15 @@ const Tratamentos: React.FC = () => {
     if (!selectedCycle) return;
 
     if (newSession.status === "realizada") {
-      if (
-        !soapNotes.subjetivo?.trim() ||
-        !soapNotes.objetivo?.trim() ||
-        !soapNotes.avaliacao?.trim() ||
-        !soapNotes.plano?.trim()
-      ) {
-        toast.error("Sessão realizada exige preenchimento completo do SOAP (Subjetivo, Objetivo, Avaliação, Plano).");
-        return;
-      }
+      const sS = (soapNotes.subjetivo ?? '').trim();
+      const sO = (soapNotes.objetivo ?? '').trim();
+      const sA = (soapNotes.avaliacao ?? '').trim();
+      const sP = (soapNotes.plano ?? '').trim();
+      console.log('[SOAP Tratamentos validation]', { sS: sS.length, sO: sO.length, sA: sA.length, sP: sP.length });
+      if (!sS) { toast.error("Preencha o campo Subjetivo (S)"); return; }
+      if (!sO) { toast.error("Preencha o campo Objetivo (O)"); return; }
+      if (!sA) { toast.error("Preencha o campo Avaliação (A)"); return; }
+      if (!sP) { toast.error("Preencha o campo Plano (P)"); return; }
       if (!newSession.procedure_done) {
         toast.error("Selecione o procedimento realizado.");
         return;
@@ -1765,7 +1765,7 @@ const Tratamentos: React.FC = () => {
         )}
 
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>Registrar Sessão</DialogTitle>
             </DialogHeader>
@@ -1846,7 +1846,7 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.subjetivo}
-                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, subjetivo: e.target.value })); }}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, subjetivo: val })); }}
                       rows={2}
                       placeholder="Ex: Paciente relata melhora da dor no joelho direito..."
                     />
@@ -1858,7 +1858,7 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Achados do exame, medições, testes realizados</p>
                     <Textarea
                       value={soapNotes.objetivo}
-                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, objetivo: e.target.value })); }}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, objetivo: val })); }}
                       rows={2}
                       placeholder="Ex: ADM flexão joelho D: 95° (anterior: 80°)..."
                     />
@@ -1870,7 +1870,7 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Análise clínica, evolução do quadro</p>
                     <Textarea
                       value={soapNotes.avaliacao}
-                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, avaliacao: e.target.value })); }}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, avaliacao: val })); }}
                       rows={2}
                       placeholder="Ex: Evolução favorável, ganho funcional progressivo..."
                     />
@@ -1884,7 +1884,7 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.plano}
-                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, plano: e.target.value })); }}
+                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, plano: val })); }}
                       rows={2}
                       placeholder="Ex: Manter protocolo atual, progrimir carga na próxima sessão..."
                     />
