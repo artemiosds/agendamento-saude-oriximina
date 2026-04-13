@@ -1360,6 +1360,7 @@ const ProntuarioPage: React.FC = () => {
                 {user?.profissao && (
                   <CamposEspecialidade
                     profissao={user.profissao}
+                    profissionalId={user.id}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
@@ -1412,6 +1413,7 @@ const ProntuarioPage: React.FC = () => {
                 {user?.profissao && (
                   <CamposEspecialidade
                     profissao={user.profissao}
+                    profissionalId={user.id}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
