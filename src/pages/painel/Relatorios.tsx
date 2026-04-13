@@ -14,6 +14,7 @@ import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, Ale
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { ChartCard } from '@/components/ChartCard';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
@@ -1261,137 +1262,118 @@ ${dataRows}
 
         {/* === GERAL === */}
         <TabsContent value="geral" className="space-y-5 mt-4">
-          {/* Gráfico 1 — Timeline com agrupamento */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground">Atendimentos por Período</h3>
-                <div className="flex gap-1">
-                  {(['dia', 'semana', 'mes'] as const).map(g => (
-                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
-                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
-                    </Button>
-                  ))}
-                </div>
+          <ChartCard
+            title="Atendimentos por Período"
+            actions={
+              <div className="flex gap-1">
+                {(['dia', 'semana', 'mes'] as const).map(g => (
+                  <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                    {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                  </Button>
+                ))}
               </div>
-              {timelineGrouped.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={timelineGrouped}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+            }
+          >
+            {timelineGrouped.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={timelineGrouped}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+            )}
+          </ChartCard>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Horários de Pico">
+              {peakHoursData.some(d => d.total > 0) ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={peakHoursData}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Novos vs Retorno">
+              {novosVsRetorno.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      <Cell fill="#3b82f6" />
+                      <Cell fill="#14b8a6" />
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Agendamentos por Profissional">
+              <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
+                <BarChart data={porProfissional} layout="vertical">
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                  <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                  <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
+                  <Legend />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Distribuição por Status">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            {porUnidade.length > 1 && (
+              <ChartCard title="Por Unidade">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={porUnidade}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="hsl(200,18%,46%)" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Gráficos 2 e 3 — Pico + Novos vs Retorno */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Horários de Pico</h3>
-                {peakHoursData.some(d => d.total > 0) ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={peakHoursData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="total" name="Agendamentos" fill="hsl(199,89%,38%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Novos vs Retorno</h3>
-                {novosVsRetorno.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        <Cell fill="hsl(199,89%,38%)" />
-                        <Cell fill="hsl(152,60%,42%)" />
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Existing charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Agendamentos por Profissional</h3>
-                <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
-                  <BarChart data={porProfissional} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
-                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
-                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
-                    <Legend />
+                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Distribuição por Status</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {porUnidade.length > 1 && (
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5">
-                  <h3 className="font-semibold font-display text-foreground mb-4">Por Unidade</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={porUnidade}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
-                      <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
-                      <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              </ChartCard>
             )}
 
-            <Card className="shadow-card border-0">
+            <Card className="group relative rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
               <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Origem dos Agendamentos</h3>
+                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4">Origem dos Agendamentos</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-accent rounded-xl">
                     <p className="text-2xl font-bold text-foreground">{stats.online}</p>
@@ -1460,7 +1442,7 @@ ${dataRows}
             })}
           </div>
 
-          <Card className="shadow-card border-0">
+          <Card className="group rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
             <CardContent className="p-5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
@@ -1646,24 +1628,56 @@ th{background:#f1f5f9;font-weight:600;}
           </Card>
 
           {/* Gráfico — Evolução Mensal */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground mb-4">Evolução Mensal</h3>
+          <ChartCard title="Evolução Mensal">
+            {evolucaoMensal.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={evolucaoMensal}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="total" name="Atendimentos" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+            )}
+          </ChartCard>
+
+          {/* Ranking + Tendência */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Ranking de Produtividade (Top 5)">
+              {rankingProdutividade.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={rankingProdutividade.slice(0, 5)} layout="vertical" margin={{ left: 10 }}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis dataKey="nome" type="category" width={130} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Concluídos" fill="#14b8a6" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Tendência de Concluídos (Últimos 6 meses)">
               {evolucaoMensal.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={evolucaoMensal}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,92%)" />
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={evolucaoMensal.slice(-6)}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
-                    <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,70%,50%)" fill="hsl(199,70%,50%)" fillOpacity={0.12} strokeWidth={2} dot={{ r: 3, fill: 'hsl(199,70%,50%)' }} />
-                  </AreaChart>
+                    <Line type="monotone" dataKey="total" name="Concluídos" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} />
+                  </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
               )}
-            </CardContent>
-          </Card>
+            </ChartCard>
+          </div>
         </TabsContent>
 
 
