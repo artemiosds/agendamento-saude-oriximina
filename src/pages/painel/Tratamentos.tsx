@@ -1705,19 +1705,38 @@ const Tratamentos: React.FC = () => {
                         </Badge>
 
                         {canAgendarSessao && effectiveIsPendente && selectedCycle.status === "em_andamento" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs border-primary text-primary hover:bg-primary/10 shrink-0"
-                            onClick={() => {
-                              setAgendarSessaoTarget(s);
-                              setAgendarSessaoData("");
-                              setAgendarSessaoHora("");
-                              setAgendarSessaoSalaId("");
-                            }}
-                          >
-                            <Calendar className="w-3 h-3 mr-1" /> Agendar
-                          </Button>
+                          <div className="flex gap-1 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-primary text-primary hover:bg-primary/10"
+                              onClick={() => {
+                                setAgendarSessaoTarget(s);
+                                setAgendarSessaoData("");
+                                setAgendarSessaoHora("");
+                                setAgendarSessaoSalaId("");
+                              }}
+                            >
+                              <Calendar className="w-3 h-3 mr-1" /> Agendar
+                            </Button>
+                            {agendarSessaoTarget?.id === s.id && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAgendarSessaoTarget(null);
+                                  setAgendarSessaoData("");
+                                  setAgendarSessaoHora("");
+                                  setAgendarSessaoSalaId("");
+                                  toast("Campos limpos", { icon: "🧹" });
+                                }}
+                              >
+                                <Eraser className="w-3 h-3 mr-1" /> Limpar
+                              </Button>
+                            )}
+                          </div>
                         )}
 
                         {canRemarcarThis && (
