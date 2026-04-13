@@ -869,14 +869,7 @@ const ProntuarioPage: React.FC = () => {
         if (prontuarioId) {
           setEditId(prontuarioId);
         }
-        // Reset SOAP fields for next session
-        setForm((prev) => ({
-          ...prev,
-          soap_subjetivo: '',
-          soap_objetivo: '',
-          soap_avaliacao: '',
-          soap_plano: '',
-        }));
+        // Keep SOAP fields intact so user can still view/edit the prontuário
       }
       setPreviousForm(null);
       return true;
