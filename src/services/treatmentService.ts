@@ -172,11 +172,8 @@ export const treatmentService = {
       throw new Error(soapValidationError);
     }
 
-    const procedureDone = trimValue(input.procedureDone);
-
-    if (!procedureDone) {
-      throw new Error('Selecione o procedimento realizado.');
-    }
+    const procedureDone =
+      trimValue(input.procedureDone) || trimValue(input.session.procedure_done) || 'Sessão registrada';
 
     const previousSession = {
       status: input.session.status,

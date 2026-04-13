@@ -41,6 +41,7 @@ import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import { Stamp } from "lucide-react";
+import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -282,9 +283,27 @@ const ProntuarioPage: React.FC = () => {
 
   const currentSessionForRegistration = useMemo(() => {
     if (!sessaoCycle || sessaoCycleSessions.length === 0) return null;
-    // Find the first session that is not 'realizada' and not 'falta'
-    return sessaoCycleSessions.find(s => !['realizada', 'falta', 'falta_justificada'].includes(s.status)) || null;
-  }, [sessaoCycle, sessaoCycleSessions]);
+
+    const availableSessions = sessaoCycleSessions.filter(
+      (session) => !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(session.status),
+    );
+
+    if (availableSessions.length === 0) return null;
+
+    if (form.agendamento_id) {
+      return (
+        availableSessions.find((session) => session.appointment_id === form.agendamento_id) ||
+        availableSessions.find((session) => session.scheduled_date === form.data_atendimento) ||
+        availableSessions[0]
+      );
+    }
+
+    return (
+      availableSessions.find((session) => session.status === 'agendada') ||
+      availableSessions.find((session) => session.status === 'pendente_agendamento') ||
+      availableSessions[0]
+    );
+  }, [sessaoCycle, sessaoCycleSessions, form.agendamento_id, form.data_atendimento]);
 
   // Medications & exam types state
   interface MedicationDB {
@@ -564,38 +583,28 @@ const ProntuarioPage: React.FC = () => {
       toast.error("Informe o motivo da alteração para salvar.");
       return;
     }
-    // SOAP validation — required for all record types
-    const soapS = (form.soap_subjetivo ?? '').trim();
-    const soapO = (form.soap_objetivo ?? '').trim();
-    const soapA = (form.soap_avaliacao ?? '').trim();
-    const soapP = (form.soap_plano ?? '').trim();
-    console.log('[SOAP validation]', { soapS: soapS.length, soapO: soapO.length, soapA: soapA.length, soapP: soapP.length });
-    if (!soapS) {
+    const soapPayload = normalizeSoapPayload({
+      subjetivo: form.soap_subjetivo,
+      objetivo: form.soap_objetivo,
+      avaliacao: form.soap_avaliacao,
+      plano: form.soap_plano,
+    });
+    const soapValidationError = getSoapValidationError(soapPayload);
+    console.log('[SOAP validation]', {
+      soap: soapPayload,
+      tipo_registro: form.tipo_registro,
+      agendamento_id: form.agendamento_id || null,
+      session_id: currentSessionForRegistration?.id || null,
+    });
+    if (soapValidationError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error("Preencha o campo Subjetivo (S)");
-      return;
-    }
-    if (!soapO) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error("Preencha o campo Objetivo (O)");
-      return;
-    }
-    if (!soapA) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error("Preencha o campo Avaliação (A)");
-      return;
-    }
-    if (!soapP) {
-      setSoapErrors(true);
-      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      toast.error("Preencha o campo Plano (P)");
+      toast.error(soapValidationError);
       return;
     }
     setSoapErrors(false);
     setSaving(true);
+    let insertedNewProntuario = false;
     try {
       const procTexto = selectedProcIds
         .map((id) => {
@@ -633,10 +642,10 @@ const ProntuarioPage: React.FC = () => {
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
         outro_procedimento: form.outro_procedimento || "",
         tipo_registro: form.tipo_registro || "consulta",
-        soap_subjetivo: form.soap_subjetivo || "",
-        soap_objetivo: form.soap_objetivo || "",
-        soap_avaliacao: form.soap_avaliacao || "",
-        soap_plano: form.soap_plano || "",
+        soap_subjetivo: soapPayload.subjetivo,
+        soap_objetivo: soapPayload.objetivo,
+        soap_avaliacao: soapPayload.avaliacao,
+        soap_plano: soapPayload.plano,
       };
 
       // CORRIGIDO: não salva 'no_episode' no banco
@@ -688,7 +697,6 @@ const ProntuarioPage: React.FC = () => {
             campos_alterados: camposAlterados,
           },
         });
-        toast.success("Prontuário atualizado!");
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
@@ -697,15 +705,7 @@ const ProntuarioPage: React.FC = () => {
           .single();
         if (error) throw error;
         prontuarioId = inserted?.id;
-        await logAction({
-          acao: "prontuario_criado",
-          entidade: "prontuario",
-          entidadeId: inserted?.id || "",
-          modulo: "prontuario",
-          user,
-          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
-        });
-        toast.success("Prontuário criado!");
+        insertedNewProntuario = true;
       }
 
       if (prontuarioId) {
@@ -716,67 +716,81 @@ const ProntuarioPage: React.FC = () => {
         }
       }
 
-      // Session registration for sessao type
-      if (form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle) {
-        // SOAP is already validated above, so we can safely register
-        try {
-          // Register session as realizada
-          const { error: sessErr } = await (supabase as any).from('treatment_sessions').update({
-            status: 'realizada',
-            clinical_notes: JSON.stringify({
-              tipo: 'soap',
-              subjetivo: form.soap_subjetivo,
-              objetivo: form.soap_objetivo,
-              avaliacao: form.soap_avaliacao,
-              plano: form.soap_plano,
-              registrado_em: new Date().toISOString(),
-              registrado_por: user?.id,
-            }),
-            appointment_id: form.agendamento_id || null,
-          }).eq('id', currentSessionForRegistration.id);
-          if (sessErr) throw sessErr;
+      const shouldRegisterSession = !editId && form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle;
 
-          // Update sessions_done on cycle
-          const newDone = sessaoCycle.sessions_done + 1;
-          const updatePayload: any = { sessions_done: newDone };
-          // Check if it was the last session
-          const remainingAfter = sessaoCycleSessions.filter(
-            s => !['realizada', 'falta', 'falta_justificada'].includes(s.status) && s.id !== currentSessionForRegistration.id
-          );
-          if (remainingAfter.length === 0) {
-            updatePayload.status = 'concluido';
-            toast.info('🎉 Ciclo de tratamento concluído!');
-          }
-          const { error: cycErr } = await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
-          if (cycErr) throw cycErr;
+      if (shouldRegisterSession) {
+        const procedureDone =
+          procTexto ||
+          form.procedimentos_texto?.trim() ||
+          form.outro_procedimento?.trim() ||
+          form.queixa_principal?.trim() ||
+          'Sessão registrada';
 
-          // Finalize the appointment if linked
-          if (form.agendamento_id) {
-            await (supabase as any).from('agendamentos').update({ status: 'concluido', atualizado_em: new Date().toISOString() }).eq('id', form.agendamento_id);
-          }
+        const result = await treatmentService.registerCompletedSession({
+          cycle: sessaoCycle,
+          session: currentSessionForRegistration,
+          soap: soapPayload,
+          procedureDone,
+          userId: user?.id,
+          appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+        });
 
-          await logAction({
-            acao: 'sessao_registrada',
-            entidade: 'treatment_session',
-            entidadeId: currentSessionForRegistration.id,
-            modulo: 'prontuario',
-            user,
-            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
-          });
-          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
-        } catch (sessError: any) {
-          console.error('Error registering session:', sessError);
-          toast.error('❌ Erro ao registrar sessão. Tente novamente.');
+        if (result.cycleStatus === 'concluido') {
+          toast.info('🎉 Ciclo de tratamento concluído!');
         }
+
+        await logAction({
+          acao: 'sessao_registrada',
+          entidade: 'treatment_session',
+          entidadeId: currentSessionForRegistration.id,
+          modulo: 'prontuario',
+          user,
+          detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+        });
+        toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+      } else {
+        toast.success(editId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
+
+      if (!editId) {
+        await logAction({
+          acao: "prontuario_criado",
+          entidade: "prontuario",
+          entidadeId: prontuarioId || "",
+          modulo: "prontuario",
+          user,
+          detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
+        });
+      }
+
+      await Promise.all([
+        loadProntuarios(),
+        refreshAgendamentos(),
+        form.tipo_registro === 'sessao' && form.paciente_id && user?.id
+          ? loadSessaoData(form.paciente_id, user.id)
+          : Promise.resolve(),
+      ]);
 
       setDialogOpen(false);
       setPreviousForm(null);
-      await loadProntuarios();
     } catch (err: any) {
-      toast.error("Erro ao salvar: " + (err?.message || "erro desconhecido"));
+      if (insertedNewProntuario && prontuarioId) {
+        try {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
+        } catch (rollbackError) {
+          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
+        }
+      }
+      console.error("Erro ao salvar prontuário:", err);
+      if (form.tipo_registro === 'sessao' && !editId) {
+        toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
+      } else {
+        toast.error("Erro ao salvar: " + (err?.message || "erro desconhecido"));
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleFinalizarAtendimento = async () => {
