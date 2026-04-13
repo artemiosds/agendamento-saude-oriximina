@@ -486,6 +486,13 @@ const Tratamentos: React.FC = () => {
   const cycleSoapOptions = useMemo(() => getSoapOptions(cycleProfissao), [cycleProfissao]);
   const cycleHasDropdown = useMemo(() => hasDropdownSoap(cycleProfissao), [cycleProfissao]);
 
+  // Custom SOAP options for the cycle's professional
+  const cycleProfId = selectedCycle?.professional_id;
+  const soapCustom = useSoapCustomOptions(cycleProfId);
+
+  const [addingFieldTrat, setAddingFieldTrat] = useState<string | null>(null);
+  const [newOptionTextTrat, setNewOptionTextTrat] = useState("");
+
   const [copyingLastSession, setCopyingLastSession] = useState(false);
 
   const handleCopyLastSession = async () => {
