@@ -236,6 +236,7 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
+  const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
   const loadSessaoData = async (patientId: string, professionalId: string) => {
@@ -274,6 +275,15 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleRegistrarSessaoClick = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setSessionRegistrationRequested(true);
+    setSoapErrors(false);
+    setForm((prev) => ({
+      ...prev,
+      tipo_registro: 'sessao',
+      data_atendimento: today,
+      agendamento_id: prev.agendamento_id || currentSessionForRegistration?.appointment_id || '',
+    }));
     setSessaoHighlightSOAP(true);
     setTimeout(() => {
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -304,6 +314,18 @@ const ProntuarioPage: React.FC = () => {
       availableSessions[0]
     );
   }, [sessaoCycle, sessaoCycleSessions, form.agendamento_id, form.data_atendimento]);
+
+  const isSessionRegistrationFlow = useMemo(() => {
+    if (!sessaoCycle || !currentSessionForRegistration) return false;
+    return sessionRegistrationRequested || form.tipo_registro === 'sessao';
+  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
+
+  const sessionRegistrationError = useMemo(() => {
+    if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
+    if (!sessaoCycle) return 'Nenhum ciclo de tratamento ativo encontrado para este paciente.';
+    if (!currentSessionForRegistration) return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
+    return null;
+  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
 
   // Medications & exam types state
   interface MedicationDB {
@@ -451,6 +473,7 @@ const ProntuarioPage: React.FC = () => {
       if (existingForAgendamento) {
         openEdit(existingForAgendamento);
       } else {
+        setSessionRegistrationRequested(false);
         setEditId(null);
         setSelectedProcIds([]);
         setForm({
@@ -482,10 +505,28 @@ const ProntuarioPage: React.FC = () => {
 
   // Load cycle + PTS data when sessao type is selected
   useEffect(() => {
-    if (form.tipo_registro === 'sessao' && form.paciente_id && user?.id) {
+    if (form.paciente_id && user?.id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
       loadSessaoData(form.paciente_id, user.id);
     }
-  }, [form.tipo_registro, form.paciente_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (
+      editId ||
+      !form.agendamento_id ||
+      form.tipo_registro !== 'consulta' ||
+      !currentSessionForRegistration ||
+      currentSessionForRegistration.appointment_id !== form.agendamento_id
+    ) {
+      return;
+    }
+
+    setSessionRegistrationRequested(true);
+    setForm((prev) => {
+      if (prev.tipo_registro !== 'consulta') return prev;
+      return { ...prev, tipo_registro: 'sessao' };
+    });
+  }, [currentSessionForRegistration, editId, form.agendamento_id, form.tipo_registro]);
 
   const patientHistory = useMemo(() => {
     if (!form.paciente_id) return [];
@@ -497,6 +538,7 @@ const ProntuarioPage: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     setActiveAtendimento(null);
+    setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
     setEpisodios([]);
     setListaExames([]);
@@ -510,6 +552,7 @@ const ProntuarioPage: React.FC = () => {
   const openEdit = (p: ProntuarioDB) => {
     setEditId(p.id);
     setActiveAtendimento(null);
+    setSessionRegistrationRequested(false);
     loadProntuarioProcedimentos(p.id);
     loadEpisodios(p.paciente_id);
     const formData = {
@@ -574,14 +617,18 @@ const ProntuarioPage: React.FC = () => {
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     if (!form.paciente_nome || !form.data_atendimento) {
       toast.error("Paciente e data são obrigatórios.");
-      return;
+      return false;
     }
-    if (editId && !form.motivo_alteracao) {
+    if (editId && !form.motivo_alteracao && !isSessionRegistrationFlow) {
       toast.error("Informe o motivo da alteração para salvar.");
-      return;
+      return false;
+    }
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
+      return false;
     }
     const soapPayload = normalizeSoapPayload({
       subjetivo: form.soap_subjetivo,
@@ -600,7 +647,7 @@ const ProntuarioPage: React.FC = () => {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       toast.error(soapValidationError);
-      return;
+      return false;
     }
     setSoapErrors(false);
     setSaving(true);
@@ -715,7 +762,7 @@ const ProntuarioPage: React.FC = () => {
         }
       }
 
-      const shouldRegisterSession = !editId && form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle;
+      const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
 
       if (shouldRegisterSession) {
         const procedureDone =
@@ -770,8 +817,10 @@ const ProntuarioPage: React.FC = () => {
           : Promise.resolve(),
       ]);
 
+      setSessionRegistrationRequested(false);
       setDialogOpen(false);
       setPreviousForm(null);
+      return true;
     } catch (err: any) {
       if (insertedNewProntuario && prontuarioId) {
         try {
@@ -781,20 +830,29 @@ const ProntuarioPage: React.FC = () => {
           console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
         }
       }
-      console.error("Erro ao salvar prontuário:", err);
+      console.error("Erro ao salvar prontuário/sessão:", {
+        error: err,
+        message: err?.message,
+        tipo_registro: form.tipo_registro,
+        paciente_id: form.paciente_id,
+        agendamento_id: form.agendamento_id || null,
+        cycle_id: sessaoCycle?.id || null,
+        session_id: currentSessionForRegistration?.id || null,
+      });
       if (form.tipo_registro === 'sessao' && !editId) {
         toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
       } else {
         toast.error("Erro ao salvar: " + (err?.message || "erro desconhecido"));
       }
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
   const handleFinalizarAtendimento = async () => {
-    await handleSave();
-    if (!activeAtendimento) return;
+    const saved = await handleSave();
+    if (!saved || !activeAtendimento) return;
     const now = new Date();
     const horaFim = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
@@ -1166,7 +1224,11 @@ const ProntuarioPage: React.FC = () => {
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open);
-          if (!open) setActiveAtendimento(null);
+          if (!open) {
+            setActiveAtendimento(null);
+            setSessionRegistrationRequested(false);
+            setSoapErrors(false);
+          }
         }}
       >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
@@ -1360,7 +1422,13 @@ const ProntuarioPage: React.FC = () => {
             {/* Tipo de Registro */}
             <div>
               <Label>Tipo de Registro *</Label>
-              <Select value={form.tipo_registro} onValueChange={(v) => setForm((p) => ({ ...p, tipo_registro: v }))}>
+              <Select
+                value={form.tipo_registro}
+                onValueChange={(v) => {
+                  setSessionRegistrationRequested((prev) => (v === 'sessao' ? prev : false));
+                  setForm((p) => ({ ...p, tipo_registro: v }));
+                }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {TIPOS_REGISTRO.map(t => (
