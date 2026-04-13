@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
+import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, normalizeProfissao, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -82,11 +82,11 @@ const MeuProntuario: React.FC = () => {
     const bloco = localConfig.blocos.find(b => b.id === blocoId);
     if (!bloco) return;
     if (bloco.admin_desabilitado && patch.visivel === true) {
-      toast.error('Este campo foi desabilitado pelo administrador');
+      toast.error('Este campo foi desabilitado pelo Master');
       return;
     }
     if (bloco.admin_obrigatorio && patch.obrigatorio === false) {
-      toast.error('Este campo foi marcado como obrigatório pelo administrador');
+      toast.error('Este campo foi marcado como obrigatório pelo Master');
       return;
     }
     const updated = {
@@ -141,7 +141,7 @@ const MeuProntuario: React.FC = () => {
             Meu Prontuário
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Personalize a estrutura do seu prontuário. Configurações do admin são respeitadas automaticamente.
+            Personalize a estrutura do seu prontuário. Configurações do Master são respeitadas automaticamente.
           </p>
           {profissao && (
             <Badge variant="outline" className="mt-1 text-xs">Especialidade: {profissao}</Badge>
@@ -164,8 +164,8 @@ const MeuProntuario: React.FC = () => {
       <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border/60 text-xs text-muted-foreground">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
         <div>
-          <strong className="text-foreground">Hierarquia de configuração:</strong> O admin define o modelo base da sua especialidade.
-          Você pode ocultar campos visíveis, reordenar e marcar favoritos. Campos desabilitados ou obrigatórios pelo admin são bloqueados.
+          <strong className="text-foreground">Hierarquia de configuração:</strong> O Master define o modelo base da sua especialidade.
+          Você pode ocultar campos visíveis, reordenar e marcar favoritos. Campos desabilitados ou obrigatórios pelo Master são bloqueados.
         </div>
       </div>
 
@@ -254,7 +254,7 @@ function BlocosTab({ sortedBlocos, updateBloco, moveBloco }: {
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Configure quais seções aparecem no prontuário, a ordem e quais ficam expandidas por padrão.
-          <br /><ShieldAlert className="w-3 h-3 inline mr-1" />Campos com <Lock className="w-3 h-3 inline" /> foram bloqueados pelo admin.
+          <br /><ShieldAlert className="w-3 h-3 inline mr-1" />Campos com <Lock className="w-3 h-3 inline" /> foram bloqueados pelo Master.
         </p>
       </CardHeader>
       <CardContent className="space-y-1">
@@ -275,13 +275,13 @@ function BlocosTab({ sortedBlocos, updateBloco, moveBloco }: {
                 </span>
                 {isAdminDisabled && (
                   <Tooltip><TooltipTrigger>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0 gap-1 text-muted-foreground"><ShieldAlert className="w-3 h-3" /> Admin</Badge>
-                  </TooltipTrigger><TooltipContent>Desabilitado pelo administrador</TooltipContent></Tooltip>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0 gap-1 text-muted-foreground"><ShieldAlert className="w-3 h-3" /> Master</Badge>
+                  </TooltipTrigger><TooltipContent>Desabilitado pelo Master</TooltipContent></Tooltip>
                 )}
                 {isAdminRequired && (
                   <Tooltip><TooltipTrigger>
                     <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1"><Lock className="w-3 h-3" /> OBR</Badge>
-                  </TooltipTrigger><TooltipContent>Obrigatório pelo administrador</TooltipContent></Tooltip>
+                  </TooltipTrigger><TooltipContent>Obrigatório pelo Master</TooltipContent></Tooltip>
                 )}
                 {bloco.obrigatorio && !isAdminRequired && (
                   <Badge variant="destructive" className="text-[10px] px-1.5 py-0 shrink-0">OBR</Badge>
@@ -711,8 +711,8 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
 }) {
   const adminCampos = useMemo(() => {
     if (!adminConfig || !profissao) return [];
-    const normalizedProf = profissao.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
-    const esp = (adminConfig as any[]).find((e: any) => e.ativa && e.profissoes?.some((p: string) => p === normalizedProf));
+    const specialtyKey = normalizeProfissao(profissao);
+    const esp = (adminConfig as any[]).find((e: any) => e.ativa && (e.key === specialtyKey || e.profissoes?.some((p: string) => p === specialtyKey)));
     return esp?.campos || [];
   }, [adminConfig, profissao]);
 
@@ -769,7 +769,11 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
       </CardHeader>
       <CardContent className="space-y-1">
         {sortedCampos.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">Nenhum campo configurado pelo admin para sua especialidade</p>
+          <div className="text-center py-6 space-y-2">
+            <Info className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+            <p className="text-sm text-muted-foreground">O Master ainda não configurou campos específicos para a especialidade <strong>{profissao}</strong>.</p>
+            <p className="text-xs text-muted-foreground">Quando configurar, os campos aparecerão aqui automaticamente.</p>
+          </div>
         ) : (
           <TooltipProvider>
             {sortedCampos.map((campo: any, idx: number) => {
@@ -787,7 +791,7 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
                   {isRequired && (
                     <Tooltip><TooltipTrigger>
                       <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1"><Lock className="w-3 h-3" /> OBR</Badge>
-                    </TooltipTrigger><TooltipContent>Obrigatório pelo administrador</TooltipContent></Tooltip>
+                    </TooltipTrigger><TooltipContent>Obrigatório pelo Master</TooltipContent></Tooltip>
                   )}
                   <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveCampo(campo.key, -1)}>
