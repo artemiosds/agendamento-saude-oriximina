@@ -192,6 +192,7 @@
 }
 
 /* ─── GLASSMORPHISM UTILITIES ────────────────────────────────── */
+/* Blur ONLY for small overlays (modals, dropdowns, popovers, max 3 cards) */
 
 .glass {
   background: var(--glass-bg);
@@ -204,6 +205,35 @@
   background: var(--glass-bg);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+}
+
+/* Disable blur on mobile — huge perf win */
+@media (max-width: 768px) {
+  .glass,
+  .glass-subtle {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  :root {
+    --glass-bg: rgba(255, 255, 255, 0.96);
+  }
+  .dark {
+    --glass-bg: rgba(30, 41, 59, 0.96);
+  }
+}
+
+/* Fallback for browsers without backdrop-filter support */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass,
+  .glass-subtle {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(255, 255, 255, 0.97);
+  }
+  .dark .glass,
+  .dark .glass-subtle {
+    background: rgba(30, 41, 59, 0.97);
+  }
 }
 
 /* ─── PREMIUM MICRO-INTERACTIONS ──────────────────────────────── */
@@ -337,6 +367,16 @@ select:focus-visible,
   button, a, [role="button"] {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+/* ─── REDUCE MOTION FOR ACCESSIBILITY & PERF ──────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

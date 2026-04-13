@@ -154,9 +154,10 @@ const App = () => (
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/login" element={<LoginRedirect />} />
-                  <Route path="/agendar" element={<AgendarOnline />} />
-                  <Route path="/portal" element={<PortalPaciente />} />
+                  <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
+                  <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
 
+                  {/* PainelLayout has its own internal Suspense for child routes */}
                   <Route
                     path="/painel"
                     element={
@@ -165,132 +166,31 @@ const App = () => (
                       </ProtectedRoute>
                     }
                   >
-                    {/* Dashboard — visível para todos autenticados */}
                     <Route index element={<Dashboard />} />
-
-                    {/* Rotas protegidas por módulo */}
-                    <Route path="agenda" element={
-                      <ModuleRoute modulo="agenda">
-                        <Agenda />
-                      </ModuleRoute>
-                    } />
-                    <Route path="fila" element={
-                      <ModuleRoute modulo="fila">
-                        <FilaEspera />
-                      </ModuleRoute>
-                    } />
-                    <Route path="pacientes" element={
-                      <ModuleRoute modulo="pacientes">
-                        <Pacientes />
-                      </ModuleRoute>
-                    } />
-                    <Route path="atendimentos" element={
-                      <ModuleRoute modulo="atendimento">
-                        <Atendimentos />
-                      </ModuleRoute>
-                    } />
-                    <Route path="relatorios" element={
-                      <ModuleRoute modulo="relatorios">
-                        <Relatorios />
-                      </ModuleRoute>
-                    } />
-                    <Route path="funcionarios" element={
-                      <ModuleRoute modulo="usuarios">
-                        <Funcionarios />
-                      </ModuleRoute>
-                    } />
-                    <Route path="unidades" element={
-                      <ModuleRoute modulo="usuarios">
-                        <UnidadesSalas />
-                      </ModuleRoute>
-                    } />
-                    <Route path="disponibilidade" element={
-                      <ModuleRoute modulo="usuarios">
-                        <Disponibilidade />
-                      </ModuleRoute>
-                    } />
-                    <Route path="prontuario" element={
-                      <ModuleRoute modulo="prontuario">
-                        <Prontuario />
-                      </ModuleRoute>
-                    } />
-                    <Route path="auditoria" element={
-                      <ModuleRoute modulo="relatorios">
-                        <Auditoria />
-                      </ModuleRoute>
-                    } />
-                    <Route path="triagem" element={
-                      <ModuleRoute modulo="triagem">
-                        <Triagem />
-                      </ModuleRoute>
-                    } />
-                    <Route path="historico-triagem" element={
-                      <ModuleRoute modulo="triagem">
-                        <HistoricoTriagem />
-                      </ModuleRoute>
-                    } />
-                    <Route path="bloqueios" element={
-                      <ModuleRoute modulo="agenda">
-                        <Bloqueios />
-                      </ModuleRoute>
-                    } />
-                    <Route path="tratamentos" element={
-                      <ModuleRoute modulo="tratamento">
-                        <Tratamentos />
-                      </ModuleRoute>
-                    } />
-                    <Route path="regulacao" element={
-                      <ModuleRoute modulo="encaminhamento">
-                        <Regulacao />
-                      </ModuleRoute>
-                    } />
-                    <Route path="enfermagem" element={
-                      <ModuleRoute modulo="enfermagem">
-                        <AvaliacaoEnfermagem />
-                      </ModuleRoute>
-                    } />
-                    <Route path="pts" element={
-                      <ModuleRoute modulo="prontuario">
-                        <PTSPage />
-                      </ModuleRoute>
-                    } />
-                    <Route path="multiprofissional" element={
-                      <ModuleRoute modulo="atendimento">
-                        <AvaliacaoMultiprofissional />
-                      </ModuleRoute>
-                    } />
-
-                    {/* Rotas exclusivas master */}
-                    <Route path="configuracoes" element={
-                      <ModuleRoute modulo="usuarios" masterOnly>
-                        <Configuracoes />
-                      </ModuleRoute>
-                    } />
-                    <Route path="permissoes" element={
-                      <ModuleRoute modulo="usuarios" masterOnly>
-                        <Permissoes />
-                      </ModuleRoute>
-                    } />
-                    <Route path="configuracoes-avancadas" element={
-                      <ModuleRoute modulo="usuarios" masterOnly>
-                        <ConfiguracoesAvancadas />
-                      </ModuleRoute>
-                    } />
-                    <Route path="alta" element={
-                      <ModuleRoute modulo="prontuario">
-                        <RelatorioAlta />
-                      </ModuleRoute>
-                    } />
-                    <Route path="encaminhamentos" element={
-                      <ModuleRoute modulo="encaminhamento">
-                        <Encaminhamentos />
-                      </ModuleRoute>
-                    } />
-                    <Route path="meu-prontuario" element={
-                      <ModuleRoute modulo="prontuario">
-                        <MeuProntuario />
-                      </ModuleRoute>
-                    } />
+                    <Route path="agenda" element={<ModuleRoute modulo="agenda"><Agenda /></ModuleRoute>} />
+                    <Route path="fila" element={<ModuleRoute modulo="fila"><FilaEspera /></ModuleRoute>} />
+                    <Route path="pacientes" element={<ModuleRoute modulo="pacientes"><Pacientes /></ModuleRoute>} />
+                    <Route path="atendimentos" element={<ModuleRoute modulo="atendimento"><Atendimentos /></ModuleRoute>} />
+                    <Route path="relatorios" element={<ModuleRoute modulo="relatorios"><Relatorios /></ModuleRoute>} />
+                    <Route path="funcionarios" element={<ModuleRoute modulo="usuarios"><Funcionarios /></ModuleRoute>} />
+                    <Route path="unidades" element={<ModuleRoute modulo="usuarios"><UnidadesSalas /></ModuleRoute>} />
+                    <Route path="disponibilidade" element={<ModuleRoute modulo="usuarios"><Disponibilidade /></ModuleRoute>} />
+                    <Route path="prontuario" element={<ModuleRoute modulo="prontuario"><Prontuario /></ModuleRoute>} />
+                    <Route path="auditoria" element={<ModuleRoute modulo="relatorios"><Auditoria /></ModuleRoute>} />
+                    <Route path="triagem" element={<ModuleRoute modulo="triagem"><Triagem /></ModuleRoute>} />
+                    <Route path="historico-triagem" element={<ModuleRoute modulo="triagem"><HistoricoTriagem /></ModuleRoute>} />
+                    <Route path="bloqueios" element={<ModuleRoute modulo="agenda"><Bloqueios /></ModuleRoute>} />
+                    <Route path="tratamentos" element={<ModuleRoute modulo="tratamento"><Tratamentos /></ModuleRoute>} />
+                    <Route path="regulacao" element={<ModuleRoute modulo="encaminhamento"><Regulacao /></ModuleRoute>} />
+                    <Route path="enfermagem" element={<ModuleRoute modulo="enfermagem"><AvaliacaoEnfermagem /></ModuleRoute>} />
+                    <Route path="pts" element={<ModuleRoute modulo="prontuario"><PTSPage /></ModuleRoute>} />
+                    <Route path="multiprofissional" element={<ModuleRoute modulo="atendimento"><AvaliacaoMultiprofissional /></ModuleRoute>} />
+                    <Route path="configuracoes" element={<ModuleRoute modulo="usuarios" masterOnly><Configuracoes /></ModuleRoute>} />
+                    <Route path="permissoes" element={<ModuleRoute modulo="usuarios" masterOnly><Permissoes /></ModuleRoute>} />
+                    <Route path="configuracoes-avancadas" element={<ModuleRoute modulo="usuarios" masterOnly><ConfiguracoesAvancadas /></ModuleRoute>} />
+                    <Route path="alta" element={<ModuleRoute modulo="prontuario"><RelatorioAlta /></ModuleRoute>} />
+                    <Route path="encaminhamentos" element={<ModuleRoute modulo="encaminhamento"><Encaminhamentos /></ModuleRoute>} />
+                    <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />

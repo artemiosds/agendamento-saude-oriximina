@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, Suspense } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
@@ -67,10 +67,16 @@ const PainelLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
+
+  // Auto-close sidebar on route change (mobile)
+  React.useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -89,15 +95,11 @@ const PainelLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Mobile overlay */}
+      {/* Mobile overlay — no blur, just dim */}
       <AnimatePresence>
         {sidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-40 lg:hidden"
+          <div
+            className="fixed inset-0 bg-foreground/50 z-40 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -168,7 +170,7 @@ const PainelLayout: React.FC = () => {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 bg-card/80 backdrop-blur-md border-b border-border flex items-center px-4 lg:px-6 shrink-0 sticky top-0 z-30">
+        <header className="h-14 bg-card border-b border-border flex items-center px-4 lg:px-6 shrink-0 sticky top-0 z-30">
           <Button
             variant="ghost"
             size="icon"
@@ -185,7 +187,13 @@ const PainelLayout: React.FC = () => {
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
-          <Outlet />
+          <Suspense fallback={
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
