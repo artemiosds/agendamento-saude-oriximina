@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
@@ -67,7 +67,7 @@ const PainelLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
-  const location = useLocation();
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
