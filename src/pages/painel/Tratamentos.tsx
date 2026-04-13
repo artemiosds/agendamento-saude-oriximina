@@ -2483,6 +2483,16 @@ const Tratamentos: React.FC = () => {
         )}
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por paciente, CPF, CNS, tratamento ou status..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <div className="flex gap-3 flex-wrap">
         <Select value={filterProf} onValueChange={setFilterProf}>
           <SelectTrigger className="w-44">
