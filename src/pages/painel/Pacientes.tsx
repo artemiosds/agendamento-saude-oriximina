@@ -32,7 +32,7 @@ import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
-import { FichaImpressao } from "@/components/FichaImpressao";
+import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
 
 interface FichaDados {
