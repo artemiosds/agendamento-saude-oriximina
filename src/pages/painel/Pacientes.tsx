@@ -909,7 +909,7 @@ const Pacientes: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       className="h-8 w-8 p-0"
-                      onClick={() => handleOpenFicha(p)}
+                      onClick={() => handleOpenFicha(p, 'completa')}
                       title="Imprimir Ficha"
                     >
                       <Printer className="w-3.5 h-3.5" />
