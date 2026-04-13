@@ -546,34 +546,39 @@ const Pacientes: React.FC = () => {
     // A) PACIENTE
     const pacientePromise = supabase
       .from("pacientes")
-      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone")
+      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone, endereco, cid")
       .eq("id", pacienteId)
       .single()
       .then(({ data, error }) => {
         if (error || !data) throw new Error("Paciente não encontrado");
         return {
-          nome_completo: data.nome || "",
-          cpf: data.cpf || "",
-          cns: data.cns || "",
-          data_nascimento: data.data_nascimento || "",
-          nome_mae: data.nome_mae || "",
-          telefone: data.telefone || "",
+          paciente: {
+            nome_completo: data.nome || "",
+            cpf: data.cpf || "",
+            cns: data.cns || "",
+            data_nascimento: data.data_nascimento || "",
+            nome_mae: data.nome_mae || "",
+            telefone: data.telefone || "",
+            endereco: data.endereco || "",
+          },
+          cid: data.cid || "",
         };
       });
 
-    // B) DADOS CLÍNICOS — último agendamento
+    // B) DADOS CLÍNICOS — agendamento do dia atual (ou mais recente se não houver hoje)
+    const today = new Date().toISOString().split("T")[0];
     const dadosClinicosPromise = supabase
       .from("agendamentos")
       .select("id, tipo, data, unidade_id, profissional_id")
       .eq("paciente_id", pacienteId)
       .order("data", { ascending: false })
-      .limit(1)
-      .then(({ data, error }) => {
-        const lastAg = data?.[0];
+      .limit(20)
+      .then(({ data }) => {
+        const todayAg = data?.find((a) => a.data === today);
+        const lastAg = todayAg || data?.[0];
         const unidade = lastAg?.unidade_id ? unidades.find((u) => u.id === lastAg.unidade_id) : null;
         return {
           numero_prontuario: pacienteId,
-          cid: "",
           tipo_atendimento: lastAg?.tipo || "",
           unidade_origem: "",
           unidade_atendimento: unidade?.nome || "",
@@ -588,7 +593,7 @@ const Pacientes: React.FC = () => {
       .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
       .order("criado_em", { ascending: false })
       .limit(1)
-      .then(({ data, error }) => {
+      .then(({ data }: any) => {
         const triagem = data?.[0];
         return {
           pressao_arterial: triagem?.pressao_arterial || "",
@@ -607,18 +612,18 @@ const Pacientes: React.FC = () => {
       registro: user?.numeroConselho || "",
     });
 
-    // E) EVOLUÇÕES CLÍNICAS — últimos atendimentos
+    // E) EVOLUÇÕES CLÍNICAS — prontuários reais (não agendamentos)
     const evolucionesPromise = supabase
-      .from("agendamentos")
-      .select("data, observacoes, profissional_nome, tipo")
+      .from("prontuarios")
+      .select("data_atendimento, profissional_nome, soap_subjetivo, soap_objetivo, observacoes")
       .eq("paciente_id", pacienteId)
-      .order("data", { ascending: false })
+      .order("data_atendimento", { ascending: false })
       .limit(5)
-      .then(({ data, error }) => {
-        return (data || []).map((ag) => ({
-          data: ag.data || "",
-          observacao: ag.observacoes || "",
-          profissional: ag.profissional_nome || "",
+      .then(({ data }) => {
+        return (data || []).map((p) => ({
+          data: p.data_atendimento || "",
+          observacao: p.soap_subjetivo || p.observacoes || "",
+          profissional: p.profissional_nome || "",
         }));
       });
 
