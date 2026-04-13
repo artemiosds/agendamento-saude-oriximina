@@ -40,6 +40,8 @@ import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
+import { isMedico } from "@/data/soapOptionsByProfession";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 
@@ -244,6 +246,7 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
+  const [soapEnabled, setSoapEnabled] = useState(true);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
