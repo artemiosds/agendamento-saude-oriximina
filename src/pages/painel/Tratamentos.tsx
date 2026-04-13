@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
+import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
