@@ -234,6 +234,7 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
+  const [soapErrors, setSoapErrors] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
   const loadSessaoData = async (patientId: string, professionalId: string) => {
@@ -562,6 +563,20 @@ const ProntuarioPage: React.FC = () => {
       toast.error("Informe o motivo da alteração para salvar.");
       return;
     }
+    // SOAP validation — required for all record types
+    const soapS = (form.soap_subjetivo || '').trim();
+    const soapO = (form.soap_objetivo || '').trim();
+    const soapA = (form.soap_avaliacao || '').trim();
+    const soapP = (form.soap_plano || '').trim();
+    if (!soapS || !soapO || !soapA || !soapP) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!soapS) { toast.error("Preencha o campo Subjetivo (S)"); return; }
+      if (!soapO) { toast.error("Preencha o campo Objetivo (O)"); return; }
+      if (!soapA) { toast.error("Preencha o campo Avaliação (A)"); return; }
+      if (!soapP) { toast.error("Preencha o campo Plano (P)"); return; }
+    }
+    setSoapErrors(false);
     setSaving(true);
     try {
       const procTexto = selectedProcIds
