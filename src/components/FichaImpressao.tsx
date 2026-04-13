@@ -374,6 +374,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     </div>
   </div>
 
+  ${somentePessoais ? '' : `
   <!-- ATENDIMENTO -->
   <div class="bloco">
     <div class="bloco-titulo">Dados do Atendimento</div>
@@ -447,6 +448,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="conduta-linha"></div>
     </div>
   </div>
+  `}
 
   <!-- ASSINATURA -->
   <div class="assinatura-area">
@@ -462,12 +464,12 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
 
   <!-- RODAPÉ -->
   <div class="rodape">
-    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
+    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; ${somentePessoais ? 'Ficha Cadastral' : 'Via do Prontuário'}
   </div>
 
 </body>
 </html>`;
-  }, [data]);
+  }, [data, somentePessoais]);
 
   const handlePrint = useCallback(() => {
     const html = buildHTML();
