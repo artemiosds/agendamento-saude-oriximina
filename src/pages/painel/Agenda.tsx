@@ -1910,6 +1910,14 @@ const Agenda: React.FC = () => {
                                     agendamentoId: ag.id,
                                     data: ag.data,
                                   });
+                                  // Restore horaInicio from localStorage so Prontuario can show Finalizar button
+                                  try {
+                                    const stored = localStorage.getItem(`timer_${ag.id}`);
+                                    if (stored) {
+                                      const parsed = JSON.parse(stored);
+                                      if (parsed.horaInicio) params.set('horaInicio', parsed.horaInicio);
+                                    }
+                                  } catch {}
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >

@@ -185,6 +185,14 @@ const ProntuarioPage: React.FC = () => {
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
   );
+
+  // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
+  const canFinalize = useMemo(() => {
+    if (activeAtendimento) return true;
+    if (!form.agendamento_id) return false;
+    const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
+    return ag && ag.status === 'em_atendimento';
+  }, [activeAtendimento, form.agendamento_id, agendamentos]);
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -943,18 +951,29 @@ const ProntuarioPage: React.FC = () => {
       }
     }
     const saved = await handleSave();
-    if (!saved || !activeAtendimento) return;
+    if (!saved) return;
+
+    // Resolve the agendamento ID — from activeAtendimento or form
+    const agendamentoId = activeAtendimento?.agendamentoId || form.agendamento_id;
+    if (!agendamentoId) {
+      toast.error("Nenhum agendamento vinculado para finalizar.");
+      return;
+    }
+
     const now = new Date();
     const horaFim = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
-    const [hf, mf] = horaFim.split(":").map(Number);
-    const duracaoMinutos = hf * 60 + mf - (hi * 60 + mi);
+    let duracaoMinutos = 0;
+    if (activeAtendimento?.horaInicio) {
+      const [hi, mi] = activeAtendimento.horaInicio.split(":").map(Number);
+      const [hf, mf] = horaFim.split(":").map(Number);
+      duracaoMinutos = hf * 60 + mf - (hi * 60 + mi);
+    }
     const pac = pacientes.find((px) => px.id === form.paciente_id);
     try {
       await (supabase as any)
         .from("atendimentos")
         .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-        .eq("agendamento_id", activeAtendimento.agendamentoId);
+        .eq("agendamento_id", agendamentoId);
     } catch (err) {
       console.error("Error finalizing atendimento:", err);
     }
@@ -985,23 +1004,23 @@ const ProntuarioPage: React.FC = () => {
     await logAction({
       acao: "atendimento_finalizado",
       entidade: "atendimento",
-      entidadeId: activeAtendimento.agendamentoId,
+      entidadeId: agendamentoId,
       modulo: "atendimento",
       user,
       detalhes: {
         paciente_nome: form.paciente_nome,
         paciente_cpf: pac?.cpf || "",
-        hora_inicio: activeAtendimento.horaInicio,
+        hora_inicio: activeAtendimento?.horaInicio || "",
         hora_fim: horaFim,
         duracao_minutos: Math.max(0, duracaoMinutos),
         unidade: user?.unidadeId || "",
         sala: user?.salaId || "",
       },
     });
-    localStorage.removeItem(`timer_${activeAtendimento.agendamentoId}`);
-    updateAgendamento(activeAtendimento.agendamentoId, { status: "concluido" });
+    localStorage.removeItem(`timer_${agendamentoId}`);
+    updateAgendamento(agendamentoId, { status: "concluido" });
     setActiveAtendimento(null);
-    toast.success(`Atendimento finalizado! Duração: ${Math.max(0, duracaoMinutos)} minutos.`);
+    toast.success(`Atendimento finalizado!${duracaoMinutos > 0 ? ` Duração: ${Math.max(0, duracaoMinutos)} minutos.` : ''}`);
     navigate("/painel/agenda");
   };
 
@@ -2185,7 +2204,7 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
 
-              {activeAtendimento ? (
+              {canFinalize ? (
                 <>
                   <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
