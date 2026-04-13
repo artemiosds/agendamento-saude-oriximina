@@ -1908,34 +1908,26 @@ const ProntuarioPage: React.FC = () => {
                                   {sessaoCycleSessions.map(s => {
                                     const isCurrent = currentSessionForRegistration?.id === s.id;
                                     const isRealizada = s.status === 'realizada';
-                                    const isRegisteringCurrentSession = isCurrent && (sessionRegistrationRequested || form.tipo_registro === 'sessao');
-                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : '⏳';
-                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Em andamento' : s.status === 'falta' ? '❌ Falta' : 'Aguardando';
+                                    const isPending = !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(s.status);
+                                    const isConfirming = confirmingSessionId === s.id;
+                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : isPending ? '⏳' : '❌';
+                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Atual' : s.status === 'falta' || s.status === 'paciente_faltou' ? 'Falta' : s.status === 'cancelada' ? 'Cancelada' : 'Aguardando';
                                     return (
                                       <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
                                         <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
                                         <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                                         <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
                                         <td className="px-2 py-1.5 text-right">
-                                          {isCurrent && (
-                                            <div className="flex flex-col items-end gap-1">
-                                              <Button
-                                                size="sm"
-                                                variant="default"
-                                                className="h-6 text-xs px-2"
-                                                onClick={() => {
-                                                  void handleRegistrarSessaoClick();
-                                                }}
-                                                disabled={saving || (isRegisteringCurrentSession && !canConfirmSessionRegistration)}
-                                              >
-                                                {saving && isRegisteringCurrentSession ? 'Registrando...' : isRegisteringCurrentSession ? 'Confirmar' : 'Registrar'}
-                                              </Button>
-                                              {isRegisteringCurrentSession && (
-                                                <span className={`text-[11px] ${canConfirmSessionRegistration ? 'text-success' : 'text-destructive'}`}>
-                                                  {canConfirmSessionRegistration ? '✔ SOAP completo' : `❌ ${sessionSoapValidationError}`}
-                                                </span>
-                                              )}
-                                            </div>
+                                          {isPending && !isRealizada && (
+                                            <Button
+                                              size="sm"
+                                              variant={isCurrent ? "default" : "outline"}
+                                              className="h-6 text-xs px-2"
+                                              onClick={() => handleConfirmSession(s)}
+                                              disabled={isConfirming || saving}
+                                            >
+                                              {isConfirming ? 'Confirmando...' : '✓ Confirmar'}
+                                            </Button>
                                           )}
                                         </td>
                                       </tr>
