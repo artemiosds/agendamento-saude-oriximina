@@ -91,13 +91,13 @@ const PageLoader = () => (
 const AccessDenied = () => (
   <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-4">
     <div className="text-5xl">🔒</div>
-    <h2 className="text-xl font-bold text-gray-800">Acesso não autorizado</h2>
-    <p className="text-gray-500 text-sm max-w-xs">
+    <h2 className="text-xl font-bold text-foreground">Acesso não autorizado</h2>
+    <p className="text-muted-foreground text-sm max-w-xs">
       Você não tem permissão para acessar esta página. Fale com o administrador.
     </p>
     <button
       onClick={() => window.history.back()}
-      className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90"
+      className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
     >
       Voltar
     </button>

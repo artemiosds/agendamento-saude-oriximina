@@ -601,7 +601,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loadFuncionarios(),
     ]);
     // Secondary data (can load after UI is interactive)
-    Promise.all([
+    await Promise.all([
       loadDisponibilidades(),
       loadPacientes(),
       loadAgendamentos(),
