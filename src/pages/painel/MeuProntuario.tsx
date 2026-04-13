@@ -706,9 +706,18 @@ function EscalasTab({ localConfig, persist }: { localConfig: ProntuarioConfigDat
 // ═══════════════════════════════════════════════════════════════
 // TAB: Campos por Especialidade
 // ═══════════════════════════════════════════════════════════════
+interface CampoEspCustom {
+  id: string; key: string; label: string; tipo: string;
+  obrigatorio: boolean; habilitado: boolean; isCustom: true; order: number; opcoes?: string[];
+}
+
 function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
   profissao?: string; adminConfig: any; localConfig: ProntuarioConfigData; persist: (c: ProntuarioConfigData) => void;
 }) {
+  const [showAddField, setShowAddField] = useState(false);
+  const [editingField, setEditingField] = useState<CampoEspCustom | null>(null);
+  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', opcoes: '' });
+
   const adminCampos = useMemo(() => {
     if (!adminConfig || !profissao) return [];
     const specialtyKey = normalizeProfissao(profissao);
@@ -716,104 +725,196 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
     return esp?.campos || [];
   }, [adminConfig, profissao]);
 
-  // Get per-specialty custom order/visibility from config
   const espConfig: Record<string, { visivel: boolean; favorito: boolean; ordem: number }> = (localConfig as any).campos_especialidade || {};
+  const camposCustom: CampoEspCustom[] = (localConfig as any).campos_especialidade_custom || [];
 
   const updateCampoEsp = (campoKey: string, patch: Partial<{ visivel: boolean; favorito: boolean; ordem: number }>) => {
     const current = espConfig[campoKey] || { visivel: true, favorito: false, ordem: 0 };
-    const updated = { ...espConfig, [campoKey]: { ...current, ...patch } };
-    persist({ ...localConfig, campos_especialidade: updated } as any);
+    persist({ ...localConfig, campos_especialidade: { ...espConfig, [campoKey]: { ...current, ...patch } } } as any);
   };
 
+  const allCampos = useMemo(() => {
+    const admin = adminCampos.filter((c: any) => c.habilitado).map((c: any) => ({ ...c, isCustom: false }));
+    const custom = camposCustom.map((c, i) => ({ ...c, isCustom: true, order: c.order ?? 100 + i }));
+    return [...admin, ...custom];
+  }, [adminCampos, camposCustom]);
+
   const sortedCampos = useMemo(() => {
-    return [...adminCampos]
-      .filter((c: any) => c.habilitado)
-      .sort((a: any, b: any) => {
-        const oa = espConfig[a.key]?.ordem ?? a.order ?? 0;
-        const ob = espConfig[b.key]?.ordem ?? b.order ?? 0;
-        return oa - ob;
-      });
-  }, [adminCampos, espConfig]);
+    return [...allCampos].sort((a: any, b: any) => {
+      const oa = espConfig[a.key]?.ordem ?? a.order ?? 0;
+      const ob = espConfig[b.key]?.ordem ?? b.order ?? 0;
+      return oa - ob;
+    });
+  }, [allCampos, espConfig]);
 
   const moveCampo = (campoKey: string, direction: -1 | 1) => {
     const idx = sortedCampos.findIndex((c: any) => c.key === campoKey);
     if (idx < 0) return;
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= sortedCampos.length) return;
-    const currentOrdem = espConfig[campoKey]?.ordem ?? sortedCampos[idx].order ?? idx;
     const targetKey = sortedCampos[newIdx].key;
+    const currentOrdem = espConfig[campoKey]?.ordem ?? sortedCampos[idx].order ?? idx;
     const targetOrdem = espConfig[targetKey]?.ordem ?? sortedCampos[newIdx].order ?? newIdx;
-    const updated = {
+    persist({ ...localConfig, campos_especialidade: {
       ...espConfig,
       [campoKey]: { ...(espConfig[campoKey] || { visivel: true, favorito: false }), ordem: targetOrdem },
       [targetKey]: { ...(espConfig[targetKey] || { visivel: true, favorito: false }), ordem: currentOrdem },
+    }} as any);
+  };
+
+  const addCustomField = () => {
+    if (!newField.label.trim()) { toast.error('Nome do campo é obrigatório'); return; }
+    const key = 'custom_' + Date.now();
+    const campo: CampoEspCustom = {
+      id: key, key, label: newField.label.trim(), tipo: newField.tipo,
+      obrigatorio: false, habilitado: true, isCustom: true, order: allCampos.length + 1,
+      opcoes: newField.tipo === 'select' ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
     };
-    persist({ ...localConfig, campos_especialidade: updated } as any);
+    persist({ ...localConfig, campos_especialidade_custom: [...camposCustom, campo] } as any);
+    setNewField({ label: '', tipo: 'textarea', opcoes: '' }); setShowAddField(false);
+    toast.success('Campo adicionado ao seu prontuário');
+  };
+
+  const updateCustomField = () => {
+    if (!editingField) return;
+    persist({ ...localConfig, campos_especialidade_custom: camposCustom.map(c => c.id === editingField.id ? editingField : c) } as any);
+    setEditingField(null); toast.success('Campo atualizado');
+  };
+
+  const deleteCustomField = (id: string) => {
+    persist({ ...localConfig, campos_especialidade_custom: camposCustom.filter(c => c.id !== id) } as any);
+    toast.success('Campo removido');
   };
 
   if (!profissao) {
-    return (
-      <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
-        Nenhuma especialidade detectada no seu cadastro.
-      </CardContent></Card>
-    );
+    return <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Nenhuma especialidade detectada no seu cadastro.</CardContent></Card>;
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2"><Stethoscope className="w-4 h-4 text-primary" /> Campos da Minha Especialidade</CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Especialidade detectada: <strong>{profissao}</strong> — Personalize os campos específicos
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        {sortedCampos.length === 0 ? (
-          <div className="text-center py-6 space-y-2">
-            <Info className="w-8 h-8 text-muted-foreground/50 mx-auto" />
-            <p className="text-sm text-muted-foreground">O Master ainda não configurou campos específicos para a especialidade <strong>{profissao}</strong>.</p>
-            <p className="text-xs text-muted-foreground">Quando configurar, os campos aparecerão aqui automaticamente.</p>
-          </div>
-        ) : (
-          <TooltipProvider>
-            {sortedCampos.map((campo: any, idx: number) => {
-              const cfg = espConfig[campo.key] || { visivel: true, favorito: false, ordem: campo.order || idx };
-              const isRequired = campo.obrigatorio;
-              return (
-                <div key={campo.key} className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all',
-                  cfg.visivel ? 'bg-card border-border/60 hover:border-primary/30' : 'bg-muted/30 border-border/30 opacity-60'
-                )}>
-                  <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-                  <span className={cn('text-sm font-medium flex-1 truncate', !cfg.visivel && 'line-through text-muted-foreground')}>
-                    {campo.label}
-                  </span>
-                  {isRequired && (
-                    <Tooltip><TooltipTrigger>
-                      <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1"><Lock className="w-3 h-3" /> OBR</Badge>
-                    </TooltipTrigger><TooltipContent>Obrigatório pelo Master</TooltipContent></Tooltip>
-                  )}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveCampo(campo.key, -1)}>
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === sortedCampos.length - 1} onClick={() => moveCampo(campo.key, 1)}>
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isRequired} onClick={() => updateCampoEsp(campo.key, { visivel: !cfg.visivel })}>
-                      {cfg.visivel ? <Eye className="w-3.5 h-3.5 text-primary" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateCampoEsp(campo.key, { favorito: !cfg.favorito })}>
-                      <Star className={cn('w-3.5 h-3.5', cfg.favorito ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground')} />
-                    </Button>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2"><Stethoscope className="w-4 h-4 text-primary" /> Campos da Minha Especialidade</CardTitle>
+          <p className="text-xs text-muted-foreground">Especialidade detectada: <strong>{profissao}</strong> — Personalize e crie campos específicos</p>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {sortedCampos.length === 0 ? (
+            <div className="text-center py-6 space-y-2">
+              <Info className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+              <p className="text-sm text-muted-foreground">Nenhum campo configurado ainda. Crie seus próprios campos abaixo.</p>
+            </div>
+          ) : (
+            <TooltipProvider>
+              {sortedCampos.map((campo: any, idx: number) => {
+                const cfg = espConfig[campo.key] || { visivel: true, favorito: false, ordem: campo.order || idx };
+                const isRequired = campo.obrigatorio && !campo.isCustom;
+                const isCustom = campo.isCustom;
+                return (
+                  <div key={campo.key} className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-all',
+                    cfg.visivel ? 'bg-card border-border/60 hover:border-primary/30' : 'bg-muted/30 border-border/30 opacity-60'
+                  )}>
+                    <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                    <span className={cn('text-sm font-medium flex-1 truncate', !cfg.visivel && 'line-through text-muted-foreground')}>{campo.label}</span>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 shrink-0">{campo.tipo}</Badge>
+                    {isCustom && <Badge className="text-[9px] px-1.5 py-0 shrink-0 bg-blue-500/20 text-blue-400 border-blue-500/30">Meu</Badge>}
+                    {isRequired && (
+                      <Tooltip><TooltipTrigger>
+                        <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1"><Lock className="w-3 h-3" /> OBR</Badge>
+                      </TooltipTrigger><TooltipContent>Obrigatório pelo Master</TooltipContent></Tooltip>
+                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveCampo(campo.key, -1)}><ChevronUp className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === sortedCampos.length - 1} onClick={() => moveCampo(campo.key, 1)}><ChevronDown className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isRequired} onClick={() => updateCampoEsp(campo.key, { visivel: !cfg.visivel })}>
+                        {cfg.visivel ? <Eye className="w-3.5 h-3.5 text-primary" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => updateCampoEsp(campo.key, { favorito: !cfg.favorito })}>
+                        <Star className={cn('w-3.5 h-3.5', cfg.favorito ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground')} />
+                      </Button>
+                      {isCustom && (
+                        <>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingField(campo)}><Pencil className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteCustomField(campo.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+            </TooltipProvider>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-4 space-y-3">
+          {!showAddField ? (
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowAddField(true)}>
+              <Plus className="w-3.5 h-3.5" /> Criar campo personalizado
+            </Button>
+          ) : (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/20">
+              <p className="text-sm font-semibold">Novo campo de especialidade</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className="text-xs">Nome do campo</Label><Input value={newField.label} onChange={e => setNewField(p => ({ ...p, label: e.target.value }))} placeholder="Ex: Avaliação Respiratória" /></div>
+                <div>
+                  <Label className="text-xs">Tipo</Label>
+                  <Select value={newField.tipo} onValueChange={val => setNewField(p => ({ ...p, tipo: val }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="textarea">Texto longo</SelectItem>
+                      <SelectItem value="text">Texto curto</SelectItem>
+                      <SelectItem value="number">Número</SelectItem>
+                      <SelectItem value="select">Lista (select)</SelectItem>
+                      <SelectItem value="slider">Slider</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              );
-            })}
-          </TooltipProvider>
-        )}
-      </CardContent>
-    </Card>
+              </div>
+              {newField.tipo === 'select' && (
+                <div><Label className="text-xs">Opções (separadas por vírgula)</Label><Input value={newField.opcoes} onChange={e => setNewField(p => ({ ...p, opcoes: e.target.value }))} placeholder="Leve, Moderado, Grave" /></div>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={addCustomField} className="gap-1"><Plus className="w-3 h-3" /> Salvar</Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddField(false)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {editingField && (
+        <Dialog open={!!editingField} onOpenChange={() => setEditingField(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Editar Campo</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div><Label>Nome do campo</Label><Input value={editingField.label} onChange={e => setEditingField({ ...editingField, label: e.target.value })} /></div>
+              <div>
+                <Label>Tipo</Label>
+                <Select value={editingField.tipo} onValueChange={val => setEditingField({ ...editingField, tipo: val })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="textarea">Texto longo</SelectItem>
+                    <SelectItem value="text">Texto curto</SelectItem>
+                    <SelectItem value="number">Número</SelectItem>
+                    <SelectItem value="select">Lista (select)</SelectItem>
+                    <SelectItem value="slider">Slider</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editingField.tipo === 'select' && (
+                <div><Label>Opções (separadas por vírgula)</Label><Input value={(editingField.opcoes || []).join(', ')} onChange={e => setEditingField({ ...editingField, opcoes: e.target.value.split(',').map(o => o.trim()).filter(Boolean) })} /></div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEditingField(null)}>Cancelar</Button>
+              <Button onClick={updateCustomField}>Salvar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
 
