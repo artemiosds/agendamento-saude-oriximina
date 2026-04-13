@@ -243,6 +243,8 @@ const Tratamentos: React.FC = () => {
 
   const [extensionForm, setExtensionForm] = useState({ new_sessions: 0, reason: "" });
   const [dischargeForm, setDischargeForm] = useState({ reason: "", final_notes: "" });
+  const [dischargeFutureCount, setDischargeFutureCount] = useState(0);
+  const [dischargeLoading, setDischargeLoading] = useState(false);
 
   const canManageFull = can('tratamento', 'can_delete');
   const isProfissional = user?.role === "profissional";
@@ -1085,12 +1087,27 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const loadDischargeFutureCount = async () => {
+    if (!selectedCycle || !user) return;
+    const today = new Date().toISOString().split("T")[0];
+    const { count } = await supabase
+      .from("agendamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("paciente_id", selectedCycle.patient_id)
+      .eq("profissional_id", user.id)
+      .gt("data", today)
+      .not("status", "in", '("cancelado","falta","remarcado")');
+    setDischargeFutureCount(count || 0);
+  };
+
   const handleDischarge = async () => {
     if (!selectedCycle || !dischargeForm.reason) {
       toast.error("Informe o motivo da alta.");
       return;
     }
+    setDischargeLoading(true);
     try {
+      // 1. Register discharge
       await supabase.from("patient_discharges").insert({
         cycle_id: selectedCycle.id,
         patient_id: selectedCycle.patient_id,
@@ -1100,7 +1117,42 @@ const Tratamentos: React.FC = () => {
         final_notes: dischargeForm.final_notes,
       });
 
+      // 2. Update cycle status
       await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
+
+      // 3. Cancel ONLY future appointments of this professional for this patient
+      const today = new Date().toISOString().split("T")[0];
+      const { data: futureAppts } = await supabase
+        .from("agendamentos")
+        .select("id")
+        .eq("paciente_id", selectedCycle.patient_id)
+        .eq("profissional_id", user?.id || "")
+        .gt("data", today)
+        .not("status", "in", '("cancelado","falta","remarcado")');
+
+      const cancelledCount = futureAppts?.length || 0;
+
+      if (futureAppts && futureAppts.length > 0) {
+        const ids = futureAppts.map((a) => a.id);
+        await supabase
+          .from("agendamentos")
+          .update({ status: "cancelado", observacoes: "Alta pelo profissional" })
+          .in("id", ids);
+
+        // Cancel pending sessions linked to those appointments
+        await supabase
+          .from("treatment_sessions")
+          .update({ status: "cancelada" })
+          .eq("cycle_id", selectedCycle.id)
+          .in("appointment_id", ids);
+      }
+
+      // 4. Cancel remaining pending sessions of this cycle
+      await supabase
+        .from("treatment_sessions")
+        .update({ status: "cancelada" })
+        .eq("cycle_id", selectedCycle.id)
+        .in("status", ["pendente_agendamento", "agendada"]);
 
       await logAction({
         acao: "alta_paciente",
@@ -1108,16 +1160,27 @@ const Tratamentos: React.FC = () => {
         entidadeId: selectedCycle.id,
         modulo: "tratamentos",
         user,
-        detalhes: { paciente: selectedCycle.patient_id, motivo: dischargeForm.reason },
+        detalhes: {
+          paciente: selectedCycle.patient_id,
+          motivo: dischargeForm.reason,
+          agendamentos_cancelados: cancelledCount,
+        },
       });
 
-      toast.success("Alta registrada com sucesso!");
+      toast.success(
+        cancelledCount > 0
+          ? `Alta realizada. ${cancelledCount} agendamento(s) deste profissional cancelado(s).`
+          : "Alta registrada com sucesso!"
+      );
       setDischargeOpen(false);
       setDischargeForm({ reason: "", final_notes: "" });
+      setDischargeFutureCount(0);
       loadData();
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar alta: " + err.message);
+    } finally {
+      setDischargeLoading(false);
     }
   };
 
@@ -1415,7 +1478,10 @@ const Tratamentos: React.FC = () => {
                     className="border-destructive text-destructive"
                     onClick={() => {
                       setDischargeForm({ reason: "", final_notes: "" });
+                      setDischargeFutureCount(0);
                       setDischargeOpen(true);
+                      // load count async
+                      setTimeout(() => loadDischargeFutureCount(), 0);
                     }}
                   >
                     <CheckCircle className="w-3.5 h-3.5 mr-1" /> Dar Alta
@@ -1952,6 +2018,17 @@ const Tratamentos: React.FC = () => {
               <DialogTitle>Dar Alta</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {dischargeFutureCount > 0 && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
+                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+                  <p className="text-sm text-warning">
+                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você. 
+                    Todos serão cancelados automaticamente ao confirmar a alta.
+                    <br />
+                    <span className="text-xs opacity-80">Agendamentos com outros profissionais não serão afetados.</span>
+                  </p>
+                </div>
+              )}
               <div>
                 <Label>Motivo da alta *</Label>
                 <Input
@@ -1971,8 +2048,9 @@ const Tratamentos: React.FC = () => {
                 onClick={handleDischarge}
                 className="w-full"
                 variant="destructive"
-                disabled={!dischargeForm.reason}
+                disabled={!dischargeForm.reason || dischargeLoading}
               >
+                {dischargeLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Confirmar Alta
               </Button>
               <p className="text-xs text-muted-foreground text-center">
