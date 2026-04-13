@@ -333,13 +333,26 @@ const Tratamentos: React.FC = () => {
   });
 
   const filteredCycles = useMemo(() => {
-    return cycles.filter((c) => {
+    let result = cycles.filter((c) => {
       if (filterProf !== "all" && c.professional_id !== filterProf) return false;
       if (filterUnit !== "all" && c.unit_id !== filterUnit) return false;
       if (filterStatus !== "all" && c.status !== filterStatus) return false;
       return true;
     });
-  }, [cycles, filterProf, filterUnit, filterStatus]);
+    if (searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      result = result.filter((c) => {
+        const pac = pacientes.find((p: any) => p.id === c.patient_id);
+        const pacNome = pac?.nome?.toLowerCase() || '';
+        const pacCpf = pac?.cpf?.toLowerCase() || '';
+        const pacCns = pac?.cns?.toLowerCase() || '';
+        const tipo = c.treatment_type?.toLowerCase() || '';
+        const statusLabel = (statusLabels as any)[c.status]?.toLowerCase() || c.status?.toLowerCase() || '';
+        return pacNome.includes(term) || pacCpf.includes(term) || pacCns.includes(term) || tipo.includes(term) || statusLabel.includes(term);
+      });
+    }
+    return result;
+  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientes]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
