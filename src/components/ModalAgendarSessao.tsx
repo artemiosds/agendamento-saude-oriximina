@@ -173,6 +173,8 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
     if (isSuggested) return 'suggested' as const;
     // Available
     if (availableSet.has(dateStr)) return 'available' as const;
+    // In remarcar mode, allow all future dates even without availability slots
+    if (mode === 'remarcar' && !isPast) return 'available' as const;
     return 'unavailable' as const;
   };
 
