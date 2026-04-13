@@ -183,6 +183,7 @@ const Tratamentos: React.FC = () => {
   const [filterProf, setFilterProf] = useState("all");
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
