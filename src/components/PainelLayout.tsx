@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
@@ -62,11 +62,6 @@ const roleLabels: Record<string, string> = {
   enfermagem:         'Enfermagem',
 };
 
-const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
-  exit: { opacity: 0, y: -4, transition: { duration: 0.15 } },
-};
 
 const PainelLayout: React.FC = () => {
   const { user, logout } = useAuth();
