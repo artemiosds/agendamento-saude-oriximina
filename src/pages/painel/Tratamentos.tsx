@@ -2011,6 +2011,21 @@ const Tratamentos: React.FC = () => {
             if (!agendarSessaoTarget || !selectedCycle) return;
             setAgendandoSessao(true);
             try {
+              // Duplicate check: verify patient doesn't already have appointment at same date+time
+              const { data: existingAppts } = await supabase
+                .from("agendamentos")
+                .select("id, profissional_nome, hora")
+                .eq("paciente_id", selectedCycle.patient_id)
+                .eq("data", data)
+                .eq("hora", hora)
+                .not("status", "in", '("cancelado","falta","remarcado")');
+              if (existingAppts && existingAppts.length > 0) {
+                const profName = existingAppts[0].profissional_nome || "outro profissional";
+                toast.error(`Este paciente já possui agendamento em ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora} com ${profName}. Escolha outro horário.`);
+                setAgendandoSessao(false);
+                throw new Error("Agendamento duplicado detectado.");
+              }
+
               const prof = funcionarios.find(f => f.id === selectedCycle.professional_id);
               const pac = pacientes.find(p => p.id === selectedCycle.patient_id);
               if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
@@ -2086,6 +2101,21 @@ const Tratamentos: React.FC = () => {
             setRemarcarSaving(true);
             try {
               const oldDate = remarcarTarget.scheduled_date;
+              // Duplicate check: verify patient doesn't already have appointment at same date+time
+              const { data: existingAppts } = await supabase
+                .from("agendamentos")
+                .select("id, profissional_nome, hora")
+                .eq("paciente_id", selectedCycle.patient_id)
+                .eq("data", data)
+                .eq("hora", hora)
+                .not("status", "in", '("cancelado","falta","remarcado")')
+                .neq("id", remarcarTarget.appointment_id || "___none___");
+              if (existingAppts && existingAppts.length > 0) {
+                const profName = existingAppts[0].profissional_nome || "outro profissional";
+                toast.error(`Este paciente já possui agendamento em ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora} com ${profName}. Escolha outro horário.`);
+                setRemarcarSaving(false);
+                throw new Error("Agendamento duplicado detectado.");
+              }
               if (!isMaster && !isProfissional) {
                 const { data: blocked } = await supabase.rpc("is_date_blocked", {
                   p_date: data,
