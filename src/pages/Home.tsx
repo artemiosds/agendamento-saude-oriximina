@@ -58,7 +58,7 @@ const Home: React.FC = () => {
               <Link to="/agendar">
                 <Button
                   size="lg"
-                  className="bg-primary-foreground text-foreground font-semibold hover:bg-primary-foreground/90 w-full sm:w-auto"
+                  className="bg-gradient-to-br from-[hsl(200,55%,38%)] to-[hsl(200,60%,28%)] text-white font-semibold tracking-wide shadow-[0_6px_14px_rgba(0,0,0,0.15)] hover:brightness-105 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
                 >
                   <Calendar className="w-5 h-5 mr-2" />
                   Agendar Online
