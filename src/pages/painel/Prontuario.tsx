@@ -251,17 +251,19 @@ const ProntuarioPage: React.FC = () => {
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
 
-  const loadSessaoData = async (patientId: string, professionalId: string) => {
+  const loadSessaoData = async (patientId: string, _professionalId?: string) => {
     setSessaoDataLoading(true);
     try {
+      // Search for ANY active cycle for this patient (not filtered by professional)
+      // so cycles created by other professionals are also detected
+      let cycleQuery = (supabase as any).from('treatment_cycles').select('*')
+        .eq('patient_id', patientId)
+        .in('status', ['em_andamento', 'ativo'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
       const [cycleRes, ptsRes] = await Promise.all([
-        (supabase as any).from('treatment_cycles').select('*')
-          .eq('patient_id', patientId)
-          .eq('professional_id', professionalId)
-          .in('status', ['em_andamento', 'ativo'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+        cycleQuery.maybeSingle(),
         supabase.from('pts').select('*')
           .eq('patient_id', patientId)
           .eq('status', 'ativo')
@@ -603,12 +605,12 @@ const ProntuarioPage: React.FC = () => {
     }
   }, [searchParams, prontuarios.length]);
 
-  // Load cycle + PTS data when sessao type is selected
+  // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
-    if (form.paciente_id && user?.id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
-      loadSessaoData(form.paciente_id, user.id);
+    if (form.paciente_id && (form.tipo_registro === 'sessao' || !!form.agendamento_id)) {
+      loadSessaoData(form.paciente_id);
     }
-  }, [form.tipo_registro, form.paciente_id, form.agendamento_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.tipo_registro, form.paciente_id, form.agendamento_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
@@ -912,8 +914,8 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        form.tipo_registro === 'sessao' && form.paciente_id && user?.id
-          ? loadSessaoData(form.paciente_id, user.id)
+        form.tipo_registro === 'sessao' && form.paciente_id
+          ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
       ]);
 
@@ -1137,7 +1139,7 @@ const ProntuarioPage: React.FC = () => {
       await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
-        loadSessaoData(form.paciente_id, user?.id || ''),
+        loadSessaoData(form.paciente_id),
       ]);
       setSessionRegistrationRequested(false);
     } catch (err: any) {
@@ -1185,7 +1187,7 @@ const ProntuarioPage: React.FC = () => {
 
       // Refresh data
       await Promise.all([
-        loadSessaoData(form.paciente_id, user?.id || ''),
+        loadSessaoData(form.paciente_id),
         refreshAgendamentos(),
       ]);
     } catch (err: any) {
