@@ -2022,7 +2022,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      clinica_config_safe: {
+        Row: {
+          created_at: string | null
+          evolution_base_url: string | null
+          evolution_instance_name: string | null
+          id: string | null
+          logo_url: string | null
+          nome_clinica: string | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          evolution_base_url?: string | null
+          evolution_instance_name?: string | null
+          id?: string | null
+          logo_url?: string | null
+          nome_clinica?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          evolution_base_url?: string | null
+          evolution_instance_name?: string | null
+          id?: string | null
+          logo_url?: string | null
+          nome_clinica?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_slot_availability: {
