@@ -1163,7 +1163,6 @@ const ProntuarioPage: React.FC = () => {
   };
 
   // Confirm any individual session (including past dates) — no SOAP required, no prontuário close
-  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const handleConfirmSession = async (session: CycleSession) => {
     if (!sessaoCycle) return;
     setConfirmingSessionId(session.id);
