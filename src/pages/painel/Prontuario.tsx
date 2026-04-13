@@ -1338,19 +1338,23 @@ const ProntuarioPage: React.FC = () => {
               <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
               <div>
                 <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))} placeholder="Relato do paciente..." />
+                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_subjetivo: e.target.value })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_subjetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>O — Objetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))} placeholder="Dados observáveis, exame físico, sinais vitais..." />
+                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_objetivo: e.target.value })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_objetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>A — Avaliação <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))} placeholder="Análise clínica, hipóteses..." />
+                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_avaliacao: e.target.value })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_avaliacao?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>P — Plano <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_plano} onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))} placeholder="Condutas, intervenções, próximos passos..." />
+                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_plano: e.target.value })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_plano?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
             </div>
 
