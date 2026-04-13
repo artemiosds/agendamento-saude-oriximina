@@ -1161,6 +1161,49 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  // Confirm any individual session (including past dates) — no SOAP required, no prontuário close
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
+  const handleConfirmSession = async (session: CycleSession) => {
+    if (!sessaoCycle) return;
+    setConfirmingSessionId(session.id);
+    try {
+      // Minimal registration: mark as realizada, update cycle counter
+      const result = await treatmentService.registerCompletedSession({
+        cycle: sessaoCycle,
+        session,
+        soap: null, // SOAP not required for simple confirmation
+        procedureDone: 'Comparecimento confirmado',
+        userId: user?.id,
+        appointmentId: session.appointment_id || null,
+      });
+
+      if (result.cycleStatus === 'concluido') {
+        toast.info('🎉 Ciclo de tratamento concluído!');
+      }
+
+      await logAction({
+        acao: 'sessao_confirmada',
+        entidade: 'treatment_session',
+        entidadeId: session.id,
+        modulo: 'prontuario',
+        user,
+        detalhes: { paciente: form.paciente_nome, sessao_numero: session.session_number, ciclo_id: sessaoCycle.id },
+      });
+      toast.success(`✅ Sessão ${session.session_number} confirmada!`);
+
+      // Refresh data
+      await Promise.all([
+        loadSessaoData(form.paciente_id, user?.id || ''),
+        refreshAgendamentos(),
+      ]);
+    } catch (err: any) {
+      console.error("Erro ao confirmar sessão:", err);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao confirmar sessão.');
+    } finally {
+      setConfirmingSessionId(null);
+    }
+  };
+
   const handleDelete = async (p: ProntuarioDB) => {
     try {
       await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", p.id);
