@@ -251,17 +251,19 @@ const ProntuarioPage: React.FC = () => {
   const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
 
-  const loadSessaoData = async (patientId: string, professionalId: string) => {
+  const loadSessaoData = async (patientId: string, _professionalId?: string) => {
     setSessaoDataLoading(true);
     try {
+      // Search for ANY active cycle for this patient (not filtered by professional)
+      // so cycles created by other professionals are also detected
+      let cycleQuery = (supabase as any).from('treatment_cycles').select('*')
+        .eq('patient_id', patientId)
+        .in('status', ['em_andamento', 'ativo'])
+        .order('created_at', { ascending: false })
+        .limit(1);
+
       const [cycleRes, ptsRes] = await Promise.all([
-        (supabase as any).from('treatment_cycles').select('*')
-          .eq('patient_id', patientId)
-          .eq('professional_id', professionalId)
-          .in('status', ['em_andamento', 'ativo'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+        cycleQuery.maybeSingle(),
         supabase.from('pts').select('*')
           .eq('patient_id', patientId)
           .eq('status', 'ativo')
