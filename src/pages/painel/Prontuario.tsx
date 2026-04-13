@@ -1772,6 +1772,10 @@ const ProntuarioPage: React.FC = () => {
               onToggleSoap={setSoapEnabled}
               highlightSOAP={sessaoHighlightSOAP}
               soapRef={soapRef as React.RefObject<HTMLDivElement>}
+              customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
+              customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
