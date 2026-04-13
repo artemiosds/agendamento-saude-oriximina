@@ -1703,29 +1703,22 @@ const ProntuarioPage: React.FC = () => {
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
             {/* SOAP Evolution — ALL 5 types */}
-            <div ref={soapRef} className={`space-y-3 bg-primary/5 rounded-lg p-4 border transition-all duration-500 ${sessaoHighlightSOAP ? 'border-primary ring-2 ring-primary/30 animate-pulse' : 'border-primary/20'}`}>
-              <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
-              <div>
-                <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_subjetivo: val })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_subjetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>O — Objetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_objetivo: val })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_objetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>A — Avaliação <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_avaliacao: val })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_avaliacao?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>P — Plano <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_plano: val })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_plano?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-            </div>
+            <SoapFieldsAdaptive
+              profissao={user?.profissao}
+              values={{
+                soap_subjetivo: form.soap_subjetivo,
+                soap_objetivo: form.soap_objetivo,
+                soap_avaliacao: form.soap_avaliacao,
+                soap_plano: form.soap_plano,
+              }}
+              onChange={(field, value) => setForm(p => ({ ...p, [field]: value }))}
+              soapErrors={soapErrors}
+              onClearErrors={() => setSoapErrors(false)}
+              soapEnabled={soapEnabled}
+              onToggleSoap={setSoapEnabled}
+              highlightSOAP={sessaoHighlightSOAP}
+              soapRef={soapRef as React.RefObject<HTMLDivElement>}
+            />
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
             {form.tipo_registro === 'avaliacao_inicial' && (
