@@ -2292,7 +2292,9 @@ th{background:#f1f5f9;font-weight:600;}
                     <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      {[...profissionais, ...tecnicos]
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
