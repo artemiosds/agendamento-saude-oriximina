@@ -2141,10 +2141,53 @@ const ProntuarioPage: React.FC = () => {
               </Button>
             )}
 
-            <div className="flex gap-2">
+            {/* Alerta inteligente de progresso do tratamento */}
+            {sessaoCycle && form.tipo_registro === 'sessao' && (() => {
+              const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+              const remaining = sessaoCycle.total_sessions - completedCount;
+              const progressPercent = sessaoCycle.total_sessions > 0 ? Math.round((completedCount / sessaoCycle.total_sessions) * 100) : 0;
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Progresso do tratamento</span>
+                    <span className="font-semibold">{completedCount}/{sessaoCycle.total_sessions} sessões</span>
+                  </div>
+                  <Progress value={progressPercent} className="h-2" />
+                  <div className="flex items-center gap-2">
+                    {remaining === 0 ? (
+                      <Badge className="bg-green-500/10 text-green-700 border-green-500/30">✅ Tratamento concluído</Badge>
+                    ) : remaining <= 2 ? (
+                      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        Atenção: {remaining === 1 ? 'última sessão' : `faltam ${remaining} sessões`}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">Faltam {remaining} sessões</Badge>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex gap-2 flex-wrap">
+              {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
+              {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
+                <Button
+                  type="button"
+                  onClick={handleRegistrarSessaoOnly}
+                  disabled={saving}
+                  variant="outline"
+                  className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  <Activity className="w-4 h-4 mr-2" />
+                  Registrar Sessão {currentSessionForRegistration.session_number}
+                </Button>
+              )}
+
               {activeAtendimento ? (
                 <>
-                  <Button onClick={handleSave} disabled={saving} variant="outline" className="flex-1">
+                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
                   <Button
@@ -2158,9 +2201,9 @@ const ProntuarioPage: React.FC = () => {
                 </>
               ) : (
                 <Button
-                  onClick={handleSave}
+                  onClick={() => { void handleSave(); }}
                   disabled={saving}
-                  className="w-full gradient-primary text-primary-foreground"
+                  className="flex-1 gradient-primary text-primary-foreground"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                   {editId ? "Salvar Alterações" : "Registrar Prontuário"}
