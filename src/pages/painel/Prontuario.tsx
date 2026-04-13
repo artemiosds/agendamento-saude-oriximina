@@ -275,15 +275,39 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleRegistrarSessaoClick = () => {
+    if (!currentSessionForRegistration) {
+      toast.error('Nenhuma sessão pendente encontrada para registrar neste ciclo.');
+      return;
+    }
+
     const today = new Date().toISOString().split('T')[0];
+    const shouldSubmitSession = sessionRegistrationRequested || form.tipo_registro === 'sessao';
+
     setSessionRegistrationRequested(true);
     setSoapErrors(false);
     setForm((prev) => ({
       ...prev,
       tipo_registro: 'sessao',
-      data_atendimento: today,
+      data_atendimento: prev.data_atendimento || currentSessionForRegistration.scheduled_date || today,
       agendamento_id: prev.agendamento_id || currentSessionForRegistration?.appointment_id || '',
     }));
+
+    if (shouldSubmitSession) {
+      if (sessionSoapValidationError) {
+        setSoapErrors(true);
+        setSessaoHighlightSOAP(true);
+        setTimeout(() => {
+          soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        setTimeout(() => setSessaoHighlightSOAP(false), 4000);
+        toast.error(sessionSoapValidationError);
+        return;
+      }
+
+      void handleSave();
+      return;
+    }
+
     setSessaoHighlightSOAP(true);
     setTimeout(() => {
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -326,6 +350,27 @@ const ProntuarioPage: React.FC = () => {
     if (!currentSessionForRegistration) return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
     return null;
   }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
+
+  const sessionSoapPayload = useMemo(
+    () =>
+      normalizeSoapPayload({
+        subjetivo: form.soap_subjetivo,
+        objetivo: form.soap_objetivo,
+        avaliacao: form.soap_avaliacao,
+        plano: form.soap_plano,
+      }),
+    [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo],
+  );
+
+  const sessionSoapValidationError = useMemo(
+    () => getSoapValidationError(sessionSoapPayload),
+    [sessionSoapPayload],
+  );
+
+  const canConfirmSessionRegistration = useMemo(
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionSoapValidationError),
+    [currentSessionForRegistration, sessaoCycle, sessionSoapValidationError],
+  );
 
   // Medications & exam types state
   interface MedicationDB {
@@ -511,12 +556,15 @@ const ProntuarioPage: React.FC = () => {
   }, [form.tipo_registro, form.paciente_id, form.agendamento_id, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const matchesCurrentSessionByAppointment = currentSessionForRegistration?.appointment_id === form.agendamento_id;
+    const matchesCurrentSessionByDate = currentSessionForRegistration?.scheduled_date === form.data_atendimento;
+
     if (
       editId ||
       !form.agendamento_id ||
       form.tipo_registro !== 'consulta' ||
       !currentSessionForRegistration ||
-      currentSessionForRegistration.appointment_id !== form.agendamento_id
+      (!matchesCurrentSessionByAppointment && !matchesCurrentSessionByDate)
     ) {
       return;
     }
@@ -630,14 +678,9 @@ const ProntuarioPage: React.FC = () => {
       toast.error(sessionRegistrationError);
       return false;
     }
-    const soapPayload = normalizeSoapPayload({
-      subjetivo: form.soap_subjetivo,
-      objetivo: form.soap_objetivo,
-      avaliacao: form.soap_avaliacao,
-      plano: form.soap_plano,
-    });
-    const soapValidationError = getSoapValidationError(soapPayload);
-    console.log('[SOAP validation]', {
+    const soapPayload = sessionSoapPayload;
+    const soapValidationError = sessionSoapValidationError;
+    console.log('SOAP enviado:', {
       soap: soapPayload,
       tipo_registro: form.tipo_registro,
       agendamento_id: form.agendamento_id || null,
@@ -1601,6 +1644,7 @@ const ProntuarioPage: React.FC = () => {
                                   {sessaoCycleSessions.map(s => {
                                     const isCurrent = currentSessionForRegistration?.id === s.id;
                                     const isRealizada = s.status === 'realizada';
+                                    const isRegisteringCurrentSession = isCurrent && (sessionRegistrationRequested || form.tipo_registro === 'sessao');
                                     const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : '⏳';
                                     const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Em andamento' : s.status === 'falta' ? '❌ Falta' : 'Aguardando';
                                     return (
@@ -1610,9 +1654,24 @@ const ProntuarioPage: React.FC = () => {
                                         <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
                                         <td className="px-2 py-1.5 text-right">
                                           {isCurrent && (
-                                            <Button size="sm" variant="default" className="h-6 text-xs px-2" onClick={handleRegistrarSessaoClick}>
-                                              Registrar
-                                            </Button>
+                                            <div className="flex flex-col items-end gap-1">
+                                              <Button
+                                                size="sm"
+                                                variant="default"
+                                                className="h-6 text-xs px-2"
+                                                onClick={() => {
+                                                  void handleRegistrarSessaoClick();
+                                                }}
+                                                disabled={saving || (isRegisteringCurrentSession && !canConfirmSessionRegistration)}
+                                              >
+                                                {saving && isRegisteringCurrentSession ? 'Registrando...' : isRegisteringCurrentSession ? 'Confirmar' : 'Registrar'}
+                                              </Button>
+                                              {isRegisteringCurrentSession && (
+                                                <span className={`text-[11px] ${canConfirmSessionRegistration ? 'text-success' : 'text-destructive'}`}>
+                                                  {canConfirmSessionRegistration ? '✔ SOAP completo' : `❌ ${sessionSoapValidationError}`}
+                                                </span>
+                                              )}
+                                            </div>
                                           )}
                                         </td>
                                       </tr>
