@@ -4,7 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
-import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
+
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ import {
   Pencil,
   Eraser,
   Search,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -456,27 +459,71 @@ const Tratamentos: React.FC = () => {
     });
   }, [procedimentos, selectedCycle, profissionais]);
 
-  const sessionSoapValidationError = useMemo(() => {
-    if (newSession.status !== "realizada") return null;
-    return getSoapValidationError(soapNotes);
-  }, [newSession.status, soapNotes]);
-
   const sessionRegisterHint = useMemo(() => {
     if (newSession.status !== "realizada") return null;
-    if (sessionSoapValidationError) return "❌ Preencha todos os campos do SOAP";
     if (!newSession.procedure_done?.trim()) return "❌ Selecione o procedimento realizado";
-    return "✔ SOAP completo";
-  }, [newSession.status, newSession.procedure_done, sessionSoapValidationError]);
+    return null;
+  }, [newSession.status, newSession.procedure_done]);
 
   const canSubmitSessionRegistration = useMemo(() => {
     if (newSession.status === "realizada") {
-      return !sessionSoapValidationError && !!newSession.procedure_done?.trim();
+      return !!newSession.procedure_done?.trim();
     }
     if (newSession.status === "paciente_faltou") {
       return !!newSession.absence_type;
     }
     return true;
-  }, [newSession.absence_type, newSession.procedure_done, newSession.status, sessionSoapValidationError]);
+  }, [newSession.absence_type, newSession.procedure_done, newSession.status]);
+
+  // Get current cycle's professional profissão for SOAP adaptation
+  const cycleProfissao = useMemo(() => {
+    if (!selectedCycle) return undefined;
+    const prof = profissionais.find((p: any) => p.id === selectedCycle.professional_id);
+    return prof?.profissao;
+  }, [selectedCycle, profissionais]);
+
+  const cycleSoapOptions = useMemo(() => getSoapOptions(cycleProfissao), [cycleProfissao]);
+  const cycleHasDropdown = useMemo(() => hasDropdownSoap(cycleProfissao), [cycleProfissao]);
+
+  const [copyingLastSession, setCopyingLastSession] = useState(false);
+
+  const handleCopyLastSession = async () => {
+    if (!selectedCycle) return;
+    setCopyingLastSession(true);
+    try {
+      const { data, error } = await supabase
+        .from("treatment_sessions")
+        .select("clinical_notes")
+        .eq("cycle_id", selectedCycle.id)
+        .eq("status", "realizada")
+        .order("session_number", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast.info("Nenhuma sessão anterior encontrada para este ciclo.");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(data[0].clinical_notes);
+        if (parsed.subjetivo || parsed.objetivo || parsed.avaliacao || parsed.plano) {
+          setSoapNotes({
+            subjetivo: parsed.subjetivo || "",
+            objetivo: parsed.objetivo || "",
+            avaliacao: parsed.avaliacao || "",
+            plano: parsed.plano || "",
+          });
+          toast.success("SOAP da sessão anterior copiado!");
+          return;
+        }
+      } catch {}
+      toast.info("Sessão anterior não possui dados SOAP para copiar.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao buscar sessão anterior.");
+    } finally {
+      setCopyingLastSession(false);
+    }
+  };
 
   const handleCreateCycle = async () => {
     if (!newCycle.patient_id || !newCycle.professional_id || !newCycle.treatment_type) {
@@ -617,14 +664,6 @@ const Tratamentos: React.FC = () => {
     }
 
     if (newSession.status === "realizada") {
-      const soapPayload = normalizeSoapPayload(soapNotes);
-      const soapError = getSoapValidationError(soapPayload);
-      console.log('[SOAP Tratamentos validation]', {
-        soap: soapPayload,
-        cycle_id: selectedCycle.id,
-        session_id: nextSession.id,
-      });
-      if (soapError) { toast.error(soapError); return; }
       if (!newSession.procedure_done) {
         toast.error("Selecione o procedimento realizado.");
         return;
@@ -694,15 +733,6 @@ const Tratamentos: React.FC = () => {
 
   const handleEditRealizada = async () => {
     if (!editRealizadaTarget || !selectedCycle) return;
-    if (
-      !editRealizadaSoap.subjetivo?.trim() ||
-      !editRealizadaSoap.objetivo?.trim() ||
-      !editRealizadaSoap.avaliacao?.trim() ||
-      !editRealizadaSoap.plano?.trim()
-    ) {
-      toast.error("Preencha todos os campos SOAP.");
-      return;
-    }
     if (!editRealizadaProcedure?.trim()) {
       toast.error("Informe o procedimento realizado.");
       return;
@@ -1907,65 +1937,68 @@ const Tratamentos: React.FC = () => {
 
               {newSession.status === "realizada" && (
                 <div className="space-y-3 border-t pt-3">
-                  <p className="text-sm font-semibold text-foreground">
-                    Prontuário SOAP <span className="text-destructive">*</span>
-                  </p>
-                  <div>
-                    <Label className="text-xs font-semibold">
-                      S — Subjetivo <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Relato do paciente, queixas, sintomas referidos
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-foreground">
+                      Prontuário SOAP <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
                     </p>
-                    <Textarea
-                      value={soapNotes.subjetivo}
-                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, subjetivo: val })); }}
-                      rows={2}
-                      placeholder="Ex: Paciente relata melhora da dor no joelho direito..."
-                      className={sessionSoapValidationError && !soapNotes.subjetivo?.trim() ? "border-destructive border-2" : ""}
-                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyLastSession}
+                      disabled={copyingLastSession}
+                      className="text-xs"
+                    >
+                      {copyingLastSession ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
+                      Copiar da sessão anterior
+                    </Button>
                   </div>
-                  <div>
-                    <Label className="text-xs font-semibold">
-                      O — Objetivo <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-1">Achados do exame, medições, testes realizados</p>
-                    <Textarea
-                      value={soapNotes.objetivo}
-                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, objetivo: val })); }}
-                      rows={2}
-                      placeholder="Ex: ADM flexão joelho D: 95° (anterior: 80°)..."
-                      className={sessionSoapValidationError && !soapNotes.objetivo?.trim() ? "border-destructive border-2" : ""}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold">
-                      A — Avaliação <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-1">Análise clínica, evolução do quadro</p>
-                    <Textarea
-                      value={soapNotes.avaliacao}
-                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, avaliacao: val })); }}
-                      rows={2}
-                      placeholder="Ex: Evolução favorável, ganho funcional progressivo..."
-                      className={sessionSoapValidationError && !soapNotes.avaliacao?.trim() ? "border-destructive border-2" : ""}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold">
-                      P — Plano <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Conduta terapêutica, orientações, próximos passos
-                    </p>
-                    <Textarea
-                      value={soapNotes.plano}
-                      onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, plano: val })); }}
-                      rows={2}
-                      placeholder="Ex: Manter protocolo atual, progrimir carga na próxima sessão..."
-                      className={sessionSoapValidationError && !soapNotes.plano?.trim() ? "border-destructive border-2" : ""}
-                    />
-                  </div>
+                  {[
+                    { key: "subjetivo" as const, label: "S — Subjetivo", placeholder: "Relato do paciente, queixas..." },
+                    { key: "objetivo" as const, label: "O — Objetivo", placeholder: "Achados do exame, medições..." },
+                    { key: "avaliacao" as const, label: "A — Avaliação", placeholder: "Análise clínica, evolução..." },
+                    { key: "plano" as const, label: "P — Plano", placeholder: "Conduta, orientações, próximos passos..." },
+                  ].map((field) => (
+                    <div key={field.key}>
+                      <Label className="text-xs font-semibold">{field.label}</Label>
+                      {cycleHasDropdown && cycleSoapOptions && (
+                        <div className="flex flex-wrap gap-1 my-1">
+                          {cycleSoapOptions[field.key === "subjetivo" ? "subjetivo" : field.key === "objetivo" ? "objetivo" : field.key === "avaliacao" ? "avaliacao" : "plano"].map((opt) => {
+                            const isSelected = soapNotes[field.key]?.includes(opt);
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => {
+                                  setSoapNotes((p) => {
+                                    const current = p[field.key] || "";
+                                    if (current.includes(opt)) {
+                                      return { ...p, [field.key]: current.replace(`• ${opt}\n`, "").replace(`• ${opt}`, "").trim() };
+                                    }
+                                    return { ...p, [field.key]: current ? `${current}\n• ${opt}` : `• ${opt}` };
+                                  });
+                                }}
+                                className={cn(
+                                  "text-xs px-2 py-0.5 rounded-full border transition-colors",
+                                  isSelected
+                                    ? "bg-primary/15 text-primary border-primary/40"
+                                    : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                                )}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <Textarea
+                        value={soapNotes[field.key]}
+                        onChange={(e) => { const val = e.target.value; setSoapNotes((p) => ({ ...p, [field.key]: val })); }}
+                        rows={2}
+                        placeholder={field.placeholder}
+                      />
+                    </div>
+                  ))}
                 </div>
               )}
 
