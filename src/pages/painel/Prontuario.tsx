@@ -960,14 +960,6 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleFinalizarAtendimento = async () => {
-    // If session type, require at least one completed session
-    if (form.tipo_registro === 'sessao' && sessaoCycle) {
-      const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
-      if (completedCount === 0) {
-        toast.error("Registre pelo menos uma sessão antes de finalizar o atendimento.");
-        return;
-      }
-    }
     const saved = await handleSave();
     if (!saved) return;
 
