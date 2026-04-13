@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
@@ -343,24 +343,24 @@ const Relatorios: React.FC = () => {
   };
   const removeAccents = normalizarProfissao;
 
-  const CATEGORIAS = [
-    { key: 'medico', emoji: '👨‍⚕️', label: 'Médicos', cor: '#1B3A5C',
+  const CATEGORIAS: Array<{ key: string; icon: LucideIcon; label: string; cor: string; bgLight: string; termos: string[] }> = [
+    { key: 'medico', icon: Stethoscope, label: 'Médicos', cor: '#1B3A5C', bgLight: '#EEF2F7',
       termos: ['medico', 'medicina', 'doutora', 'doutor', 'clinicogeral', 'cirurgiao', 'cirurgia', 'infectologista', 'infectologia'] },
-    { key: 'psicologo', emoji: '🧠', label: 'Psicólogos', cor: '#6B4C9A',
+    { key: 'psicologo', icon: Brain, label: 'Psicólogos', cor: '#6B4C9A', bgLight: '#F3EEF9',
       termos: ['psicologo', 'psicologa', 'psicologia'] },
-    { key: 'fonoaudiologo', emoji: '🗣️', label: 'Fonoaudiólogos', cor: '#2E8B8B',
+    { key: 'fonoaudiologo', icon: Ear, label: 'Fonoaudiólogos', cor: '#2E8B8B', bgLight: '#EEF7F7',
       termos: ['fonoaudiologo', 'fonoaudiologa', 'fonoaudiologia', 'fono'] },
-    { key: 'fisioterapeuta', emoji: '🦿', label: 'Fisioterapeutas', cor: '#2D7A4F',
+    { key: 'fisioterapeuta', icon: Dumbbell, label: 'Fisioterapeutas', cor: '#2D7A4F', bgLight: '#EEF7F2',
       termos: ['fisioterapeuta', 'fisioterapia', 'fisio'] },
-    { key: 'terapeuta_ocupacional', emoji: '🖐️', label: 'T. Ocupacional', cor: '#C17B1A',
+    { key: 'terapeuta_ocupacional', icon: Hand, label: 'T. Ocupacional', cor: '#C17B1A', bgLight: '#FDF5E8',
       termos: ['terapeutaocupacional', 'terapiaocupacional'] },
-    { key: 'nutricionista', emoji: '🥗', label: 'Nutrição', cor: '#E05A2B',
+    { key: 'nutricionista', icon: Apple, label: 'Nutrição', cor: '#E05A2B', bgLight: '#FDF0EB',
       termos: ['nutricionista', 'nutricao', 'nutri'] },
-    { key: 'enfermeiro', emoji: '👩‍⚕️', label: 'Enfermagem', cor: '#B83232',
+    { key: 'enfermeiro', icon: Heart, label: 'Enfermagem', cor: '#B83232', bgLight: '#FDEAEA',
       termos: ['enfermeiro', 'enfermeira', 'enfermagem', 'tecnicoenfermagem', 'auxiliarenfermagem'] },
-    { key: 'assistente_social', emoji: '👥', label: 'Serviço Social', cor: '#3A6B9A',
+    { key: 'assistente_social', icon: Users2, label: 'Serviço Social', cor: '#3A6B9A', bgLight: '#EEF3F9',
       termos: ['assistentesocial', 'servicosocial'] },
-    { key: 'odontologia', emoji: '🦷', label: 'Odontologia', cor: '#0E7490',
+    { key: 'odontologia', icon: Stethoscope, label: 'Odontologia', cor: '#0E7490', bgLight: '#ECFEFF',
       termos: ['odontologo', 'odontologa', 'odontologia', 'odontopediatra', 'odontopediatria', 'dentista'] },
   ];
 
@@ -1203,7 +1203,7 @@ ${dataRows}
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
           { label: 'Total', value: stats.total, color: '#1B3A5C' },
           { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
@@ -1218,11 +1218,10 @@ ${dataRows}
         ].map(s => (
           <div
             key={s.label}
-            className="rounded-xl border text-center"
-            style={{ borderColor: '#DDE3ED', background: '#FFFFFF', padding: '12px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
+            className="rounded-xl border border-border/60 bg-card text-center px-2 py-3 shadow-sm"
           >
-            <p className="text-xl font-bold font-display" style={{ color: s.color }}>{s.value}</p>
-            <p className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: '#6B7280' }}>{s.label}</p>
+            <p className="text-lg font-bold font-display leading-none" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[9px] uppercase tracking-wider mt-1 text-muted-foreground truncate">{s.label}</p>
           </div>
         ))}
       </div>
@@ -1413,53 +1412,48 @@ ${dataRows}
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
           {/* Category cards */}
-          <div className="flex gap-4 overflow-x-auto pb-2" style={{ scrollBehavior: 'smooth' }}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
             {categoriaCards.map(c => {
               const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
               const isActive = filterCargoProd === c.key;
-              const activeBgMap: Record<string, string> = {
-                medico: '#EEF2F7', psicologo: '#F3EEF9', fonoaudiologo: '#EEF7F7',
-                fisioterapeuta: '#EEF7F2', terapeuta_ocupacional: '#FDF5E8',
-                nutricionista: '#FDF0EB', enfermeiro: '#FDEAEA',
-                assistente_social: '#EEF3F9', odontologia: '#ECFEFF',
-              };
+              const catDef = CATEGORIAS.find(cat => cat.key === c.key);
+              const IconComp = catDef?.icon || Stethoscope;
+              const bgLight = catDef?.bgLight || '#F8FAFC';
               return (
                 <div
                   key={c.key}
-                  className="flex-shrink-0 cursor-pointer"
+                  className="cursor-pointer rounded-xl border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
                   style={{
-                    minWidth: 190,
-                    borderRadius: 16,
-                    border: `1px solid ${isActive ? c.cor : '#DDE3ED'}`,
-                    borderLeft: `5px solid ${c.cor}`,
-                    padding: '20px 24px',
-                    background: isActive ? (activeBgMap[c.key] || '#F8FAFC') : '#FFFFFF',
-                    boxShadow: isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)',
-                    transition: 'box-shadow 0.2s, transform 0.2s',
+                    borderColor: isActive ? c.cor : 'hsl(var(--border))',
+                    borderLeftWidth: 4,
+                    borderLeftColor: c.cor,
+                    padding: '16px 18px',
+                    background: isActive ? bgLight : 'hsl(var(--card))',
+                    boxShadow: isActive ? `0 4px 16px ${c.cor}30` : '0 1px 4px rgba(0,0,0,0.05)',
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.12)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = isActive ? `0 4px 16px ${c.cor}40` : '0 2px 8px rgba(0,0,0,0.06)'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
                   onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <span style={{ fontSize: 28 }}>{c.emoji}</span>
-                    <span className="uppercase tracking-wider font-semibold font-display" style={{ fontSize: 13, color: '#6B7280' }}>{c.label}</span>
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: `${c.cor}15` }}>
+                      <IconComp className="w-[18px] h-[18px]" style={{ color: c.cor }} />
+                    </div>
+                    <span className="text-xs uppercase tracking-wider font-semibold font-display text-muted-foreground leading-tight">{c.label}</span>
                   </div>
-                  <div className="flex items-baseline gap-6">
+                  <div className="flex items-baseline gap-4">
                     <div>
-                      <p className="font-bold font-display" style={{ fontSize: 36, color: '#1B3A5C', lineHeight: 1 }}>{c.total}</p>
-                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Total</p>
+                      <p className="text-3xl font-bold font-display leading-none" style={{ color: 'hsl(var(--foreground))' }}>{c.total}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
                     </div>
                     <div>
-                      <p className="font-bold" style={{ fontSize: 20, color: '#2D7A4F' }}>{c.concluidos}</p>
-                      <p className="mt-1" style={{ fontSize: 11, color: '#6B7280' }}>Concluídos</p>
+                      <p className="text-lg font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Concluídos</p>
                     </div>
                   </div>
-                  <div className="mt-3">
-                    <div className="w-full overflow-hidden" style={{ height: 4, borderRadius: 2, background: '#E5E7EB' }}>
-                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 2, transition: 'width 0.3s' }} />
+                  <div className="mt-2.5">
+                    <div className="w-full overflow-hidden rounded-full" style={{ height: 4, background: 'hsl(var(--muted))' }}>
+                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 9999, transition: 'width 0.3s' }} />
                     </div>
-                    <p className="text-right mt-1" style={{ fontSize: 12, color: '#6B7280' }}>{taxa}%</p>
+                    <p className="text-right mt-0.5 text-[11px] text-muted-foreground">{taxa}%</p>
                   </div>
                 </div>
               );
@@ -1658,11 +1652,11 @@ th{background:#f1f5f9;font-weight:600;}
               {evolucaoMensal.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <AreaChart data={evolucaoMensal}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,92%)" />
                     <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
-                    <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,89%,38%)" fill="hsl(199,89%,38%)" fillOpacity={0.2} strokeWidth={2} dot={{ r: 4, fill: 'hsl(199,89%,38%)' }} />
+                    <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,70%,50%)" fill="hsl(199,70%,50%)" fillOpacity={0.12} strokeWidth={2} dot={{ r: 3, fill: 'hsl(199,70%,50%)' }} />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -2349,8 +2343,8 @@ th{background:#f1f5f9;font-weight:600;}
               )}
 
               {mapaGenerated && mapaData.length > 0 && (
-                <div className="overflow-x-auto">
-                  <p className="text-xs text-muted-foreground mb-2">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                <div className="overflow-x-auto rounded-lg border border-border/60">
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-muted/60">
