@@ -40,6 +40,8 @@ import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
+import { isMedico } from "@/data/soapOptionsByProfession";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 
@@ -244,6 +246,7 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
+  const [soapEnabled, setSoapEnabled] = useState(true);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
@@ -368,14 +371,15 @@ const ProntuarioPage: React.FC = () => {
     }));
 
     if (shouldSubmitSession) {
-      if (sessionSoapValidationError) {
+      const effectiveError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
+      if (effectiveError) {
         setSoapErrors(true);
         setSessaoHighlightSOAP(true);
         setTimeout(() => {
           soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
         setTimeout(() => setSessaoHighlightSOAP(false), 4000);
-        toast.error(sessionSoapValidationError);
+        toast.error(effectiveError);
         return;
       }
 
@@ -402,13 +406,13 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const sessionSoapValidationError = useMemo(
-    () => getSoapValidationError(sessionSoapPayload),
-    [sessionSoapPayload],
+    () => getSoapValidationError(sessionSoapPayload, { required: soapEnabled && !isMedico(user?.profissao) }),
+    [sessionSoapPayload, soapEnabled, user?.profissao],
   );
 
   const canConfirmSessionRegistration = useMemo(
-    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && !sessionSoapValidationError),
-    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError],
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && (!soapEnabled || !sessionSoapValidationError)),
+    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError, soapEnabled],
   );
 
   // Medications & exam types state
@@ -632,6 +636,7 @@ const ProntuarioPage: React.FC = () => {
     setListaPrescricao([]);
     setEspecialidadeFields({});
     setSoapErrors(false);
+    setSoapEnabled(true);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0], tipo_registro: "avaliacao_inicial" });
     setDialogOpen(true);
   };
@@ -718,9 +723,10 @@ const ProntuarioPage: React.FC = () => {
       return false;
     }
     const soapPayload = sessionSoapPayload;
-    const soapValidationError = sessionSoapValidationError;
+    const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
     console.log('SOAP enviado:', {
       soap: soapPayload,
+      soapEnabled,
       tipo_registro: form.tipo_registro,
       agendamento_id: form.agendamento_id || null,
       session_id: currentSessionForRegistration?.id || null,
@@ -1035,7 +1041,7 @@ const ProntuarioPage: React.FC = () => {
       return;
     }
     const soapPayload = sessionSoapPayload;
-    const soapError = sessionSoapValidationError;
+    const soapError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
     if (soapError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1700,29 +1706,22 @@ const ProntuarioPage: React.FC = () => {
             {/* ===== TYPE-SPECIFIC FORM SECTIONS ===== */}
 
             {/* SOAP Evolution — ALL 5 types */}
-            <div ref={soapRef} className={`space-y-3 bg-primary/5 rounded-lg p-4 border transition-all duration-500 ${sessaoHighlightSOAP ? 'border-primary ring-2 ring-primary/30 animate-pulse' : 'border-primary/20'}`}>
-              <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
-              <div>
-                <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_subjetivo: val })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_subjetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>O — Objetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_objetivo: val })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_objetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>A — Avaliação <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_avaliacao: val })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_avaliacao?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-              <div>
-                <Label>P — Plano <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { const val = e.target.value; setSoapErrors(false); setForm((p) => ({ ...p, soap_plano: val })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
-                {soapErrors && !form.soap_plano?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
-              </div>
-            </div>
+            <SoapFieldsAdaptive
+              profissao={user?.profissao}
+              values={{
+                soap_subjetivo: form.soap_subjetivo,
+                soap_objetivo: form.soap_objetivo,
+                soap_avaliacao: form.soap_avaliacao,
+                soap_plano: form.soap_plano,
+              }}
+              onChange={(field, value) => setForm(p => ({ ...p, [field]: value }))}
+              soapErrors={soapErrors}
+              onClearErrors={() => setSoapErrors(false)}
+              soapEnabled={soapEnabled}
+              onToggleSoap={setSoapEnabled}
+              highlightSOAP={sessaoHighlightSOAP}
+              soapRef={soapRef as React.RefObject<HTMLDivElement>}
+            />
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}
             {form.tipo_registro === 'avaliacao_inicial' && (
