@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,10 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
+import { ChartCard } from '@/components/ChartCard';
+import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -48,6 +50,8 @@ const Relatorios: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
   const [filterRoleProd, setFilterRoleProd] = useState('all');
+  const [filterCargoProd, setFilterCargoProd] = useState('all');
+  const [prodViewMode, setProdViewMode] = useState<'tabela' | 'grafico'>('tabela');
   const [timelineGroup, setTimelineGroup] = useState<'dia' | 'semana' | 'mes'>('dia');
   const [filterUnit, setFilterUnit] = useState('all');
   const [filterProf, setFilterProf] = useState('all');
@@ -65,14 +69,17 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
   // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
     num: number; paciente_nome: string; cns: string; telefone: string;
-    data: string; profissional_nome: string; especialidade: string; cid: string;
-    tipo: string;
+    profissional_nome: string; profissional_id: string; especialidade: string; cid: string;
+    tipo: string; cpf: string; data_nascimento: string; endereco: string;
+    procedimento_sigtap: string; nome_procedimento: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -92,111 +99,131 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentos]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-        let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-        let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-        if (user?.role === 'coordenador' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'recepcao' && user.unidadeId) {
-          qAt = qAt.eq('unidade_id', user.unidadeId);
-          qFila = qFila.eq('unidade_id', user.unidadeId);
-        }
-        if (user?.role === 'profissional' && user.id) {
-          qAt = qAt.eq('profissional_id', user.id);
-          qFila = qFila.eq('profissional_id', user.id);
-        }
-        if (user?.role === 'tecnico' && user.id) {
-          qTriage = qTriage.eq('tecnico_id', user.id);
-        }
+  const loadReportData = useCallback(async () => {
+    try {
+      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
+      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
+      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
+      if (user?.role === 'coordenador' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'recepcao' && user.unidadeId) {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'profissional' && user.id) {
+        qAt = qAt.eq('profissional_id', user.id);
+        qFila = qFila.eq('profissional_id', user.id);
+      }
+      if (user?.role === 'tecnico' && user.id) {
+        qTriage = qTriage.eq('tecnico_id', user.id);
+      }
 
-        let qProc = (supabase as any).from('prontuario_procedimentos')
-          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+      let qProc = (supabase as any).from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
 
-        let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-        const loadAllTreatmentSessions = async () => {
-          const pageSize = 1000;
-          let from = 0;
-          let allSessions: any[] = [];
+      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
+      const loadAllTreatmentSessions = async () => {
+        const pageSize = 1000;
+        let from = 0;
+        let allSessions: any[] = [];
 
-          while (true) {
-            let query = supabase
-              .from('treatment_sessions')
-              .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-              .range(from, from + pageSize - 1);
+        while (true) {
+          let query = supabase
+            .from('treatment_sessions')
+            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+            .range(from, from + pageSize - 1);
 
-            if (user?.role === 'profissional') {
-              query = query.eq('professional_id', user.id);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-            if (!data || data.length === 0) break;
-
-            allSessions = allSessions.concat(data);
-
-            if (data.length < pageSize) break;
-            from += pageSize;
+          if (user?.role === 'profissional') {
+            query = query.eq('professional_id', user.id);
           }
 
-          return allSessions;
-        };
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
 
-        if (user?.role === 'profissional') {
-          qCycles = qCycles.eq('professional_id', user.id);
-        }
-        if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
-          qCycles = qCycles.eq('unit_id', user.unidadeId);
+          allSessions = allSessions.concat(data);
+
+          if (data.length < pageSize) break;
+          from += pageSize;
         }
 
-        const [
-          { data: atData },
-          { data: filaData },
-          { data: triageData },
-          { data: procData },
-          { data: cyclesData },
-          sessionsData,
-          { data: nursingData },
-          { data: multiData },
-          { data: ptsDataResult },
-        ] = await Promise.all([
-          qAt,
-          qFila,
-          qTriage,
-          qProc,
-          qCycles,
-          loadAllTreatmentSessions(),
-          supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
-          supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
-          supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
-        ]);
+        return allSessions;
+      };
 
-        if (atData) setAtendimentosDB(atData);
-        if (filaData) setFilaDB(filaData);
-        if (triageData) setTriagensDB(triageData as TriagemDB[]);
-        if (procData) {
-          setProcedimentosDB(procData.map((r: any) => ({
-            prontuario_id: r.prontuario_id,
-            procedimento_id: r.procedimento_id,
-            proc_nome: r.procedimentos?.nome || '',
-            prof_nome: r.prontuarios?.profissional_nome || '',
-            unidade_id: r.prontuarios?.unidade_id || '',
-            data: r.prontuarios?.data_atendimento || '',
-          })));
-        }
-        if (cyclesData) setTreatmentCycles(cyclesData);
-        if (sessionsData) setTreatmentSessions(sessionsData);
-        if (nursingData) setNursingEvals(nursingData);
-        if (multiData) setMultiEvals(multiData);
-        if (ptsDataResult) setPtsData(ptsDataResult);
-      } catch (err) { console.error('Error loading report data:', err); }
-    };
-    load();
+      if (user?.role === 'profissional') {
+        qCycles = qCycles.eq('professional_id', user.id);
+      }
+      if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+        qCycles = qCycles.eq('unit_id', user.unidadeId);
+      }
+
+      const [
+        { data: atData },
+        { data: filaData },
+        { data: triageData },
+        { data: procData },
+        { data: cyclesData },
+        sessionsData,
+        { data: nursingData },
+        { data: multiData },
+        { data: ptsDataResult },
+      ] = await Promise.all([
+        qAt,
+        qFila,
+        qTriage,
+        qProc,
+        qCycles,
+        loadAllTreatmentSessions(),
+        supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
+        supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
+        supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+      ]);
+
+      if (atData) setAtendimentosDB(atData);
+      if (filaData) setFilaDB(filaData);
+      if (triageData) setTriagensDB(triageData as TriagemDB[]);
+      if (procData) {
+        setProcedimentosDB(procData.map((r: any) => ({
+          prontuario_id: r.prontuario_id,
+          procedimento_id: r.procedimento_id,
+          proc_nome: r.procedimentos?.nome || '',
+          prof_nome: r.prontuarios?.profissional_nome || '',
+          unidade_id: r.prontuarios?.unidade_id || '',
+          data: r.prontuarios?.data_atendimento || '',
+        })));
+      }
+      if (cyclesData) setTreatmentCycles(cyclesData);
+      if (sessionsData) setTreatmentSessions(sessionsData);
+      if (nursingData) setNursingEvals(nursingData);
+      if (multiData) setMultiEvals(multiData);
+      if (ptsDataResult) setPtsData(ptsDataResult);
+      setLastUpdated(new Date());
+    } catch (err) { console.error('Error loading report data:', err); }
   }, [user]);
+
+  useEffect(() => { loadReportData(); }, [loadReportData]);
+
+  // Realtime subscription for auto-refresh
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
+    onchange: loadReportData,
+    enabled: true,
+    debounceMs: 2000,
+  });
+
+  // Update "last updated" label every 10s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
+      if (diffSec < 10) setLastUpdatedLabel('agora');
+      else if (diffSec < 60) setLastUpdatedLabel(`há ${diffSec}s`);
+      else if (diffSec < 3600) setLastUpdatedLabel(`há ${Math.floor(diffSec / 60)}min`);
+      else setLastUpdatedLabel(`há ${Math.floor(diffSec / 3600)}h`);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   // === FILTERS ===
   const filtered = useMemo(() => {
@@ -253,12 +280,12 @@ const Relatorios: React.FC = () => {
 
   // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { id: string; nome: string; role: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
       const func = funcionarios.find(f => f.id === a.profissionalId);
       const key = a.profissionalId || a.profissionalNome;
-      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       const m = map[key];
       m.total++;
       m.pacientesSet.add(a.pacienteId);
@@ -273,7 +300,7 @@ const Relatorios: React.FC = () => {
       const un = unidades.find(u => u.id === at.unidade_id);
       const func = funcionarios.find(f => f.id === at.profissional_id);
       const key = at.profissional_id || at.profissional_nome;
-      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
@@ -283,10 +310,17 @@ const Relatorios: React.FC = () => {
     });
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
+      .filter(d => {
+        if (filterCargoProd === 'all') return true;
+        const cat = CATEGORIAS.find(c => c.key === filterCargoProd);
+        if (!cat) return true;
+        return profissionalPertenceCategoria(d.profissao, cat);
+      })
       .map(d => ({
         id: d.id,
         nome: d.nome,
         role: d.role,
+        profissao: d.profissao,
         unidade: d.unidade,
         total: d.total,
         concluidos: d.concluidos,
@@ -301,7 +335,88 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd]);
+  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+
+  // === CATEGORY CARDS (by profissao) ===
+  const normalizarProfissao = (str: string) => {
+    if (!str) return '';
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  };
+  const removeAccents = normalizarProfissao;
+
+  const CATEGORIAS: Array<{ key: string; icon: LucideIcon; label: string; cor: string; bgLight: string; termos: string[] }> = [
+    { key: 'medico', icon: Stethoscope, label: 'Médicos', cor: '#1B3A5C', bgLight: '#EEF2F7',
+      termos: ['medico', 'medicina', 'doutora', 'doutor', 'clinicogeral', 'cirurgiao', 'cirurgia', 'infectologista', 'infectologia'] },
+    { key: 'psicologo', icon: Brain, label: 'Psicólogos', cor: '#6B4C9A', bgLight: '#F3EEF9',
+      termos: ['psicologo', 'psicologa', 'psicologia'] },
+    { key: 'fonoaudiologo', icon: Ear, label: 'Fonoaudiólogos', cor: '#2E8B8B', bgLight: '#EEF7F7',
+      termos: ['fonoaudiologo', 'fonoaudiologa', 'fonoaudiologia', 'fono'] },
+    { key: 'fisioterapeuta', icon: Dumbbell, label: 'Fisioterapeutas', cor: '#2D7A4F', bgLight: '#EEF7F2',
+      termos: ['fisioterapeuta', 'fisioterapia', 'fisio'] },
+    { key: 'terapeuta_ocupacional', icon: Hand, label: 'T. Ocupacional', cor: '#C17B1A', bgLight: '#FDF5E8',
+      termos: ['terapeutaocupacional', 'terapiaocupacional'] },
+    { key: 'nutricionista', icon: Apple, label: 'Nutrição', cor: '#E05A2B', bgLight: '#FDF0EB',
+      termos: ['nutricionista', 'nutricao', 'nutri'] },
+    { key: 'enfermeiro', icon: Heart, label: 'Enfermagem', cor: '#B83232', bgLight: '#FDEAEA',
+      termos: ['enfermeiro', 'enfermeira', 'enfermagem', 'tecnicoenfermagem', 'auxiliarenfermagem'] },
+    { key: 'assistente_social', icon: Users2, label: 'Serviço Social', cor: '#3A6B9A', bgLight: '#EEF3F9',
+      termos: ['assistentesocial', 'servicosocial'] },
+    { key: 'odontologia', icon: Stethoscope, label: 'Odontologia', cor: '#0E7490', bgLight: '#ECFEFF',
+      termos: ['odontologo', 'odontologa', 'odontologia', 'odontopediatra', 'odontopediatria', 'dentista'] },
+  ];
+
+  const profissionalPertenceCategoria = (profissao: string, cat: typeof CATEGORIAS[0]) => {
+    const norm = normalizarProfissao(profissao);
+    return cat.termos.some(termo => norm.includes(termo));
+  };
+
+  const categoriaCards = useMemo(() => {
+    const profMap = new Map(funcionarios.map(f => [f.id, f]));
+    const counts: Record<string, { total: number; concluidos: number }> = {};
+
+    filtered.forEach(a => {
+      const func = profMap.get(a.profissionalId);
+      const profissao = func?.profissao || '';
+      for (const cat of CATEGORIAS) {
+        if (profissionalPertenceCategoria(profissao, cat)) {
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          counts[cat.key].total++;
+          if (a.status === 'concluido') counts[cat.key].concluidos++;
+          break;
+        }
+      }
+    });
+
+    return CATEGORIAS.map(cat => ({
+      ...cat,
+      total: counts[cat.key]?.total || 0,
+      concluidos: counts[cat.key]?.concluidos || 0,
+    }));
+  }, [filtered, funcionarios]);
+
+  // === PROD TOTALS ===
+  const prodTotals = useMemo(() => {
+    return porProfissional.reduce((acc, p) => ({
+      total: acc.total + p.total,
+      concluidos: acc.concluidos + p.concluidos,
+      faltas: acc.faltas + p.faltas,
+      cancelados: acc.cancelados + p.cancelados,
+      remarcados: acc.remarcados + p.remarcados,
+      retornos: acc.retornos + p.retornos,
+    }), { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, retornos: 0 });
+  }, [porProfissional]);
+
+  // === SEGMENTED BAR CHART DATA ===
+  const prodChartData = useMemo(() => {
+    return porProfissional.filter(p => p.total > 0).map(p => ({
+      nome: p.nome.length > 20 ? p.nome.substring(0, 20) + '…' : p.nome,
+      nomeCompleto: p.nome,
+      concluidos: p.concluidos,
+      faltas: p.faltas,
+      cancelados: p.cancelados,
+      remarcados: p.remarcados,
+    }));
+  }, [porProfissional]);
 
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
@@ -843,7 +958,7 @@ ${dataRows}
     try {
       let query = supabase
         .from('agendamentos')
-        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id')
+        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
         .eq('status', 'concluido')
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
@@ -866,7 +981,7 @@ ${dataRows}
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
-        .select('id, cns, telefone, cid')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco')
         .in('id', pacienteIds);
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
@@ -883,11 +998,16 @@ ${dataRows}
           paciente_nome: a.paciente_nome || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
-          data: a.data,
           profissional_nome: a.profissional_nome || '',
+          profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
           cid: pac?.cid || '',
           tipo: a.tipo || '',
+          cpf: pac?.cpf || '',
+          data_nascimento: pac?.data_nascimento || '',
+          endereco: pac?.endereco || '',
+          procedimento_sigtap: (a as any).procedimento_sigtap || '',
+          nome_procedimento: (a as any).nome_procedimento || '',
         };
       });
 
@@ -910,22 +1030,24 @@ ${dataRows}
     if (mapaData.length === 0) return;
     const now = new Date().toLocaleString('pt-BR');
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
 
-    const tableRows = mapaData.map((r, i) =>
-      `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${r.cns}</td><td>${r.telefone}</td><td>${formatDateBR(r.data)}</td><td>${r.profissional_nome}</td><td>${r.especialidade}</td><td>${r.cid}</td></tr>`
-    ).join('');
+    const tableRows = mapaData.map((r, i) => {
+      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+    }).join('');
 
     const body = `
       <h2>Mapa de Atendimentos Concluídos</h2>
       <table>
         <thead><tr>
-          <th style="width:35px;text-align:center">Nº</th>
-          <th>Nome do Paciente</th><th>CNS</th><th>Telefone</th>
-          <th style="width:85px">Data</th><th>Profissional</th>
-          <th>Especialidade</th><th style="width:60px">CID</th>
+          <th style="width:30px;text-align:center">Nº</th>
+          <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
+          <th>CNS</th><th>Telefone</th><th>Profissional</th>
+          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="8" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
@@ -978,10 +1100,13 @@ ${dataRows}
 
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
-    const headers = ['Nº', 'Nome do Paciente', 'CNS', 'Telefone', 'Data', 'Profissional', 'Especialidade', 'CID'];
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
     const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, r.cns, r.telefone,
-      formatDateBR(r.data), r.profissional_nome, r.especialidade, r.cid,
+      r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
+      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
+      r.cid,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1002,253 +1127,253 @@ ${dataRows}
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" /> Relatórios
+          <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
+            <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
-          <p className="text-muted-foreground text-sm">{filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados</p>
+          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
+          </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
+            <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
+          </span>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-foreground text-sm">Filtros</span></div>
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">Limpar filtros</Button>
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DDE3ED', background: '#FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div>
+            <Label className="text-xs">Unidade</Label>
+            <Select value={filterUnit} onValueChange={setFilterUnit}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div>
-              <Label className="text-xs">Unidade</Label>
-              <Select value={filterUnit} onValueChange={setFilterUnit}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todas</SelectItem>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Profissional</Label>
-              <Select value={filterProf} onValueChange={setFilterProf}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Tipo</Label>
-              <Select value={filterTipo} onValueChange={setFilterTipo}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Setor</Label>
-              <Select value={filterSetor} onValueChange={setFilterSetor}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
-            <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div>
+            <Label className="text-xs">Profissional</Label>
+            <Select value={filterProf} onValueChange={setFilterProf}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <Label className="text-xs">Status</Label>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Tipo</Label>
+            <Select value={filterTipo} onValueChange={setFilterTipo}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{tiposUnicos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Setor</Label>
+            <Select value={filterSetor} onValueChange={setFilterSetor}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Todos</SelectItem>{setoresUnicos.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
+          <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+        </div>
+      </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
-          { label: 'Total', value: stats.total, icon: CalendarDays, color: 'text-foreground' },
-          { label: 'Concluídos', value: stats.concluidos, icon: UserCheck, color: 'text-success' },
-          { label: 'Pendentes', value: stats.pendentes, icon: Clock, color: 'text-warning' },
-          { label: 'Faltas', value: stats.faltas, icon: AlertTriangle, color: 'text-destructive' },
-          { label: 'Cancelados', value: stats.cancelados, icon: null, color: 'text-muted-foreground' },
-          { label: 'Remarcados', value: stats.remarcados, icon: null, color: 'text-warning' },
-          { label: 'Retornos', value: stats.retornos, icon: null, color: 'text-info' },
-          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, icon: Clock, color: 'text-primary' },
-          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, icon: TrendingUp, color: 'text-success' },
-          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, icon: AlertTriangle, color: 'text-destructive' },
+          { label: 'Total', value: stats.total, color: '#1B3A5C' },
+          { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
+          { label: 'Pendentes', value: stats.pendentes, color: '#C17B1A' },
+          { label: 'Faltas', value: stats.faltas, color: '#B83232' },
+          { label: 'Cancelados', value: stats.cancelados, color: '#6B7280' },
+          { label: 'Remarcados', value: stats.remarcados, color: '#C17B1A' },
+          { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
+          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
+          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
+          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, color: '#B83232' },
         ].map(s => (
-          <Card key={s.label} className="shadow-card border-0">
-            <CardContent className="p-2.5 text-center">
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
-            </CardContent>
-          </Card>
+          <div
+            key={s.label}
+            className="rounded-xl border border-border/60 bg-card text-center px-2 py-3 shadow-sm"
+          >
+            <p className="text-lg font-bold font-display leading-none" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[9px] uppercase tracking-wider mt-1 text-muted-foreground truncate">{s.label}</p>
+          </div>
         ))}
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-          <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
-          <TabsTrigger value="produtividade" className="text-xs">Produtividade</TabsTrigger>
-          <TabsTrigger value="procedimentos" className="text-xs">Procedimentos</TabsTrigger>
-          <TabsTrigger value="faltas" className="text-xs">Faltas</TabsTrigger>
-          <TabsTrigger value="pacientes" className="text-xs">Pacientes</TabsTrigger>
-          <TabsTrigger value="fila" className="text-xs">Fila de Espera</TabsTrigger>
-          <TabsTrigger value="triagem" className="text-xs">Triagem</TabsTrigger>
-          <TabsTrigger value="enfermagem" className="text-xs">Enfermagem</TabsTrigger>
-          <TabsTrigger value="multiprofissional" className="text-xs">Multiprofissional</TabsTrigger>
-          <TabsTrigger value="pts_report" className="text-xs">PTS</TabsTrigger>
-          <TabsTrigger value="tratamentos" className="text-xs">Tratamentos</TabsTrigger>
-          <TabsTrigger value="detalhado" className="text-xs">Detalhado</TabsTrigger>
-          <TabsTrigger value="mapa" className="text-xs"><MapPin className="w-3 h-3 mr-1" />Mapa Atendimento</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
+          {[
+            { value: 'geral', label: 'Geral' },
+            { value: 'produtividade', label: 'Produtividade' },
+            { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'faltas', label: 'Faltas' },
+            { value: 'pacientes', label: 'Pacientes' },
+            { value: 'fila', label: 'Fila de Espera' },
+            { value: 'triagem', label: 'Triagem' },
+            { value: 'enfermagem', label: 'Enfermagem' },
+            { value: 'multiprofissional', label: 'Multiprofissional' },
+            { value: 'pts_report', label: 'PTS' },
+            { value: 'tratamentos', label: 'Tratamentos' },
+            { value: 'detalhado', label: 'Detalhado' },
+            { value: 'mapa', label: '📍 Mapa Atendimento' },
+          ].map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+              style={{
+                color: activeTab === tab.value ? '#1B3A5C' : '#6B7280',
+                borderBottomColor: activeTab === tab.value ? '#2E8B8B' : 'transparent',
+                fontWeight: activeTab === tab.value ? 600 : 500,
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </TabsList>
 
         {/* === GERAL === */}
         <TabsContent value="geral" className="space-y-5 mt-4">
-          {/* Gráfico 1 — Timeline com agrupamento */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground">Atendimentos por Período</h3>
-                <div className="flex gap-1">
-                  {(['dia', 'semana', 'mes'] as const).map(g => (
-                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
-                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
-                    </Button>
-                  ))}
-                </div>
+          <ChartCard
+            title="Atendimentos por Período"
+            actions={
+              <div className="flex gap-1">
+                {(['dia', 'semana', 'mes'] as const).map(g => (
+                  <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                    {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                  </Button>
+                ))}
               </div>
-              {timelineGrouped.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={timelineGrouped}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+            }
+          >
+            {timelineGrouped.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={timelineGrouped}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+            )}
+          </ChartCard>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Horários de Pico">
+              {peakHoursData.some(d => d.total > 0) ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={peakHoursData}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Novos vs Retorno">
+              {novosVsRetorno.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      <Cell fill="#3b82f6" />
+                      <Cell fill="#14b8a6" />
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Agendamentos por Profissional">
+              <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
+                <BarChart data={porProfissional} layout="vertical">
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                  <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                  <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
+                  <Legend />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Distribuição por Status">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            {porUnidade.length > 1 && (
+              <ChartCard title="Por Unidade">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={porUnidade}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
                     <Legend />
-                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="hsl(152,60%,42%)" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="hsl(0,72%,51%)" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="hsl(200,18%,46%)" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Gráficos 2 e 3 — Pico + Novos vs Retorno */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Horários de Pico</h3>
-                {peakHoursData.some(d => d.total > 0) ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={peakHoursData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="total" name="Agendamentos" fill="hsl(199,89%,38%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Novos vs Retorno</h3>
-                {novosVsRetorno.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        <Cell fill="hsl(199,89%,38%)" />
-                        <Cell fill="hsl(152,60%,42%)" />
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Existing charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Agendamentos por Profissional</h3>
-                <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
-                  <BarChart data={porProfissional} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
-                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
-                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
-                    <Legend />
+                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
                   </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Distribuição por Status</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {porUnidade.length > 1 && (
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5">
-                  <h3 className="font-semibold font-display text-foreground mb-4">Por Unidade</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={porUnidade}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
-                      <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
-                      <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              </ChartCard>
             )}
 
-            <Card className="shadow-card border-0">
+            <Card className="group relative rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
               <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Origem dos Agendamentos</h3>
+                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4">Origem dos Agendamentos</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-accent rounded-xl">
                     <p className="text-2xl font-bold text-foreground">{stats.online}</p>
@@ -1268,11 +1393,60 @@ ${dataRows}
 
         {/* === PRODUTIVIDADE === */}
         <TabsContent value="produtividade" className="space-y-5 mt-4">
-          <Card className="shadow-card border-0">
+          {/* Category cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
+            {categoriaCards.map(c => {
+              const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
+              const isActive = filterCargoProd === c.key;
+              const catDef = CATEGORIAS.find(cat => cat.key === c.key);
+              const IconComp = catDef?.icon || Stethoscope;
+              const bgLight = catDef?.bgLight || '#F8FAFC';
+              return (
+                <div
+                  key={c.key}
+                  className="cursor-pointer rounded-xl border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                  style={{
+                    borderColor: isActive ? c.cor : 'hsl(var(--border))',
+                    borderLeftWidth: 4,
+                    borderLeftColor: c.cor,
+                    padding: '16px 18px',
+                    background: isActive ? bgLight : 'hsl(var(--card))',
+                    boxShadow: isActive ? `0 4px 16px ${c.cor}30` : '0 1px 4px rgba(0,0,0,0.05)',
+                  }}
+                  onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
+                >
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: `${c.cor}15` }}>
+                      <IconComp className="w-[18px] h-[18px]" style={{ color: c.cor }} />
+                    </div>
+                    <span className="text-xs uppercase tracking-wider font-semibold font-display text-muted-foreground leading-tight">{c.label}</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <div>
+                      <p className="text-3xl font-bold font-display leading-none" style={{ color: 'hsl(var(--foreground))' }}>{c.total}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Concluídos</p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5">
+                    <div className="w-full overflow-hidden rounded-full" style={{ height: 4, background: 'hsl(var(--muted))' }}>
+                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 9999, transition: 'width 0.3s' }} />
+                    </div>
+                    <p className="text-right mt-0.5 text-[11px] text-muted-foreground">{taxa}%</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <Card className="group rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
             <CardContent className="p-5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
                     <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
                     <SelectContent>
@@ -1282,112 +1456,230 @@ ${dataRows}
                       <SelectItem value="master">Master</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant={prodViewMode === 'tabela' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}
+                  >
+                    {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    const now = new Date().toLocaleString('pt-BR');
+                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+                    const prodRows = porProfissional.map(p => {
+                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
+                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
+                    }).join('');
+                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    const logoUrl = window.location.origin + '/logo-sms.jpeg';
+                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Georgia,serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #333;}
+.header img{width:48px;height:48px;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:9px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
+</body></html>`);
+                    printWindow.document.close();
+                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
                 </div>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Profissional</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Cancelados</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Remarcados</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Tempo Médio</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Retorno</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {porProfissional.map(p => {
-                      const roleBadge = p.role === 'master'
-                        ? { label: 'Master', class: 'bg-destructive/10 text-destructive' }
-                        : p.role === 'coordenador'
-                        ? { label: 'Coordenador', class: 'bg-info/10 text-info' }
-                        : { label: 'Profissional', class: 'bg-success/10 text-success' };
+
+              {prodViewMode === 'tabela' ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: '#F4F6FA' }}>
+                        <th className="text-left py-3 px-4 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Profissional</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Total</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Concluídos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Faltas</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Cancelados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Remarcados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Retornos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Tempo Médio</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Conclusão</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Retorno</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porProfissional.map((p, idx) => {
+                        const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
+                        const catBadge = catMatch
+                          ? { label: catMatch.label, cor: catMatch.cor }
+                          : { label: 'Outros', cor: '#888' };
+                        const taxaConcStyle = p.taxaConclusao >= 70
+                          ? { background: '#ECFDF5', color: '#2D7A4F' }
+                          : p.taxaConclusao >= 40
+                          ? { background: '#FFFBEB', color: '#C17B1A' }
+                          : { background: '#FEF2F2', color: '#B83232' };
+                        const taxaRetStyle = p.taxaRetorno > 30
+                          ? { background: '#EEF2F7', color: '#1B3A5C' }
+                          : {};
+                        return (
+                          <tr
+                            key={p.id || p.nome}
+                            className="border-b last:border-0 transition-colors"
+                            style={{ background: idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#EEF2F7')}
+                            onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF')}
+                          >
+                            <td className="py-3 px-4 font-medium" style={{ color: '#1B3A5C' }}>
+                              <div className="flex items-center gap-2">
+                                {p.nome}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-center font-semibold" style={{ color: '#1B3A5C' }}>{p.total}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2D7A4F' }}>{p.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{p.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{p.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{p.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{p.retornos}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2E8B8B' }}>{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcStyle, borderRadius: 20 }}>{p.taxaConclusao}%</span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaRetStyle, borderRadius: 20, color: taxaRetStyle.color || '#6B7280' }}>{p.taxaRetorno}%</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8" style={{ color: '#6B7280' }}>Nenhum dado encontrado para o período selecionado</td></tr>}
+                    </tbody>
+                    {porProfissional.length > 0 && (() => {
+                      const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
+                      const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
+                      const taxaConcGeralStyle = taxaConcGeral >= 70
+                        ? { background: '#ECFDF5', color: '#2D7A4F' }
+                        : taxaConcGeral >= 40
+                        ? { background: '#FFFBEB', color: '#C17B1A' }
+                        : { background: '#FEF2F2', color: '#B83232' };
                       return (
-                        <tr key={p.id || p.nome} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2.5 px-3 text-foreground font-medium">
-                            <div className="flex items-center gap-2">
-                              {p.nome}
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${roleBadge.class}`}>{roleBadge.label}</span>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-2 text-center font-semibold">{p.total}</td>
-                          <td className="py-2.5 px-2 text-center text-success font-medium">{p.concluidos}</td>
-                          <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.cancelados}</td>
-                          <td className="py-2.5 px-2 text-center text-warning">{p.remarcados}</td>
-                          <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                          <td className="py-2.5 px-2 text-center text-primary font-medium">{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                          <td className="py-2.5 px-2 text-center">
-                            <Badge variant={p.taxaConclusao >= 70 ? 'default' : 'destructive'} className="text-xs">{p.taxaConclusao}%</Badge>
-                          </td>
-                          <td className="py-2.5 px-2 text-center text-muted-foreground">{p.taxaRetorno}%</td>
-                        </tr>
+                        <tfoot>
+                          <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
+                            <td className="py-3 px-4" style={{ color: '#1B3A5C' }}>TOTAL GERAL</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.total}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#2D7A4F' }}>{prodTotals.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{prodTotals.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{prodTotals.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{prodTotals.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.retornos}</td>
+                            <td className="py-3 px-2 text-center">-</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcGeralStyle, borderRadius: 20 }}>{taxaConcGeral}%</span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: '#6B7280', borderRadius: 20 }}>{taxaRetGeral}%</span>
+                            </td>
+                          </tr>
+                        </tfoot>
                       );
-                    })}
-                    {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum dado encontrado para o período selecionado</td></tr>}
-                  </tbody>
-                </table>
-              </div>
+                    })()}
+                  </table>
+                </div>
+              ) : (
+                <div>
+                  {prodChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={Math.max(300, prodChartData.length * 45)}>
+                      <BarChart data={prodChartData} layout="vertical" margin={{ left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis dataKey="nome" type="category" width={140} tick={{ fontSize: 10 }} />
+                        <Tooltip content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload;
+                          return (
+                            <div className="bg-background border border-border p-2 rounded shadow text-xs">
+                              <p className="font-semibold mb-1">{d?.nomeCompleto}</p>
+                              {payload.map((p: any) => (
+                                <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
+                              ))}
+                            </div>
+                          );
+                        }} />
+                        <Legend />
+                        <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
+                        <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
+                        <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
+                        <Bar dataKey="remarcados" name="Remarcados" stackId="a" fill="hsl(45,93%,47%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Gráficos 4 e 5 — Ranking + Evolução Mensal */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Ranking de Atendimentos</h3>
-                {rankingProdutividade.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={Math.max(200, rankingProdutividade.length * 40)}>
-                    <BarChart data={rankingProdutividade} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis type="number" tick={{ fontSize: 10 }} />
-                      <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Bar dataKey="total" name="Atendimentos">
-                        {rankingProdutividade.map((entry) => (
-                          <Cell key={`prod-${entry.nome}`} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                      <Legend payload={[
-                        { value: 'Profissional', type: 'square', color: 'hsl(152,60%,42%)' },
-                        { value: 'Coordenador', type: 'square', color: 'hsl(199,89%,38%)' },
-                        { value: 'Master', type: 'square', color: 'hsl(0,72%,51%)' },
-                      ]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
+          {/* Gráfico — Evolução Mensal */}
+          <ChartCard title="Evolução Mensal">
+            {evolucaoMensal.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={evolucaoMensal}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="total" name="Atendimentos" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+            )}
+          </ChartCard>
 
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Evolução Mensal</h3>
-                {evolucaoMensal.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={evolucaoMensal}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="total" name="Atendimentos" stroke="hsl(199,89%,38%)" fill="hsl(199,89%,38%)" fillOpacity={0.2} strokeWidth={2} dot={{ r: 4, fill: 'hsl(199,89%,38%)' }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-                )}
-              </CardContent>
-            </Card>
+          {/* Ranking + Tendência */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Ranking de Produtividade (Top 5)">
+              {rankingProdutividade.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={rankingProdutividade.slice(0, 5)} layout="vertical" margin={{ left: 10 }}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis dataKey="nome" type="category" width={130} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Concluídos" fill="#14b8a6" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Tendência de Concluídos (Últimos 6 meses)">
+              {evolucaoMensal.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={evolucaoMensal.slice(-6)}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="total" name="Concluídos" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
           </div>
         </TabsContent>
+
 
         {/* === FALTAS === */}
         <TabsContent value="faltas" className="space-y-5 mt-4">
@@ -2014,7 +2306,9 @@ ${dataRows}
                     <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      {[...profissionais, ...tecnicos]
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2027,6 +2321,37 @@ ${dataRows}
                 <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
                   <Download className="w-4 h-4 mr-1" />CSV
                 </Button>
+                <Button variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" onClick={() => {
+                  const now = new Date().toLocaleString('pt-BR');
+                  const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                  const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                  const tableRows = mapaData.map((r, i) => {
+                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${r.cns || '-'}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                  }).join('');
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const logoUrl = window.location.origin + '/logo-sms.jpeg';
+                  printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Georgia,serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #333;}
+.header img{width:48px;height:48px;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo"/><div><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><div style="margin-left:auto;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+</body></html>`);
+                  printWindow.document.close();
+                  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                }}>
+                  <Printer className="w-4 h-4 mr-1" />Imprimir
+                </Button>
               </div>
 
               {mapaGenerated && mapaData.length === 0 && (
@@ -2034,38 +2359,61 @@ ${dataRows}
               )}
 
               {mapaGenerated && mapaData.length > 0 && (
-                <div className="overflow-x-auto">
-                  <p className="text-xs text-muted-foreground mb-2">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                <div className="overflow-x-auto rounded-lg border border-border/60">
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-muted/60">
-                        <th className="border border-border px-2 py-1.5 text-center w-10">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-center w-8">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-center w-10">Foto</th>
                         <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
                         <th className="border border-border px-2 py-1.5 text-left">CNS</th>
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
-                        <th className="border border-border px-2 py-1.5 text-left w-24">Data</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {mapaData.map((r, i) => (
-                        <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                          <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
-                          <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
-                          <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
-                          <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
-                          <td className="border border-border px-2 py-1">{formatDateBR(r.data)}</td>
-                          <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
-                          <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
-                          <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
-                        </tr>
-                      ))}
+                      {mapaData.map((r, i) => {
+                        const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                        const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
+                        const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                        return (
+                          <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                            <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
+                            <td className="border border-border px-2 py-1 text-center">
+                              <div className="relative group inline-block">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white mx-auto" style={{ backgroundColor: hashColor }} title={r.profissional_nome}>
+                                  {initials}
+                                </div>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-foreground text-background text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                  {r.profissional_nome}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
+                            <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
+                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
+                            <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{procSigtap}</td>
+                            <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={8} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
                     </tfoot>
                   </table>

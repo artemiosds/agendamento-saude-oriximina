@@ -76,11 +76,13 @@ export type Database = {
           id: string
           lembrete_24h_enviado_em: string | null
           lembrete_proximo_enviado_em: string | null
+          nome_procedimento: string | null
           observacoes: string
           origem: string
           paciente_id: string
           paciente_nome: string
           prioridade_perfil: string
+          procedimento_sigtap: string | null
           profissional_id: string
           profissional_nome: string
           sala_id: string
@@ -88,6 +90,7 @@ export type Database = {
           status: string
           sync_status: string | null
           tipo: string
+          turno: string | null
           unidade_id: string
         }
         Insert: {
@@ -100,11 +103,13 @@ export type Database = {
           id: string
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          nome_procedimento?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
@@ -112,6 +117,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          turno?: string | null
           unidade_id?: string
         }
         Update: {
@@ -124,11 +130,13 @@ export type Database = {
           id?: string
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          nome_procedimento?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
           sala_id?: string
@@ -136,6 +144,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          turno?: string | null
           unidade_id?: string
         }
         Relationships: []
@@ -737,6 +746,48 @@ export type Database = {
         }
         Relationships: []
       }
+      medications: {
+        Row: {
+          apresentacao: string
+          ativo: boolean
+          classe_terapeutica: string
+          created_at: string
+          dosagem_padrao: string
+          id: string
+          is_global: boolean
+          nome: string
+          principio_ativo: string
+          profissional_id: string | null
+          via_padrao: string
+        }
+        Insert: {
+          apresentacao?: string
+          ativo?: boolean
+          classe_terapeutica?: string
+          created_at?: string
+          dosagem_padrao?: string
+          id?: string
+          is_global?: boolean
+          nome: string
+          principio_ativo?: string
+          profissional_id?: string | null
+          via_padrao?: string
+        }
+        Update: {
+          apresentacao?: string
+          ativo?: boolean
+          classe_terapeutica?: string
+          created_at?: string
+          dosagem_padrao?: string
+          id?: string
+          is_global?: boolean
+          nome?: string
+          principio_ativo?: string
+          profissional_id?: string | null
+          via_padrao?: string
+        }
+        Relationships: []
+      }
       multiprofessional_evaluations: {
         Row: {
           agendamento_id: string | null
@@ -1299,6 +1350,42 @@ export type Database = {
           tipo?: string
           uf?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      prontuario_config: {
+        Row: {
+          config: Json
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          profissional_id: string
+          template_nome: string | null
+          tipo_prontuario: string
+          updated_at: string | null
+          versao: number
+        }
+        Insert: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          profissional_id: string
+          template_nome?: string | null
+          tipo_prontuario?: string
+          updated_at?: string | null
+          versao?: number
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          profissional_id?: string
+          template_nome?: string | null
+          tipo_prontuario?: string
+          updated_at?: string | null
+          versao?: number
         }
         Relationships: []
       }
@@ -1935,7 +2022,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      clinica_config_safe: {
+        Row: {
+          created_at: string | null
+          evolution_base_url: string | null
+          evolution_instance_name: string | null
+          id: string | null
+          logo_url: string | null
+          nome_clinica: string | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          evolution_base_url?: string | null
+          evolution_instance_name?: string | null
+          id?: string | null
+          logo_url?: string | null
+          nome_clinica?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          evolution_base_url?: string | null
+          evolution_instance_name?: string | null
+          id?: string | null
+          logo_url?: string | null
+          nome_clinica?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_slot_availability: {

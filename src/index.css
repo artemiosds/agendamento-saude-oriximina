@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
@@ -54,11 +54,91 @@
 
     --gradient-primary: linear-gradient(135deg, hsl(199, 89%, 38%), hsl(168, 60%, 42%));
     --gradient-hero: linear-gradient(135deg, hsl(215, 25%, 15%), hsl(199, 89%, 30%));
-    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
-    --shadow-elevated: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+    --shadow-elevated: 0 20px 35px -8px rgba(0, 0, 0, 0.12), 0 5px 10px -4px rgba(0, 0, 0, 0.04);
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
 
-    --font-display: 'Plus Jakarta Sans', sans-serif;
+    --font-display: 'DM Sans', 'Plus Jakarta Sans', sans-serif;
     --font-body: 'Inter', sans-serif;
+    --font-clinical: 'JetBrains Mono', monospace;
+
+    --clinical-primary: 215 40% 24%;
+    --clinical-accent: 174 51% 36%;
+    --clinical-success: 147 44% 33%;
+    --clinical-warning: 36 75% 43%;
+    --clinical-danger: 0 56% 46%;
+    --clinical-surface: 220 20% 97%;
+    --clinical-card: 0 0% 100%;
+    --clinical-border: 216 20% 90%;
+
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.35);
+    --glass-blur: 12px;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 20% 90%;
+
+    --card: 220 40% 13%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 220 40% 13%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 168 60% 42%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 20%;
+    --accent-foreground: 217 91% 70%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+
+    --success: 160 60% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 10%;
+    --info: 199 89% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 47% 14%;
+    --sidebar-accent-foreground: 210 20% 85%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(217, 91%, 60%), hsl(168, 60%, 42%));
+    --gradient-hero: linear-gradient(135deg, hsl(222, 47%, 11%), hsl(217, 91%, 40%));
+    --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3), 0 1px 2px -1px rgba(0, 0, 0, 0.2);
+    --shadow-elevated: 0 20px 35px -8px rgba(0, 0, 0, 0.5), 0 5px 10px -4px rgba(0, 0, 0, 0.25);
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+    --clinical-primary: 215 40% 70%;
+    --clinical-accent: 174 51% 50%;
+    --clinical-success: 147 44% 50%;
+    --clinical-warning: 36 75% 55%;
+    --clinical-danger: 0 56% 55%;
+    --clinical-surface: 220 30% 14%;
+    --clinical-card: 220 40% 13%;
+    --clinical-border: 217 33% 20%;
+
+    --glass-bg: rgba(30, 41, 59, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 12px;
   }
 }
 
@@ -72,16 +152,24 @@
     font-family: var(--font-body);
     -webkit-text-size-adjust: 100%;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
+    letter-spacing: -0.01em;
   }
 
   /* Ensure no horizontal overflow on mobile */
   #root {
     overflow-x: hidden;
     width: 100%;
+  }
+
+  /* Smooth scroll globally */
+  html {
+    scroll-behavior: smooth;
   }
 }
 
@@ -98,9 +186,162 @@
   .shadow-elevated {
     box-shadow: var(--shadow-elevated);
   }
+  .shadow-glass {
+    box-shadow: var(--shadow-glass);
+  }
 }
 
-/* Global print styles — hide UI chrome when printing from the app */
+/* ─── GLASSMORPHISM UTILITIES ────────────────────────────────── */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.glass-subtle {
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ─── PREMIUM MICRO-INTERACTIONS ──────────────────────────────── */
+
+/* Card hover lift */
+.card-hover {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Button press effect — enhanced */
+button:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+/* Input focus animated underline */
+.input-focus-line {
+  position: relative;
+}
+.input-focus-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: hsl(var(--primary));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: 1px;
+}
+.input-focus-line:focus-within::after {
+  transform: scaleX(1);
+}
+
+/* Input focus glow — enhanced */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="combobox"]:focus-visible {
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.12);
+  transition: box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease;
+  border-color: hsl(var(--ring));
+}
+
+/* ─── LIST ITEM HOVER ──────────────────────────────────────── */
+
+.list-item-hover {
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.2s ease;
+}
+.list-item-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── SHIMMER SKELETON — ENHANCED ──────────────────────────── */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.06) 40%,
+    hsl(var(--muted)) 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+/* ─── SIDEBAR ACTIVE INDICATOR ─────────────────────────────── */
+
+.sidebar-active-glow {
+  position: relative;
+}
+.sidebar-active-glow::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: hsl(var(--sidebar-primary));
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 8px hsl(var(--sidebar-primary) / 0.5);
+}
+
+/* ─── CUSTOM SCROLLBAR ─────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.15);
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.3);
+}
+
+/* ─── TOUCH DEVICE OPTIMIZATIONS ───────────────────────────── */
+
+@media (hover: none) and (pointer: coarse) {
+  .card-hover:hover {
+    transform: none;
+    box-shadow: var(--shadow-card);
+  }
+  .list-item-hover:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  /* Ensure minimum touch targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ─── PRINT STYLES ─────────────────────────────────────────── */
+
 @media print {
   nav, aside, header, footer,
   button, .no-print,
@@ -133,7 +374,6 @@
   thead {
     display: table-header-group;
   }
-  /* Signature and carimbo should not break across pages */
   .doc-sign-footer,
   .e-signature-box,
   .carimbo-digital,

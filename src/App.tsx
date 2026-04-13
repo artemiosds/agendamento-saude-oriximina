@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { DataProvider } from "@/contexts/DataContext";
 import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/PermissionsContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import React, { Suspense } from "react";
 
 // Helper: retry dynamic import once, then force full reload to bust stale chunks
@@ -60,6 +61,7 @@ const HistoricoTriagem            = lazyRetry(() => import("./pages/painel/Histo
 const RelatorioAlta               = lazyRetry(() => import("./pages/painel/RelatorioAlta"));
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
+const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -89,13 +91,13 @@ const PageLoader = () => (
 const AccessDenied = () => (
   <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4 text-center px-4">
     <div className="text-5xl">🔒</div>
-    <h2 className="text-xl font-bold text-gray-800">Acesso não autorizado</h2>
-    <p className="text-gray-500 text-sm max-w-xs">
+    <h2 className="text-xl font-bold text-foreground">Acesso não autorizado</h2>
+    <p className="text-muted-foreground text-sm max-w-xs">
       Você não tem permissão para acessar esta página. Fale com o administrador.
     </p>
     <button
       onClick={() => window.history.back()}
-      className="mt-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90"
+      className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
     >
       Voltar
     </button>
@@ -140,12 +142,13 @@ const ModuleRoute: React.FC<{
 // ─── APP ──────────────────────────────────────────────────────────────────────
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <PermissionsProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <PermissionsProvider>
             <DataProvider>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -283,6 +286,11 @@ const App = () => (
                         <Encaminhamentos />
                       </ModuleRoute>
                     } />
+                    <Route path="meu-prontuario" element={
+                      <ModuleRoute modulo="prontuario">
+                        <MeuProntuario />
+                      </ModuleRoute>
+                    } />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
@@ -293,6 +301,7 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+  </ThemeProvider>
   </QueryClientProvider>
 );
 

@@ -227,6 +227,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             </Select>
             {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
           </div>
+          <div>
+            <Label>Endereço</Label>
+            <Input
+              value={form.endereco}
+              onChange={(e) => set("endereco", e.target.value)}
+              placeholder="Rua, nº, bairro"
+            />
+          </div>
         </div>
 
         {/* Menor de idade toggle */}
@@ -563,14 +571,6 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                   value={form.email}
                   onChange={(e) => set("email", e.target.value)}
                   placeholder="email@exemplo.com"
-                />
-              </div>
-              <div>
-                <Label>Endereço</Label>
-                <Input
-                  value={form.endereco}
-                  onChange={(e) => set("endereco", e.target.value)}
-                  placeholder="Rua, nº, bairro"
                 />
               </div>
             </div>
