@@ -701,14 +701,23 @@ const ProntuarioPage: React.FC = () => {
 
       // Session registration for sessao type
       if (form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle) {
-        const soapFilled = form.soap_subjetivo?.trim() && form.soap_objetivo?.trim() && form.soap_avaliacao?.trim() && form.soap_plano?.trim();
-        if (soapFilled) {
+        // SOAP is already validated above, so we can safely register
+        try {
           // Register session as realizada
-          await (supabase as any).from('treatment_sessions').update({
+          const { error: sessErr } = await (supabase as any).from('treatment_sessions').update({
             status: 'realizada',
-            clinical_notes: `S: ${form.soap_subjetivo}\nO: ${form.soap_objetivo}\nA: ${form.soap_avaliacao}\nP: ${form.soap_plano}`,
+            clinical_notes: JSON.stringify({
+              tipo: 'soap',
+              subjetivo: form.soap_subjetivo,
+              objetivo: form.soap_objetivo,
+              avaliacao: form.soap_avaliacao,
+              plano: form.soap_plano,
+              registrado_em: new Date().toISOString(),
+              registrado_por: user?.id,
+            }),
             appointment_id: form.agendamento_id || null,
           }).eq('id', currentSessionForRegistration.id);
+          if (sessErr) throw sessErr;
 
           // Update sessions_done on cycle
           const newDone = sessaoCycle.sessions_done + 1;
@@ -721,7 +730,8 @@ const ProntuarioPage: React.FC = () => {
             updatePayload.status = 'concluido';
             toast.info('🎉 Ciclo de tratamento concluído!');
           }
-          await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+          const { error: cycErr } = await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+          if (cycErr) throw cycErr;
 
           // Finalize the appointment if linked
           if (form.agendamento_id) {
@@ -736,7 +746,10 @@ const ProntuarioPage: React.FC = () => {
             user,
             detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
           });
-          toast.success(`Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+        } catch (sessError: any) {
+          console.error('Error registering session:', sessError);
+          toast.error('❌ Erro ao registrar sessão. Tente novamente.');
         }
       }
 
