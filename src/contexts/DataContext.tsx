@@ -840,6 +840,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     poll: loadFuncionarios,
   });
 
+  // Realtime sync for system_config — reflects Master changes to all users instantly
+  useRealtimeSync({
+    table: "system_config",
+    debounceMs: 500,
+    onEvent: (payload) => {
+      const row = payload.new as any;
+      if (row?.configuracoes) {
+        setConfiguracoes(safeConfigMerge(row.configuracoes as Record<string, unknown>));
+      }
+    },
+    poll: loadConfiguracoes,
+    pollIntervalMs: 60000,
+  });
+
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
       const { error } = await supabase.from("agendamentos" as any).insert({
