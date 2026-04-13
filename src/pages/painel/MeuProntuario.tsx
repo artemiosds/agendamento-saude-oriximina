@@ -791,7 +791,7 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
                   {isRequired && (
                     <Tooltip><TooltipTrigger>
                       <Badge variant="destructive" className="text-[9px] px-1.5 py-0 shrink-0 gap-1"><Lock className="w-3 h-3" /> OBR</Badge>
-                    </TooltipTrigger><TooltipContent>Obrigatório pelo administrador</TooltipContent></Tooltip>
+                    </TooltipTrigger><TooltipContent>Obrigatório pelo Master</TooltipContent></Tooltip>
                   )}
                   <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="icon" className="h-7 w-7" disabled={idx === 0} onClick={() => moveCampo(campo.key, -1)}>
