@@ -934,6 +934,14 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleFinalizarAtendimento = async () => {
+    // If session type, require at least one completed session
+    if (form.tipo_registro === 'sessao' && sessaoCycle) {
+      const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+      if (completedCount === 0) {
+        toast.error("Registre pelo menos uma sessão antes de finalizar o atendimento.");
+        return;
+      }
+    }
     const saved = await handleSave();
     if (!saved || !activeAtendimento) return;
     const now = new Date();
@@ -950,6 +958,30 @@ const ProntuarioPage: React.FC = () => {
     } catch (err) {
       console.error("Error finalizing atendimento:", err);
     }
+
+    // Auto-discharge: if cycle completed, register discharge
+    if (sessaoCycle && form.tipo_registro === 'sessao') {
+      const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+      if (completedCount >= sessaoCycle.total_sessions) {
+        try {
+          await (supabase as any).from('treatment_cycles').update({
+            status: 'finalizado_alta',
+            updated_at: new Date().toISOString(),
+          }).eq('id', sessaoCycle.id);
+          await (supabase as any).from('patient_discharges').insert({
+            cycle_id: sessaoCycle.id,
+            patient_id: form.paciente_id,
+            professional_id: user?.id || '',
+            reason: 'Alta automática — ciclo concluído',
+            final_notes: 'Tratamento finalizado com todas as sessões realizadas.',
+          });
+          toast.success("🎉 Paciente recebeu alta automática — tratamento concluído!");
+        } catch (err) {
+          console.error("Erro ao registrar alta automática:", err);
+        }
+      }
+    }
+
     await logAction({
       acao: "atendimento_finalizado",
       entidade: "atendimento",
@@ -971,6 +1003,126 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     toast.success(`Atendimento finalizado! Duração: ${Math.max(0, duracaoMinutos)} minutos.`);
     navigate("/painel/agenda");
+  };
+
+  // Dedicated handler: register session only (no close)
+  const handleRegistrarSessaoOnly = async () => {
+    if (!currentSessionForRegistration || !sessaoCycle) {
+      toast.error("Nenhuma sessão disponível para registro.");
+      return;
+    }
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
+      return;
+    }
+    const soapPayload = sessionSoapPayload;
+    const soapError = sessionSoapValidationError;
+    if (soapError) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      toast.error(soapError);
+      return;
+    }
+    setSoapErrors(false);
+    setSaving(true);
+    let insertedNewProntuario = false;
+    let prontuarioId: string | null = editId;
+    try {
+      const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
+      const record: any = {
+        paciente_id: form.paciente_id || `manual_${Date.now()}`,
+        paciente_nome: form.paciente_nome,
+        profissional_id: user?.id || "",
+        profissional_nome: user?.nome || "",
+        unidade_id: user?.unidadeId || "",
+        setor: user?.setor || "",
+        agendamento_id: form.agendamento_id,
+        data_atendimento: form.data_atendimento,
+        hora_atendimento: form.hora_atendimento,
+        queixa_principal: form.queixa_principal,
+        anamnese: form.anamnese,
+        sinais_sintomas: form.sinais_sintomas,
+        exame_fisico: form.exame_fisico,
+        hipotese: form.hipotese,
+        conduta: form.conduta,
+        prescricao: listaPrescricao.length > 0 ? JSON.stringify({ medicamentos: listaPrescricao }) : form.prescricao,
+        solicitacao_exames: listaExames.length > 0 ? JSON.stringify({ exames: listaExames }) : form.solicitacao_exames,
+        evolucao: form.evolucao,
+        observacoes: Object.keys(especialidadeFields).length > 0 ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes }) : form.observacoes,
+        indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
+        motivo_alteracao: editId ? form.motivo_alteracao : "",
+        procedimentos_texto: procTexto || form.procedimentos_texto || "",
+        outro_procedimento: form.outro_procedimento || "",
+        tipo_registro: 'sessao',
+        soap_subjetivo: soapPayload.subjetivo,
+        soap_objetivo: soapPayload.objetivo,
+        soap_avaliacao: soapPayload.avaliacao,
+        soap_plano: soapPayload.plano,
+      };
+      if (form.episodio_id && form.episodio_id !== "no_episode") record.episodio_id = form.episodio_id;
+
+      if (editId) {
+        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await (supabase as any).from("prontuarios").insert(record).select("id").single();
+        if (error) throw error;
+        prontuarioId = inserted?.id;
+        insertedNewProntuario = true;
+      }
+
+      if (prontuarioId) {
+        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+        if (selectedProcIds.length > 0) {
+          const links = selectedProcIds.map(pid => ({ prontuario_id: prontuarioId, procedimento_id: pid }));
+          await (supabase as any).from("prontuario_procedimentos").insert(links);
+        }
+      }
+
+      const procedureDone = procTexto || form.procedimentos_texto?.trim() || form.outro_procedimento?.trim() || form.queixa_principal?.trim() || 'Sessão registrada';
+      const result = await treatmentService.registerCompletedSession({
+        cycle: sessaoCycle,
+        session: currentSessionForRegistration,
+        soap: soapPayload,
+        procedureDone,
+        userId: user?.id,
+        appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+      });
+
+      if (result.cycleStatus === 'concluido') {
+        toast.info('🎉 Ciclo de tratamento concluído!');
+      }
+
+      await logAction({
+        acao: 'sessao_registrada',
+        entidade: 'treatment_session',
+        entidadeId: currentSessionForRegistration.id,
+        modulo: 'prontuario',
+        user,
+        detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+      });
+      toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+
+      if (prontuarioId) setEditId(prontuarioId);
+
+      await Promise.all([
+        loadProntuarios(),
+        refreshAgendamentos(),
+        loadSessaoData(form.paciente_id, user?.id || ''),
+      ]);
+      setSessionRegistrationRequested(false);
+    } catch (err: any) {
+      if (insertedNewProntuario && prontuarioId) {
+        try {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
+        } catch {}
+      }
+      console.error("Erro ao registrar sessão:", err);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async (p: ProntuarioDB) => {
