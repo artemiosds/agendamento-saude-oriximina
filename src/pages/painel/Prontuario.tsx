@@ -274,13 +274,80 @@ const ProntuarioPage: React.FC = () => {
     setSessaoDataLoading(false);
   };
 
-  const handleRegistrarSessaoClick = () => {
+  const registrationReferenceDate =
+    form.data_atendimento || searchParams.get('data') || new Date().toISOString().split('T')[0];
+  const registrationReferenceDateLabel = registrationReferenceDate
+    ? new Date(`${registrationReferenceDate}T12:00:00`).toLocaleDateString('pt-BR')
+    : 'a data do prontuário';
+
+  const availableSessionsForRegistration = useMemo(() => {
+    if (!sessaoCycle || sessaoCycleSessions.length === 0) return [];
+
+    return sessaoCycleSessions.filter(
+      (session) => !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(session.status),
+    );
+  }, [sessaoCycle, sessaoCycleSessions]);
+
+  const currentSessionForRegistration = useMemo(() => {
+    if (!sessaoCycle || availableSessionsForRegistration.length === 0 || !registrationReferenceDate) return null;
+
+    if (form.agendamento_id) {
+      const exactAppointmentMatch = availableSessionsForRegistration.find(
+        (session) =>
+          session.appointment_id === form.agendamento_id &&
+          session.scheduled_date === registrationReferenceDate,
+      );
+
+      if (exactAppointmentMatch) {
+        return exactAppointmentMatch;
+      }
+    }
+
+    return (
+      availableSessionsForRegistration.find(
+        (session) => session.scheduled_date === registrationReferenceDate,
+      ) || null
+    );
+  }, [availableSessionsForRegistration, form.agendamento_id, registrationReferenceDate, sessaoCycle]);
+
+  const isSessionRegistrationFlow = useMemo(() => {
+    if (!sessaoCycle || !currentSessionForRegistration) return false;
+    return sessionRegistrationRequested || form.tipo_registro === 'sessao';
+  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
+
+  const sessionRegistrationError = useMemo(() => {
+    if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
+    if (!sessaoCycle) return 'Nenhum ciclo de tratamento ativo encontrado para este paciente.';
+    if (!registrationReferenceDate) return 'Defina a data do prontuário para registrar a sessão.';
     if (!currentSessionForRegistration) {
-      toast.error('Nenhuma sessão pendente encontrada para registrar neste ciclo.');
+      if (availableSessionsForRegistration.length === 0) {
+        return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
+      }
+
+      return `Só é possível confirmar a sessão agendada para ${registrationReferenceDateLabel}. As demais sessões não podem ser registradas neste prontuário.`;
+    }
+    return null;
+  }, [
+    availableSessionsForRegistration.length,
+    currentSessionForRegistration,
+    form.tipo_registro,
+    registrationReferenceDate,
+    registrationReferenceDateLabel,
+    sessaoCycle,
+    sessionRegistrationRequested,
+  ]);
+
+  const handleRegistrarSessaoClick = () => {
+    if (sessionRegistrationError) {
+      toast.error(sessionRegistrationError);
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    if (!currentSessionForRegistration) {
+      toast.error(`Nenhuma sessão disponível para ${registrationReferenceDateLabel}.`);
+      return;
+    }
+
     const shouldSubmitSession = sessionRegistrationRequested || form.tipo_registro === 'sessao';
 
     setSessionRegistrationRequested(true);
@@ -288,8 +355,8 @@ const ProntuarioPage: React.FC = () => {
     setForm((prev) => ({
       ...prev,
       tipo_registro: 'sessao',
-      data_atendimento: prev.data_atendimento || currentSessionForRegistration.scheduled_date || today,
-      agendamento_id: prev.agendamento_id || currentSessionForRegistration?.appointment_id || '',
+      data_atendimento: registrationReferenceDate,
+      agendamento_id: prev.agendamento_id || currentSessionForRegistration.appointment_id || '',
     }));
 
     if (shouldSubmitSession) {
@@ -315,42 +382,6 @@ const ProntuarioPage: React.FC = () => {
     setTimeout(() => setSessaoHighlightSOAP(false), 4000);
   };
 
-  const currentSessionForRegistration = useMemo(() => {
-    if (!sessaoCycle || sessaoCycleSessions.length === 0) return null;
-
-    const availableSessions = sessaoCycleSessions.filter(
-      (session) => !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(session.status),
-    );
-
-    if (availableSessions.length === 0) return null;
-
-    if (form.agendamento_id) {
-      return (
-        availableSessions.find((session) => session.appointment_id === form.agendamento_id) ||
-        availableSessions.find((session) => session.scheduled_date === form.data_atendimento) ||
-        availableSessions[0]
-      );
-    }
-
-    return (
-      availableSessions.find((session) => session.status === 'agendada') ||
-      availableSessions.find((session) => session.status === 'pendente_agendamento') ||
-      availableSessions[0]
-    );
-  }, [sessaoCycle, sessaoCycleSessions, form.agendamento_id, form.data_atendimento]);
-
-  const isSessionRegistrationFlow = useMemo(() => {
-    if (!sessaoCycle || !currentSessionForRegistration) return false;
-    return sessionRegistrationRequested || form.tipo_registro === 'sessao';
-  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
-
-  const sessionRegistrationError = useMemo(() => {
-    if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
-    if (!sessaoCycle) return 'Nenhum ciclo de tratamento ativo encontrado para este paciente.';
-    if (!currentSessionForRegistration) return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
-    return null;
-  }, [currentSessionForRegistration, form.tipo_registro, sessaoCycle, sessionRegistrationRequested]);
-
   const sessionSoapPayload = useMemo(
     () =>
       normalizeSoapPayload({
@@ -368,8 +399,8 @@ const ProntuarioPage: React.FC = () => {
   );
 
   const canConfirmSessionRegistration = useMemo(
-    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionSoapValidationError),
-    [currentSessionForRegistration, sessaoCycle, sessionSoapValidationError],
+    () => Boolean(currentSessionForRegistration && sessaoCycle && !sessionRegistrationError && !sessionSoapValidationError),
+    [currentSessionForRegistration, sessaoCycle, sessionRegistrationError, sessionSoapValidationError],
   );
 
   // Medications & exam types state
