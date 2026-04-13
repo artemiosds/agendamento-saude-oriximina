@@ -342,7 +342,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     <div class="header-center">
       <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
       <h2>Centro Especializado em Reabilitação II &mdash; CER II</h2>
-      <div class="ficha-tipo">Ficha de Atendimento / Prontuário</div>
+      <div class="ficha-tipo">${somentePessoais ? 'Ficha Cadastral do Paciente' : 'Ficha de Atendimento / Prontuário'}</div>
     </div>
     <div class="header-right">
       <div><b>Data:</b> ${dataAtual}</div>
