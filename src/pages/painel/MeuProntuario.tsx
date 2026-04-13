@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
+import { useProntuarioConfig, getDefaultConfig, mergeAdminAndProfConfig, normalizeProfissao, TIPOS_PRONTUARIO, BlocoConfig, ProntuarioConfigData } from '@/hooks/useProntuarioConfig';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -711,8 +711,8 @@ function EspecialidadeTab({ profissao, adminConfig, localConfig, persist }: {
 }) {
   const adminCampos = useMemo(() => {
     if (!adminConfig || !profissao) return [];
-    const normalizedProf = profissao.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
-    const esp = (adminConfig as any[]).find((e: any) => e.ativa && e.profissoes?.some((p: string) => p === normalizedProf));
+    const specialtyKey = normalizeProfissao(profissao);
+    const esp = (adminConfig as any[]).find((e: any) => e.ativa && (e.key === specialtyKey || e.profissoes?.some((p: string) => p === specialtyKey)));
     return esp?.campos || [];
   }, [adminConfig, profissao]);
 
