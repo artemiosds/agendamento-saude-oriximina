@@ -2204,7 +2204,7 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
 
-              {activeAtendimento ? (
+              {canFinalize ? (
                 <>
                   <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
