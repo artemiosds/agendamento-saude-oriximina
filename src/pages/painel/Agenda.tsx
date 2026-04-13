@@ -1045,6 +1045,7 @@ const Agenda: React.FC = () => {
       agendamentoId: ag.id,
       horaInicio,
       data: ag.data,
+      tipo: ag.tipo || '',
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   };
@@ -1909,6 +1910,7 @@ const Agenda: React.FC = () => {
                                     pacienteNome: ag.pacienteNome,
                                     agendamentoId: ag.id,
                                     data: ag.data,
+                                    tipo: ag.tipo || '',
                                   });
                                   // Restore horaInicio from localStorage so Prontuario can show Finalizar button
                                   try {
@@ -1935,6 +1937,7 @@ const Agenda: React.FC = () => {
                                     pacienteNome: ag.pacienteNome,
                                     agendamentoId: ag.id,
                                     data: ag.data,
+                                    tipo: ag.tipo || '',
                                   });
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
