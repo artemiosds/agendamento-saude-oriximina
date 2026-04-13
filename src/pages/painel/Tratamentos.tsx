@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { procedureService, ProcedimentoDB } from "@/services/procedureService";
 import { normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 import { getSoapOptions, hasDropdownSoap, isMedico, normalizeProfissaoForSoap } from "@/data/soapOptionsByProfession";
-import { Copy } from "lucide-react";
+
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import {
   Pencil,
   Eraser,
   Search,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
