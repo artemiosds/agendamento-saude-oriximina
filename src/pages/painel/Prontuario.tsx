@@ -483,6 +483,7 @@ const ProntuarioPage: React.FC = () => {
     setListaExames([]);
     setListaPrescricao([]);
     setEspecialidadeFields({});
+    setSoapErrors(false);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0], tipo_registro: "avaliacao_inicial" });
     setDialogOpen(true);
   };
