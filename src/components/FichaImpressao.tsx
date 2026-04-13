@@ -75,8 +75,11 @@ const calcIdade = (dataNasc: string): string => {
 
 const v = (valor: string | undefined): string => valor?.trim() || '';
 
+export type FichaPrintMode = 'completa' | 'dados_pessoais';
+
 interface FichaImpressaoProps {
   data: FichaData;
+  mode?: FichaPrintMode;
   onPrintComplete?: () => void;
 }
 
@@ -304,7 +307,8 @@ const PRINT_CSS = `
   }
 `;
 
-export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, onPrintComplete }) => {
+export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'completa', onPrintComplete }) => {
+  const somentePessoais = mode === 'dados_pessoais';
   const buildHTML = useCallback(() => {
     const logo = resolveLogoUrl();
     const now = new Date();
