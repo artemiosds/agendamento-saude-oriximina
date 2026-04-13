@@ -861,7 +861,23 @@ const ProntuarioPage: React.FC = () => {
       ]);
 
       setSessionRegistrationRequested(false);
-      setDialogOpen(false);
+      // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
+      if (!shouldRegisterSession) {
+        setDialogOpen(false);
+      } else {
+        // Session registered: update editId to the saved prontuário so user can continue editing
+        if (prontuarioId) {
+          setEditId(prontuarioId);
+        }
+        // Reset SOAP fields for next session
+        setForm((prev) => ({
+          ...prev,
+          soap_subjetivo: '',
+          soap_objetivo: '',
+          soap_avaliacao: '',
+          soap_plano: '',
+        }));
+      }
       setPreviousForm(null);
       return true;
     } catch (err: any) {
