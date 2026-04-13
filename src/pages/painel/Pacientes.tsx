@@ -646,7 +646,8 @@ const Pacientes: React.FC = () => {
   }, [unidades, user]);
 
   // Abrir ficha de impressão
-  const handleOpenFicha = async (p: (typeof pacientes)[0]) => {
+  const handleOpenFicha = async (p: (typeof pacientes)[0], mode: FichaPrintMode = 'completa') => {
+    setFichaPrintMode(mode);
     setFichaLoading(true);
     setFichaOpen(true);
     try {
@@ -1082,10 +1083,18 @@ const Pacientes: React.FC = () => {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => handleOpenFicha(detalhePaciente)}
+                      onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
                     >
                       <Printer className="w-4 h-4 mr-2" />
-                      Imprimir Ficha
+                      Ficha Completa
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Só Dados
                     </Button>
                   </div>
                 </Secao>
@@ -1116,11 +1125,15 @@ const Pacientes: React.FC = () => {
       {/* Dialog de impressão da ficha */}
       <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b flex flex-row items-center justify-between">
             <DialogTitle className="font-display flex items-center gap-2">
               <Printer className="w-5 h-5" />
-              Ficha de Atendimento Clínico
+              {fichaPrintMode === 'dados_pessoais' ? 'Ficha Cadastral' : 'Ficha de Atendimento Clínico'}
             </DialogTitle>
+            <div className="flex gap-2">
+              <Button size="sm" variant={fichaPrintMode === 'completa' ? 'default' : 'outline'} onClick={() => setFichaPrintMode('completa')}>Completa</Button>
+              <Button size="sm" variant={fichaPrintMode === 'dados_pessoais' ? 'default' : 'outline'} onClick={() => setFichaPrintMode('dados_pessoais')}>Só Dados Pessoais</Button>
+            </div>
           </DialogHeader>
           <div className="px-6 pb-6">
             {fichaLoading ? (
@@ -1129,7 +1142,7 @@ const Pacientes: React.FC = () => {
                 <p className="text-sm text-muted-foreground">Carregando dados da ficha...</p>
               </div>
             ) : fichaData ? (
-              <FichaImpressao data={fichaData} onPrintComplete={handlePrintComplete} />
+              <FichaImpressao data={fichaData} mode={fichaPrintMode} onPrintComplete={handlePrintComplete} />
             ) : (
               <div className="text-center py-16 text-muted-foreground">
                 <p>Erro ao carregar dados da ficha.</p>
