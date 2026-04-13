@@ -125,6 +125,7 @@ const Pacientes: React.FC = () => {
   const [fichaOpen, setFichaOpen] = useState(false);
   const [fichaLoading, setFichaLoading] = useState(false);
   const [fichaData, setFichaData] = useState<FichaDados | null>(null);
+  const [fichaPrintMode, setFichaPrintMode] = useState<FichaPrintMode>('completa');
 
   // Filter state
   const [filterFila, setFilterFila] = useState("all");
