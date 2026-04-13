@@ -168,11 +168,14 @@ export const treatmentService = {
   },
 
   async registerCompletedSession(input: RegisterCompletedSessionInput): Promise<RegisterCompletedSessionResult> {
-    const soap = normalizeSoapPayload(input.soap);
-    const soapValidationError = getSoapValidationError(soap);
-
-    if (soapValidationError) {
-      throw new Error(soapValidationError);
+    const hasSoap = input.soap && (input.soap.subjetivo || input.soap.objetivo || input.soap.avaliacao || input.soap.plano);
+    const soap = hasSoap ? normalizeSoapPayload(input.soap) : normalizeSoapPayload(null);
+    // SOAP validation is now optional — only validate if SOAP was provided
+    if (hasSoap) {
+      const soapValidationError = getSoapValidationError(soap, { required: false });
+      if (soapValidationError) {
+        throw new Error(soapValidationError);
+      }
     }
 
     const procedureDone =

@@ -248,6 +248,7 @@ const ProntuarioPage: React.FC = () => {
   const [soapErrors, setSoapErrors] = useState(false);
   const [soapEnabled, setSoapEnabled] = useState(true);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
 
   const loadSessaoData = async (patientId: string, professionalId: string) => {
@@ -299,6 +300,7 @@ const ProntuarioPage: React.FC = () => {
     );
   }, [sessaoCycle, sessaoCycleSessions]);
 
+  // Session matching the current prontuário date (for inline registration)
   const currentSessionForRegistration = useMemo(() => {
     if (!sessaoCycle || availableSessionsForRegistration.length === 0 || !registrationReferenceDate) return null;
 
@@ -328,22 +330,13 @@ const ProntuarioPage: React.FC = () => {
 
   const sessionRegistrationError = useMemo(() => {
     if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
-    if (!sessaoCycle) return 'Nenhum ciclo de tratamento ativo encontrado para este paciente.';
+    if (!sessaoCycle) return null; // No cycle is OK — user can create one
     if (!registrationReferenceDate) return 'Defina a data do prontuário para registrar a sessão.';
-    if (!currentSessionForRegistration) {
-      if (availableSessionsForRegistration.length === 0) {
-        return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
-      }
-
-      return `Só é possível confirmar a sessão agendada para ${registrationReferenceDateLabel}. As demais sessões não podem ser registradas neste prontuário.`;
-    }
+    // Don't block if no current session — user can still confirm past sessions from the table
     return null;
   }, [
-    availableSessionsForRegistration.length,
-    currentSessionForRegistration,
     form.tipo_registro,
     registrationReferenceDate,
-    registrationReferenceDateLabel,
     sessaoCycle,
     sessionRegistrationRequested,
   ]);
@@ -546,12 +539,29 @@ const ProntuarioPage: React.FC = () => {
     else setEpisodios([]);
   };
 
+  // Map agenda tipo to prontuário tipo_registro
+  const mapAgendaTipoToRegistro = (agendaTipo: string | null): string => {
+    if (!agendaTipo) return 'avaliacao_inicial';
+    const map: Record<string, string> = {
+      'Consulta': 'avaliacao_inicial',
+      'Primeira Consulta': 'avaliacao_inicial',
+      'Retorno': 'retorno',
+      'Sessão de Tratamento': 'sessao',
+      'Sessão': 'sessao',
+      'Urgência': 'urgencia',
+      'Procedimento': 'procedimento',
+      'Exame': 'procedimento',
+    };
+    return map[agendaTipo] || 'avaliacao_inicial';
+  };
+
   useEffect(() => {
     const pacienteId = searchParams.get("pacienteId");
     const pacienteNome = searchParams.get("pacienteNome");
     const agendamentoId = searchParams.get("agendamentoId");
     const horaInicio = searchParams.get("horaInicio");
     const data = searchParams.get("data");
+    const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
       // Coming from Agenda with a specific appointment — open form
@@ -561,6 +571,7 @@ const ProntuarioPage: React.FC = () => {
       if (existingForAgendamento) {
         openEdit(existingForAgendamento);
       } else {
+        const tipoRegistro = mapAgendaTipoToRegistro(agendaTipo);
         setSessionRegistrationRequested(false);
         setEditId(null);
         setSelectedProcIds([]);
@@ -571,6 +582,7 @@ const ProntuarioPage: React.FC = () => {
           agendamento_id: agendamentoId || "",
           data_atendimento: data || new Date().toISOString().split("T")[0],
           hora_atendimento: horaInicio || "",
+          tipo_registro: tipoRegistro,
         });
         setDialogOpen(true);
       }
@@ -948,14 +960,6 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const handleFinalizarAtendimento = async () => {
-    // If session type, require at least one completed session
-    if (form.tipo_registro === 'sessao' && sessaoCycle) {
-      const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
-      if (completedCount === 0) {
-        toast.error("Registre pelo menos uma sessão antes de finalizar o atendimento.");
-        return;
-      }
-    }
     const saved = await handleSave();
     if (!saved) return;
 
@@ -1147,6 +1151,48 @@ const ProntuarioPage: React.FC = () => {
       toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao registrar sessão. Tente novamente.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Confirm any individual session (including past dates) — no SOAP required, no prontuário close
+  const handleConfirmSession = async (session: CycleSession) => {
+    if (!sessaoCycle) return;
+    setConfirmingSessionId(session.id);
+    try {
+      // Minimal registration: mark as realizada, update cycle counter
+      const result = await treatmentService.registerCompletedSession({
+        cycle: sessaoCycle,
+        session,
+        soap: null, // SOAP not required for simple confirmation
+        procedureDone: 'Comparecimento confirmado',
+        userId: user?.id,
+        appointmentId: session.appointment_id || null,
+      });
+
+      if (result.cycleStatus === 'concluido') {
+        toast.info('🎉 Ciclo de tratamento concluído!');
+      }
+
+      await logAction({
+        acao: 'sessao_confirmada',
+        entidade: 'treatment_session',
+        entidadeId: session.id,
+        modulo: 'prontuario',
+        user,
+        detalhes: { paciente: form.paciente_nome, sessao_numero: session.session_number, ciclo_id: sessaoCycle.id },
+      });
+      toast.success(`✅ Sessão ${session.session_number} confirmada!`);
+
+      // Refresh data
+      await Promise.all([
+        loadSessaoData(form.paciente_id, user?.id || ''),
+        refreshAgendamentos(),
+      ]);
+    } catch (err: any) {
+      console.error("Erro ao confirmar sessão:", err);
+      toast.error(err?.message?.startsWith('Preencha') ? err.message : '❌ Erro ao confirmar sessão.');
+    } finally {
+      setConfirmingSessionId(null);
     }
   };
 
@@ -1854,34 +1900,26 @@ const ProntuarioPage: React.FC = () => {
                                   {sessaoCycleSessions.map(s => {
                                     const isCurrent = currentSessionForRegistration?.id === s.id;
                                     const isRealizada = s.status === 'realizada';
-                                    const isRegisteringCurrentSession = isCurrent && (sessionRegistrationRequested || form.tipo_registro === 'sessao');
-                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : '⏳';
-                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Em andamento' : s.status === 'falta' ? '❌ Falta' : 'Aguardando';
+                                    const isPending = !['realizada', 'paciente_faltou', 'cancelada', 'remarcada'].includes(s.status);
+                                    const isConfirming = confirmingSessionId === s.id;
+                                    const statusIcon = isRealizada ? '✅' : isCurrent ? '🔵' : isPending ? '⏳' : '❌';
+                                    const statusLabel = isRealizada ? 'Realizada' : isCurrent ? 'Atual' : s.status === 'falta' || s.status === 'paciente_faltou' ? 'Falta' : s.status === 'cancelada' ? 'Cancelada' : 'Aguardando';
                                     return (
                                       <tr key={s.id} className={`border-t ${isCurrent ? 'bg-primary/5' : ''}`}>
                                         <td className="px-2 py-1.5 font-mono">{s.session_number}</td>
                                         <td className="px-2 py-1.5">{new Date(s.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                                         <td className="px-2 py-1.5">{statusIcon} {statusLabel}</td>
                                         <td className="px-2 py-1.5 text-right">
-                                          {isCurrent && (
-                                            <div className="flex flex-col items-end gap-1">
-                                              <Button
-                                                size="sm"
-                                                variant="default"
-                                                className="h-6 text-xs px-2"
-                                                onClick={() => {
-                                                  void handleRegistrarSessaoClick();
-                                                }}
-                                                disabled={saving || (isRegisteringCurrentSession && !canConfirmSessionRegistration)}
-                                              >
-                                                {saving && isRegisteringCurrentSession ? 'Registrando...' : isRegisteringCurrentSession ? 'Confirmar' : 'Registrar'}
-                                              </Button>
-                                              {isRegisteringCurrentSession && (
-                                                <span className={`text-[11px] ${canConfirmSessionRegistration ? 'text-success' : 'text-destructive'}`}>
-                                                  {canConfirmSessionRegistration ? '✔ SOAP completo' : `❌ ${sessionSoapValidationError}`}
-                                                </span>
-                                              )}
-                                            </div>
+                                          {isPending && !isRealizada && (
+                                            <Button
+                                              size="sm"
+                                              variant={isCurrent ? "default" : "outline"}
+                                              className="h-6 text-xs px-2"
+                                              onClick={() => handleConfirmSession(s)}
+                                              disabled={isConfirming || saving}
+                                            >
+                                              {isConfirming ? 'Confirmando...' : '✓ Confirmar'}
+                                            </Button>
                                           )}
                                         </td>
                                       </tr>
