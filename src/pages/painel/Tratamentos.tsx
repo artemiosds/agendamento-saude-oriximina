@@ -34,6 +34,7 @@ import {
   Unlink,
   Pencil,
   Eraser,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -183,6 +184,7 @@ const Tratamentos: React.FC = () => {
   const [filterProf, setFilterProf] = useState("all");
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -332,13 +334,26 @@ const Tratamentos: React.FC = () => {
   });
 
   const filteredCycles = useMemo(() => {
-    return cycles.filter((c) => {
+    let result = cycles.filter((c) => {
       if (filterProf !== "all" && c.professional_id !== filterProf) return false;
       if (filterUnit !== "all" && c.unit_id !== filterUnit) return false;
       if (filterStatus !== "all" && c.status !== filterStatus) return false;
       return true;
     });
-  }, [cycles, filterProf, filterUnit, filterStatus]);
+    if (searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      result = result.filter((c) => {
+        const pac = pacientes.find((p: any) => p.id === c.patient_id);
+        const pacNome = pac?.nome?.toLowerCase() || '';
+        const pacCpf = pac?.cpf?.toLowerCase() || '';
+        const pacCns = pac?.cns?.toLowerCase() || '';
+        const tipo = c.treatment_type?.toLowerCase() || '';
+        const statusLabel = (statusLabels as any)[c.status]?.toLowerCase() || c.status?.toLowerCase() || '';
+        return pacNome.includes(term) || pacCpf.includes(term) || pacCns.includes(term) || tipo.includes(term) || statusLabel.includes(term);
+      });
+    }
+    return result;
+  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientes]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
@@ -2466,6 +2481,16 @@ const Tratamentos: React.FC = () => {
             <Plus className="w-4 h-4 mr-2" /> Novo Ciclo
           </Button>
         )}
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por paciente, CPF, CNS, tratamento ou status..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       <div className="flex gap-3 flex-wrap">
