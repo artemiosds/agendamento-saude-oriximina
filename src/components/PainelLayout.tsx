@@ -19,8 +19,9 @@ const menuItems: {
   to: string;
   label: string;
   icon: React.ElementType;
-  modulo: ModuleName | null;     // null = sempre visível (ex: dashboard para master)
-  roles_master_only?: boolean;   // true = só master vê
+  modulo: ModuleName | null;
+  roles_master_only?: boolean;
+  hide_from_master?: boolean;    // true = master NÃO vê (ex: Meu Prontuário)
 }[] = [
   { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
   { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
@@ -43,7 +44,7 @@ const menuItems: {
   { to: '/painel/disponibilidade',  label: 'Disponibilidade',        icon: CalendarClock,      modulo: 'usuarios' },
   { to: '/painel/bloqueios',        label: 'Feriados/Bloqueios',     icon: CalendarClock,      modulo: 'agenda' },
   { to: '/painel/auditoria',        label: 'Logs & Auditoria',       icon: ShieldCheck,        modulo: 'relatorios' },
-  { to: '/painel/meu-prontuario',   label: 'Meu Prontuário',         icon: Settings,           modulo: 'prontuario' },
+  { to: '/painel/meu-prontuario',   label: 'Meu Prontuário',         icon: Settings,           modulo: 'prontuario', hide_from_master: true },
   { to: '/painel/configuracoes',    label: 'Configurações',          icon: Settings,           modulo: null, roles_master_only: true },
   { to: '/painel/permissoes',       label: 'Permissões',             icon: Lock,               modulo: null, roles_master_only: true },
   { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,           modulo: null, roles_master_only: true },
@@ -79,7 +80,10 @@ const PainelLayout: React.FC = () => {
     // Itens só para master
     if (item.roles_master_only) return isMaster;
 
-    // Master vê tudo
+    // Itens que master NÃO deve ver (ex: Meu Prontuário é exclusivo do profissional)
+    if (item.hide_from_master && isMaster) return false;
+
+    // Master vê tudo (exceto os hide_from_master acima)
     if (isMaster) return true;
 
     // Sem módulo definido = visível para todos autenticados
