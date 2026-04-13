@@ -227,7 +227,7 @@ const ProntuarioPage: React.FC = () => {
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
 
   // Sessão: cycle + PTS state
-  interface CycleSession { id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; appointment_id: string | null; }
+  interface CycleSession { id: string; cycle_id: string; patient_id: string; professional_id: string; session_number: number; total_sessions: number; scheduled_date: string; status: string; clinical_notes: string; procedure_done?: string; absence_type?: string | null; appointment_id: string | null; }
   interface ActiveCycle { id: string; treatment_type: string; professional_id: string; start_date: string; end_date_predicted: string | null; frequency: string; status: string; total_sessions: number; sessions_done: number; created_at: string; }
   interface ActivePTS { id: string; diagnostico_funcional: string; objetivos_terapeuticos: string; metas_curto_prazo: string; metas_medio_prazo: string; metas_longo_prazo: string; especialidades_envolvidas: string[]; created_at: string; professional_id: string; status: string; }
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
@@ -605,6 +605,7 @@ const ProntuarioPage: React.FC = () => {
     setSoapErrors(false);
     setSaving(true);
     let insertedNewProntuario = false;
+    let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds
         .map((id) => {
@@ -654,8 +655,6 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
-      let prontuarioId = editId;
-
       if (editId) {
         const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
         if (error) throw error;
