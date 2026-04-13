@@ -546,12 +546,29 @@ const ProntuarioPage: React.FC = () => {
     else setEpisodios([]);
   };
 
+  // Map agenda tipo to prontuário tipo_registro
+  const mapAgendaTipoToRegistro = (agendaTipo: string | null): string => {
+    if (!agendaTipo) return 'avaliacao_inicial';
+    const map: Record<string, string> = {
+      'Consulta': 'avaliacao_inicial',
+      'Primeira Consulta': 'avaliacao_inicial',
+      'Retorno': 'retorno',
+      'Sessão de Tratamento': 'sessao',
+      'Sessão': 'sessao',
+      'Urgência': 'urgencia',
+      'Procedimento': 'procedimento',
+      'Exame': 'procedimento',
+    };
+    return map[agendaTipo] || 'avaliacao_inicial';
+  };
+
   useEffect(() => {
     const pacienteId = searchParams.get("pacienteId");
     const pacienteNome = searchParams.get("pacienteNome");
     const agendamentoId = searchParams.get("agendamentoId");
     const horaInicio = searchParams.get("horaInicio");
     const data = searchParams.get("data");
+    const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
       // Coming from Agenda with a specific appointment — open form
@@ -561,6 +578,7 @@ const ProntuarioPage: React.FC = () => {
       if (existingForAgendamento) {
         openEdit(existingForAgendamento);
       } else {
+        const tipoRegistro = mapAgendaTipoToRegistro(agendaTipo);
         setSessionRegistrationRequested(false);
         setEditId(null);
         setSelectedProcIds([]);
@@ -571,6 +589,7 @@ const ProntuarioPage: React.FC = () => {
           agendamento_id: agendamentoId || "",
           data_atendimento: data || new Date().toISOString().split("T")[0],
           hora_atendimento: horaInicio || "",
+          tipo_registro: tipoRegistro,
         });
         setDialogOpen(true);
       }
