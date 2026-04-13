@@ -535,47 +535,47 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
             </div>
           </div>
 
-          {!somentePessoais && (
-            <>
-              <div className="border rounded p-3">
-                <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Atendimento</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tipo:</span> {data.dadosClinicos.tipo_atendimento || '—'}</p>
-                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CID:</span> {data.dadosClinicos.cid || '—'}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Profissional:</span> {data.profissional.nome || '—'}</p>
-                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Especialidade:</span> {data.dadosClinicos.especialidade || data.profissional.cargo || '—'}</p>
-                </div>
-              </div>
+          <div className="border rounded p-3">
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Atendimento</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tipo:</span> {somentePessoais ? '___' : (data.dadosClinicos.tipo_atendimento || '—')}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CID:</span> {somentePessoais ? '___' : (data.dadosClinicos.cid || '—')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Profissional:</span> {somentePessoais ? '___' : (data.profissional.nome || '—')}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Especialidade:</span> {somentePessoais ? '___' : (data.dadosClinicos.especialidade || data.profissional.cargo || '—')}</p>
+            </div>
+          </div>
 
-              <div className="border rounded p-3">
-                <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Triagem / Sinais Vitais</h3>
-                <div className="grid grid-cols-4 gap-2 text-xs">
-                  <p><strong>PA:</strong> {data.sinaisVitais.pressao_arterial || '—'}</p>
-                  <p><strong>FC:</strong> {data.sinaisVitais.frequencia_cardiaca || '—'} bpm</p>
-                  <p><strong>Temp:</strong> {data.sinaisVitais.temperatura || '—'} °C</p>
-                  <p><strong>SpO₂:</strong> {data.sinaisVitais.saturacao || '—'} %</p>
-                  <p><strong>Peso:</strong> {data.sinaisVitais.peso || '—'} kg</p>
-                  <p><strong>Altura:</strong> {data.sinaisVitais.altura || '—'} m</p>
-                  <p><strong>Glicemia:</strong> {data.sinaisVitais.glicemia || '—'}</p>
-                  <p><strong>FR:</strong> {data.sinaisVitais.frequencia_respiratoria || '—'}</p>
-                </div>
-              </div>
+          <div className="border rounded p-3">
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Triagem / Sinais Vitais</h3>
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <p><strong>PA:</strong> {somentePessoais ? '___' : (data.sinaisVitais.pressao_arterial || '—')}</p>
+              <p><strong>FC:</strong> {somentePessoais ? '___' : (data.sinaisVitais.frequencia_cardiaca || '—')}</p>
+              <p><strong>Temp:</strong> {somentePessoais ? '___' : (data.sinaisVitais.temperatura || '—')}</p>
+              <p><strong>SpO₂:</strong> {somentePessoais ? '___' : (data.sinaisVitais.saturacao || '—')}</p>
+              <p><strong>Peso:</strong> {somentePessoais ? '___' : (data.sinaisVitais.peso || '—')}</p>
+              <p><strong>Altura:</strong> {somentePessoais ? '___' : (data.sinaisVitais.altura || '—')}</p>
+              <p><strong>Glicemia:</strong> {somentePessoais ? '___' : (data.sinaisVitais.glicemia || '—')}</p>
+              <p><strong>FR:</strong> {somentePessoais ? '___' : (data.sinaisVitais.frequencia_respiratoria || '—')}</p>
+            </div>
+          </div>
 
-              {data.evoluciones.length > 0 && (
-                <div className="border rounded p-3">
-                  <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
-                  {data.evoluciones.map((evo, i) => (
-                    <div key={i} className="border-b last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                      <p className="text-xs text-muted-foreground">{formatarData(evo.data)} — {evo.profissional || '—'}</p>
-                      <p className="text-xs">{evo.observacao || '—'}</p>
-                    </div>
-                  ))}
+          <div className="border rounded p-3">
+            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
+            {somentePessoais ? (
+              <p className="text-xs text-muted-foreground italic">Em branco para preenchimento manual</p>
+            ) : data.evoluciones.length > 0 ? (
+              data.evoluciones.map((evo, i) => (
+                <div key={i} className="border-b last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                  <p className="text-xs text-muted-foreground">{formatarData(evo.data)} — {evo.profissional || '—'}</p>
+                  <p className="text-xs">{evo.observacao || '—'}</p>
                 </div>
-              )}
-            </>
-          )}
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground italic">Sem registros</p>
+            )}
+          </div>
         </div>
       </div>
 
