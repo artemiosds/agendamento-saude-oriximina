@@ -234,6 +234,7 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
+  const [soapErrors, setSoapErrors] = useState(false);
   const soapRef = useRef<HTMLDivElement>(null);
 
   const loadSessaoData = async (patientId: string, professionalId: string) => {
@@ -482,6 +483,7 @@ const ProntuarioPage: React.FC = () => {
     setListaExames([]);
     setListaPrescricao([]);
     setEspecialidadeFields({});
+    setSoapErrors(false);
     setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0], tipo_registro: "avaliacao_inicial" });
     setDialogOpen(true);
   };
@@ -562,6 +564,20 @@ const ProntuarioPage: React.FC = () => {
       toast.error("Informe o motivo da alteração para salvar.");
       return;
     }
+    // SOAP validation — required for all record types
+    const soapS = (form.soap_subjetivo || '').trim();
+    const soapO = (form.soap_objetivo || '').trim();
+    const soapA = (form.soap_avaliacao || '').trim();
+    const soapP = (form.soap_plano || '').trim();
+    if (!soapS || !soapO || !soapA || !soapP) {
+      setSoapErrors(true);
+      soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!soapS) { toast.error("Preencha o campo Subjetivo (S)"); return; }
+      if (!soapO) { toast.error("Preencha o campo Objetivo (O)"); return; }
+      if (!soapA) { toast.error("Preencha o campo Avaliação (A)"); return; }
+      if (!soapP) { toast.error("Preencha o campo Plano (P)"); return; }
+    }
+    setSoapErrors(false);
     setSaving(true);
     try {
       const procTexto = selectedProcIds
@@ -685,14 +701,23 @@ const ProntuarioPage: React.FC = () => {
 
       // Session registration for sessao type
       if (form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle) {
-        const soapFilled = form.soap_subjetivo?.trim() && form.soap_objetivo?.trim() && form.soap_avaliacao?.trim() && form.soap_plano?.trim();
-        if (soapFilled) {
+        // SOAP is already validated above, so we can safely register
+        try {
           // Register session as realizada
-          await (supabase as any).from('treatment_sessions').update({
+          const { error: sessErr } = await (supabase as any).from('treatment_sessions').update({
             status: 'realizada',
-            clinical_notes: `S: ${form.soap_subjetivo}\nO: ${form.soap_objetivo}\nA: ${form.soap_avaliacao}\nP: ${form.soap_plano}`,
+            clinical_notes: JSON.stringify({
+              tipo: 'soap',
+              subjetivo: form.soap_subjetivo,
+              objetivo: form.soap_objetivo,
+              avaliacao: form.soap_avaliacao,
+              plano: form.soap_plano,
+              registrado_em: new Date().toISOString(),
+              registrado_por: user?.id,
+            }),
             appointment_id: form.agendamento_id || null,
           }).eq('id', currentSessionForRegistration.id);
+          if (sessErr) throw sessErr;
 
           // Update sessions_done on cycle
           const newDone = sessaoCycle.sessions_done + 1;
@@ -705,7 +730,8 @@ const ProntuarioPage: React.FC = () => {
             updatePayload.status = 'concluido';
             toast.info('🎉 Ciclo de tratamento concluído!');
           }
-          await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+          const { error: cycErr } = await (supabase as any).from('treatment_cycles').update(updatePayload).eq('id', sessaoCycle.id);
+          if (cycErr) throw cycErr;
 
           // Finalize the appointment if linked
           if (form.agendamento_id) {
@@ -720,7 +746,10 @@ const ProntuarioPage: React.FC = () => {
             user,
             detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
           });
-          toast.success(`Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+        } catch (sessError: any) {
+          console.error('Error registering session:', sessError);
+          toast.error('❌ Erro ao registrar sessão. Tente novamente.');
         }
       }
 
@@ -1323,19 +1352,23 @@ const ProntuarioPage: React.FC = () => {
               <h3 className="font-semibold text-sm text-primary">Evolução SOAP (obrigatório)</h3>
               <div>
                 <Label>S — Subjetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => setForm((p) => ({ ...p, soap_subjetivo: e.target.value }))} placeholder="Relato do paciente..." />
+                <Textarea rows={2} value={form.soap_subjetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_subjetivo: e.target.value })); }} placeholder="Relato do paciente..." className={soapErrors && !form.soap_subjetivo?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_subjetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>O — Objetivo <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => setForm((p) => ({ ...p, soap_objetivo: e.target.value }))} placeholder="Dados observáveis, exame físico, sinais vitais..." />
+                <Textarea rows={2} value={form.soap_objetivo} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_objetivo: e.target.value })); }} placeholder="Dados observáveis, exame físico, sinais vitais..." className={soapErrors && !form.soap_objetivo?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_objetivo?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>A — Avaliação <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => setForm((p) => ({ ...p, soap_avaliacao: e.target.value }))} placeholder="Análise clínica, hipóteses..." />
+                <Textarea rows={2} value={form.soap_avaliacao} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_avaliacao: e.target.value })); }} placeholder="Análise clínica, hipóteses..." className={soapErrors && !form.soap_avaliacao?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_avaliacao?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
               <div>
                 <Label>P — Plano <span className="text-destructive">*</span></Label>
-                <Textarea rows={2} value={form.soap_plano} onChange={(e) => setForm((p) => ({ ...p, soap_plano: e.target.value }))} placeholder="Condutas, intervenções, próximos passos..." />
+                <Textarea rows={2} value={form.soap_plano} onChange={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, soap_plano: e.target.value })); }} placeholder="Condutas, intervenções, próximos passos..." className={soapErrors && !form.soap_plano?.trim() ? 'border-destructive border-2' : ''} />
+                {soapErrors && !form.soap_plano?.trim() && <span className="text-xs text-destructive">Campo obrigatório</span>}
               </div>
             </div>
 
