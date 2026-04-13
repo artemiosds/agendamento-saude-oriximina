@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
