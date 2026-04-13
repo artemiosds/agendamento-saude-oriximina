@@ -2196,7 +2196,7 @@ const ProntuarioPage: React.FC = () => {
                     className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Finalizar Atendimento
+                    Finalizar Prontuário
                   </Button>
                 </>
               ) : (
