@@ -248,6 +248,7 @@ const ProntuarioPage: React.FC = () => {
   const [soapErrors, setSoapErrors] = useState(false);
   const [soapEnabled, setSoapEnabled] = useState(true);
   const [sessionRegistrationRequested, setSessionRegistrationRequested] = useState(false);
+  const [confirmingSessionId, setConfirmingSessionId] = useState<string | null>(null);
   const soapRef = useRef<HTMLDivElement>(null);
 
   const loadSessaoData = async (patientId: string, professionalId: string) => {
