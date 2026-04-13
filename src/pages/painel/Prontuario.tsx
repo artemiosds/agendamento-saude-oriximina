@@ -299,6 +299,7 @@ const ProntuarioPage: React.FC = () => {
     );
   }, [sessaoCycle, sessaoCycleSessions]);
 
+  // Session matching the current prontuário date (for inline registration)
   const currentSessionForRegistration = useMemo(() => {
     if (!sessaoCycle || availableSessionsForRegistration.length === 0 || !registrationReferenceDate) return null;
 
@@ -328,22 +329,13 @@ const ProntuarioPage: React.FC = () => {
 
   const sessionRegistrationError = useMemo(() => {
     if (!(sessionRegistrationRequested || form.tipo_registro === 'sessao')) return null;
-    if (!sessaoCycle) return 'Nenhum ciclo de tratamento ativo encontrado para este paciente.';
+    if (!sessaoCycle) return null; // No cycle is OK — user can create one
     if (!registrationReferenceDate) return 'Defina a data do prontuário para registrar a sessão.';
-    if (!currentSessionForRegistration) {
-      if (availableSessionsForRegistration.length === 0) {
-        return 'Nenhuma sessão pendente encontrada para registrar neste ciclo.';
-      }
-
-      return `Só é possível confirmar a sessão agendada para ${registrationReferenceDateLabel}. As demais sessões não podem ser registradas neste prontuário.`;
-    }
+    // Don't block if no current session — user can still confirm past sessions from the table
     return null;
   }, [
-    availableSessionsForRegistration.length,
-    currentSessionForRegistration,
     form.tipo_registro,
     registrationReferenceDate,
-    registrationReferenceDateLabel,
     sessaoCycle,
     sessionRegistrationRequested,
   ]);
