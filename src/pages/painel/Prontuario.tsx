@@ -41,7 +41,8 @@ import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
-import { isMedico } from "@/data/soapOptionsByProfession";
+import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
+import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 
