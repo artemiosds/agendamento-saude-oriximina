@@ -58,7 +58,7 @@ const Home: React.FC = () => {
               <Link to="/agendar">
                 <Button
                   size="lg"
-                  className="bg-primary-foreground text-foreground font-semibold hover:bg-primary-foreground/90 w-full sm:w-auto"
+                  className="bg-gradient-to-br from-[hsl(200,55%,38%)] to-[hsl(200,60%,28%)] text-white font-semibold tracking-wide shadow-[0_6px_14px_rgba(0,0,0,0.15)] hover:brightness-105 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
                 >
                   <Calendar className="w-5 h-5 mr-2" />
                   Agendar Online
@@ -68,7 +68,7 @@ const Home: React.FC = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-primary-foreground bg-primary-foreground/20 text-primary-foreground font-semibold hover:bg-primary-foreground/30 w-full sm:w-auto"
+                  className="bg-white/[0.08] border-white/35 text-white font-medium shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:bg-white/15 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
                 >
                   <User className="w-5 h-5 mr-2" />
                   Portal do Paciente
@@ -78,7 +78,7 @@ const Home: React.FC = () => {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-primary-foreground/50 bg-transparent text-primary-foreground/80 font-semibold hover:bg-primary-foreground/10 w-full sm:w-auto"
+                  className="bg-white/[0.05] border-white/25 text-white/90 font-medium hover:bg-white/10 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
                 >
                   <Shield className="w-5 h-5 mr-2" />
                   Painel Interno

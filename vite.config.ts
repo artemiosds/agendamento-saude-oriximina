@@ -20,13 +20,17 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: "es2020",
+    cssCodeSplit: true,
     rollupOptions: {
       output: {
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           "vendor-query": ["@tanstack/react-query"],
           "vendor-supabase": ["@supabase/supabase-js"],
-          "vendor-ui": ["framer-motion", "recharts", "sonner"],
+          "vendor-ui": ["framer-motion", "sonner"],
+          "vendor-charts": ["recharts"],
+          "vendor-icons": ["lucide-react"],
+          "vendor-utils": ["date-fns", "clsx", "tailwind-merge"],
         },
       },
     },
