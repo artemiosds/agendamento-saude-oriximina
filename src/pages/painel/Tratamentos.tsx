@@ -1780,7 +1780,7 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.subjetivo}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, subjetivo: e.target.value }))}
+                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, subjetivo: e.target.value })); }}
                       rows={2}
                       placeholder="Ex: Paciente relata melhora da dor no joelho direito..."
                     />
@@ -1792,7 +1792,7 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Achados do exame, medições, testes realizados</p>
                     <Textarea
                       value={soapNotes.objetivo}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, objetivo: e.target.value }))}
+                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, objetivo: e.target.value })); }}
                       rows={2}
                       placeholder="Ex: ADM flexão joelho D: 95° (anterior: 80°)..."
                     />
@@ -1804,7 +1804,7 @@ const Tratamentos: React.FC = () => {
                     <p className="text-xs text-muted-foreground mb-1">Análise clínica, evolução do quadro</p>
                     <Textarea
                       value={soapNotes.avaliacao}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, avaliacao: e.target.value }))}
+                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, avaliacao: e.target.value })); }}
                       rows={2}
                       placeholder="Ex: Evolução favorável, ganho funcional progressivo..."
                     />
@@ -1818,9 +1818,9 @@ const Tratamentos: React.FC = () => {
                     </p>
                     <Textarea
                       value={soapNotes.plano}
-                      onChange={(e) => setSoapNotes((p) => ({ ...p, plano: e.target.value }))}
+                      onChange={(e) => { e.stopPropagation(); setSoapNotes((p) => ({ ...p, plano: e.target.value })); }}
                       rows={2}
-                      placeholder="Ex: Manter protocolo atual, progredir carga na próxima sessão..."
+                      placeholder="Ex: Manter protocolo atual, progrimir carga na próxima sessão..."
                     />
                   </div>
                 </div>
