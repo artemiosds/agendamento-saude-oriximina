@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -475,7 +476,12 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const dialogOpenRef = useRef(false);
+  useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
+
   const silentRefreshProntuarios = useCallback(() => {
+    // Don't refresh while user is editing — it resets form state (SOAP fields)
+    if (dialogOpenRef.current) return;
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -570,6 +576,8 @@ const ProntuarioPage: React.FC = () => {
     return map[agendaTipo] || 'avaliacao_inicial';
   };
 
+  const initializedRef = useRef(false);
+
   useEffect(() => {
     const pacienteId = searchParams.get("pacienteId");
     const pacienteNome = searchParams.get("pacienteNome");
@@ -579,7 +587,21 @@ const ProntuarioPage: React.FC = () => {
     const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
-      // Coming from Agenda with a specific appointment — open form
+      // Only initialize once per searchParams to avoid re-opening/resetting the form
+      // when prontuarios refresh in background
+      if (initializedRef.current) {
+        // If already initialized, only update if we find an existing prontuário for this agendamento
+        // and we don't already have the dialog open
+        if (!dialogOpen) {
+          const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
+          if (existingForAgendamento) {
+            openEdit(existingForAgendamento);
+          }
+        }
+        return;
+      }
+      initializedRef.current = true;
+
       loadTriagem(agendamentoId);
       loadEpisodios(pacienteId);
       const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
@@ -613,10 +635,9 @@ const ProntuarioPage: React.FC = () => {
         }
       }
     } else if (pacienteId && pacienteNome) {
-      // Coming from Pacientes page — just show the filtered list, don't open form
       setSearch(pacienteNome);
     }
-  }, [searchParams, prontuarios.length]);
+  }, [searchParams, prontuarios.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
@@ -1787,13 +1808,13 @@ const ProntuarioPage: React.FC = () => {
                 <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
                   <h4 className="text-sm font-semibold text-foreground mb-3">🟢 Avaliação Inicial</h4>
                   <div className="space-y-3">
-                    <div><Label>Queixa Principal <span className="text-destructive">*</span></Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
-                    <div><Label>História da Doença Atual <span className="text-destructive">*</span></Label><Textarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="HDA detalhada..." /></div>
-                    <div><Label>Histórico de Saúde</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Antecedentes pessoais, familiares..." /></div>
-                    <div><Label>Medicações em Uso</Label><Textarea rows={2} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} placeholder="Medicações atuais do paciente..." /></div>
+                    <div><Label>Queixa Principal <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
+                    <div><Label>História da Doença Atual <span className="text-destructive">*</span></Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="HDA detalhada..." /></div>
+                    <div><Label>Histórico de Saúde</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Antecedentes pessoais, familiares..." /></div>
+                    <div><Label>Medicações em Uso</Label><DebouncedTextarea rows={2} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} placeholder="Medicações atuais do paciente..." /></div>
                     <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                       <Label className="flex items-center gap-1">⚠️ Alergias</Label>
-                      <Textarea rows={1} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} placeholder="Listar alergias conhecidas..." className="border-destructive/30" />
+                      <DebouncedTextarea rows={1} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} placeholder="Listar alergias conhecidas..." className="border-destructive/30" />
                     </div>
                   </div>
                 </div>
@@ -1808,8 +1829,8 @@ const ProntuarioPage: React.FC = () => {
                   />
                 )}
 
-                <div><Label>Diagnóstico Funcional</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Diagnóstico funcional baseado na avaliação..." /></div>
-                <div><Label>Conduta Inicial</Label><Textarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} placeholder="Conduta clínica inicial..." /></div>
+                <div><Label>Diagnóstico Funcional</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Diagnóstico funcional baseado na avaliação..." /></div>
+                <div><Label>Conduta Inicial</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} placeholder="Conduta clínica inicial..." /></div>
 
                 {/* Decisão Clínica: PTS / Tratamento */}
                 {!editId && form.paciente_id && (
@@ -1846,9 +1867,9 @@ const ProntuarioPage: React.FC = () => {
                         </p>
                       </div>
                     )}
-                    <div><Label>Reavaliação</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Reavaliação do quadro clínico..." /></div>
-                    <div><Label>Evolução Clínica</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente evoluiu desde o último atendimento..." /></div>
-                    <div><Label>Ajuste de Conduta</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Mudanças na conduta terapêutica..." /></div>
+                    <div><Label>Reavaliação</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Reavaliação do quadro clínico..." /></div>
+                    <div><Label>Evolução Clínica</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente evoluiu desde o último atendimento..." /></div>
+                    <div><Label>Ajuste de Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Mudanças na conduta terapêutica..." /></div>
                   </div>
                 </div>
 
@@ -2028,9 +2049,9 @@ const ProntuarioPage: React.FC = () => {
                         </div>
                       )}
                       <div className="space-y-3">
-                        <div><Label>Procedimentos Realizados</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
-                        <div><Label>Resposta do Paciente</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
-                        <div><Label>Intercorrências</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
+                        <div><Label>Procedimentos Realizados</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Procedimentos realizados nesta sessão..." /></div>
+                        <div><Label>Resposta do Paciente</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Como o paciente respondeu à intervenção..." /></div>
+                        <div><Label>Intercorrências</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Sem intercorrências" /></div>
                       </div>
                     </div>
                   </>
@@ -2056,9 +2077,9 @@ const ProntuarioPage: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    <div><Label>Queixa Imediata <span className="text-destructive">*</span></Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Queixa principal de urgência..." /></div>
-                    <div><Label>Conduta Rápida</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Conduta imediata adotada..." /></div>
-                    <div><Label>Encaminhamento</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Encaminhamento realizado (se aplicável)..." /></div>
+                    <div><Label>Queixa Imediata <span className="text-destructive">*</span></Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Queixa principal de urgência..." /></div>
+                    <div><Label>Conduta Rápida</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Conduta imediata adotada..." /></div>
+                    <div><Label>Encaminhamento</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Encaminhamento realizado (se aplicável)..." /></div>
                   </div>
                 </div>
               </div>
@@ -2070,10 +2091,10 @@ const ProntuarioPage: React.FC = () => {
                 <div className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-3">
                   <h4 className="text-sm font-semibold text-foreground mb-3">🟣 Procedimento</h4>
                   <div className="space-y-3">
-                    <div><Label>Tipo de Exame/Procedimento</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Tipo de procedimento realizado..." /></div>
-                    <div><Label>Resultado</Label><Textarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Resultado do procedimento/exame..." /></div>
-                    <div><Label>Observações</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Observações durante o procedimento..." /></div>
-                    <div><Label>Conduta Pós-Procedimento</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Orientações pós-procedimento..." /></div>
+                    <div><Label>Tipo de Exame/Procedimento</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} placeholder="Tipo de procedimento realizado..." /></div>
+                    <div><Label>Resultado</Label><DebouncedTextarea rows={2} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} placeholder="Resultado do procedimento/exame..." /></div>
+                    <div><Label>Observações</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} placeholder="Observações durante o procedimento..." /></div>
+                    <div><Label>Conduta Pós-Procedimento</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} placeholder="Orientações pós-procedimento..." /></div>
                   </div>
                 </div>
               </div>
@@ -2082,14 +2103,14 @@ const ProntuarioPage: React.FC = () => {
             {/* Legacy types: show generic fields */}
             {!['avaliacao_inicial', 'retorno', 'sessao', 'urgencia', 'procedimento'].includes(form.tipo_registro) && (
               <div className="space-y-3">
-                <div><Label>Queixa Principal</Label><Textarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
-                <div><Label>Anamnese</Label><Textarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
-                <div><Label>Sinais e Sintomas</Label><Textarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} /></div>
-                <div><Label>Exame Físico</Label><Textarea rows={3} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} /></div>
-                <div><Label>Hipótese / Avaliação</Label><Textarea rows={2} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} /></div>
-                <div><Label>Conduta</Label><Textarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
-                <div><Label>Evolução</Label><Textarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
-                <div><Label>Observações Gerais</Label><Textarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
+                <div><Label>Queixa Principal</Label><DebouncedTextarea rows={2} value={form.queixa_principal} onChange={(e) => setForm((p) => ({ ...p, queixa_principal: e.target.value }))} /></div>
+                <div><Label>Anamnese</Label><DebouncedTextarea rows={3} value={form.anamnese} onChange={(e) => setForm((p) => ({ ...p, anamnese: e.target.value }))} /></div>
+                <div><Label>Sinais e Sintomas</Label><DebouncedTextarea rows={2} value={form.sinais_sintomas} onChange={(e) => setForm((p) => ({ ...p, sinais_sintomas: e.target.value }))} /></div>
+                <div><Label>Exame Físico</Label><DebouncedTextarea rows={3} value={form.exame_fisico} onChange={(e) => setForm((p) => ({ ...p, exame_fisico: e.target.value }))} /></div>
+                <div><Label>Hipótese / Avaliação</Label><DebouncedTextarea rows={2} value={form.hipotese} onChange={(e) => setForm((p) => ({ ...p, hipotese: e.target.value }))} /></div>
+                <div><Label>Conduta</Label><DebouncedTextarea rows={2} value={form.conduta} onChange={(e) => setForm((p) => ({ ...p, conduta: e.target.value }))} /></div>
+                <div><Label>Evolução</Label><DebouncedTextarea rows={2} value={form.evolucao} onChange={(e) => setForm((p) => ({ ...p, evolucao: e.target.value }))} /></div>
+                <div><Label>Observações Gerais</Label><DebouncedTextarea rows={2} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} /></div>
               </div>
             )}
 

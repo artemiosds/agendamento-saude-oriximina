@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -295,7 +296,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
                   </div>
                 )}
 
-                <Textarea
+                <DebouncedTextarea
                   rows={isMedicoMode ? 3 : 2}
                   value={values[field.key]}
                   onChange={(e) => {
