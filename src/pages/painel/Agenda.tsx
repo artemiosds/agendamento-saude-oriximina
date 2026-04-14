@@ -354,10 +354,11 @@ const Agenda: React.FC = () => {
     };
 
     const getPrioLevel = (ag: (typeof agendamentos)[0]): number => {
+      const st = ag.status as string;
       // Completed → bottom
-      if (ag.status === "concluido") return 99;
+      if (st === "concluido") return 99;
       // Not checked in yet
-      if (!CHECKED_IN_STATUSES.has(ag.status) && ag.status !== "concluido") return 50;
+      if (!CHECKED_IN_STATUSES.has(st) && st !== "concluido") return 50;
 
       // Checked in — use triage classification
       const risco = triageMap[ag.id]?.toLowerCase();
