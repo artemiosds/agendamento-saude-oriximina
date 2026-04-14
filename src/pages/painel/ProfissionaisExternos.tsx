@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,8 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,20 +57,15 @@ const ProfissionaisExternos: React.FC = () => {
   const [quotas, setQuotas] = useState<QuotaRow[]>([]);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const [selectedExternoId, setSelectedExternoId] = useState<string>("");
-  const [quotaForm, setQuotaForm] = useState({
-    profissional_interno_id: "",
-    unidade_id: "",
-    vagas_total: 5,
-    periodo_inicio: new Date().toISOString().slice(0, 10),
-    periodo_fim: "",
-  });
+  const [selectedProfIds, setSelectedProfIds] = useState<string[]>([]);
+  const [vagasPorProf, setVagasPorProf] = useState<Record<string, number>>({});
+  const [savingQuota, setSavingQuota] = useState(false);
 
   const loadExternos = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await supabase.functions.invoke("manage-external", { body: { action: "list" } });
       setExternos(data?.profissionais || []);
-
       const { data: quotasData } = await supabase.from("quotas_externas").select("*");
       setQuotas(quotasData || []);
     } catch (err) {
@@ -81,15 +75,6 @@ const ProfissionaisExternos: React.FC = () => {
   }, []);
 
   useEffect(() => { loadExternos(); }, [loadExternos]);
-
-  // Default periodo_fim to end of month
-  useEffect(() => {
-    if (!quotaForm.periodo_fim && quotaForm.periodo_inicio) {
-      const d = new Date(quotaForm.periodo_inicio);
-      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      setQuotaForm(p => ({ ...p, periodo_fim: lastDay.toISOString().slice(0, 10) }));
-    }
-  }, [quotaForm.periodo_inicio, quotaForm.periodo_fim]);
 
   const openNew = () => {
     setEditId(null);
@@ -146,41 +131,59 @@ const ProfissionaisExternos: React.FC = () => {
     }
   };
 
-  // Quota management
+  // Quota management – multi-select
   const openQuotaDialog = (externoId: string) => {
     setSelectedExternoId(externoId);
-    setQuotaForm({
-      profissional_interno_id: "",
-      unidade_id: "",
-      vagas_total: 5,
-      periodo_inicio: new Date().toISOString().slice(0, 10),
-      periodo_fim: "",
-    });
+    // Pre-select already configured professionals
+    const existing = quotas.filter(q => q.profissional_externo_id === externoId);
+    const existingIds = existing.map(q => q.profissional_interno_id);
+    // Only show unconfigured professionals as candidates
+    setSelectedProfIds([]);
+    setVagasPorProf({});
     setQuotaDialogOpen(true);
   };
 
-  const handleSaveQuota = async () => {
-    if (!quotaForm.profissional_interno_id || !quotaForm.vagas_total) {
-      toast.error("Selecione o profissional e defina as vagas.");
+  const toggleProfSelection = (profId: string) => {
+    setSelectedProfIds(prev => {
+      if (prev.includes(profId)) {
+        const next = prev.filter(id => id !== profId);
+        setVagasPorProf(v => { const copy = { ...v }; delete copy[profId]; return copy; });
+        return next;
+      }
+      setVagasPorProf(v => ({ ...v, [profId]: 5 }));
+      return [...prev, profId];
+    });
+  };
+
+  const handleSaveQuotas = async () => {
+    if (selectedProfIds.length === 0) {
+      toast.error("Selecione ao menos um profissional.");
       return;
     }
+    setSavingQuota(true);
     try {
-      const { error } = await supabase.from("quotas_externas").insert({
+      const today = new Date().toISOString().slice(0, 10);
+      const endOfYear = `${new Date().getFullYear()}-12-31`;
+
+      const inserts = selectedProfIds.map(profId => ({
         profissional_externo_id: selectedExternoId,
-        profissional_interno_id: quotaForm.profissional_interno_id,
-        unidade_id: quotaForm.unidade_id,
-        vagas_total: quotaForm.vagas_total,
+        profissional_interno_id: profId,
+        unidade_id: "",
+        vagas_total: vagasPorProf[profId] || 5,
         vagas_usadas: 0,
-        periodo_inicio: quotaForm.periodo_inicio,
-        periodo_fim: quotaForm.periodo_fim,
-      });
+        periodo_inicio: today,
+        periodo_fim: endOfYear,
+      }));
+
+      const { error } = await supabase.from("quotas_externas").insert(inserts);
       if (error) throw error;
-      toast.success("Quota adicionada!");
+      toast.success(`${inserts.length} quota(s) adicionada(s)!`);
       setQuotaDialogOpen(false);
       await loadExternos();
     } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar quota.");
+      toast.error(err.message || "Erro ao salvar quotas.");
     }
+    setSavingQuota(false);
   };
 
   const handleDeleteQuota = async (quotaId: string) => {
@@ -196,6 +199,11 @@ const ProfissionaisExternos: React.FC = () => {
     const term = searchTerm.toLowerCase();
     return e.nome.toLowerCase().includes(term) || e.email.toLowerCase().includes(term);
   });
+
+  // For quota dialog: filter out professionals that already have a quota for this external
+  const availableForQuota = profissionaisInternos.filter((f: any) =>
+    !quotas.some(q => q.profissional_externo_id === selectedExternoId && q.profissional_interno_id === f.id)
+  );
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -280,12 +288,12 @@ const ProfissionaisExternos: React.FC = () => {
                               <div>
                                 <span className="font-medium">{prof?.nome || "—"}</span>
                                 <span className="text-muted-foreground ml-2">
-                                  ({q.periodo_inicio} → {q.periodo_fim})
+                                  {(prof as any)?.profissao || ""}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant={restantes > 0 ? "default" : "destructive"}>
-                                  {restantes}/{q.vagas_total}
+                                  {restantes}/{q.vagas_total} vagas
                                 </Badge>
                                 {canManage && (
                                   <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDeleteQuota(q.id)}>
@@ -336,38 +344,75 @@ const ProfissionaisExternos: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Add Quota Dialog */}
+      {/* Add Quota Dialog – Multi-select */}
       <Dialog open={quotaDialogOpen} onOpenChange={setQuotaDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Adicionar Quota</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Profissional Interno *</Label>
-              <Select value={quotaForm.profissional_interno_id} onValueChange={v => setQuotaForm(p => ({ ...p, profissional_interno_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
-                <SelectContent>
-                  {profissionaisInternos.map((f: any) => (
-                    <SelectItem key={f.id} value={f.id}>{f.nome} — {f.profissao || f.cargo}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Unidade</Label>
-              <Select value={quotaForm.unidade_id} onValueChange={v => setQuotaForm(p => ({ ...p, unidade_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{unidadesVisiveis.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Vagas (total)</Label>
-              <Input type="number" min={1} value={quotaForm.vagas_total} onChange={e => setQuotaForm(p => ({ ...p, vagas_total: Number(e.target.value) }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Início</Label><Input type="date" value={quotaForm.periodo_inicio} onChange={e => setQuotaForm(p => ({ ...p, periodo_inicio: e.target.value }))} /></div>
-              <div><Label>Fim</Label><Input type="date" value={quotaForm.periodo_fim} onChange={e => setQuotaForm(p => ({ ...p, periodo_fim: e.target.value }))} /></div>
-            </div>
-            <Button onClick={handleSaveQuota} className="w-full gradient-primary text-primary-foreground">Adicionar Quota</Button>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Adicionar Quotas</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Selecione os profissionais internos e defina a quantidade de vagas para cada um.
+            </p>
+
+            {availableForQuota.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Todos os profissionais já possuem quota configurada para este externo.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {availableForQuota.map((f: any) => {
+                  const isSelected = selectedProfIds.includes(f.id);
+                  return (
+                    <div key={f.id} className={`rounded-lg border p-3 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border"}`}>
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleProfSelection(f.id)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-foreground">{f.nome}</p>
+                          <p className="text-xs text-muted-foreground">{f.profissao || f.cargo || ""}</p>
+                        </div>
+                        {isSelected && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Label className="text-xs whitespace-nowrap">Vagas:</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={vagasPorProf[f.id] || 5}
+                              onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: Math.max(1, Number(e.target.value)) }))}
+                              className="w-16 h-8 text-center text-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {selectedProfIds.length > 0 && (
+              <div className="bg-accent/30 rounded-lg p-3">
+                <p className="text-xs font-semibold text-muted-foreground mb-1">RESUMO</p>
+                {selectedProfIds.map(id => {
+                  const prof = profissionaisInternos.find((f: any) => f.id === id);
+                  return (
+                    <p key={id} className="text-sm">
+                      {prof?.nome || "—"}: <strong>{vagasPorProf[id] || 5} vagas</strong>
+                    </p>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button
+              onClick={handleSaveQuotas}
+              disabled={savingQuota || selectedProfIds.length === 0}
+              className="w-full gradient-primary text-primary-foreground"
+            >
+              {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Adicionar {selectedProfIds.length > 0 ? `${selectedProfIds.length} Quota(s)` : "Quotas"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
