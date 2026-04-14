@@ -1865,6 +1865,16 @@ const Tratamentos: React.FC = () => {
                             <CalendarClock className="w-3 h-3 mr-1" /> Remarcar
                           </Button>
                         )}
+                        {canAgendarSessao && isAgendada && selectedCycle.status === "em_andamento" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-destructive text-destructive hover:bg-destructive/10 shrink-0"
+                            onClick={() => handleDesmarcarSessao(s)}
+                          >
+                            <X className="w-3 h-3 mr-1" /> Desmarcar
+                          </Button>
+                        )}
                         {canControlSessions && isRealizada && (
                           <>
                             <Button
