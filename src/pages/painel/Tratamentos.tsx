@@ -840,6 +840,49 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  const handleDesmarcarSessao = async (session: TreatmentSession) => {
+    if (!selectedCycle) return;
+    const confirmed = window.confirm(
+      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será removido da agenda e o status voltará para "Aguardando agendamento".`
+    );
+    if (!confirmed) return;
+    try {
+      // Remove the linked appointment from the main schedule
+      if (session.appointment_id) {
+        await cancelAgendamento(session.appointment_id);
+      }
+
+      // Revert session to pending
+      const { error } = await supabase
+        .from("treatment_sessions")
+        .update({
+          status: "pendente_agendamento",
+          appointment_id: null,
+        })
+        .eq("id", session.id);
+      if (error) throw error;
+
+      await logAction({
+        acao: "desmarcar_sessao",
+        entidade: "treatment_session",
+        entidadeId: session.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: {
+          ciclo: selectedCycle.id,
+          sessao: session.session_number,
+          agendamento_removido: session.appointment_id,
+        },
+      });
+
+      toast.success(`Sessão ${session.session_number} desmarcada. O horário foi liberado na agenda.`);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao desmarcar sessão: " + (err?.message || ""));
+    }
+  };
+
   const openEditRealizada = (session: TreatmentSession) => {
     setEditRealizadaTarget(session);
     setEditRealizadaDate(session.scheduled_date);
