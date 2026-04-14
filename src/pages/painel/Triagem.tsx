@@ -129,13 +129,7 @@ const Triagem: React.FC = () => {
       .filter((item) => item.unidadeId === user?.unidadeId && STATUS_TRIAGEM_FILA.includes(item.status))
       .map((item) => {
         const agendamentoRelacionado =
-          agendamentos.find((ag) => ag.id === item.id) ||
-          agendamentos.find(
-            (ag) =>
-              ag.pacienteId === item.pacienteId &&
-              ag.unidadeId === item.unidadeId &&
-              STATUS_AGENDAMENTO_TRIAGEM.includes(ag.status),
-          );
+          agendamentos.find((ag) => ag.id === item.id);
 
         if (!agendamentoRelacionado) return null;
 
