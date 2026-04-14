@@ -90,6 +90,10 @@ export interface PacienteFormData {
   endereco: string;
   nomeMae: string;
   descricaoClinica: string;
+  // Prioridade especial
+  isGestante: boolean;
+  isPne: boolean;
+  isAutista: boolean;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -127,6 +131,9 @@ export const emptyPacienteForm: PacienteFormData = {
   endereco: "",
   nomeMae: "",
   descricaoClinica: "",
+  isGestante: false,
+  isPne: false,
+  isAutista: false,
 };
 
 interface Props {

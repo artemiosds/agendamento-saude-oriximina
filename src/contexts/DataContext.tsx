@@ -464,6 +464,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             descricaoClinica: p.descricao_clinica || "",
             cid: p.cid || "",
             criadoEm: p.criado_em || "",
+            isGestante: !!p.is_gestante,
+            isPne: !!p.is_pne,
+            isAutista: !!p.is_autista,
           })),
         );
       }
