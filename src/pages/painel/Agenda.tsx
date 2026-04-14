@@ -394,8 +394,8 @@ const Agenda: React.FC = () => {
         const pb = getPrioLevel(b);
         if (pa !== pb) return pa - pb;
         // Same group — sort by check-in time (horaChegada) or scheduled time
-        const ha = (a as any).horaChegada || a.hora;
-        const hb = (b as any).horaChegada || b.hora;
+        const ha = a.horaChegada || a.hora;
+        const hb = b.horaChegada || b.hora;
         return ha.localeCompare(hb);
       });
 
