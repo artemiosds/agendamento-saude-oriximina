@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
-import { MANCHESTER_ORDER } from "@/lib/manchesterProtocol";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
