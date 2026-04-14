@@ -2293,28 +2293,6 @@ const Agenda: React.FC = () => {
             </div>
           )}
         </DialogContent>
-      </Dialog>
-
-  // ── Triage records for priority sorting ──
-  const [triageMap, setTriageMap] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let cancelled = false;
-    const loadTriage = async () => {
-      const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
-      if (dayAgIds.length === 0) { setTriageMap({}); return; }
-      const { data } = await supabase
-        .from("triage_records")
-        .select("agendamento_id, classificacao_risco")
-        .in("agendamento_id", dayAgIds);
-      if (!cancelled && data) {
-        const map: Record<string, string> = {};
-        for (const r of data) map[r.agendamento_id] = r.classificacao_risco || "";
-        setTriageMap(map);
-      }
-    };
-    loadTriage();
-    return () => { cancelled = true; };
-  }, [agendamentos, selectedDate]);
 
 
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
