@@ -216,23 +216,39 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
-  // ── Triage records for priority sorting ──
+  // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
+  const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
     const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
-    if (dayAgIds.length === 0) { setTriageMap({}); return; }
+    if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
     (async () => {
-      const { data } = await supabase
-        .from("triage_records")
-        .select("agendamento_id, classificacao_risco")
-        .in("agendamento_id", dayAgIds);
-      if (!cancelled && data) {
-        const m: Record<string, { risco: string }> = {};
-        for (const r of data) {
-          m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+      const [triageRes, filaRes] = await Promise.all([
+        supabase
+          .from("triage_records")
+          .select("agendamento_id, classificacao_risco")
+          .in("agendamento_id", dayAgIds),
+        supabase
+          .from("fila_espera" as any)
+          .select("id, hora_chegada")
+          .in("id", dayAgIds),
+      ]);
+      if (!cancelled) {
+        if (triageRes.data) {
+          const m: Record<string, { risco: string }> = {};
+          for (const r of triageRes.data) {
+            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+          }
+          setTriageMap(m);
         }
-        setTriageMap(m);
+        if (filaRes.data) {
+          const a: Record<string, string> = {};
+          for (const f of filaRes.data as any[]) {
+            if (f.hora_chegada) a[f.id] = f.hora_chegada;
+          }
+          setArrivalMap(a);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -407,8 +423,8 @@ const Agenda: React.FC = () => {
         const pb = getPrioLevel(b);
         if (pa !== pb) return pa - pb;
         // Same priority — earlier check-in first; for non-checked-in use scheduled time
-        const ha = pa < 50 ? (a.horaChegada || a.hora) : a.hora;
-        const hb = pb < 50 ? (b.horaChegada || b.hora) : b.hora;
+        const ha = pa < 50 ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
+        const hb = pb < 50 ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
       });
 
@@ -421,7 +437,7 @@ const Agenda: React.FC = () => {
       const cns = pac?.cns?.toLowerCase() || "";
       return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
     });
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap]);
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap, arrivalMap]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -770,6 +786,8 @@ const Agenda: React.FC = () => {
     try {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        // Update local arrival map immediately for correct sorting
+        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
 
         // Check per-professional triage setting
         let triagemHabilitada = true; // default: triage enabled
