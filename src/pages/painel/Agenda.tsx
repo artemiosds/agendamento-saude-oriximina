@@ -1748,8 +1748,13 @@ const Agenda: React.FC = () => {
                                 <strong>Tipo:</strong> {tipoInfo.label}
                               </p>
                               <p className="text-xs">
-                                <strong>Origem:</strong> {ag.origem}
+                                <strong>Origem:</strong> {ag.origem === 'externo' ? '🔗 Externo' : ag.origem}
                               </p>
+                              {(ag as any).agendadoPorExterno && (
+                                <p className="text-xs text-primary font-medium">
+                                  📋 Agendado por externo
+                                </p>
+                              )}
                               {lastAppt && (
                                 <>
                                   <hr className="my-1 border-border" />
