@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
@@ -216,6 +216,26 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
+  // ── Triage records for priority sorting ──
+  const [triageMap, setTriageMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    if (dayAgIds.length === 0) { setTriageMap({}); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("triage_records")
+        .select("agendamento_id, classificacao_risco")
+        .in("agendamento_id", dayAgIds);
+      if (!cancelled && data) {
+        const m: Record<string, string> = {};
+        for (const r of data) m[r.agendamento_id] = r.classificacao_risco || "";
+        setTriageMap(m);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [agendamentos, selectedDate]);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
@@ -313,6 +333,50 @@ const Agenda: React.FC = () => {
   }, [profissionais, filterUnit]);
 
   const filtered = useMemo(() => {
+    // Helper: compute priority level for sorting
+    const CHECKED_IN_STATUSES = new Set([
+      "confirmado_chegada", "aguardando_triagem", "aguardando_atendimento",
+      "em_atendimento", "aguardando_enfermagem", "apto_atendimento",
+    ]);
+    const MANCHESTER_PRIO: Record<string, number> = { vermelho: 1, laranja: 2, amarelo: 3, verde: 4, azul: 6 };
+
+    const calcAge = (dob: string): number => {
+      if (!dob) return 0;
+      const parts = dob.includes("/") ? dob.split("/").reverse().join("-") : dob;
+      const birth = new Date(parts + "T12:00:00");
+      if (isNaN(birth.getTime())) return 0;
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age;
+    };
+
+    const getPrioLevel = (ag: (typeof agendamentos)[0]): number => {
+      const st = ag.status as string;
+      // Completed → bottom
+      if (st === "concluido") return 99;
+      // Not checked in yet
+      if (!CHECKED_IN_STATUSES.has(st) && st !== "concluido") return 50;
+
+      // Checked in — use triage classification
+      const risco = triageMap[ag.id]?.toLowerCase();
+      if (risco && MANCHESTER_PRIO[risco] !== undefined) {
+        const basePrio = MANCHESTER_PRIO[risco];
+        // Elderly boost: if verde or azul and patient ≥60, bump up
+        if ((risco === "verde" || risco === "azul") && basePrio > 4) {
+          const pac = pacientes.find((p) => p.id === ag.pacienteId);
+          if (pac && calcAge(pac.dataNascimento) >= 60) return 5;
+        }
+        return basePrio;
+      }
+
+      // Checked in but no triage classification
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      if (pac && calcAge(pac.dataNascimento) >= 60) return 5;
+      return 7; // Normal
+    };
+
     const base = agendamentos
       .filter((a) => {
         if (a.data !== selectedDate) return false;
@@ -325,7 +389,15 @@ const Agenda: React.FC = () => {
         if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
         return true;
       })
-      .sort((a, b) => a.hora.localeCompare(b.hora));
+      .sort((a, b) => {
+        const pa = getPrioLevel(a);
+        const pb = getPrioLevel(b);
+        if (pa !== pb) return pa - pb;
+        // Same group — sort by check-in time (horaChegada) or scheduled time
+        const ha = a.horaChegada || a.hora;
+        const hb = b.horaChegada || b.hora;
+        return ha.localeCompare(hb);
+      });
 
     if (!debouncedSearch) return base;
 
@@ -336,7 +408,7 @@ const Agenda: React.FC = () => {
       const cns = pac?.cns?.toLowerCase() || "";
       return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
     });
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
