@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Search } from 'lucide-react';
 import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff, UserCog } from 'lucide-react';
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
@@ -67,6 +68,7 @@ const Funcionarios: React.FC = () => {
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
   const canManage = can('usuarios', 'can_edit');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const loadFuncionarios = async () => {
     setLoading(true);
@@ -223,9 +225,14 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const visibleFuncionarios = (user?.role === 'coordenador' || user?.role === 'recepcao')
+  const filteredFuncionarios = ((user?.role === 'coordenador' || user?.role === 'recepcao')
     ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
-    : funcionarios;
+    : funcionarios
+  ).filter(f => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -238,8 +245,11 @@ const Funcionarios: React.FC = () => {
         </TabsList>
 
         <TabsContent value="internos" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground text-sm">{visibleFuncionarios.length} cadastrados</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Buscar por nome, e-mail, CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
+            </div>
             {canManage && (
               <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
             )}
@@ -409,7 +419,7 @@ const Funcionarios: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {visibleFuncionarios.map(f => {
+              {filteredFuncionarios.map(f => {
                 const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
                 return (
                   <Card key={f.id} className="shadow-card border-0">
@@ -459,7 +469,7 @@ const Funcionarios: React.FC = () => {
                   </Card>
                 );
               })}
-              {visibleFuncionarios.length === 0 && !loading && (
+              {filteredFuncionarios.length === 0 && !loading && (
                 <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
                   Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
                 </p>

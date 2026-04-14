@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -46,6 +46,7 @@ const ProfissionaisExternos: React.FC = () => {
   const canManage = can("usuarios", "can_edit");
 
   const [externos, setExternos] = useState<ExternalProf[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -190,12 +191,18 @@ const ProfissionaisExternos: React.FC = () => {
 
   const profissionaisInternos = funcionarios.filter((f: any) => f.role === "profissional" && f.ativo);
 
+  const filteredExternos = externos.filter(e => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return e.nome.toLowerCase().includes(term) || e.email.toLowerCase().includes(term);
+  });
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Profissionais Externos</h1>
-          <p className="text-muted-foreground text-sm">{externos.length} cadastrados</p>
+          <p className="text-muted-foreground text-sm">{filteredExternos.length} de {externos.length} cadastrados</p>
         </div>
         {canManage && (
           <Button onClick={openNew} className="gradient-primary text-primary-foreground">
@@ -204,13 +211,18 @@ const ProfissionaisExternos: React.FC = () => {
         )}
       </div>
 
+      <div className="relative w-full sm:w-72">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="Buscar por nome, e-mail..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-      ) : externos.length === 0 ? (
-        <Card><CardContent className="p-8 text-center text-muted-foreground">Nenhum profissional externo cadastrado.</CardContent></Card>
+      ) : filteredExternos.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-muted-foreground">{externos.length === 0 ? "Nenhum profissional externo cadastrado." : "Nenhum resultado encontrado."}</CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {externos.map(ext => {
+          {filteredExternos.map(ext => {
             const unidade = unidades.find((u: any) => u.id === ext.unidade_id);
             const extQuotas = quotas.filter(q => q.profissional_externo_id === ext.id);
             return (
