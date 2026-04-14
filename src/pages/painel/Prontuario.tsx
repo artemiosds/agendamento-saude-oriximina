@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
