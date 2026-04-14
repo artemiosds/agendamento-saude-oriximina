@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -90,6 +91,10 @@ export interface PacienteFormData {
   endereco: string;
   nomeMae: string;
   descricaoClinica: string;
+  // Prioridade especial
+  isGestante: boolean;
+  isPne: boolean;
+  isAutista: boolean;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -127,6 +132,9 @@ export const emptyPacienteForm: PacienteFormData = {
   endereco: "",
   nomeMae: "",
   descricaoClinica: "",
+  isGestante: false,
+  isPne: false,
+  isAutista: false,
 };
 
 interface Props {
@@ -493,6 +501,28 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
             </div>
           </div>
         )}
+      </div>
+
+      {/* ═══ BLOCO 4 — PRIORIDADE ESPECIAL ═══ */}
+      <div className="space-y-3 border-t pt-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+          ⚡ Prioridade Especial
+        </div>
+        <p className="text-xs text-muted-foreground">Marque as condições aplicáveis. Idoso (≥60) é calculado automaticamente pela data de nascimento.</p>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isGestante} onCheckedChange={(v) => set("isGestante", !!v)} />
+            <span className="text-sm">Gestante</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isPne} onCheckedChange={(v) => set("isPne", !!v)} />
+            <span className="text-sm">PNE</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isAutista} onCheckedChange={(v) => set("isAutista", !!v)} />
+            <span className="text-sm">Autista (TEA)</span>
+          </label>
+        </div>
       </div>
 
       {/* ═══ BLOCO EXTRA (Accordion) ═══ */}

@@ -277,6 +277,9 @@ const Pacientes: React.FC = () => {
       outroServicoSus: (p as any).outro_servico_sus || false,
       transporte: (p as any).transporte || "",
       turnoPreferido: (p as any).turno_preferido || "",
+      isGestante: (p as any).isGestante || false,
+      isPne: (p as any).isPne || false,
+      isAutista: (p as any).isAutista || false,
     });
     setErrors({});
     setDialogOpen(true);
@@ -343,6 +346,9 @@ const Pacientes: React.FC = () => {
       outro_servico_sus: form.outroServicoSus,
       transporte: form.transporte,
       turno_preferido: form.turnoPreferido,
+      is_gestante: form.isGestante,
+      is_pne: form.isPne,
+      is_autista: form.isAutista,
     };
 
     try {

@@ -118,6 +118,9 @@ export interface Paciente {
   descricaoClinica: string;
   cid: string;
   criadoEm: string;
+  isGestante?: boolean;
+  isPne?: boolean;
+  isAutista?: boolean;
 }
 
 export interface Agendamento {
