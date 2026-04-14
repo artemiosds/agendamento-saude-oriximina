@@ -216,23 +216,39 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
-  // ── Triage records for priority sorting ──
+  // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
+  const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
     const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
-    if (dayAgIds.length === 0) { setTriageMap({}); return; }
+    if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
     (async () => {
-      const { data } = await supabase
-        .from("triage_records")
-        .select("agendamento_id, classificacao_risco")
-        .in("agendamento_id", dayAgIds);
-      if (!cancelled && data) {
-        const m: Record<string, { risco: string }> = {};
-        for (const r of data) {
-          m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+      const [triageRes, filaRes] = await Promise.all([
+        supabase
+          .from("triage_records")
+          .select("agendamento_id, classificacao_risco")
+          .in("agendamento_id", dayAgIds),
+        supabase
+          .from("fila_espera" as any)
+          .select("id, hora_chegada")
+          .in("id", dayAgIds),
+      ]);
+      if (!cancelled) {
+        if (triageRes.data) {
+          const m: Record<string, { risco: string }> = {};
+          for (const r of triageRes.data) {
+            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+          }
+          setTriageMap(m);
         }
-        setTriageMap(m);
+        if (filaRes.data) {
+          const a: Record<string, string> = {};
+          for (const f of filaRes.data as any[]) {
+            if (f.hora_chegada) a[f.id] = f.hora_chegada;
+          }
+          setArrivalMap(a);
+        }
       }
     })();
     return () => { cancelled = true; };
