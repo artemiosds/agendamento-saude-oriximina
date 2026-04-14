@@ -1748,7 +1748,7 @@ const Agenda: React.FC = () => {
                                 <strong>Tipo:</strong> {tipoInfo.label}
                               </p>
                               <p className="text-xs">
-                                <strong>Origem:</strong> {ag.origem === 'externo' ? '🔗 Externo' : ag.origem}
+                                <strong>Origem:</strong> {(ag.origem as string) === 'externo' ? '🔗 Externo' : ag.origem}
                               </p>
                               {(ag as any).agendadoPorExterno && (
                                 <p className="text-xs text-primary font-medium">
