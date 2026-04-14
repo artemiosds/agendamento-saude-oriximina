@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
@@ -45,6 +45,7 @@ import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -474,6 +475,20 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const dialogOpenRef = useRef(false);
+  useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
+
+  const silentRefreshProntuarios = useCallback(() => {
+    // Don't refresh while user is editing — it resets form state (SOAP fields)
+    if (dialogOpenRef.current) return;
+    loadProntuarios();
+  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeSubscription({
+    tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
+    onchange: silentRefreshProntuarios,
+  });
+
   const loadTriagem = async (agendamentoId: string) => {
     try {
       // Try to find triage by agendamento_id first
@@ -560,6 +575,8 @@ const ProntuarioPage: React.FC = () => {
     return map[agendaTipo] || 'avaliacao_inicial';
   };
 
+  const initializedRef = useRef(false);
+
   useEffect(() => {
     const pacienteId = searchParams.get("pacienteId");
     const pacienteNome = searchParams.get("pacienteNome");
@@ -569,7 +586,21 @@ const ProntuarioPage: React.FC = () => {
     const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
-      // Coming from Agenda with a specific appointment — open form
+      // Only initialize once per searchParams to avoid re-opening/resetting the form
+      // when prontuarios refresh in background
+      if (initializedRef.current) {
+        // If already initialized, only update if we find an existing prontuário for this agendamento
+        // and we don't already have the dialog open
+        if (!dialogOpen) {
+          const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
+          if (existingForAgendamento) {
+            openEdit(existingForAgendamento);
+          }
+        }
+        return;
+      }
+      initializedRef.current = true;
+
       loadTriagem(agendamentoId);
       loadEpisodios(pacienteId);
       const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
@@ -603,10 +634,9 @@ const ProntuarioPage: React.FC = () => {
         }
       }
     } else if (pacienteId && pacienteNome) {
-      // Coming from Pacientes page — just show the filtered list, don't open form
       setSearch(pacienteNome);
     }
-  }, [searchParams, prontuarios.length]);
+  }, [searchParams, prontuarios.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
@@ -741,13 +771,6 @@ const ProntuarioPage: React.FC = () => {
     }
     const soapPayload = sessionSoapPayload;
     const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
-    console.log('SOAP enviado:', {
-      soap: soapPayload,
-      soapEnabled,
-      tipo_registro: form.tipo_registro,
-      agendamento_id: form.agendamento_id || null,
-      session_id: currentSessionForRegistration?.id || null,
-    });
     if (soapValidationError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
