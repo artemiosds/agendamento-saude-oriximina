@@ -68,6 +68,7 @@ const Funcionarios: React.FC = () => {
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
   const canManage = can('usuarios', 'can_edit');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const loadFuncionarios = async () => {
     setLoading(true);

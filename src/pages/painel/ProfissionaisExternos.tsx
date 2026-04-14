@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
