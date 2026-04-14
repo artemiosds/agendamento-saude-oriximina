@@ -475,7 +475,15 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadTriagem = async (agendamentoId: string) => {
+  const silentRefreshProntuarios = useCallback(() => {
+    loadProntuarios();
+  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeSubscription({
+    tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
+    onchange: silentRefreshProntuarios,
+  });
+
     try {
       // Try to find triage by agendamento_id first
       let { data } = await (supabase as any)
