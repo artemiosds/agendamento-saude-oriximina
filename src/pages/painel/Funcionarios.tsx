@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Search } from 'lucide-react';
 import { Plus, Pencil, Trash2, Loader2, CalendarCheck, Eye, EyeOff, UserCog } from 'lucide-react';
 import { UserRole } from '@/types';
 import { toast } from 'sonner';
