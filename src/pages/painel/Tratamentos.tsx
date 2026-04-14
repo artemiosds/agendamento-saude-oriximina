@@ -165,6 +165,7 @@ const Tratamentos: React.FC = () => {
     getAvailableSlots,
     getAvailableDates,
     addAgendamento,
+    cancelAgendamento,
   } = useData();
   const { user } = useAuth();
   const { can } = usePermissions();
