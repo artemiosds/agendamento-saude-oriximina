@@ -776,11 +776,7 @@ const Agenda: React.FC = () => {
           await updateAgendamento(agId, { status: "confirmado_chegada" as any });
 
           const filaExistente = fila.find(
-            (item) =>
-              item.id === agId ||
-              (item.pacienteId === ag.pacienteId &&
-                item.unidadeId === ag.unidadeId &&
-                !["atendido", "cancelado", "falta"].includes(item.status)),
+            (item) => item.id === agId,
           );
 
           if (filaExistente) {
@@ -817,11 +813,7 @@ const Agenda: React.FC = () => {
           await updateAgendamento(agId, { status: "apto_atendimento" as any });
 
           const filaExistente = fila.find(
-            (item) =>
-              item.id === agId ||
-              (item.pacienteId === ag.pacienteId &&
-                item.unidadeId === ag.unidadeId &&
-                !["atendido", "cancelado", "falta"].includes(item.status)),
+            (item) => item.id === agId,
           );
 
           if (filaExistente) {
