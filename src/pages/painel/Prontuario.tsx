@@ -484,6 +484,7 @@ const ProntuarioPage: React.FC = () => {
     onchange: silentRefreshProntuarios,
   });
 
+  const loadTriagem = async (agendamentoId: string) => {
     try {
       // Try to find triage by agendamento_id first
       let { data } = await (supabase as any)
