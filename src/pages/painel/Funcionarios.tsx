@@ -229,237 +229,249 @@ const Funcionarios: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
-          <p className="text-muted-foreground text-sm">{visibleFuncionarios.length} cadastrados</p>
-        </div>
-        {canManage && (
-          <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
-        )}
-      </div>
+      <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Usuário *</Label><Input value={form.usuario} onChange={e => setForm(p => ({ ...p, usuario: e.target.value }))} /></div>
-              <div>
-                <Label>{editId ? 'Nova Senha (opcional)' : 'Senha *'}</Label>
-                <div className="relative">
-                  <Input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="pr-10" placeholder="Min. 6 caracteres (a-z, A-Z, 0-9)" />
-                  <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {form.senha && (form.senha.length < 6 || !/[a-z]/.test(form.senha) || !/[A-Z]/.test(form.senha) || !/[0-9]/.test(form.senha)) && (
-                  <p className="text-xs text-destructive mt-1">A senha deve ter min. 6 caracteres com letras minúsculas, maiúsculas e números.</p>
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-              <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Cargo</Label><Input value={form.cargo} onChange={e => setForm(p => ({ ...p, cargo: e.target.value }))} /></div>
-              <div><Label>Perfil do Usuário *</Label>
-                <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as UserRole }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o perfil" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="master">MASTER</SelectItem>
-                    <SelectItem value="gestao">GESTÃO</SelectItem>
-                    <SelectItem value="recepcao">RECEPÇÃO</SelectItem>
-                    <SelectItem value="tecnico">TRIAGEM</SelectItem>
-                    <SelectItem value="enfermagem">ENFERMAGEM</SelectItem>
-                    <SelectItem value="profissional">PROFISSIONAL</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
-              <div><Label>Unidade</Label>
-                <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Sala</Label>
-                <Select value={form.sala_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, sala_id: v === '__none__' ? '' : v }))}>
-                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Todas</SelectItem>
-                    {salas.filter(s => !form.unidade_id || s.unidadeId === form.unidade_id).map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.role === 'profissional' && (
-                <div>
-                  <Label>Tempo de Atendimento</Label>
-                  <Select value={String(form.tempo_atendimento)} onValueChange={v => setForm(p => ({ ...p, tempo_atendimento: Number(v) }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="15">15 minutos</SelectItem>
-                      <SelectItem value="20">20 minutos</SelectItem>
-                      <SelectItem value="30">30 minutos</SelectItem>
-                      <SelectItem value="45">45 minutos</SelectItem>
-                      <SelectItem value="60">60 minutos</SelectItem>
-                      <SelectItem value="90">90 minutos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            {(form.role === 'profissional' || form.role === 'tecnico' || form.role === 'enfermagem') && (
-              <>
-                <div className="border-t pt-3 mt-2">
-                  <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
-                </div>
-                {(form.role === 'tecnico' || form.role === 'enfermagem') && (
-                  <div>
-                    <Label>COREN</Label>
-                    <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
-                  </div>
-                )}
-                {form.role === 'profissional' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Profissão</Label>
-                        <Select value={form.profissao || '__none__'} onValueChange={v => {
-                          const prof = v === '__none__' ? '' : v;
-                          const conselho = conselhoMap[prof] || '';
-                          setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
-                        }}>
-                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Selecione</SelectItem>
-                            {Object.keys(conselhoMap).map(p => (
-                              <SelectItem key={p} value={p}>{p}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Tipo de Conselho</Label>
-                        <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>Nº do Conselho</Label>
-                        <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
-                      </div>
-                      <div>
-                        <Label>UF do Conselho</Label>
-                        <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
-                          <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">—</SelectItem>
-                            {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
-                              <SelectItem key={uf} value={uf}>{uf}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
+      <Tabs defaultValue="internos">
+        <TabsList className="w-full">
+          <TabsTrigger value="internos" className="flex-1">Funcionários Internos</TabsTrigger>
+          <TabsTrigger value="externos" className="flex-1"><UserCog className="w-4 h-4 mr-1" />Profissionais Externos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="internos" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-muted-foreground text-sm">{visibleFuncionarios.length} cadastrados</p>
+            {canManage && (
+              <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
             )}
-            {form.role === 'profissional' && canManage && (
-              <div className="border-t pt-3 mt-2">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-semibold">Permissão de Retorno</Label>
-                    <p className="text-xs text-muted-foreground">Permitir que este profissional agende retorno de paciente</p>
-                  </div>
-                  <Switch
-                    checked={form.pode_agendar_retorno}
-                    onCheckedChange={v => setForm(p => ({ ...p, pode_agendar_retorno: v }))}
-                  />
-                </div>
-              </div>
-            )}
-            <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {editId ? 'Salvar' : 'Cadastrar'}
-            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {visibleFuncionarios.map(f => {
-            const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
-            return (
-              <Card key={f.id} className="shadow-card border-0">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                    {f.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{f.nome}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {f.cargo}{f.setor ? ` • ${f.setor}` : ''}
-                      {f.role === 'profissional' && f.tempo_atendimento ? ` • ${f.tempo_atendimento}min` : ''}
-                    </p>
-                    {f.tipo_conselho && f.numero_conselho && (
-                      <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Usuário *</Label><Input value={form.usuario} onChange={e => setForm(p => ({ ...p, usuario: e.target.value }))} /></div>
+                  <div>
+                    <Label>{editId ? 'Nova Senha (opcional)' : 'Senha *'}</Label>
+                    <div className="relative">
+                      <Input type={showSenha ? 'text' : 'password'} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} className="pr-10" placeholder="Min. 6 caracteres (a-z, A-Z, 0-9)" />
+                      <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                    {form.senha && (form.senha.length < 6 || !/[a-z]/.test(form.senha) || !/[A-Z]/.test(form.senha) || !/[0-9]/.test(form.senha)) && (
+                      <p className="text-xs text-destructive mt-1">A senha deve ter min. 6 caracteres com letras minúsculas, maiúsculas e números.</p>
                     )}
-                    {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
-                    {f.role === 'profissional' && f.pode_agendar_retorno && (
-                      <Badge variant="outline" className="text-xs mt-1 border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-1" />Retorno</Badge>
-                    )}
-                    {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
                   </div>
-                  <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
-                    {roleLabels[f.role as UserRole] || f.role}
-                  </Badge>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
-                            <AlertDialogDescription>Tem certeza que deseja excluir {f.nome}? Esta ação não pode ser desfeita.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(f.id)}>Excluir</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                  <div><Label>CPF</Label><Input value={form.cpf} onChange={e => setForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Cargo</Label><Input value={form.cargo} onChange={e => setForm(p => ({ ...p, cargo: e.target.value }))} /></div>
+                  <div><Label>Perfil do Usuário *</Label>
+                    <Select value={form.role} onValueChange={v => setForm(p => ({ ...p, role: v as UserRole }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione o perfil" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="master">MASTER</SelectItem>
+                        <SelectItem value="gestao">GESTÃO</SelectItem>
+                        <SelectItem value="recepcao">RECEPÇÃO</SelectItem>
+                        <SelectItem value="tecnico">TRIAGEM</SelectItem>
+                        <SelectItem value="enfermagem">ENFERMAGEM</SelectItem>
+                        <SelectItem value="profissional">PROFISSIONAL</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
+                  <div><Label>Unidade</Label>
+                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Sala</Label>
+                    <Select value={form.sala_id || '__none__'} onValueChange={v => setForm(p => ({ ...p, sala_id: v === '__none__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Todas</SelectItem>
+                        {salas.filter(s => !form.unidade_id || s.unidadeId === form.unidade_id).map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.role === 'profissional' && (
+                    <div>
+                      <Label>Tempo de Atendimento</Label>
+                      <Select value={String(form.tempo_atendimento)} onValueChange={v => setForm(p => ({ ...p, tempo_atendimento: Number(v) }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="15">15 minutos</SelectItem>
+                          <SelectItem value="20">20 minutos</SelectItem>
+                          <SelectItem value="30">30 minutos</SelectItem>
+                          <SelectItem value="45">45 minutos</SelectItem>
+                          <SelectItem value="60">60 minutos</SelectItem>
+                          <SelectItem value="90">90 minutos</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            );
-          })}
-          {visibleFuncionarios.length === 0 && !loading && (
-            <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
-              Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
-            </p>
+                </div>
+                {(form.role === 'profissional' || form.role === 'tecnico' || form.role === 'enfermagem') && (
+                  <>
+                    <div className="border-t pt-3 mt-2">
+                      <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
+                    </div>
+                    {(form.role === 'tecnico' || form.role === 'enfermagem') && (
+                      <div>
+                        <Label>COREN</Label>
+                        <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
+                      </div>
+                    )}
+                    {form.role === 'profissional' && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Profissão</Label>
+                            <Select value={form.profissao || '__none__'} onValueChange={v => {
+                              const prof = v === '__none__' ? '' : v;
+                              const conselho = conselhoMap[prof] || '';
+                              setForm(p => ({ ...p, profissao: prof, tipo_conselho: conselho || p.tipo_conselho }));
+                            }}>
+                              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Selecione</SelectItem>
+                                {Object.keys(conselhoMap).map(p => (
+                                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Tipo de Conselho</Label>
+                            <Input value={form.tipo_conselho} onChange={e => setForm(p => ({ ...p, tipo_conselho: e.target.value }))} placeholder="CRM, COREN..." />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>Nº do Conselho</Label>
+                            <Input value={form.numero_conselho} onChange={e => setForm(p => ({ ...p, numero_conselho: e.target.value }))} placeholder="000000" />
+                          </div>
+                          <div>
+                            <Label>UF do Conselho</Label>
+                            <Select value={form.uf_conselho || '__none__'} onValueChange={v => setForm(p => ({ ...p, uf_conselho: v === '__none__' ? '' : v }))}>
+                              <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf => (
+                                  <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {form.role === 'profissional' && canManage && (
+                  <div className="border-t pt-3 mt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-semibold">Permissão de Retorno</Label>
+                        <p className="text-xs text-muted-foreground">Permitir que este profissional agende retorno de paciente</p>
+                      </div>
+                      <Switch
+                        checked={form.pode_agendar_retorno}
+                        onCheckedChange={v => setForm(p => ({ ...p, pode_agendar_retorno: v }))}
+                      />
+                    </div>
+                  </div>
+                )}
+                <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
+                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  {editId ? 'Salvar' : 'Cadastrar'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {visibleFuncionarios.map(f => {
+                const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
+                return (
+                  <Card key={f.id} className="shadow-card border-0">
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+                        {f.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-foreground">{f.nome}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {f.cargo}{f.setor ? ` • ${f.setor}` : ''}
+                          {f.role === 'profissional' && f.tempo_atendimento ? ` • ${f.tempo_atendimento}min` : ''}
+                        </p>
+                        {f.tipo_conselho && f.numero_conselho && (
+                          <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
+                        )}
+                        {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
+                        {f.role === 'profissional' && f.pode_agendar_retorno && (
+                          <Badge variant="outline" className="text-xs mt-1 border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-1" />Retorno</Badge>
+                        )}
+                        {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
+                      </div>
+                      <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
+                        {roleLabels[f.role as UserRole] || f.role}
+                      </Badge>
+                      {canManage && (
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
+                                <AlertDialogDescription>Tem certeza que deseja excluir {f.nome}? Esta ação não pode ser desfeita.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(f.id)}>Excluir</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {visibleFuncionarios.length === 0 && !loading && (
+                <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
+                  Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
+                </p>
+              )}
+            </div>
           )}
-        </div>
-      )}
+        </TabsContent>
+
+        <TabsContent value="externos" className="mt-4">
+          <ProfissionaisExternos />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
