@@ -419,7 +419,7 @@ const Funcionarios: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {visibleFuncionarios.map(f => {
+              {filteredFuncionarios.map(f => {
                 const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
                 return (
                   <Card key={f.id} className="shadow-card border-0">
@@ -469,7 +469,7 @@ const Funcionarios: React.FC = () => {
                   </Card>
                 );
               })}
-              {visibleFuncionarios.length === 0 && !loading && (
+              {filteredFuncionarios.length === 0 && !loading && (
                 <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
                   Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
                 </p>
