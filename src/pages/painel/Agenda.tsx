@@ -786,6 +786,8 @@ const Agenda: React.FC = () => {
     try {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        // Update local arrival map immediately for correct sorting
+        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
 
         // Check per-professional triage setting
         let triagemHabilitada = true; // default: triage enabled
