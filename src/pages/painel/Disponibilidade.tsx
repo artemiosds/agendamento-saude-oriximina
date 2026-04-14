@@ -838,11 +838,17 @@ const Disponibilidade: React.FC = () => {
                         <div key={tId} className="flex items-center gap-2 text-xs">
                           <Badge variant="outline" className="text-[10px]">{info.turno?.nome || tId}</Badge>
                           <span className="text-muted-foreground">{info.turno?.horaInicio}–{info.turno?.horaFim}</span>
-                          <span className="font-medium">{info.vagas} vagas</span>
+                          <span className="font-medium">{info.vagas} vagas (configurado)</span>
                           <span className="text-muted-foreground">• {info.days.sort().map(d => diasSemanaLabels[d]).join(', ')}</span>
                         </div>
                       ))}
                     </div>
+
+                    {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
+                      <div className="mt-2">
+                        <SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -903,7 +909,7 @@ const Disponibilidade: React.FC = () => {
                   <div className="flex items-center gap-3 text-xs text-muted-foreground border-t border-border pt-2">
                     <span>{first.vagasPorHora} vagas/hora</span>
                     <span>•</span>
-                    <span>{first.vagasPorDia} vagas/dia</span>
+                    <span>{first.vagasPorDia} vagas/dia (configurado)</span>
                     <span>•</span>
                     <span>{first.duracaoConsulta || 30}min/consulta</span>
                   </div>

@@ -62,6 +62,9 @@ const RelatorioAlta               = lazyRetry(() => import("./pages/painel/Relat
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
+
+const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
+const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
 const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -156,6 +159,8 @@ const App = () => (
                   <Route path="/login" element={<LoginRedirect />} />
                   <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
                   <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
+                  <Route path="/externo" element={<Suspense fallback={<PageLoader />}><LoginExterno /></Suspense>} />
+                  <Route path="/externo/agendar" element={<Suspense fallback={<PageLoader />}><AgendamentoExterno /></Suspense>} />
 
                   {/* PainelLayout has its own internal Suspense for child routes */}
                   <Route
@@ -173,6 +178,7 @@ const App = () => (
                     <Route path="atendimentos" element={<ModuleRoute modulo="atendimento"><Atendimentos /></ModuleRoute>} />
                     <Route path="relatorios" element={<ModuleRoute modulo="relatorios"><Relatorios /></ModuleRoute>} />
                     <Route path="funcionarios" element={<ModuleRoute modulo="usuarios"><Funcionarios /></ModuleRoute>} />
+                    
                     <Route path="unidades" element={<ModuleRoute modulo="usuarios"><UnidadesSalas /></ModuleRoute>} />
                     <Route path="disponibilidade" element={<ModuleRoute modulo="usuarios"><Disponibilidade /></ModuleRoute>} />
                     <Route path="prontuario" element={<ModuleRoute modulo="prontuario"><Prontuario /></ModuleRoute>} />

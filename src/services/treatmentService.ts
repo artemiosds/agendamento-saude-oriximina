@@ -82,7 +82,10 @@ export function normalizeSoapPayload(soap: Partial<SoapPayload> | null | undefin
   };
 }
 
-export function getSoapValidationError(soap: Partial<SoapPayload> | null | undefined) {
+export function getSoapValidationError(soap: Partial<SoapPayload> | null | undefined, options?: { required?: boolean }) {
+  // If SOAP is explicitly not required, skip validation
+  if (options?.required === false) return null;
+
   const normalized = normalizeSoapPayload(soap);
 
   if (!normalized.subjetivo) return 'Preencha o campo Subjetivo (S)';
@@ -165,11 +168,14 @@ export const treatmentService = {
   },
 
   async registerCompletedSession(input: RegisterCompletedSessionInput): Promise<RegisterCompletedSessionResult> {
-    const soap = normalizeSoapPayload(input.soap);
-    const soapValidationError = getSoapValidationError(soap);
-
-    if (soapValidationError) {
-      throw new Error(soapValidationError);
+    const hasSoap = input.soap && (input.soap.subjetivo || input.soap.objetivo || input.soap.avaliacao || input.soap.plano);
+    const soap = hasSoap ? normalizeSoapPayload(input.soap) : normalizeSoapPayload(null);
+    // SOAP validation is now optional — only validate if SOAP was provided
+    if (hasSoap) {
+      const soapValidationError = getSoapValidationError(soap, { required: false });
+      if (soapValidationError) {
+        throw new Error(soapValidationError);
+      }
     }
 
     const procedureDone =

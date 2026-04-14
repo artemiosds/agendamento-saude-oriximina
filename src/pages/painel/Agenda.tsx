@@ -1045,6 +1045,7 @@ const Agenda: React.FC = () => {
       agendamentoId: ag.id,
       horaInicio,
       data: ag.data,
+      tipo: ag.tipo || '',
     });
     navigate(`/painel/prontuario?${params.toString()}`);
   };
@@ -1747,8 +1748,13 @@ const Agenda: React.FC = () => {
                                 <strong>Tipo:</strong> {tipoInfo.label}
                               </p>
                               <p className="text-xs">
-                                <strong>Origem:</strong> {ag.origem}
+                                <strong>Origem:</strong> {(ag.origem as string) === 'externo' ? '🔗 Externo' : ag.origem}
                               </p>
+                              {(ag as any).agendadoPorExterno && (
+                                <p className="text-xs text-primary font-medium">
+                                  📋 Agendado por externo
+                                </p>
+                              )}
                               {lastAppt && (
                                 <>
                                   <hr className="my-1 border-border" />
@@ -1909,7 +1915,16 @@ const Agenda: React.FC = () => {
                                     pacienteNome: ag.pacienteNome,
                                     agendamentoId: ag.id,
                                     data: ag.data,
+                                    tipo: ag.tipo || '',
                                   });
+                                  // Restore horaInicio from localStorage so Prontuario can show Finalizar button
+                                  try {
+                                    const stored = localStorage.getItem(`timer_${ag.id}`);
+                                    if (stored) {
+                                      const parsed = JSON.parse(stored);
+                                      if (parsed.horaInicio) params.set('horaInicio', parsed.horaInicio);
+                                    }
+                                  } catch {}
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}
                               >
@@ -1927,6 +1942,7 @@ const Agenda: React.FC = () => {
                                     pacienteNome: ag.pacienteNome,
                                     agendamentoId: ag.id,
                                     data: ag.data,
+                                    tipo: ag.tipo || '',
                                   });
                                   navigate(`/painel/prontuario?${params.toString()}`);
                                 }}

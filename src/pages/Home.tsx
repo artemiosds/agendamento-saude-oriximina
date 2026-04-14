@@ -18,6 +18,7 @@ import {
   User,
   HeartHandshake,
   HandMetal,
+  UserCheck,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import logoSms from "@/assets/logo-sms.jpeg";
@@ -82,6 +83,16 @@ const Home: React.FC = () => {
                 >
                   <Shield className="w-5 h-5 mr-2" />
                   Painel Interno
+                </Button>
+              </Link>
+              <Link to="/externo">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="bg-white/[0.05] border-white/25 text-white/90 font-medium hover:bg-white/10 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-200 w-full sm:w-auto"
+                >
+                  <UserCheck className="w-5 h-5 mr-2" />
+                  Acesso Externo
                 </Button>
               </Link>
             </div>

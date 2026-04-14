@@ -32,7 +32,7 @@ import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
-import { FichaImpressao } from "@/components/FichaImpressao";
+import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
 
 interface FichaDados {
@@ -125,6 +125,7 @@ const Pacientes: React.FC = () => {
   const [fichaOpen, setFichaOpen] = useState(false);
   const [fichaLoading, setFichaLoading] = useState(false);
   const [fichaData, setFichaData] = useState<FichaDados | null>(null);
+  const [fichaPrintMode, setFichaPrintMode] = useState<FichaPrintMode>('completa');
 
   // Filter state
   const [filterFila, setFilterFila] = useState("all");
@@ -545,34 +546,39 @@ const Pacientes: React.FC = () => {
     // A) PACIENTE
     const pacientePromise = supabase
       .from("pacientes")
-      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone")
+      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone, endereco, cid")
       .eq("id", pacienteId)
       .single()
       .then(({ data, error }) => {
         if (error || !data) throw new Error("Paciente não encontrado");
         return {
-          nome_completo: data.nome || "",
-          cpf: data.cpf || "",
-          cns: data.cns || "",
-          data_nascimento: data.data_nascimento || "",
-          nome_mae: data.nome_mae || "",
-          telefone: data.telefone || "",
+          paciente: {
+            nome_completo: data.nome || "",
+            cpf: data.cpf || "",
+            cns: data.cns || "",
+            data_nascimento: data.data_nascimento || "",
+            nome_mae: data.nome_mae || "",
+            telefone: data.telefone || "",
+            endereco: data.endereco || "",
+          },
+          cid: data.cid || "",
         };
       });
 
-    // B) DADOS CLÍNICOS — último agendamento
+    // B) DADOS CLÍNICOS — agendamento do dia atual (ou mais recente se não houver hoje)
+    const today = new Date().toISOString().split("T")[0];
     const dadosClinicosPromise = supabase
       .from("agendamentos")
       .select("id, tipo, data, unidade_id, profissional_id")
       .eq("paciente_id", pacienteId)
       .order("data", { ascending: false })
-      .limit(1)
-      .then(({ data, error }) => {
-        const lastAg = data?.[0];
+      .limit(20)
+      .then(({ data }) => {
+        const todayAg = data?.find((a) => a.data === today);
+        const lastAg = todayAg || data?.[0];
         const unidade = lastAg?.unidade_id ? unidades.find((u) => u.id === lastAg.unidade_id) : null;
         return {
           numero_prontuario: pacienteId,
-          cid: "",
           tipo_atendimento: lastAg?.tipo || "",
           unidade_origem: "",
           unidade_atendimento: unidade?.nome || "",
@@ -587,7 +593,7 @@ const Pacientes: React.FC = () => {
       .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
       .order("criado_em", { ascending: false })
       .limit(1)
-      .then(({ data, error }) => {
+      .then(({ data }: any) => {
         const triagem = data?.[0];
         return {
           pressao_arterial: triagem?.pressao_arterial || "",
@@ -606,23 +612,23 @@ const Pacientes: React.FC = () => {
       registro: user?.numeroConselho || "",
     });
 
-    // E) EVOLUÇÕES CLÍNICAS — últimos atendimentos
+    // E) EVOLUÇÕES CLÍNICAS — prontuários reais (não agendamentos)
     const evolucionesPromise = supabase
-      .from("agendamentos")
-      .select("data, observacoes, profissional_nome, tipo")
+      .from("prontuarios")
+      .select("data_atendimento, profissional_nome, soap_subjetivo, soap_objetivo, observacoes")
       .eq("paciente_id", pacienteId)
-      .order("data", { ascending: false })
+      .order("data_atendimento", { ascending: false })
       .limit(5)
-      .then(({ data, error }) => {
-        return (data || []).map((ag) => ({
-          data: ag.data || "",
-          observacao: ag.observacoes || "",
-          profissional: ag.profissional_nome || "",
+      .then(({ data }) => {
+        return (data || []).map((p) => ({
+          data: p.data_atendimento || "",
+          observacao: p.soap_subjetivo || p.observacoes || "",
+          profissional: p.profissional_nome || "",
         }));
       });
 
     // Executar todas as buscas em paralelo
-    const [paciente, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
+    const [pacienteResult, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
       pacientePromise,
       dadosClinicosPromise,
       sinaisVitaisPromise,
@@ -631,8 +637,8 @@ const Pacientes: React.FC = () => {
     ]);
 
     return {
-      paciente,
-      dadosClinicos,
+      paciente: pacienteResult.paciente,
+      dadosClinicos: { ...dadosClinicos, cid: pacienteResult.cid },
       sinaisVitais,
       profissional,
       evoluciones,
@@ -640,7 +646,8 @@ const Pacientes: React.FC = () => {
   }, [unidades, user]);
 
   // Abrir ficha de impressão
-  const handleOpenFicha = async (p: (typeof pacientes)[0]) => {
+  const handleOpenFicha = async (p: (typeof pacientes)[0], mode: FichaPrintMode = 'completa') => {
+    setFichaPrintMode(mode);
     setFichaLoading(true);
     setFichaOpen(true);
     try {
@@ -902,7 +909,7 @@ const Pacientes: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       className="h-8 w-8 p-0"
-                      onClick={() => handleOpenFicha(p)}
+                      onClick={() => handleOpenFicha(p, 'completa')}
                       title="Imprimir Ficha"
                     >
                       <Printer className="w-3.5 h-3.5" />
@@ -1076,10 +1083,18 @@ const Pacientes: React.FC = () => {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => handleOpenFicha(detalhePaciente)}
+                      onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
                     >
                       <Printer className="w-4 h-4 mr-2" />
-                      Imprimir Ficha
+                      Ficha Completa
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
+                    >
+                      <Printer className="w-4 h-4 mr-2" />
+                      Só Dados
                     </Button>
                   </div>
                 </Secao>
@@ -1110,11 +1125,15 @@ const Pacientes: React.FC = () => {
       {/* Dialog de impressão da ficha */}
       <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b flex flex-row items-center justify-between">
             <DialogTitle className="font-display flex items-center gap-2">
               <Printer className="w-5 h-5" />
-              Ficha de Atendimento Clínico
+              {fichaPrintMode === 'dados_pessoais' ? 'Ficha Cadastral' : 'Ficha de Atendimento Clínico'}
             </DialogTitle>
+            <div className="flex gap-2">
+              <Button size="sm" variant={fichaPrintMode === 'completa' ? 'default' : 'outline'} onClick={() => setFichaPrintMode('completa')}>Completa</Button>
+              <Button size="sm" variant={fichaPrintMode === 'dados_pessoais' ? 'default' : 'outline'} onClick={() => setFichaPrintMode('dados_pessoais')}>Só Dados Pessoais</Button>
+            </div>
           </DialogHeader>
           <div className="px-6 pb-6">
             {fichaLoading ? (
@@ -1123,7 +1142,7 @@ const Pacientes: React.FC = () => {
                 <p className="text-sm text-muted-foreground">Carregando dados da ficha...</p>
               </div>
             ) : fichaData ? (
-              <FichaImpressao data={fichaData} onPrintComplete={handlePrintComplete} />
+              <FichaImpressao data={fichaData} mode={fichaPrintMode} onPrintComplete={handlePrintComplete} />
             ) : (
               <div className="text-center py-16 text-muted-foreground">
                 <p>Erro ao carregar dados da ficha.</p>

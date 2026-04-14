@@ -147,7 +147,8 @@ export interface Agendamento {
     | "apto_atendimento";
   tipo: string;
   observacoes: string;
-  origem: "online" | "recepcao" | "profissional";
+  origem: "online" | "recepcao" | "profissional" | "externo";
+  agendadoPorExterno?: string;
   googleEventId?: string;
   syncStatus?: "ok" | "pendente" | "erro";
   criadoEm: string;
