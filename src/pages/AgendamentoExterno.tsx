@@ -117,18 +117,17 @@ const AgendamentoExterno: React.FC = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Filter quotas by today's date range ──
+  // ── Active quotas (with remaining slots) ──
   const activeQuotas = useMemo(() => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    return quotas.filter(q => q.periodo_inicio <= today && q.periodo_fim >= today);
+    return quotas.filter(q => q.vagas_usadas < q.vagas_total);
   }, [quotas]);
 
-  // Available professionals for selected unidade (those with active quota and remaining slots)
+  // Available professionals (those with active quota and remaining slots)
   const availableProfessionals = useMemo(() => {
     return activeQuotas
       .filter(q => {
-        if (selectedUnidade && q.unidade_id !== selectedUnidade) return false;
-        return q.vagas_usadas < q.vagas_total;
+        if (selectedUnidade && q.unidade_id && q.unidade_id !== selectedUnidade) return false;
+        return true;
       })
       .map(q => {
         const prof = professionals.find(p => p.id === q.profissional_interno_id);
