@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
@@ -45,6 +45,7 @@ import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 const PTS_SPECIALTIES = [
   'Fisioterapia', 'Fonoaudiologia', 'Psicologia', 'Terapia Ocupacional',
@@ -474,6 +475,15 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const silentRefreshProntuarios = useCallback(() => {
+    loadProntuarios();
+  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRealtimeSubscription({
+    tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
+    onchange: silentRefreshProntuarios,
+  });
+
   const loadTriagem = async (agendamentoId: string) => {
     try {
       // Try to find triage by agendamento_id first
@@ -741,13 +751,6 @@ const ProntuarioPage: React.FC = () => {
     }
     const soapPayload = sessionSoapPayload;
     const soapValidationError = soapEnabled && !isMedico(user?.profissao) ? sessionSoapValidationError : null;
-    console.log('SOAP enviado:', {
-      soap: soapPayload,
-      soapEnabled,
-      tipo_registro: form.tipo_registro,
-      agendamento_id: form.agendamento_id || null,
-      session_id: currentSessionForRegistration?.id || null,
-    });
     if (soapValidationError) {
       setSoapErrors(true);
       soapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
