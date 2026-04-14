@@ -225,9 +225,14 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const visibleFuncionarios = (user?.role === 'coordenador' || user?.role === 'recepcao')
+  const filteredFuncionarios = ((user?.role === 'coordenador' || user?.role === 'recepcao')
     ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
-    : funcionarios;
+    : funcionarios
+  ).filter(f => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term);
+  });
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -240,8 +245,11 @@ const Funcionarios: React.FC = () => {
         </TabsList>
 
         <TabsContent value="internos" className="mt-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-muted-foreground text-sm">{visibleFuncionarios.length} cadastrados</p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Buscar por nome, e-mail, CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
+            </div>
             {canManage && (
               <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
             )}
