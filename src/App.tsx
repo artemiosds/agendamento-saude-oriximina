@@ -159,6 +159,8 @@ const App = () => (
                   <Route path="/login" element={<LoginRedirect />} />
                   <Route path="/agendar" element={<Suspense fallback={<PageLoader />}><AgendarOnline /></Suspense>} />
                   <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalPaciente /></Suspense>} />
+                  <Route path="/externo" element={<Suspense fallback={<PageLoader />}><LoginExterno /></Suspense>} />
+                  <Route path="/externo/agendar" element={<Suspense fallback={<PageLoader />}><AgendamentoExterno /></Suspense>} />
 
                   {/* PainelLayout has its own internal Suspense for child routes */}
                   <Route
