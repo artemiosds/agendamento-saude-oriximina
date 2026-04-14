@@ -475,7 +475,12 @@ const ProntuarioPage: React.FC = () => {
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const dialogOpenRef = useRef(false);
+  useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
+
   const silentRefreshProntuarios = useCallback(() => {
+    // Don't refresh while user is editing — it resets form state (SOAP fields)
+    if (dialogOpenRef.current) return;
     loadProntuarios();
   }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
