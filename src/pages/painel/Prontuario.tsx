@@ -41,7 +41,8 @@ import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
-import { isMedico } from "@/data/soapOptionsByProfession";
+import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
+import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
 import { Stamp } from "lucide-react";
 import { getSoapValidationError, normalizeSoapPayload, treatmentService } from "@/services/treatmentService";
 
@@ -230,6 +231,8 @@ const ProntuarioPage: React.FC = () => {
   const { isBlocoVisible: isProfBlocoVisible, config: profConfig } = useProntuarioConfig(user?.id, form.tipo_registro);
   // Custom fields storage (for fields not in DB columns)
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const soapCustom = useSoapCustomOptions(user?.id);
+  const showSoapDropdown = hasDropdownSoap(user?.profissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
@@ -1769,6 +1772,10 @@ const ProntuarioPage: React.FC = () => {
               onToggleSoap={setSoapEnabled}
               highlightSOAP={sessaoHighlightSOAP}
               soapRef={soapRef as React.RefObject<HTMLDivElement>}
+              customOptionsForField={showSoapDropdown ? soapCustom.getOptionsForField : undefined}
+              customOptionsWithId={showSoapDropdown ? soapCustom.getOptionWithId : undefined}
+              onAddCustomOption={showSoapDropdown ? (campo, opcao) => soapCustom.addOption(campo, opcao, user?.profissao || '') : undefined}
+              onDeleteCustomOption={showSoapDropdown ? soapCustom.deleteOption : undefined}
             />
 
             {/* 🟢 PRONTUÁRIO 1 — AVALIAÇÃO INICIAL */}

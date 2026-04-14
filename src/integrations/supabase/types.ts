@@ -1714,6 +1714,33 @@ export type Database = {
         }
         Relationships: []
       }
+      soap_custom_options: {
+        Row: {
+          campo: string
+          created_at: string
+          id: string
+          opcao: string
+          profissao: string
+          profissional_id: string
+        }
+        Insert: {
+          campo: string
+          created_at?: string
+          id?: string
+          opcao: string
+          profissao?: string
+          profissional_id: string
+        }
+        Update: {
+          campo?: string
+          created_at?: string
+          id?: string
+          opcao?: string
+          profissao?: string
+          profissional_id?: string
+        }
+        Relationships: []
+      }
       system_config: {
         Row: {
           configuracoes: Json
