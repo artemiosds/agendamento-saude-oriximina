@@ -2293,6 +2293,7 @@ const Agenda: React.FC = () => {
             </div>
           )}
         </DialogContent>
+      </Dialog>
 
 
       <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Agendamento">
