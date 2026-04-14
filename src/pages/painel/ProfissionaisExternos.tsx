@@ -59,13 +59,8 @@ const ProfissionaisExternos: React.FC = () => {
   const [quotas, setQuotas] = useState<QuotaRow[]>([]);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const [selectedExternoId, setSelectedExternoId] = useState<string>("");
-  const [quotaForm, setQuotaForm] = useState({
-    profissional_interno_id: "",
-    unidade_id: "",
-    vagas_total: 5,
-    periodo_inicio: new Date().toISOString().slice(0, 10),
-    periodo_fim: "",
-  });
+  const [selectedProfIds, setSelectedProfIds] = useState<string[]>([]);
+  const [vagasPorProf, setVagasPorProf] = useState<Record<string, number>>({});
 
   const loadExternos = useCallback(async () => {
     setLoading(true);
