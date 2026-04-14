@@ -575,6 +575,8 @@ const ProntuarioPage: React.FC = () => {
     return map[agendaTipo] || 'avaliacao_inicial';
   };
 
+  const initializedRef = useRef(false);
+
   useEffect(() => {
     const pacienteId = searchParams.get("pacienteId");
     const pacienteNome = searchParams.get("pacienteNome");
@@ -584,7 +586,21 @@ const ProntuarioPage: React.FC = () => {
     const agendaTipo = searchParams.get("tipo");
 
     if (pacienteId && pacienteNome && agendamentoId) {
-      // Coming from Agenda with a specific appointment — open form
+      // Only initialize once per searchParams to avoid re-opening/resetting the form
+      // when prontuarios refresh in background
+      if (initializedRef.current) {
+        // If already initialized, only update if we find an existing prontuário for this agendamento
+        // and we don't already have the dialog open
+        if (!dialogOpen) {
+          const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
+          if (existingForAgendamento) {
+            openEdit(existingForAgendamento);
+          }
+        }
+        return;
+      }
+      initializedRef.current = true;
+
       loadTriagem(agendamentoId);
       loadEpisodios(pacienteId);
       const existingForAgendamento = prontuarios.find((p) => p.agendamento_id === agendamentoId);
@@ -618,10 +634,9 @@ const ProntuarioPage: React.FC = () => {
         }
       }
     } else if (pacienteId && pacienteNome) {
-      // Coming from Pacientes page — just show the filtered list, don't open form
       setSearch(pacienteNome);
     }
-  }, [searchParams, prontuarios.length]);
+  }, [searchParams, prontuarios.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load cycle + PTS data when sessao type is selected or patient changes
   useEffect(() => {
