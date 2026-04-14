@@ -423,8 +423,8 @@ const Agenda: React.FC = () => {
         const pb = getPrioLevel(b);
         if (pa !== pb) return pa - pb;
         // Same priority — earlier check-in first; for non-checked-in use scheduled time
-        const ha = pa < 50 ? (a.horaChegada || a.hora) : a.hora;
-        const hb = pb < 50 ? (b.horaChegada || b.hora) : b.hora;
+        const ha = pa < 50 ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
+        const hb = pb < 50 ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
       });
 
