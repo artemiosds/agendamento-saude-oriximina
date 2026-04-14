@@ -62,6 +62,9 @@ const RelatorioAlta               = lazyRetry(() => import("./pages/painel/Relat
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
+const ProfissionaisExternos       = lazyRetry(() => import("./pages/painel/ProfissionaisExternos"));
+const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
+const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
 const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
