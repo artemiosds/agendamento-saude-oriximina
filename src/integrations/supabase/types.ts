@@ -955,6 +955,9 @@ export type Database = {
           equipamentos: string[]
           especialidade_destino: string
           id: string
+          is_autista: boolean
+          is_gestante: boolean
+          is_pne: boolean
           justificativa: string
           menor_idade: boolean
           mobilidade: string
@@ -995,6 +998,9 @@ export type Database = {
           equipamentos?: string[]
           especialidade_destino?: string
           id: string
+          is_autista?: boolean
+          is_gestante?: boolean
+          is_pne?: boolean
           justificativa?: string
           menor_idade?: boolean
           mobilidade?: string
@@ -1035,6 +1041,9 @@ export type Database = {
           equipamentos?: string[]
           especialidade_destino?: string
           id?: string
+          is_autista?: boolean
+          is_gestante?: boolean
+          is_pne?: boolean
           justificativa?: string
           menor_idade?: boolean
           mobilidade?: string
