@@ -67,6 +67,7 @@ export type Database = {
       }
       agendamentos: {
         Row: {
+          agendado_por_externo: string | null
           atualizado_em: string
           criado_em: string | null
           criado_por: string
@@ -94,6 +95,7 @@ export type Database = {
           unidade_id: string
         }
         Insert: {
+          agendado_por_externo?: string | null
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
@@ -121,6 +123,7 @@ export type Database = {
           unidade_id?: string
         }
         Update: {
+          agendado_por_externo?: string | null
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
@@ -1353,6 +1356,42 @@ export type Database = {
         }
         Relationships: []
       }
+      profissionais_externos: {
+        Row: {
+          ativo: boolean
+          auth_user_id: string | null
+          criado_em: string
+          criado_por: string
+          email: string
+          id: string
+          nome: string
+          unidade_id: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          auth_user_id?: string | null
+          criado_em?: string
+          criado_por?: string
+          email: string
+          id?: string
+          nome: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          auth_user_id?: string | null
+          criado_em?: string
+          criado_por?: string
+          email?: string
+          id?: string
+          nome?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       prontuario_config: {
         Row: {
           config: Json
@@ -1616,6 +1655,53 @@ export type Database = {
           total_procedimentos?: number
         }
         Relationships: []
+      }
+      quotas_externas: {
+        Row: {
+          criado_em: string
+          id: string
+          periodo_fim: string
+          periodo_inicio: string
+          profissional_externo_id: string
+          profissional_interno_id: string
+          unidade_id: string
+          updated_at: string
+          vagas_total: number
+          vagas_usadas: number
+        }
+        Insert: {
+          criado_em?: string
+          id?: string
+          periodo_fim?: string
+          periodo_inicio?: string
+          profissional_externo_id: string
+          profissional_interno_id: string
+          unidade_id?: string
+          updated_at?: string
+          vagas_total?: number
+          vagas_usadas?: number
+        }
+        Update: {
+          criado_em?: string
+          id?: string
+          periodo_fim?: string
+          periodo_inicio?: string
+          profissional_externo_id?: string
+          profissional_interno_id?: string
+          unidade_id?: string
+          updated_at?: string
+          vagas_total?: number
+          vagas_usadas?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotas_externas_profissional_externo_id_fkey"
+            columns: ["profissional_externo_id"]
+            isOneToOne: false
+            referencedRelation: "profissionais_externos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       salas: {
         Row: {
@@ -2106,6 +2192,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
     }
     Enums: {
