@@ -1966,37 +1966,84 @@ const Tratamentos: React.FC = () => {
                     { key: "objetivo" as const, label: "O — Objetivo", placeholder: "Achados do exame, medições..." },
                     { key: "avaliacao" as const, label: "A — Avaliação", placeholder: "Análise clínica, evolução..." },
                     { key: "plano" as const, label: "P — Plano", placeholder: "Conduta, orientações, próximos passos..." },
-                  ].map((field) => (
+                  ].map((field) => {
+                    const defaultOpts = cycleSoapOptions?.[field.key] || [];
+                    const customOpts = soapCustom.getOptionsForField(field.key);
+                    const allOpts = [...defaultOpts, ...customOpts];
+                    const customWithIds = soapCustom.getOptionWithId(field.key);
+
+                    return (
                     <div key={field.key}>
                       <Label className="text-xs font-semibold">{field.label}</Label>
-                      {cycleHasDropdown && cycleSoapOptions && (
-                        <div className="flex flex-wrap gap-1 my-1">
-                          {cycleSoapOptions[field.key === "subjetivo" ? "subjetivo" : field.key === "objetivo" ? "objetivo" : field.key === "avaliacao" ? "avaliacao" : "plano"].map((opt) => {
-                            const isSelected = soapNotes[field.key]?.includes(opt);
-                            return (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => {
-                                  setSoapNotes((p) => {
-                                    const current = p[field.key] || "";
-                                    if (current.includes(opt)) {
-                                      return { ...p, [field.key]: current.replace(`• ${opt}\n`, "").replace(`• ${opt}`, "").trim() };
-                                    }
-                                    return { ...p, [field.key]: current ? `${current}\n• ${opt}` : `• ${opt}` };
-                                  });
+                      {cycleHasDropdown && allOpts.length > 0 && (
+                        <div className="space-y-1 my-1">
+                          <div className="flex flex-wrap gap-1">
+                            {allOpts.map((opt) => {
+                              const isSelected = soapNotes[field.key]?.includes(opt);
+                              const isCustom = customOpts.includes(opt);
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => {
+                                    setSoapNotes((p) => {
+                                      const current = p[field.key] || "";
+                                      if (current.includes(opt)) {
+                                        return { ...p, [field.key]: current.replace(`• ${opt}\n`, "").replace(`• ${opt}`, "").trim() };
+                                      }
+                                      return { ...p, [field.key]: current ? `${current}\n• ${opt}` : `• ${opt}` };
+                                    });
+                                  }}
+                                  className={cn(
+                                    "text-xs px-2 py-0.5 rounded-full border transition-colors",
+                                    isSelected
+                                      ? "bg-primary/15 text-primary border-primary/40"
+                                      : "bg-muted/50 text-muted-foreground border-border hover:bg-muted",
+                                    isCustom && "border-dashed"
+                                  )}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              onClick={() => { setAddingFieldTrat(addingFieldTrat === field.key ? null : field.key); setNewOptionTextTrat(""); }}
+                              className="text-xs px-2 py-0.5 rounded-full border border-dashed border-primary/40 text-primary hover:bg-primary/5 transition-colors flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" /> Adicionar
+                            </button>
+                          </div>
+                          {addingFieldTrat === field.key && (
+                            <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50 border">
+                              <Input
+                                value={newOptionTextTrat}
+                                onChange={(e) => setNewOptionTextTrat(e.target.value)}
+                                placeholder="Nova opção..."
+                                className="h-7 text-xs flex-1"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); if (newOptionTextTrat.trim()) { soapCustom.addOption(field.key, newOptionTextTrat.trim(), cycleProfissao || ''); setNewOptionTextTrat(""); setAddingFieldTrat(null); } }
+                                  if (e.key === "Escape") { setAddingFieldTrat(null); setNewOptionTextTrat(""); }
                                 }}
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full border transition-colors",
-                                  isSelected
-                                    ? "bg-primary/15 text-primary border-primary/40"
-                                    : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
-                                )}
-                              >
-                                {opt}
-                              </button>
-                            );
-                          })}
+                              />
+                              <Button type="button" size="sm" className="h-7 text-xs px-2" onClick={() => { if (newOptionTextTrat.trim()) { soapCustom.addOption(field.key, newOptionTextTrat.trim(), cycleProfissao || ''); setNewOptionTextTrat(""); setAddingFieldTrat(null); } }} disabled={!newOptionTextTrat.trim()}>Salvar</Button>
+                              <Button type="button" size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setAddingFieldTrat(null); setNewOptionTextTrat(""); }}><X className="w-3 h-3" /></Button>
+                            </div>
+                          )}
+                          {customWithIds.length > 0 && (
+                            <details className="text-xs">
+                              <summary className="text-muted-foreground cursor-pointer hover:text-foreground">Gerenciar minhas opções ({customWithIds.length})</summary>
+                              <div className="mt-1 space-y-1 p-2 rounded-md bg-muted/50 border">
+                                {customWithIds.map((opt) => (
+                                  <div key={opt.id} className="flex items-center justify-between gap-2">
+                                    <span className="truncate">{opt.opcao}</span>
+                                    <button type="button" onClick={() => soapCustom.deleteOption(opt.id)} className="text-destructive hover:text-destructive/80 p-0.5"><X className="w-3 h-3" /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
                         </div>
                       )}
                       <Textarea
@@ -2006,7 +2053,8 @@ const Tratamentos: React.FC = () => {
                         placeholder={field.placeholder}
                       />
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
