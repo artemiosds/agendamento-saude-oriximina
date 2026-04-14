@@ -296,7 +296,7 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
                   </div>
                 )}
 
-                <Textarea
+                <DebouncedTextarea
                   rows={isMedicoMode ? 3 : 2}
                   value={values[field.key]}
                   onChange={(e) => {
