@@ -46,6 +46,7 @@ const ProfissionaisExternos: React.FC = () => {
   const canManage = can("usuarios", "can_edit");
 
   const [externos, setExternos] = useState<ExternalProf[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
