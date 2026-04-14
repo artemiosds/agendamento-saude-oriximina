@@ -217,7 +217,7 @@ const Agenda: React.FC = () => {
   }, []);
 
   // ── Triage records for priority sorting ──
-  const [triageMap, setTriageMap] = useState<Record<string, string>>({});
+  const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
   useEffect(() => {
     let cancelled = false;
     const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
@@ -228,8 +228,10 @@ const Agenda: React.FC = () => {
         .select("agendamento_id, classificacao_risco")
         .in("agendamento_id", dayAgIds);
       if (!cancelled && data) {
-        const m: Record<string, string> = {};
-        for (const r of data) m[r.agendamento_id] = r.classificacao_risco || "";
+        const m: Record<string, { risco: string }> = {};
+        for (const r of data) {
+          m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+        }
         setTriageMap(m);
       }
     })();
@@ -333,12 +335,20 @@ const Agenda: React.FC = () => {
   }, [profissionais, filterUnit]);
 
   const filtered = useMemo(() => {
-    // Helper: compute priority level for sorting
+    // Statuses that indicate the patient is physically present
     const CHECKED_IN_STATUSES = new Set([
       "confirmado_chegada", "aguardando_triagem", "aguardando_atendimento",
       "em_atendimento", "aguardando_enfermagem", "apto_atendimento",
     ]);
-    const MANCHESTER_PRIO: Record<string, number> = { vermelho: 1, laranja: 2, amarelo: 3, verde: 4, azul: 6 };
+
+    // Priority levels: 1=Vermelho, 2=Laranja/Amarelo, 4=Verde, 5=Idoso, 6=Azul, 7=Normal
+    const RISCO_PRIO: Record<string, number> = {
+      vermelho: 1,
+      laranja: 2,
+      amarelo: 2,
+      verde: 4,
+      azul: 6,
+    };
 
     const calcAge = (dob: string): number => {
       if (!dob) return 0;
@@ -352,28 +362,31 @@ const Agenda: React.FC = () => {
       return age;
     };
 
+    const isElderly = (ag: (typeof agendamentos)[0]): boolean => {
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      return !!pac && calcAge(pac.dataNascimento) >= 60;
+    };
+
     const getPrioLevel = (ag: (typeof agendamentos)[0]): number => {
       const st = ag.status as string;
       // Completed → bottom
       if (st === "concluido") return 99;
-      // Not checked in yet
-      if (!CHECKED_IN_STATUSES.has(st) && st !== "concluido") return 50;
+      // Not checked in yet → below all present patients
+      if (!CHECKED_IN_STATUSES.has(st)) return 50;
 
-      // Checked in — use triage classification
-      const risco = triageMap[ag.id]?.toLowerCase();
-      if (risco && MANCHESTER_PRIO[risco] !== undefined) {
-        const basePrio = MANCHESTER_PRIO[risco];
-        // Elderly boost: if verde or azul and patient ≥60, bump up
-        if ((risco === "verde" || risco === "azul") && basePrio > 4) {
-          const pac = pacientes.find((p) => p.id === ag.pacienteId);
-          if (pac && calcAge(pac.dataNascimento) >= 60) return 5;
-        }
+      // Patient is present — check triage data
+      const triage = triageMap[ag.id];
+      const risco = triage?.risco || "";
+
+      if (risco && RISCO_PRIO[risco] !== undefined) {
+        const basePrio = RISCO_PRIO[risco];
+        // For verde (4) or azul (6): if elderly, bump to level 5
+        if (basePrio >= 4 && isElderly(ag)) return 5;
         return basePrio;
       }
 
-      // Checked in but no triage classification
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
-      if (pac && calcAge(pac.dataNascimento) >= 60) return 5;
+      // No triage classification — elderly gets level 5, otherwise normal
+      if (isElderly(ag)) return 5;
       return 7; // Normal
     };
 
@@ -393,9 +406,9 @@ const Agenda: React.FC = () => {
         const pa = getPrioLevel(a);
         const pb = getPrioLevel(b);
         if (pa !== pb) return pa - pb;
-        // Same group — sort by check-in time (horaChegada) or scheduled time
-        const ha = a.horaChegada || a.hora;
-        const hb = b.horaChegada || b.hora;
+        // Same priority — earlier check-in first; for non-checked-in use scheduled time
+        const ha = pa < 50 ? (a.horaChegada || a.hora) : a.hora;
+        const hb = pb < 50 ? (b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
       });
 
