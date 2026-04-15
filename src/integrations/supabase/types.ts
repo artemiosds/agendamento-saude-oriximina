@@ -1710,6 +1710,38 @@ export type Database = {
         }
         Relationships: []
       }
+      pts_cid: {
+        Row: {
+          cid_codigo: string
+          cid_descricao: string
+          created_at: string
+          id: string
+          pts_id: string
+        }
+        Insert: {
+          cid_codigo?: string
+          cid_descricao?: string
+          created_at?: string
+          id?: string
+          pts_id: string
+        }
+        Update: {
+          cid_codigo?: string
+          cid_descricao?: string
+          created_at?: string
+          id?: string
+          pts_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pts_cid_pts_id_fkey"
+            columns: ["pts_id"]
+            isOneToOne: false
+            referencedRelation: "pts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pts_import_log: {
         Row: {
           competencia: string
@@ -1742,6 +1774,41 @@ export type Database = {
           total_procedimentos?: number
         }
         Relationships: []
+      }
+      pts_sigtap: {
+        Row: {
+          created_at: string
+          especialidade: string
+          id: string
+          procedimento_codigo: string
+          procedimento_nome: string
+          pts_id: string
+        }
+        Insert: {
+          created_at?: string
+          especialidade?: string
+          id?: string
+          procedimento_codigo?: string
+          procedimento_nome?: string
+          pts_id: string
+        }
+        Update: {
+          created_at?: string
+          especialidade?: string
+          id?: string
+          procedimento_codigo?: string
+          procedimento_nome?: string
+          pts_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pts_sigtap_pts_id_fkey"
+            columns: ["pts_id"]
+            isOneToOne: false
+            referencedRelation: "pts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quotas_externas: {
         Row: {

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Plus, Search, Eye, Edit2, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Search, Eye, Edit2, AlertTriangle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { BuscaPaciente } from '@/components/BuscaPaciente';
@@ -21,7 +21,6 @@ const SPECIALTIES = [
   'Neuropsicologia', 'Psicopedagogia', 'Nutrição', 'Serviço Social', 'Enfermagem',
 ];
 
-// Map display specialty names to sigtap_procedimentos.especialidade values
 const SPECIALTY_TO_SIGTAP: Record<string, string> = {
   'Fisioterapia': 'fisioterapia',
   'Fonoaudiologia': 'fonoaudiologia',
@@ -61,6 +60,17 @@ interface SigtapCid {
   cid_descricao: string;
 }
 
+interface SelectedSigtap {
+  procedimento_codigo: string;
+  procedimento_nome: string;
+  especialidade: string;
+}
+
+interface SelectedCid {
+  cid_codigo: string;
+  cid_descricao: string;
+}
+
 const PTS: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -73,16 +83,22 @@ const PTS: React.FC = () => {
   const [detailPts, setDetailPts] = useState<PTSRecord | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // SIGTAP state
+  // SIGTAP catalog state
   const [sigtapProcs, setSigtapProcs] = useState<SigtapProcedimento[]>([]);
   const [selectedProcCodigo, setSelectedProcCodigo] = useState('');
   const [validCids, setValidCids] = useState<SigtapCid[]>([]);
   const [cidSearch, setCidSearch] = useState('');
-  const [selectedCid, setSelectedCid] = useState('');
-  const [selectedCidDesc, setSelectedCidDesc] = useState('');
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
+
+  // Persisted selections (multiple)
+  const [sigtapSelecionados, setSigtapSelecionados] = useState<SelectedSigtap[]>([]);
+  const [cidsSelecionados, setCidsSelecionados] = useState<SelectedCid[]>([]);
+
+  // Detail view saved data
+  const [detailSigtap, setDetailSigtap] = useState<SelectedSigtap[]>([]);
+  const [detailCids, setDetailCids] = useState<SelectedCid[]>([]);
 
   const isMaster = user?.role === 'master';
 
@@ -105,17 +121,8 @@ const PTS: React.FC = () => {
   // Load SIGTAP procedures dynamically based on selected specialties
   const loadSigtapProcsForSpecialties = useCallback(async (specialties: string[]) => {
     if (!user) return;
-    
-    // Get the sigtap keys for the selected specialties
-    const sigtapKeys = specialties
-      .map(s => SPECIALTY_TO_SIGTAP[s])
-      .filter(Boolean);
-    
-    if (sigtapKeys.length === 0) {
-      setSigtapProcs([]);
-      return;
-    }
-
+    const sigtapKeys = specialties.map(s => SPECIALTY_TO_SIGTAP[s]).filter(Boolean);
+    if (sigtapKeys.length === 0) { setSigtapProcs([]); return; }
     setLoadingProcs(true);
     try {
       const { data, error } = await supabase
@@ -125,10 +132,7 @@ const PTS: React.FC = () => {
         .eq('ativo', true)
         .order('especialidade')
         .order('codigo');
-      if (error) {
-        console.error('Erro ao carregar SIGTAP:', error);
-        return;
-      }
+      if (error) { console.error('Erro ao carregar SIGTAP:', error); return; }
       setSigtapProcs(data || []);
     } catch (err) {
       console.error('Erro SIGTAP:', err);
@@ -137,20 +141,15 @@ const PTS: React.FC = () => {
     }
   }, [user]);
 
-  // Reload procs when specialties change
   useEffect(() => {
     if (!dialogOpen) return;
-    if (!isFisioterapeuta && !isMaster) {
-      setSigtapProcs([]);
-      return;
-    }
+    if (!isFisioterapeuta && !isMaster) { setSigtapProcs([]); return; }
     loadSigtapProcsForSpecialties(form.especialidades_envolvidas);
   }, [form.especialidades_envolvidas, dialogOpen, isFisioterapeuta, isMaster, loadSigtapProcsForSpecialties]);
 
   const loadPts = useCallback(async () => {
     setLoading(true);
     let query = supabase.from('pts').select('*').order('created_at', { ascending: false });
-    // Unit isolation: non-admin users only see their unit
     if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
       query = query.eq('unit_id', user.unidadeId);
     }
@@ -166,10 +165,7 @@ const PTS: React.FC = () => {
 
   // Load valid CIDs when procedure is selected
   useEffect(() => {
-    if (!selectedProcCodigo) {
-      setValidCids([]);
-      return;
-    }
+    if (!selectedProcCodigo) { setValidCids([]); return; }
     setLoadingCids(true);
     supabase
       .from('sigtap_procedimento_cids')
@@ -183,12 +179,9 @@ const PTS: React.FC = () => {
       });
   }, [selectedProcCodigo]);
 
-  // Check if typed CID is valid for selected procedure
+  // CID warning
   useEffect(() => {
-    if (!selectedProcCodigo || !cidSearch.trim()) {
-      setCidWarning(false);
-      return;
-    }
+    if (!selectedProcCodigo || !cidSearch.trim()) { setCidWarning(false); return; }
     const typed = cidSearch.trim().toUpperCase();
     if (typed.length >= 3) {
       const found = validCids.some(c =>
@@ -229,34 +222,81 @@ const PTS: React.FC = () => {
         : [...p.especialidades_envolvidas, spec];
       return { ...p, especialidades_envolvidas: newSpecs };
     });
-    // Reset proc/cid selection when specialties change
     setSelectedProcCodigo('');
-    setSelectedCid('');
-    setSelectedCidDesc('');
     setCidSearch('');
   };
 
-  const handleSelectCid = (cid: SigtapCid) => {
-    setSelectedCid(cid.cid_codigo);
-    setSelectedCidDesc(cid.cid_descricao);
-    setCidSearch(cid.cid_codigo);
-    setCidWarning(false);
+  // Add selected SIGTAP procedure to list
+  const handleAddSigtap = () => {
+    if (!selectedProcCodigo) return;
+    const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+    if (!proc) return;
+    if (sigtapSelecionados.some(s => s.procedimento_codigo === proc.codigo)) {
+      toast.info('Procedimento já adicionado.');
+      return;
+    }
+    setSigtapSelecionados(prev => [...prev, {
+      procedimento_codigo: proc.codigo,
+      procedimento_nome: proc.nome,
+      especialidade: proc.especialidade,
+    }]);
+    setSelectedProcCodigo('');
+    toast.success('Procedimento SIGTAP adicionado.');
   };
 
-  const handleForceUseCid = () => {
-    setSelectedCid(cidSearch.trim().toUpperCase());
-    setSelectedCidDesc('CID informado manualmente');
+  // Add CID to list
+  const handleAddCid = (cid: SigtapCid) => {
+    if (cidsSelecionados.some(c => c.cid_codigo === cid.cid_codigo)) {
+      toast.info('CID já adicionado.');
+      return;
+    }
+    setCidsSelecionados(prev => [...prev, { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao }]);
+    setCidSearch('');
+    toast.success(`CID ${cid.cid_codigo} adicionado.`);
+  };
+
+  const handleForceAddCid = () => {
+    const code = cidSearch.trim().toUpperCase();
+    if (!code) return;
+    if (cidsSelecionados.some(c => c.cid_codigo === code)) {
+      toast.info('CID já adicionado.');
+      return;
+    }
+    setCidsSelecionados(prev => [...prev, { cid_codigo: code, cid_descricao: 'CID informado manualmente' }]);
+    setCidSearch('');
     setCidWarning(false);
-    toast.info('CID aceito manualmente (fora da tabela SIGTAP).');
+    toast.info('CID aceito manualmente.');
+  };
+
+  const removeSigtap = (codigo: string) => {
+    setSigtapSelecionados(prev => prev.filter(s => s.procedimento_codigo !== codigo));
+  };
+
+  const removeCid = (codigo: string) => {
+    setCidsSelecionados(prev => prev.filter(c => c.cid_codigo !== codigo));
   };
 
   const resetSigtapState = () => {
     setSelectedProcCodigo('');
-    setSelectedCid('');
-    setSelectedCidDesc('');
     setCidSearch('');
     setSigtapProcs([]);
+    setSigtapSelecionados([]);
+    setCidsSelecionados([]);
+    setValidCids([]);
+    setCidWarning(false);
   };
+
+  // Load saved SIGTAP/CID for a PTS
+  const loadPtsSigtapCid = useCallback(async (ptsId: string) => {
+    const [sigtapRes, cidRes] = await Promise.all([
+      (supabase as any).from('pts_sigtap').select('procedimento_codigo, procedimento_nome, especialidade').eq('pts_id', ptsId),
+      (supabase as any).from('pts_cid').select('cid_codigo, cid_descricao').eq('pts_id', ptsId),
+    ]);
+    return {
+      sigtap: (sigtapRes.data || []) as SelectedSigtap[],
+      cids: (cidRes.data || []) as SelectedCid[],
+    };
+  }, []);
 
   const openNewDialog = () => {
     setEditingPts(null);
@@ -265,7 +305,7 @@ const PTS: React.FC = () => {
     setDialogOpen(true);
   };
 
-  const openEditDialog = (pts: PTSRecord) => {
+  const openEditDialog = async (pts: PTSRecord) => {
     const pac = pacientes.find(p => p.id === pts.patient_id);
     setEditingPts(pts);
     setForm({
@@ -278,8 +318,20 @@ const PTS: React.FC = () => {
       metas_longo_prazo: pts.metas_longo_prazo,
       especialidades_envolvidas: pts.especialidades_envolvidas || [],
     });
-    resetSigtapState();
+    // Load saved SIGTAP/CID
+    const { sigtap, cids } = await loadPtsSigtapCid(pts.id);
+    setSigtapSelecionados(sigtap);
+    setCidsSelecionados(cids);
+    setSelectedProcCodigo('');
+    setCidSearch('');
     setDialogOpen(true);
+  };
+
+  const openDetailDialog = async (pts: PTSRecord) => {
+    setDetailPts(pts);
+    const { sigtap, cids } = await loadPtsSigtapCid(pts.id);
+    setDetailSigtap(sigtap);
+    setDetailCids(cids);
   };
 
   const handleSave = async () => {
@@ -289,10 +341,6 @@ const PTS: React.FC = () => {
     }
     setSaving(true);
     try {
-      const selectedProcNome = sigtapProcs.find(p => p.codigo === selectedProcCodigo)?.nome || '';
-      const cidInfo = selectedCid ? ` | CID: ${selectedCid} - ${selectedCidDesc}` : '';
-      const procInfo = selectedProcCodigo ? `Procedimento SIGTAP: ${selectedProcCodigo} - ${selectedProcNome}` : '';
-
       const ptsPayload = {
         patient_id: form.patient_id,
         professional_id: editingPts ? editingPts.professional_id : (user?.id || ''),
@@ -305,27 +353,30 @@ const PTS: React.FC = () => {
         especialidades_envolvidas: form.especialidades_envolvidas,
       };
 
+      let ptsId: string;
+
       if (editingPts) {
-        const { error } = await (supabase as any)
-          .from('pts')
-          .update(ptsPayload)
-          .eq('id', editingPts.id);
+        const { error } = await (supabase as any).from('pts').update(ptsPayload).eq('id', editingPts.id);
         if (error) throw error;
+        ptsId = editingPts.id;
 
-        await logAction({
-          acao: 'editar_pts', entidade: 'pts', entidadeId: editingPts.id,
-          modulo: 'pts', user,
-          detalhes: {
-            paciente_nome: form.patient_name,
-            especialidades: form.especialidades_envolvidas,
-            ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
-            ...(selectedCid && { cid: selectedCid }),
-          },
-        });
-        toast.success('PTS atualizado com sucesso!');
+        // Delete old relationships then re-insert
+        await Promise.all([
+          (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId),
+          (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId),
+        ]);
       } else {
-        await (supabase as any).from('pts').insert(ptsPayload);
+        const { data: newPts, error } = await (supabase as any)
+          .from('pts')
+          .insert(ptsPayload)
+          .select('id')
+          .single();
+        if (error) throw error;
+        ptsId = newPts.id;
 
+        // Also create prontuario record
+        const procInfo = sigtapSelecionados.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
+        const cidInfo = cidsSelecionados.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
         await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
@@ -339,22 +390,46 @@ const PTS: React.FC = () => {
           anamnese: form.diagnostico_funcional,
           hipotese: form.objetivos_terapeuticos,
           conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
-          observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\n${procInfo}` : ''}${cidInfo}`,
+          observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\nSIGTAP: ${procInfo}` : ''}${cidInfo ? `\nCID: ${cidInfo}` : ''}`,
         });
-
-        await logAction({
-          acao: 'criar_pts', entidade: 'pts', entidadeId: form.patient_id,
-          modulo: 'pts', user,
-          detalhes: {
-            paciente_nome: form.patient_name,
-            especialidades: form.especialidades_envolvidas,
-            ...(selectedProcCodigo && { procedimento_sigtap: selectedProcCodigo }),
-            ...(selectedCid && { cid: selectedCid }),
-          },
-        });
-        toast.success('PTS criado e registrado no prontuário!');
       }
 
+      // Insert SIGTAP relationships
+      if (sigtapSelecionados.length > 0) {
+        await (supabase as any).from('pts_sigtap').insert(
+          sigtapSelecionados.map(s => ({
+            pts_id: ptsId,
+            procedimento_codigo: s.procedimento_codigo,
+            procedimento_nome: s.procedimento_nome,
+            especialidade: s.especialidade,
+          }))
+        );
+      }
+
+      // Insert CID relationships
+      if (cidsSelecionados.length > 0) {
+        await (supabase as any).from('pts_cid').insert(
+          cidsSelecionados.map(c => ({
+            pts_id: ptsId,
+            cid_codigo: c.cid_codigo,
+            cid_descricao: c.cid_descricao,
+          }))
+        );
+      }
+
+      await logAction({
+        acao: editingPts ? 'editar_pts' : 'criar_pts',
+        entidade: 'pts', entidadeId: ptsId,
+        modulo: 'pts', user,
+        detalhes: {
+          paciente_nome: form.patient_name,
+          especialidades: form.especialidades_envolvidas,
+          sigtap_count: sigtapSelecionados.length,
+          cid_count: cidsSelecionados.length,
+        },
+      });
+
+      toast.success(editingPts ? 'PTS atualizado com sucesso!' : 'PTS criado e registrado no prontuário!');
       setDialogOpen(false);
       setEditingPts(null);
       resetSigtapState();
@@ -365,7 +440,6 @@ const PTS: React.FC = () => {
     setSaving(false);
   };
 
-  // Group procedures by specialty for display
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
     for (const p of sigtapProcs) {
@@ -434,7 +508,7 @@ const PTS: React.FC = () => {
                         <Edit2 className="w-4 h-4" />
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => setDetailPts(pts)} title="Visualizar">
+                    <Button size="sm" variant="ghost" onClick={() => openDetailDialog(pts)} title="Visualizar">
                       <Eye className="w-4 h-4" />
                     </Button>
                   </div>
@@ -475,48 +549,68 @@ const PTS: React.FC = () => {
               </div>
             </div>
 
-            {/* SIGTAP Section - Dynamic per specialty */}
+            {/* SIGTAP Section */}
             {showSigtap && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                 <Label className="text-sm font-semibold flex items-center gap-1.5">
-                  📋 Procedimento SIGTAP
+                  📋 Procedimentos SIGTAP
                   {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
                 </Label>
 
                 {sigtapProcs.length > 0 && (
-                  <Select value={selectedProcCodigo} onValueChange={v => {
-                    setSelectedProcCodigo(v);
-                    setSelectedCid('');
-                    setSelectedCidDesc('');
-                    setCidSearch('');
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(procsBySpecialty).map(([esp, procs]) => (
-                        <React.Fragment key={esp}>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
-                            {getSpecLabelForSigtap(esp)} ({procs.length})
-                          </div>
-                          {procs.map(p => (
-                            <SelectItem key={p.codigo} value={p.codigo}>
-                              <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
-                              <span className="text-xs">{p.nome}</span>
-                            </SelectItem>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Select value={selectedProcCodigo} onValueChange={v => { setSelectedProcCodigo(v); setCidSearch(''); }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(procsBySpecialty).map(([esp, procs]) => (
+                            <React.Fragment key={esp}>
+                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                                {getSpecLabelForSigtap(esp)} ({procs.length})
+                              </div>
+                              {procs.map(p => (
+                                <SelectItem key={p.codigo} value={p.codigo}>
+                                  <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
+                                  <span className="text-xs">{p.nome}</span>
+                                </SelectItem>
+                              ))}
+                            </React.Fragment>
                           ))}
-                        </React.Fragment>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button size="sm" onClick={handleAddSigtap} disabled={!selectedProcCodigo}>
+                      <Plus className="w-4 h-4 mr-1" /> Adicionar
+                    </Button>
+                  </div>
                 )}
 
                 {sigtapProcs.length === 0 && !loadingProcs && (
-                  <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado para as especialidades selecionadas. Execute a sincronização DATASUS nas Configurações.</p>
+                  <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado. Execute a sincronização DATASUS nas Configurações.</p>
                 )}
 
+                {/* Lista de SIGTAP selecionados */}
+                {sigtapSelecionados.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Procedimentos adicionados ({sigtapSelecionados.length}):</Label>
+                    {sigtapSelecionados.map(s => (
+                      <div key={s.procedimento_codigo} className="flex items-center gap-2 bg-background rounded px-2 py-1 text-xs">
+                        <Badge variant="secondary" className="font-mono text-xs shrink-0">{s.procedimento_codigo}</Badge>
+                        <span className="flex-1 truncate">{s.procedimento_nome}</span>
+                        <span className="text-muted-foreground shrink-0">{getSpecLabelForSigtap(s.especialidade)}</span>
+                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => removeSigtap(s.procedimento_codigo)}>
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* CID Section */}
                 {selectedProcCodigo && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 border-t pt-2">
                     <Label className="text-xs">
                       Buscar CID vinculado ao procedimento ({validCids.length} CIDs válidos)
                     </Label>
@@ -532,9 +626,9 @@ const PTS: React.FC = () => {
                         <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                         <div>
                           <p className="font-medium text-warning">
-                            ⚠️ Este CID não está vinculado ao procedimento selecionado conforme tabela SIGTAP oficial.
+                            ⚠️ CID não vinculado ao procedimento selecionado na tabela SIGTAP.
                           </p>
-                          <Button size="sm" variant="outline" className="mt-1 h-6 text-xs" onClick={handleForceUseCid}>
+                          <Button size="sm" variant="outline" className="mt-1 h-6 text-xs" onClick={handleForceAddCid}>
                             Usar mesmo assim?
                           </Button>
                         </div>
@@ -546,13 +640,13 @@ const PTS: React.FC = () => {
                         <Loader2 className="w-3 h-3 animate-spin" /> Carregando CIDs...
                       </div>
                     ) : (
-                      cidSearch.trim() && filteredCids.length > 0 && !selectedCid && (
+                      cidSearch.trim() && filteredCids.length > 0 && (
                         <div className="max-h-40 overflow-y-auto border rounded text-xs divide-y">
                           {filteredCids.map(c => (
                             <button
                               key={c.cid_codigo}
                               className="w-full text-left px-2 py-1.5 hover:bg-accent/50 flex gap-2"
-                              onClick={() => handleSelectCid(c)}
+                              onClick={() => handleAddCid(c)}
                             >
                               <span className="font-mono font-medium text-primary shrink-0">{c.cid_codigo}</span>
                               <span className="text-muted-foreground truncate">{c.cid_descricao}</span>
@@ -561,18 +655,22 @@ const PTS: React.FC = () => {
                         </div>
                       )
                     )}
+                  </div>
+                )}
 
-                    {selectedCid && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <Badge variant="secondary" className="font-mono">{selectedCid}</Badge>
-                        <span className="text-muted-foreground truncate">{selectedCidDesc}</span>
-                        <Button size="sm" variant="ghost" className="h-5 text-xs px-1" onClick={() => {
-                          setSelectedCid('');
-                          setSelectedCidDesc('');
-                          setCidSearch('');
-                        }}>✕</Button>
+                {/* Lista de CIDs selecionados */}
+                {cidsSelecionados.length > 0 && (
+                  <div className="space-y-1 border-t pt-2">
+                    <Label className="text-xs text-muted-foreground">CIDs adicionados ({cidsSelecionados.length}):</Label>
+                    {cidsSelecionados.map(c => (
+                      <div key={c.cid_codigo} className="flex items-center gap-2 bg-background rounded px-2 py-1 text-xs">
+                        <Badge variant="secondary" className="font-mono text-xs shrink-0">{c.cid_codigo}</Badge>
+                        <span className="flex-1 truncate">{c.cid_descricao}</span>
+                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0" onClick={() => removeCid(c.cid_codigo)}>
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </Button>
                       </div>
-                    )}
+                    ))}
                   </div>
                 )}
               </div>
@@ -620,7 +718,7 @@ const PTS: React.FC = () => {
       </Dialog>
 
       {/* Detail Dialog */}
-      <Dialog open={!!detailPts} onOpenChange={() => setDetailPts(null)}>
+      <Dialog open={!!detailPts} onOpenChange={() => { setDetailPts(null); setDetailSigtap([]); setDetailCids([]); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">Detalhes do PTS</DialogTitle></DialogHeader>
           {detailPts && (
@@ -628,6 +726,36 @@ const PTS: React.FC = () => {
               <div><strong>Paciente:</strong> {pacientes.find(p => p.id === detailPts.patient_id)?.nome || detailPts.patient_id}</div>
               <div><strong>Profissional:</strong> {funcionarios.find(f => f.id === detailPts.professional_id)?.nome || '—'}</div>
               <div><strong>Data:</strong> {new Date(detailPts.created_at).toLocaleDateString('pt-BR')}</div>
+
+              {detailSigtap.length > 0 && (
+                <div className="border-t pt-2">
+                  <strong>Procedimentos SIGTAP:</strong>
+                  <div className="space-y-1 mt-1">
+                    {detailSigtap.map(s => (
+                      <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
+                        <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
+                        <span>{s.procedimento_nome}</span>
+                        <span className="text-muted-foreground">({getSpecLabelForSigtap(s.especialidade)})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detailCids.length > 0 && (
+                <div className="border-t pt-2">
+                  <strong>CIDs:</strong>
+                  <div className="space-y-1 mt-1">
+                    {detailCids.map(c => (
+                      <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
+                        <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
+                        <span>{c.cid_descricao}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="border-t pt-2"><strong>Diagnóstico Funcional:</strong><p className="mt-1 text-muted-foreground">{detailPts.diagnostico_funcional}</p></div>
               <div><strong>Objetivos Terapêuticos:</strong><p className="mt-1 text-muted-foreground">{detailPts.objetivos_terapeuticos}</p></div>
               {detailPts.metas_curto_prazo && <div><strong>Curto Prazo:</strong><p className="mt-1 text-muted-foreground">{detailPts.metas_curto_prazo}</p></div>}
@@ -641,7 +769,7 @@ const PTS: React.FC = () => {
                 </div>
               )}
               {canEditPts(detailPts) && (
-                <Button variant="outline" className="w-full mt-2" onClick={() => { setDetailPts(null); openEditDialog(detailPts); }}>
+                <Button variant="outline" className="w-full mt-2" onClick={() => { const pts = detailPts; setDetailPts(null); setDetailSigtap([]); setDetailCids([]); openEditDialog(pts); }}>
                   <Edit2 className="w-4 h-4 mr-2" /> Editar este PTS
                 </Button>
               )}
