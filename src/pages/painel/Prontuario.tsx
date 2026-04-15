@@ -462,7 +462,7 @@ const ProntuarioPage: React.FC = () => {
     try {
       // All professionals can VIEW all prontuários — edit is restricted in the UI
       let query = (supabase as any).from("prontuarios").select("*").order("data_atendimento", { ascending: false });
-      if (user?.role === "coordenador" && user.unidadeId) query = query.eq("unidade_id", user.unidadeId);
+      if (user?.unidadeId) query = query.eq("unidade_id", user.unidadeId);
       const { data, error } = await query;
       if (data) setProntuarios(data);
       if (error) console.error("Error loading prontuarios:", error);

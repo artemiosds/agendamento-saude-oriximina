@@ -264,7 +264,7 @@ const Tratamentos: React.FC = () => {
     try {
       let qCycles = supabase.from("treatment_cycles").select("*").order("created_at", { ascending: false });
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
-      if (user?.role === "coordenador" && user.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
+      if (user?.unidadeId) qCycles = qCycles.eq("unit_id", user.unidadeId);
 
       const [{ data: cData }, sData, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
         qCycles,
