@@ -154,6 +154,8 @@ interface Props {
 const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const [uploading, setUploading] = useState(false);
+  const { user } = useAuth();
+  const { resolved: customConfig } = useCustomFields('paciente', user?.unidadeId);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
