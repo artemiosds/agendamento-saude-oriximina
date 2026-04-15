@@ -268,16 +268,6 @@ export const treatmentService = {
           : 0,
       };
     } catch (error) {
-      if (appointmentUpdated && appointmentIdToFinalize && previousAppointmentStatus) {
-        await (supabase as any)
-          .from('agendamentos')
-          .update({
-            status: previousAppointmentStatus,
-            atualizado_em: new Date().toISOString(),
-          })
-          .eq('id', appointmentIdToFinalize);
-      }
-
       if (cycleUpdated) {
         await (supabase as any)
           .from('treatment_cycles')
