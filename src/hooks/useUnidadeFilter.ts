@@ -13,6 +13,8 @@ export function useUnidadeFilter() {
   const { user, isGlobalMaster } = useAuth();
   const { unidades, funcionarios, salas, disponibilidades } = useData();
 
+  /** True if user has role=master (either global or unit-scoped) */
+  const isMaster = user?.role === 'master';
   const userUnidadeId = user?.unidadeId || '';
 
   /** Units visible to the current user */
@@ -25,7 +27,6 @@ export function useUnidadeFilter() {
   const profissionaisVisiveis = useMemo(() => {
     const profs = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
     if (isGlobalMaster || !userUnidadeId) return profs;
-    // Show professionals assigned to user's unit OR who have availability in user's unit
     const profsWithDisp = new Set(
       disponibilidades
         .filter(d => d.unidadeId === userUnidadeId)
@@ -47,6 +48,7 @@ export function useUnidadeFilter() {
   const defaultUnidadeId = unidadesVisiveis.length === 1 ? unidadesVisiveis[0].id : '';
 
   return {
+    isMaster,
     isGlobalMaster,
     userUnidadeId,
     unidadesVisiveis,
