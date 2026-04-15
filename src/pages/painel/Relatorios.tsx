@@ -158,6 +158,15 @@ const Relatorios: React.FC = () => {
         qCycles = qCycles.eq('unit_id', user.unidadeId);
       }
 
+      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
+      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
+      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qNursing = qNursing.eq('unit_id', user.unidadeId);
+        qMulti = qMulti.eq('unit_id', user.unidadeId);
+        qPts = qPts.eq('unit_id', user.unidadeId);
+      }
+
       const [
         { data: atData },
         { data: filaData },
@@ -175,9 +184,9 @@ const Relatorios: React.FC = () => {
         qProc,
         qCycles,
         loadAllTreatmentSessions(),
-        supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
-        supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
-        supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+        qNursing,
+        qMulti,
+        qPts,
       ]);
 
       if (atData) setAtendimentosDB(atData);
