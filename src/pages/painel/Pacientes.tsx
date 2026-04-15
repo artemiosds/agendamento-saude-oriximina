@@ -277,9 +277,10 @@ const Pacientes: React.FC = () => {
       outroServicoSus: (p as any).outro_servico_sus || false,
       transporte: (p as any).transporte || "",
       turnoPreferido: (p as any).turno_preferido || "",
-      isGestante: (p as any).isGestante || false,
-      isPne: (p as any).isPne || false,
-      isAutista: (p as any).isAutista || false,
+      isGestante: (p as any).isGestante || (p as any).is_gestante || false,
+      isPne: (p as any).isPne || (p as any).is_pne || false,
+      isAutista: (p as any).isAutista || (p as any).is_autista || false,
+      customData: (p as any).custom_data || {},
     });
     setErrors({});
     setDialogOpen(true);
