@@ -71,10 +71,12 @@ const HistoricoTriagem: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      let trQuery = supabase.from("triage_records").select("*").order("criado_em", { ascending: false });
+      // Unit isolation: filter triage records by unit (via agendamento join not available, filter client-side below)
       const [trRes, funcRes, agRes] = await Promise.all([
-        supabase.from("triage_records").select("*").order("criado_em", { ascending: false }),
+        trQuery,
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        supabase.from("agendamentos").select("id, paciente_nome"),
+        supabase.from("agendamentos").select("id, paciente_nome, unidade_id"),
       ]);
 
       const funcMap = new Map<string, string>();
@@ -84,14 +86,25 @@ const HistoricoTriagem: React.FC = () => {
       });
 
       const agMap = new Map<string, string>();
-      (agRes.data || []).forEach((a: any) => agMap.set(a.id, a.paciente_nome));
+      // Build a set of agendamento IDs belonging to the user's unit for filtering
+      const unitAgIds = new Set<string>();
+      (agRes.data || []).forEach((a: any) => {
+        agMap.set(a.id, a.paciente_nome);
+        // Track which agendamentos belong to user's unit
+        if (user?.usuario === 'admin.sms' || !user?.unidadeId || a.unidade_id === user?.unidadeId) {
+          unitAgIds.add(a.id);
+        }
+      });
 
-      const enriched: EnrichedRecord[] = (trRes.data || []).map((r: any) => ({
-        ...r,
-        pacienteNome: agMap.get(r.agendamento_id) || "Paciente",
-        profissionalNome: funcMap.get(r.tecnico_id) || "—",
-        classificacaoRisco: r.classificacao_risco || "",
-      }));
+      const enriched: EnrichedRecord[] = (trRes.data || [])
+        // Unit isolation: only show triage records linked to agendamentos in user's unit
+        .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
+        .map((r: any) => ({
+          ...r,
+          pacienteNome: agMap.get(r.agendamento_id) || "Paciente",
+          profissionalNome: funcMap.get(r.tecnico_id) || "—",
+          classificacaoRisco: r.classificacao_risco || "",
+        }));
 
       setRecords(enriched);
     } catch (err) {
@@ -99,7 +112,7 @@ const HistoricoTriagem: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

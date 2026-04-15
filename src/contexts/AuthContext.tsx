@@ -7,7 +7,9 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  /** True when user is master with NO unit restriction (global owner) */
+  /** True when user is the system owner (admin.sms) — no unit filter */
+  isGlobalAdmin: boolean;
+  /** @deprecated Use isGlobalAdmin instead */
   isGlobalMaster: boolean;
   /** True when user is master scoped to a specific unit */
   isUnitMaster: boolean;
@@ -191,8 +193,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   }, [user, logAuthAction]);
 
-  const isGlobalMaster = !!(user && user.role === 'master' && !user.unidadeId);
-  const isUnitMaster = !!(user && user.role === 'master' && !!user.unidadeId);
+  // Global admin = system owner identified by username 'admin.sms'
+  const isGlobalAdmin = !!(user && user.usuario === 'admin.sms');
+  // Backward compat alias
+  const isGlobalMaster = isGlobalAdmin;
+  // Unit master = master role with a specific unit (NOT admin.sms)
+  const isUnitMaster = !!(user && user.role === 'master' && !!user.unidadeId && !isGlobalAdmin);
 
   const hasPermission = useCallback(
     (roles: UserRole[]) => {
@@ -204,7 +210,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, isGlobalMaster, isUnitMaster, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, isGlobalAdmin, isGlobalMaster, isUnitMaster, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

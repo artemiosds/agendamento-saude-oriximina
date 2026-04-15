@@ -106,11 +106,8 @@ const Relatorios: React.FC = () => {
       let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
       let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
       let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-      if (user?.role === 'coordenador' && user.unidadeId) {
-        qAt = qAt.eq('unidade_id', user.unidadeId);
-        qFila = qFila.eq('unidade_id', user.unidadeId);
-      }
-      if (user?.role === 'recepcao' && user.unidadeId) {
+      // Universal unit isolation (admin.sms sees all)
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         qAt = qAt.eq('unidade_id', user.unidadeId);
         qFila = qFila.eq('unidade_id', user.unidadeId);
       }
@@ -157,8 +154,17 @@ const Relatorios: React.FC = () => {
       if (user?.role === 'profissional') {
         qCycles = qCycles.eq('professional_id', user.id);
       }
-      if ((user?.role === 'coordenador' || user?.role === 'recepcao') && user?.unidadeId) {
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         qCycles = qCycles.eq('unit_id', user.unidadeId);
+      }
+
+      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
+      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
+      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qNursing = qNursing.eq('unit_id', user.unidadeId);
+        qMulti = qMulti.eq('unit_id', user.unidadeId);
+        qPts = qPts.eq('unit_id', user.unidadeId);
       }
 
       const [
@@ -178,9 +184,9 @@ const Relatorios: React.FC = () => {
         qProc,
         qCycles,
         loadAllTreatmentSessions(),
-        supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at'),
-        supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at'),
-        supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at'),
+        qNursing,
+        qMulti,
+        qPts,
       ]);
 
       if (atData) setAtendimentosDB(atData);
@@ -236,9 +242,8 @@ const Relatorios: React.FC = () => {
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
       if (dateFrom && a.data < dateFrom) return false;
       if (dateTo && a.data > dateTo) return false;
-      if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
       if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
-      if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
       return true;
     });
   }, [agendamentos, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, user]);
@@ -969,6 +974,9 @@ ${dataRows}
 
       if (mapaProf !== 'all') {
         query = query.eq('profissional_id', mapaProf);
+      }
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        query = query.eq('unidade_id', user.unidadeId);
       }
 
       const { data: agend } = await query;

@@ -42,6 +42,8 @@ const Dashboard: React.FC = () => {
   const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
+  const isGlobalAdmin = user?.usuario === 'admin.sms';
+  const userUnidadeId = user?.unidadeId || '';
   const navigate = useNavigate();
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,8 +52,8 @@ const Dashboard: React.FC = () => {
     const load = async () => {
       try {
         let query = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
-        if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
-        if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        // Universal unit isolation (admin.sms sees all)
+        if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
         if (user?.role === 'profissional' && user.id) query = query.eq('profissional_id', user.id);
         const { data } = await query;
         if (data) setAtendimentosDB(data);
@@ -69,8 +71,7 @@ const Dashboard: React.FC = () => {
   const filteredAgendamentos = useMemo(() => {
     return agendamentos.filter(a => {
       if (user?.role === 'profissional' && a.profissionalId !== user.id) return false;
-      if (user?.role === 'coordenador' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === 'recepcao' && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
       return true;
     });
   }, [agendamentos, user]);
@@ -268,7 +269,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="shadow-card border-0">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{funcionarios.filter(f => f.role === 'profissional' && f.ativo).length}</p>
+            <p className="text-2xl font-bold text-foreground">{funcionarios.filter(f => f.role === 'profissional' && f.ativo && (isGlobalAdmin || !userUnidadeId || f.unidadeId === userUnidadeId)).length}</p>
             <p className="text-xs text-muted-foreground">Profissionais Ativos</p>
           </CardContent>
         </Card>

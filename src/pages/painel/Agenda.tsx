@@ -288,8 +288,7 @@ const Agenda: React.FC = () => {
     return agendamentos
       .filter((a) => {
         if (a.origem !== "online" || a.status !== "pendente") return false;
-        if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-        if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
         return true;
       })
       .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm));
@@ -435,8 +434,8 @@ const Agenda: React.FC = () => {
         if (isProfissional && user) {
           if (a.profissionalId !== user.id) return false;
         }
-        if (user?.role === "coordenador" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
-        if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
+        // Universal unit isolation: any user with unidadeId only sees their unit (except admin.sms)
+        if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
         return true;
       })
       .sort((a, b) => {

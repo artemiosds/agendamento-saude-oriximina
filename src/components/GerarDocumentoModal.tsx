@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2 } from 'lucide-react';
-import { openPrintDocument } from '@/lib/printLayout';
+import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
@@ -46,6 +46,7 @@ const emptyMedicamento = (): MedicamentoRow => ({
 const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
   const { user } = useAuth();
   const { funcionarios } = useData();
+  const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
   const [modelos, setModelos] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [conteudoFinal, setConteudoFinal] = useState('');
@@ -62,9 +63,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     if (open) {
       loadModelos();
       loadCarimbo();
+      loadDocConfig();
       resetFields();
     }
   }, [open]);
+
+  const loadDocConfig = async () => {
+    const cfg = await loadDocumentConfig();
+    setDocConfig(cfg);
+  };
 
   const resetFields = () => {
     setSelectedId('');
@@ -77,16 +84,14 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const loadModelos = async () => {
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'modelos_documentos')
-        .maybeSingle();
-      if (data?.configuracoes) {
-        const raw = data.configuracoes as Record<string, unknown>;
-        const all: DocumentTemplate[] = Array.isArray(raw) ? raw : ((raw as any).modelos || []);
-        setModelos(all.filter(m => m.ativo && m.perfis_permitidos.includes(user?.role || '')));
-      }
+      const { data, error } = await supabase
+        .from('document_templates')
+        .select('*')
+        .eq('ativo', true)
+        .order('nome');
+      if (error) throw error;
+      const all = (data || []) as unknown as DocumentTemplate[];
+      setModelos(all.filter(m => m.perfis_permitidos.includes(user?.role || '')));
     } catch (e) { console.error(e); }
   };
 
@@ -175,11 +180,12 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const tipoLower = selected?.tipo.toLowerCase() || '';
 
   const buildHtmlBody = (signatureHtml: string) => {
-    const html = conteudoFinal.replace(/\n/g, '<br/>');
+    // Content may already be rich HTML from TipTap or plain text
+    const html = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block" style="margin-top:20px;">
-        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;white-space:pre-wrap;">${html}</div>
+        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;">${html}</div>
       </div>
       <div class="doc-sign-footer">
         <div class="sign-block">${signatureHtml}</div>
@@ -516,14 +522,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               {/* Preview */}
               <div className="space-y-1.5">
                 <Label className="text-[13px] font-bold">Preview</Label>
-                <div className="border rounded-lg p-5 bg-white max-h-[300px] overflow-y-auto">
-                  <div className="text-center mb-3">
-                    <h3 className="font-bold text-sm uppercase text-primary">Secretaria Municipal de Saúde de Oriximiná</h3>
-                    <p className="text-xs text-muted-foreground">CER II — Sistema de Gestão em Saúde</p>
-                    <p className="text-xs font-semibold mt-1 uppercase">{selected.tipo}</p>
-                  </div>
-                  <Separator className="mb-3" />
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap font-serif">{conteudoFinal}</div>
+                <div className="border rounded-lg bg-white max-h-[400px] overflow-y-auto">
+                  {docConfig && (
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: buildInstitutionalCSS() + docHeader(selected.tipo, docConfig) +
+                          '<div class="doc-content" style="padding:0 20px;">' +
+                          conteudoFinal.replace(/\n/g, '<br/>') +
+                          '</div>' + docFooter(docConfig)
+                      }}
+                    />
+                  )}
+                  {!docConfig && (
+                    <div className="p-5 text-center text-muted-foreground text-sm">Carregando preview...</div>
+                  )}
 
                   {/* Carimbo preview */}
                   {carimbo && (

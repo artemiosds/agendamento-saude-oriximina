@@ -92,7 +92,8 @@ const Bloqueios: React.FC = () => {
 
   // Filtro de busca por nome
   const profissionaisFiltrados = useMemo(() => {
-    const base = isCoordenador
+    const isAdminGlobal = user?.usuario === 'admin.sms';
+    const base = (!isAdminGlobal && (isCoordenador || (isMaster && user?.unidadeId)))
       ? todosProfissionais.filter(p => p.unidadeId === user?.unidadeId)
       : todosProfissionais;
 
@@ -106,15 +107,13 @@ const Bloqueios: React.FC = () => {
   }, [todosProfissionais, buscaProfissional, isCoordenador, user?.unidadeId]);
 
   const visibleBloqueios = useMemo(() => {
-    if (isMaster) return bloqueios;
-    if (isCoordenador && user?.unidadeId) {
-      return bloqueios.filter(b => !b.unidadeId || b.unidadeId === user.unidadeId);
-    }
+    if (user?.usuario === 'admin.sms') return bloqueios; // Global admin sees all
+    if (isMaster && !user?.unidadeId) return bloqueios;
     if (user?.unidadeId) {
       return bloqueios.filter(b => !b.unidadeId || b.unidadeId === user.unidadeId);
     }
     return bloqueios;
-  }, [bloqueios, user, isMaster, isCoordenador]);
+  }, [bloqueios, user, isMaster]);
 
   const getScopeLabel = (b: typeof bloqueios[0]) => {
     if (b.profissionalId) {

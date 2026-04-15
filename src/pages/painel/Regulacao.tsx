@@ -90,9 +90,10 @@ const Regulacao: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const unitFilter = (user?.usuario !== 'admin.sms' && user?.unidadeId) ? user.unidadeId : undefined;
       const [regs, evals, procs] = await Promise.all([
         regulationService.getAll(),
-        regulationService.getEvaluations(),
+        regulationService.getEvaluations(unitFilter ? { unitId: unitFilter } : undefined),
         procedureService.getAll(),
       ]);
       setRegulations(regs);
