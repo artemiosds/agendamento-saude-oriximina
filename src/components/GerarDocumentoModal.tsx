@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { FileText, Printer, Save, ShieldCheck, Plus, Trash2, Loader2 } from 'lucide-react';
-import { openPrintDocument } from '@/lib/printLayout';
+import { openPrintDocument, loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS, type DocumentConfig } from '@/lib/printLayout';
 import { salvarEncaminhamento } from '@/services/encaminhamentoService';
 import { generateSignature, formatSignatureBlock, formatCarimboBlock, type CarimboData, type SignatureData } from '@/lib/documentSignature';
 import type { DocumentTemplate } from '@/components/ModelosDocumentos';
@@ -46,6 +46,7 @@ const emptyMedicamento = (): MedicamentoRow => ({
 const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, profissional, unidade, dataAtendimento }) => {
   const { user } = useAuth();
   const { funcionarios } = useData();
+  const [docConfig, setDocConfig] = useState<DocumentConfig | null>(null);
   const [modelos, setModelos] = useState<DocumentTemplate[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [conteudoFinal, setConteudoFinal] = useState('');
@@ -62,9 +63,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     if (open) {
       loadModelos();
       loadCarimbo();
+      loadDocConfig();
       resetFields();
     }
   }, [open]);
+
+  const loadDocConfig = async () => {
+    const cfg = await loadDocumentConfig();
+    setDocConfig(cfg);
+  };
 
   const resetFields = () => {
     setSelectedId('');
@@ -516,14 +523,20 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               {/* Preview */}
               <div className="space-y-1.5">
                 <Label className="text-[13px] font-bold">Preview</Label>
-                <div className="border rounded-lg p-5 bg-white max-h-[300px] overflow-y-auto">
-                  <div className="text-center mb-3">
-                    <h3 className="font-bold text-sm uppercase text-primary">Secretaria Municipal de Saúde de Oriximiná</h3>
-                    <p className="text-xs text-muted-foreground">CER II — Sistema de Gestão em Saúde</p>
-                    <p className="text-xs font-semibold mt-1 uppercase">{selected.tipo}</p>
-                  </div>
-                  <Separator className="mb-3" />
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap font-serif">{conteudoFinal}</div>
+                <div className="border rounded-lg bg-white max-h-[400px] overflow-y-auto">
+                  {docConfig && (
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: buildInstitutionalCSS() + docHeader(selected.tipo, docConfig) +
+                          '<div class="doc-content" style="padding:0 20px;">' +
+                          conteudoFinal.replace(/\n/g, '<br/>') +
+                          '</div>' + docFooter(docConfig)
+                      }}
+                    />
+                  )}
+                  {!docConfig && (
+                    <div className="p-5 text-center text-muted-foreground text-sm">Carregando preview...</div>
+                  )}
 
                   {/* Carimbo preview */}
                   {carimbo && (
