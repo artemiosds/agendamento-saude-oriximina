@@ -497,7 +497,7 @@ const ModelosDocumentos: React.FC = () => {
               <p className="text-xs text-muted-foreground">CER II — Sistema de Gestão em Saúde</p>
             </div>
             <Separator className="mb-4" />
-            <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewHtml) }} />
             <div className="mt-10 text-center">
               <div className="w-64 border-t border-foreground mx-auto mb-1" />
               <p className="text-xs font-semibold">Dr. Maria Santos</p>

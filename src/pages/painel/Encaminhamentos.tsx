@@ -419,7 +419,7 @@ const Encaminhamentos: React.FC = () => {
           </DialogHeader>
           {previewDoc && (
             <div className="border rounded-lg p-5 bg-white">
-              <div dangerouslySetInnerHTML={{ __html: previewDoc.conteudo_html }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewDoc.conteudo_html) }} />
             </div>
           )}
           <DialogFooter>
