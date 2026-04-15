@@ -175,8 +175,8 @@ const Auditoria: React.FC = () => {
         }
       }
 
-      // Universal unit isolation
-      if (user?.unidadeId) {
+      // Universal unit isolation (admin.sms sees all)
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         query = query.eq('unidade_id', user.unidadeId);
       }
 
@@ -232,7 +232,7 @@ const Auditoria: React.FC = () => {
 
       if (filterDateFrom) query = query.gte('created_at', `${filterDateFrom}T00:00:00`);
       if (filterDateTo) query = query.lte('created_at', `${filterDateTo}T23:59:59`);
-      if (user?.unidadeId) {
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         query = query.eq('unidade_id', user.unidadeId);
       }
 

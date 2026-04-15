@@ -106,8 +106,8 @@ const Relatorios: React.FC = () => {
       let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
       let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
       let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-      // Universal unit isolation
-      if (user?.unidadeId) {
+      // Universal unit isolation (admin.sms sees all)
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         qAt = qAt.eq('unidade_id', user.unidadeId);
         qFila = qFila.eq('unidade_id', user.unidadeId);
       }
@@ -154,7 +154,7 @@ const Relatorios: React.FC = () => {
       if (user?.role === 'profissional') {
         qCycles = qCycles.eq('professional_id', user.id);
       }
-      if (user?.unidadeId) {
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         qCycles = qCycles.eq('unit_id', user.unidadeId);
       }
 
@@ -233,7 +233,7 @@ const Relatorios: React.FC = () => {
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
       if (dateFrom && a.data < dateFrom) return false;
       if (dateTo && a.data > dateTo) return false;
-      if (user?.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
       if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
       return true;
     });

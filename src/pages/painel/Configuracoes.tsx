@@ -130,8 +130,8 @@ const Configuracoes: React.FC = () => {
   const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
 
   const isMaster = user?.role === 'master';
-  const _isGlobalMaster = isMaster && !user?.unidadeId;
-  const _isUnitMaster = isMaster && !!user?.unidadeId;
+  const _isGlobalMaster = user?.usuario === 'admin.sms';
+  const _isUnitMaster = isMaster && !!user?.unidadeId && !_isGlobalMaster;
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
   );

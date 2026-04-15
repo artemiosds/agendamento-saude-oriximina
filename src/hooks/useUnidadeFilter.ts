@@ -6,11 +6,11 @@ import { useData } from '@/contexts/DataContext';
  * Centralized hook for unit-based visibility filtering.
  * 
  * Rules:
- * - Global master (unidadeId empty): sees all units
- * - Unit master / coordenador / recepcao / profissional / tecnico: sees only their assigned unit
+ * - Global admin (admin.sms): sees all units, no filter
+ * - All other users with unidadeId: sees only their assigned unit
  */
 export function useUnidadeFilter() {
-  const { user, isGlobalMaster } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const { unidades, funcionarios, salas, disponibilidades } = useData();
 
   /** True if user has role=master (either global or unit-scoped) */
@@ -19,27 +19,30 @@ export function useUnidadeFilter() {
 
   /** Units visible to the current user */
   const unidadesVisiveis = useMemo(() => {
-    if (isGlobalMaster || !userUnidadeId) return unidades;
+    if (isGlobalAdmin) return unidades;
+    if (!userUnidadeId) return unidades;
     return unidades.filter(u => u.id === userUnidadeId);
-  }, [unidades, isGlobalMaster, userUnidadeId]);
+  }, [unidades, isGlobalAdmin, userUnidadeId]);
 
   /** Active professionals visible to the current user (filtered by unit) */
   const profissionaisVisiveis = useMemo(() => {
     const profs = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
-    if (isGlobalMaster || !userUnidadeId) return profs;
+    if (isGlobalAdmin) return profs;
+    if (!userUnidadeId) return profs;
     const profsWithDisp = new Set(
       disponibilidades
         .filter(d => d.unidadeId === userUnidadeId)
         .map(d => d.profissionalId)
     );
     return profs.filter(p => p.unidadeId === userUnidadeId || profsWithDisp.has(p.id));
-  }, [funcionarios, disponibilidades, isGlobalMaster, userUnidadeId]);
+  }, [funcionarios, disponibilidades, isGlobalAdmin, userUnidadeId]);
 
   /** Rooms visible to the current user (filtered by unit) */
   const salasVisiveis = useMemo(() => {
-    if (isGlobalMaster || !userUnidadeId) return salas;
+    if (isGlobalAdmin) return salas;
+    if (!userUnidadeId) return salas;
     return salas.filter(s => s.unidadeId === userUnidadeId);
-  }, [salas, isGlobalMaster, userUnidadeId]);
+  }, [salas, isGlobalAdmin, userUnidadeId]);
 
   /** Whether to show unit selector (only if user has access to multiple units) */
   const showUnitSelector = unidadesVisiveis.length > 1;
@@ -49,7 +52,9 @@ export function useUnidadeFilter() {
 
   return {
     isMaster,
-    isGlobalMaster,
+    isGlobalAdmin,
+    /** @deprecated Use isGlobalAdmin */
+    isGlobalMaster: isGlobalAdmin,
     userUnidadeId,
     unidadesVisiveis,
     profissionaisVisiveis,

@@ -118,15 +118,19 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
   // Load from fila_espera where status = 'aguardando_enfermagem'
   const loadFila = useCallback(async () => {
-    if (!user?.unidadeId) return;
+    const isAdmin = user?.usuario === 'admin.sms';
+    if (!isAdmin && !user?.unidadeId) return;
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from('fila_espera')
         .select('*')
         .eq('status', 'aguardando_enfermagem')
-        .eq('unidade_id', user.unidadeId)
         .order('criado_em', { ascending: true });
+      if (!isAdmin && user?.unidadeId) {
+        query = query.eq('unidade_id', user.unidadeId);
+      }
+      const { data, error } = await query;
 
       if (data && !error) {
         setFila(data.map((f: any) => ({
@@ -143,18 +147,19 @@ const AvaliacaoEnfermagem: React.FC = () => {
       console.error('Error loading nursing queue:', err);
     }
     setLoading(false);
-  }, [user?.unidadeId]);
+  }, [user?.unidadeId, user?.usuario]);
 
   useEffect(() => { loadFila(); }, [loadFila]);
 
   // Realtime on fila_espera
   useEffect(() => {
-    if (!user?.unidadeId) return;
+    const isAdmin = user?.usuario === 'admin.sms';
+    if (!isAdmin && !user?.unidadeId) return;
     const channel = supabase.channel('enfermagem-fila-espera')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.unidadeId, loadFila]);
+  }, [user?.unidadeId, user?.usuario, loadFila]);
 
   const openAvaliacao = async (item: FilaItem) => {
     setSelected(item);

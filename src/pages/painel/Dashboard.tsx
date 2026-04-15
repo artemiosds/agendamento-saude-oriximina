@@ -50,8 +50,8 @@ const Dashboard: React.FC = () => {
     const load = async () => {
       try {
         let query = (supabase as any).from('atendimentos').select('id,profissional_nome,unidade_id,setor,data,status,duracao_minutos,sala_id').order('data', { ascending: false }).limit(1000);
-        // Universal unit isolation
-        if (user?.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+        // Universal unit isolation (admin.sms sees all)
+        if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq('unidade_id', user.unidadeId);
         if (user?.role === 'profissional' && user.id) query = query.eq('profissional_id', user.id);
         const { data } = await query;
         if (data) setAtendimentosDB(data);
@@ -69,7 +69,7 @@ const Dashboard: React.FC = () => {
   const filteredAgendamentos = useMemo(() => {
     return agendamentos.filter(a => {
       if (user?.role === 'profissional' && a.profissionalId !== user.id) return false;
-      if (user?.unidadeId && a.unidadeId !== user.unidadeId) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
       return true;
     });
   }, [agendamentos, user]);

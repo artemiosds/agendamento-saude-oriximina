@@ -130,7 +130,7 @@ const Triagem: React.FC = () => {
     const termo = busca.trim().toLowerCase();
 
     return fila
-      .filter((item) => item.unidadeId === user?.unidadeId && STATUS_TRIAGEM_FILA.includes(item.status))
+      .filter((item) => (user?.usuario === 'admin.sms' || item.unidadeId === user?.unidadeId) && STATUS_TRIAGEM_FILA.includes(item.status))
       .map((item) => {
         const agendamentoRelacionado =
           agendamentos.find((ag) => ag.id === item.id);

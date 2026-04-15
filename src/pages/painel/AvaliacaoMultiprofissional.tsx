@@ -58,7 +58,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
         .eq('status', 'aguardando_multiprofissional')
         .order('data', { ascending: true });
 
-      if (user?.unidadeId && user.role !== 'master') {
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
         query = query.eq('unidade_id', user.unidadeId);
       }
 
