@@ -704,6 +704,8 @@ const Agenda: React.FC = () => {
       id_agendamento: agId,
       observacoes: newAg.obs,
     });
+    // WhatsApp: confirmação de agendamento
+    whatsappService.sendByAgendamento(agId, "confirmacao").catch(() => {});
   };
 
   // NOVO: aprovar agendamento online
