@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList } from 'lucide-react';
+import { Plus, Clock, Calendar, Pencil, Trash2, RefreshCw, Loader2, Info, ClipboardList, Search, Settings2, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
