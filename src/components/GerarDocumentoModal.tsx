@@ -180,11 +180,12 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const tipoLower = selected?.tipo.toLowerCase() || '';
 
   const buildHtmlBody = (signatureHtml: string) => {
-    const html = conteudoFinal.replace(/\n/g, '<br/>');
+    // Content may already be rich HTML from TipTap or plain text
+    const html = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block" style="margin-top:20px;">
-        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;white-space:pre-wrap;">${html}</div>
+        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;">${html}</div>
       </div>
       <div class="doc-sign-footer">
         <div class="sign-block">${signatureHtml}</div>
