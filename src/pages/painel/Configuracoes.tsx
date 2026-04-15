@@ -78,6 +78,7 @@ const Configuracoes: React.FC = () => {
   const [reativarAgendamentos, setReativarAgendamentos] = useState<any[]>([]);
   const [reativarAgId, setReativarAgId] = useState('');
   const [reativarLoading, setReativarLoading] = useState(false);
+  const [reativarProfSearch, setReativarProfSearch] = useState('');
   const [reativarBuscando, setReativarBuscando] = useState(false);
 
   const [transferAgId, setTransferAgId] = useState('');
