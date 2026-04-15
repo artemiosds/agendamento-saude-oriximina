@@ -139,6 +139,13 @@ const UnidadesSalas: React.FC = () => {
               <div><Label>Telefone</Label><Input value={unitForm.telefone} onChange={e => setUnitForm(p => ({ ...p, telefone: e.target.value }))} /></div>
               <div><Label>WhatsApp</Label><Input value={unitForm.whatsapp} onChange={e => setUnitForm(p => ({ ...p, whatsapp: e.target.value }))} /></div>
             </div>
+            {customConfig.fields.length > 0 && (
+              <CustomFieldsRenderer
+                fields={customConfig.fields}
+                values={customData}
+                onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+              />
+            )}
             <Button onClick={handleSaveUnit} className="w-full gradient-primary text-primary-foreground">{editUnitId ? 'Salvar' : 'Criar'}</Button>
           </div>
         </DialogContent>
