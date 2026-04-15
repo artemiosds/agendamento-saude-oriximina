@@ -84,16 +84,14 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const loadModelos = async () => {
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'modelos_documentos')
-        .maybeSingle();
-      if (data?.configuracoes) {
-        const raw = data.configuracoes as Record<string, unknown>;
-        const all: DocumentTemplate[] = Array.isArray(raw) ? raw : ((raw as any).modelos || []);
-        setModelos(all.filter(m => m.ativo && m.perfis_permitidos.includes(user?.role || '')));
-      }
+      const { data, error } = await supabase
+        .from('document_templates')
+        .select('*')
+        .eq('ativo', true)
+        .order('nome');
+      if (error) throw error;
+      const all = (data || []) as unknown as DocumentTemplate[];
+      setModelos(all.filter(m => m.perfis_permitidos.includes(user?.role || '')));
     } catch (e) { console.error(e); }
   };
 
