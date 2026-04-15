@@ -98,6 +98,7 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+  customData?: Record<string, any>;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
