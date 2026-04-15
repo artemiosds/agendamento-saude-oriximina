@@ -124,6 +124,18 @@ const Funcionarios: React.FC = () => {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
     }
+    // Unit master: force unit to their own and block editing global master
+    if (isUnitMaster) {
+      if (editId) {
+        const target = funcionarios.find(f => f.id === editId);
+        if (target && isProtectedGlobalMaster(target)) {
+          toast.error('Você não tem permissão para editar o administrador global.');
+          return;
+        }
+      }
+      // Force unit_id to the user's unit
+      form.unidade_id = user?.unidadeId || '';
+    }
 
     setSaving(true);
     try {
