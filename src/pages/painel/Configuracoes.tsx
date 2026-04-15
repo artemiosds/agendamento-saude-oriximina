@@ -38,6 +38,7 @@ import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
 import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
+import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -47,6 +48,7 @@ const TABS = [
   { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
   { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
   { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, globalOnly: false },
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
   { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
@@ -528,6 +530,9 @@ const Configuracoes: React.FC = () => {
 
       case 'campos':
         return <ConfigPersonalizarCampos />;
+
+      case 'whatsapp':
+        return <ConfigWhatsApp />;
 
       case 'fluxo':
         return (
