@@ -202,12 +202,9 @@ export const treatmentService = {
     });
 
     const appointmentIdForSession = input.appointmentId ?? input.session.appointment_id ?? linkedAppointment?.id ?? null;
-    const appointmentIdToFinalize = linkedAppointment?.id ?? null;
-    const previousAppointmentStatus = linkedAppointment?.status ?? null;
 
     let sessionUpdated = false;
     let cycleUpdated = false;
-    let appointmentUpdated = false;
 
     try {
       const clinicalNotesJson = JSON.stringify({
@@ -254,18 +251,10 @@ export const treatmentService = {
       if (cycleError) throw cycleError;
       cycleUpdated = true;
 
-      if (appointmentIdToFinalize) {
-        const { error: appointmentError } = await (supabase as any)
-          .from('agendamentos')
-          .update({
-            status: 'concluido',
-            atualizado_em: new Date().toISOString(),
-          })
-          .eq('id', appointmentIdToFinalize);
-
-        if (appointmentError) throw appointmentError;
-        appointmentUpdated = true;
-      }
+      // NOTE: Do NOT mark the appointment as 'concluido' here.
+      // The appointment status should only be changed to 'concluido' via
+      // the explicit "Finalizar Prontuário" action in the Prontuario page.
+      // This prevents premature conclusion and cross-appointment interference.
 
       return {
         appointmentId: appointmentIdForSession,
@@ -276,16 +265,6 @@ export const treatmentService = {
           : 0,
       };
     } catch (error) {
-      if (appointmentUpdated && appointmentIdToFinalize && previousAppointmentStatus) {
-        await (supabase as any)
-          .from('agendamentos')
-          .update({
-            status: previousAppointmentStatus,
-            atualizado_em: new Date().toISOString(),
-          })
-          .eq('id', appointmentIdToFinalize);
-      }
-
       if (cycleUpdated) {
         await (supabase as any)
           .from('treatment_cycles')
