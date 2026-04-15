@@ -40,6 +40,8 @@ interface AtendimentoDB {
 
 const Dashboard: React.FC = () => {
   const { agendamentos, fila, funcionarios, unidades, disponibilidades, salas } = useData();
+  const isGlobalAdmin = user?.usuario === 'admin.sms';
+  const userUnidadeId = user?.unidadeId || '';
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const navigate = useNavigate();
