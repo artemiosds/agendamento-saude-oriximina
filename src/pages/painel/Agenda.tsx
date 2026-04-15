@@ -1061,8 +1061,9 @@ const Agenda: React.FC = () => {
           observacoes: `Motivo: ${cancelMotivo}`,
         });
       }
+      // WhatsApp: cancelamento
+      whatsappService.sendByAgendamento(ag.id, "cancelamento").catch(() => {});
 
-      // Liberar vaga
       if (cancelConfig.liberar_vaga_automaticamente) {
         await handleVagaLiberada(
           { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
