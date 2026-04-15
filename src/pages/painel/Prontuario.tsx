@@ -762,6 +762,12 @@ const ProntuarioPage: React.FC = () => {
       toast.error("Paciente e data são obrigatórios.");
       return false;
     }
+    // Prevent creating/editing prontuários for future dates
+    const today = new Date().toISOString().split("T")[0];
+    if (form.data_atendimento > today && !editId) {
+      toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
+      return false;
+    }
     if (editId && !form.motivo_alteracao && !isSessionRegistrationFlow) {
       toast.error("Informe o motivo da alteração para salvar.");
       return false;
