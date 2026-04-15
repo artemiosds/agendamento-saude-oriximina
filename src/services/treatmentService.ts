@@ -202,12 +202,9 @@ export const treatmentService = {
     });
 
     const appointmentIdForSession = input.appointmentId ?? input.session.appointment_id ?? linkedAppointment?.id ?? null;
-    const appointmentIdToFinalize = linkedAppointment?.id ?? null;
-    const previousAppointmentStatus = linkedAppointment?.status ?? null;
 
     let sessionUpdated = false;
     let cycleUpdated = false;
-    let appointmentUpdated = false;
 
     try {
       const clinicalNotesJson = JSON.stringify({
