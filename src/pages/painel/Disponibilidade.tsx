@@ -418,14 +418,65 @@ const Disponibilidade: React.FC = () => {
     return { totalVagas, diasAtivos, turnosConfig: turnosUsados.size };
   }, [modo, turnoDays, turnoVagas]);
 
+  // Group disponibilidades by professional
+  const profGroups = useMemo(() => {
+    const map = new Map<string, { prof: typeof funcionarios[0] | undefined; groups: [string, typeof disponibilidades][] }>();
+    for (const [key, records] of groups.entries()) {
+      const profId = records[0].profissionalId;
+      if (!map.has(profId)) {
+        map.set(profId, { prof: funcionarios.find(f => f.id === profId), groups: [] });
+      }
+      map.get(profId)!.groups.push([key, records]);
+    }
+    // Sort alphabetically
+    return Array.from(map.entries()).sort((a, b) => {
+      const nameA = a[1].prof?.nome || '';
+      const nameB = b[1].prof?.nome || '';
+      return nameA.localeCompare(nameB, 'pt-BR');
+    });
+  }, [groups, funcionarios]);
+
+  // Filter by search
+  const filteredProfGroups = useMemo(() => {
+    if (!searchTerm.trim()) return profGroups;
+    const term = searchTerm.toLowerCase().trim();
+    return profGroups.filter(([profId, data]) => {
+      const nome = data.prof?.nome?.toLowerCase() || '';
+      const unidadeId = data.groups[0]?.[1]?.[0]?.unidadeId || '';
+      const unidadeNome = unidades.find(u => u.id === unidadeId)?.nome?.toLowerCase() || '';
+      return nome.includes(term) || unidadeNome.includes(term);
+    });
+  }, [profGroups, searchTerm, unidades]);
+
+  const manageProfData = manageProfId ? profGroups.find(([id]) => id === manageProfId) : null;
+
+  const openNewForProf = (profId: string) => {
+    const prof = profissionais.find(p => p.id === profId);
+    setEditGroupIds([]);
+    setForm({
+      profissionalId: profId,
+      unidadeId: prof?.unidadeId || '',
+      salaId: prof?.salaId || '',
+      dataInicio: '', dataFim: '',
+      vagasPorHora: 3, vagasPorDia: 25, duracaoConsulta: 30, intervalo: 0,
+    });
+    const savedModo = modosPorProfissional[profId] || 'por_hora';
+    setModo(savedModo);
+    setDaySchedules(defaultDaySchedules.map(d => ({ ...d })));
+    setTurnoDays(defaultTurnoDays.map(d => ({ ...d, turnosAtivos: [] })));
+    setTurnoVagas({});
+    setDialogOpen(true);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Disponibilidade</h1>
           <p className="text-muted-foreground text-sm">
             Configurar horários e vagas dos profissionais
-            {profissionais.length > 0 && ` • ${profissionais.length} profissional(is) ativo(s)`}
+            {profGroups.length > 0 && ` • ${profGroups.length} profissional(is) com horários`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -438,6 +489,17 @@ const Disponibilidade: React.FC = () => {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar por nome ou unidade..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {profissionais.length === 0 && (
         <Card className="shadow-card border-0 border-l-4 border-l-warning">
           <CardContent className="p-4 text-sm text-warning">
@@ -446,7 +508,7 @@ const Disponibilidade: React.FC = () => {
         </Card>
       )}
 
-      {/* Dialog */}
+      {/* Dialog (add/edit) */}
       <Dialog open={dialogOpen} onOpenChange={v => { if (!saving) setDialogOpen(v); }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-display">{isEditing ? 'Editar' : 'Configurar'} Disponibilidade</DialogTitle></DialogHeader>
@@ -639,39 +701,35 @@ const Disponibilidade: React.FC = () => {
                           <span className="text-center px-3">Vagas</span>
                           <span className="text-center px-3">Ativo</span>
                         </div>
-                        {activeTurnos.map(turno => {
-                          const isActive = Object.keys(turnoVagas).includes(turno.id);
-                          return (
-                            <div key={turno.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center px-3 py-2.5 border-b border-border last:border-b-0">
-                              <span className="text-sm font-medium flex items-center gap-2">
-                                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                                {turno.nome}
-                              </span>
-                              <span className="text-xs text-muted-foreground text-center px-3">{turno.horaInicio} - {turno.horaFim}</span>
-                              <div className="px-3">
-                                <Input
-                                  type="number" min={1} value={turnoVagas[turno.id] || 20}
-                                  onChange={e => setTurnoVagas(prev => ({ ...prev, [turno.id]: parseInt(e.target.value) || 1 }))}
-                                  className="h-8 w-16 text-xs text-center"
-                                />
-                              </div>
-                              <div className="px-3 flex justify-center">
-                                <Switch
-                                  checked={turnoVagas[turno.id] !== undefined}
-                                  onCheckedChange={v => {
-                                    if (v) {
-                                      setTurnoVagas(prev => ({ ...prev, [turno.id]: 20 }));
-                                    } else {
-                                      setTurnoVagas(prev => { const n = { ...prev }; delete n[turno.id]; return n; });
-                                      // Remove from all days
-                                      setTurnoDays(prev => prev.map(td => ({ ...td, turnosAtivos: td.turnosAtivos.filter(id => id !== turno.id) })));
-                                    }
-                                  }}
-                                />
-                              </div>
+                        {activeTurnos.map(turno => (
+                          <div key={turno.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center px-3 py-2.5 border-b border-border last:border-b-0">
+                            <span className="text-sm font-medium flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                              {turno.nome}
+                            </span>
+                            <span className="text-xs text-muted-foreground text-center px-3">{turno.horaInicio} - {turno.horaFim}</span>
+                            <div className="px-3">
+                              <Input
+                                type="number" min={1} value={turnoVagas[turno.id] || 20}
+                                onChange={e => setTurnoVagas(prev => ({ ...prev, [turno.id]: parseInt(e.target.value) || 1 }))}
+                                className="h-8 w-16 text-xs text-center"
+                              />
                             </div>
-                          );
-                        })}
+                            <div className="px-3 flex justify-center">
+                              <Switch
+                                checked={turnoVagas[turno.id] !== undefined}
+                                onCheckedChange={v => {
+                                  if (v) {
+                                    setTurnoVagas(prev => ({ ...prev, [turno.id]: 20 }));
+                                  } else {
+                                    setTurnoVagas(prev => { const n = { ...prev }; delete n[turno.id]; return n; });
+                                    setTurnoDays(prev => prev.map(td => ({ ...td, turnosAtivos: td.turnosAtivos.filter(id => id !== turno.id) })));
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -781,152 +839,198 @@ const Disponibilidade: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* List */}
+      {/* Management Modal */}
+      <Dialog open={!!manageProfId} onOpenChange={v => { if (!v) setManageProfId(null); }}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          {manageProfData && (() => {
+            const [profId, data] = manageProfData;
+            const prof = data.prof;
+            const profUnidade = unidades.find(u => u.id === prof?.unidadeId);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display flex items-center gap-2">
+                    <User className="w-5 h-5 text-primary" />
+                    {prof?.nome || 'Profissional'}
+                    {profUnidade && <Badge variant="secondary" className="text-xs ml-2">{profUnidade.nome}</Badge>}
+                  </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">{data.groups.length} disponibilidade(s) cadastrada(s)</p>
+                    <Button size="sm" onClick={() => openNewForProf(profId)} className="gradient-primary text-primary-foreground">
+                      <Plus className="w-4 h-4 mr-1" />Adicionar
+                    </Button>
+                  </div>
+
+                  {data.groups.map(([key, records]) => {
+                    const first = records[0];
+                    const unidade = unidades.find(u => u.id === first.unidadeId);
+                    const isTurno = isGroupTurno(records);
+                    const sala = first.salaId && !isTurno ? salas.find(s => s.id === first.salaId) : null;
+                    const allIds = records.map(r => r.id);
+
+                    if (isTurno) {
+                      const turnoMap = new Map<string, { turno: TurnoDefinition | undefined; vagas: number; days: number[] }>();
+                      records.forEach(r => {
+                        const tId = r.salaId || '';
+                        if (!turnoMap.has(tId)) turnoMap.set(tId, { turno: turnosGlobais.find(t => t.id === tId), vagas: r.vagasPorDia, days: [] });
+                        r.diasSemana.forEach(d => { turnoMap.get(tId)!.days.push(d); });
+                      });
+
+                      return (
+                        <Card key={key} className="border border-border">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="secondary" className="text-[10px] gap-1"><ClipboardList className="w-3 h-3" />Por Turno</Badge>
+                                  {unidade && <span className="text-xs text-muted-foreground">{unidade.nome}</span>}
+                                </div>
+                                <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const r of records) { await deleteDisponibilidade(r.id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              {Array.from(turnoMap.entries()).map(([tId, info]) => (
+                                <div key={tId} className="flex items-center gap-2 text-xs">
+                                  <Badge variant="outline" className="text-[10px]">{info.turno?.nome || tId}</Badge>
+                                  <span className="text-muted-foreground">{info.turno?.horaInicio}–{info.turno?.horaFim}</span>
+                                  <span className="font-medium">{info.vagas} vagas</span>
+                                  <span className="text-muted-foreground">• {info.days.sort().map(d => diasSemanaLabels[d]).join(', ')}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
+                              <div className="mt-2"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    // Por Hora
+                    const dayEntries = records.flatMap(r => r.diasSemana.map(dayNum => ({ dayNum, horaInicio: r.horaInicio, horaFim: r.horaFim }))).sort((a, b) => a.dayNum - b.dayNum);
+
+                    return (
+                      <Card key={key} className="border border-border">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="secondary" className="text-[10px] gap-1"><Clock className="w-3 h-3" />Por Hora</Badge>
+                                {unidade && <span className="text-xs text-muted-foreground">{unidade.nome}</span>}
+                                {sala && <span className="text-xs text-muted-foreground">• {sala.nome}</span>}
+                              </div>
+                              <p className="text-xs text-muted-foreground"><Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}</p>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditGroup(key)}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os {records.length} registro(s) serão removidos.</AlertDialogDescription></AlertDialogHeader>
+                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const id of allIds) { await deleteDisponibilidade(id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {dayEntries.map((de, i) => (
+                              <span key={i} className={cn(
+                                "inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border",
+                                (de.dayNum === 0 || de.dayNum === 6)
+                                  ? "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30"
+                                  : "bg-primary/10 text-primary border-primary/20"
+                              )}>
+                                {diasSemanaLabels[de.dayNum]} {de.horaInicio}–{de.horaFim}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>{first.vagasPorHora} vagas/hora</span>
+                            <span>•</span>
+                            <span>{first.vagasPorDia} vagas/dia</span>
+                            <span>•</span>
+                            <span>{first.duracaoConsulta || 30}min</span>
+                          </div>
+                          {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
+                            <div className="mt-2"><SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} /></div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Professional Cards List */}
       {disponibilidades.length === 0 ? (
         <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
           <Clock className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
           Nenhuma disponibilidade configurada.
         </CardContent></Card>
+      ) : filteredProfGroups.length === 0 ? (
+        <Card className="shadow-card border-0"><CardContent className="p-8 text-center text-muted-foreground">
+          <Search className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+          Nenhum profissional encontrado para "{searchTerm}".
+        </CardContent></Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {Array.from(groups.entries()).map(([key, records]) => {
-            const first = records[0];
-            const prof = funcionarios.find(f => f.id === first.profissionalId);
-            const unidade = unidades.find(u => u.id === first.unidadeId);
-            const isTurno = isGroupTurno(records);
-            const profModo = modosPorProfissional[first.profissionalId] || 'por_hora';
-
-            if (isTurno) {
-              // Turno card
-              const turnoMap = new Map<string, { turno: TurnoDefinition | undefined; vagas: number; days: number[] }>();
-              records.forEach(r => {
-                const tId = r.salaId || '';
-                if (!turnoMap.has(tId)) {
-                  turnoMap.set(tId, { turno: turnosGlobais.find(t => t.id === tId), vagas: r.vagasPorDia, days: [] });
-                }
-                r.diasSemana.forEach(d => { turnoMap.get(tId)!.days.push(d); });
-              });
-
-              return (
-                <Card key={key} className="shadow-card border-0">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-foreground">{prof?.nome || 'Profissional'}</h3>
-                          <Badge variant="secondary" className="text-[10px] gap-1">
-                            <ClipboardList className="w-3 h-3" />Por Turno
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{unidade?.nome || 'Unidade'}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          <Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}
-                        </p>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button size="icon" variant="ghost" onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os registros serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const r of records) { await deleteDisponibilidade(r.id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 mb-3">
-                      {Array.from(turnoMap.entries()).map(([tId, info]) => (
-                        <div key={tId} className="flex items-center gap-2 text-xs">
-                          <Badge variant="outline" className="text-[10px]">{info.turno?.nome || tId}</Badge>
-                          <span className="text-muted-foreground">{info.turno?.horaInicio}–{info.turno?.horaFim}</span>
-                          <span className="font-medium">{info.vagas} vagas (configurado)</span>
-                          <span className="text-muted-foreground">• {info.days.sort().map(d => diasSemanaLabels[d]).join(', ')}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
-                      <div className="mt-2">
-                        <SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            }
-
-            // Por Hora card (existing)
-            const sala = first.salaId ? salas.find(s => s.id === first.salaId) : null;
-            const dayEntries = records
-              .flatMap(r => r.diasSemana.map(dayNum => ({ dayNum, horaInicio: r.horaInicio, horaFim: r.horaFim, id: r.id })))
-              .sort((a, b) => a.dayNum - b.dayNum);
-            const hasWeekend = dayEntries.some(de => de.dayNum === 0 || de.dayNum === 6);
-            const allIds = records.map(r => r.id);
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredProfGroups.map(([profId, data]) => {
+            const prof = data.prof;
+            const totalDisp = data.groups.length;
+            const firstUnidadeId = data.groups[0]?.[1]?.[0]?.unidadeId || '';
+            const unidade = unidades.find(u => u.id === (prof?.unidadeId || firstUnidadeId));
+            const hasTurno = data.groups.some(([_, records]) => isGroupTurno(records));
+            const hasHora = data.groups.some(([_, records]) => !isGroupTurno(records));
 
             return (
-              <Card key={key} className="shadow-card border-0">
+              <Card key={profId} className="shadow-card border-0 hover:shadow-elevated transition-shadow">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-foreground">{prof?.nome || 'Profissional não encontrado'}</h3>
-                        <Badge variant="secondary" className="text-[10px] gap-1">
-                          <Clock className="w-3 h-3" />Por Hora
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{unidade?.nome || 'Unidade'}{sala ? ` • ${sala.nome}` : ''}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        <Calendar className="w-3.5 h-3.5 inline mr-1" />{first.dataInicio} a {first.dataFim}
-                      </p>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <User className="w-5 h-5 text-primary" />
                     </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button size="icon" variant="ghost" onClick={() => openEditGroup(key)}><Pencil className="w-4 h-4" /></Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Excluir disponibilidade?</AlertDialogTitle><AlertDialogDescription>Todos os {records.length} registro(s) deste grupo serão removidos.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={async () => { for (const id of allIds) { await deleteDisponibilidade(id); } toast.success('Disponibilidade excluída!'); }}>Excluir</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-foreground truncate">{prof?.nome || 'Profissional'}</h3>
+                      <p className="text-xs text-muted-foreground truncate">{prof?.profissao || prof?.cargo || ''}</p>
+                      {unidade && <p className="text-xs text-muted-foreground truncate">{unidade.nome}</p>}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {dayEntries.map((de, i) => {
-                      const isWeekend = de.dayNum === 0 || de.dayNum === 6;
-                      return (
-                        <span key={i} className={cn(
-                          "inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border",
-                          isWeekend
-                            ? "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-400 dark:border-orange-500/30"
-                            : "bg-primary/10 text-primary border-primary/20"
-                        )}>
-                          {diasSemanaLabels[de.dayNum]} {de.horaInicio}–{de.horaFim}
-                        </span>
-                      );
-                    })}
+                  <div className="flex items-center gap-2 mt-3">
+                    <Badge variant="outline" className="text-xs">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {totalDisp} horário{totalDisp !== 1 ? 's' : ''}
+                    </Badge>
+                    {hasTurno && <Badge variant="secondary" className="text-[10px]">Turno</Badge>}
+                    {hasHora && <Badge variant="secondary" className="text-[10px]">Hora</Badge>}
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground border-t border-border pt-2">
-                    <span>{first.vagasPorHora} vagas/hora</span>
-                    <span>•</span>
-                    <span>{first.vagasPorDia} vagas/dia (configurado)</span>
-                    <span>•</span>
-                    <span>{first.duracaoConsulta || 30}min/consulta</span>
-                  </div>
-
-                  {hasWeekend && (
-                    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 mt-2">
-                      ⚠️ Ativo no fim de semana
-                    </span>
-                  )}
-
-                  {todayStr >= first.dataInicio && todayStr <= first.dataFim && (
-                    <div className="mt-2">
-                      <SlotInfoBadge profissionalId={first.profissionalId} unidadeId={first.unidadeId} date={todayStr} />
-                    </div>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-3"
+                    onClick={() => setManageProfId(profId)}
+                  >
+                    <Settings2 className="w-4 h-4 mr-1.5" />
+                    Gerenciar
+                  </Button>
                 </CardContent>
               </Card>
             );
