@@ -315,6 +315,9 @@ export function docFooter(config: DocumentConfig, extraInfo?: string): string {
       <div class="institution">${config.linha1} — ${config.linha2}</div>
       <div>${rodape} ${extraInfo || ''}</div>
       <div>${now}</div>
+    </div>
+    <div style="text-align:center;font-size:7.5pt;color:#94a3b8;margin-top:4px;">
+      Rua Barão do Rio Branco, S/N, Santa Terezinha, Oriximiná-PA, 68270-000
     </div>`;
 }
 
