@@ -423,11 +423,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadDisponibilidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("disponibilidades" as any)
         .select(
           "id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta",
         );
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setDisponibilidades(
           data.map((d: any) => ({
@@ -449,7 +451,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading disponibilidades:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadPacientes = useCallback(async () => {
     try {
