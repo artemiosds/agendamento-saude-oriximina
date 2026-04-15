@@ -1,4 +1,5 @@
-import logoSms from '@/assets/logo-sms.jpeg';
+import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerFallback from '@/assets/logo-cer-ii.png';
 
 interface FichaPacienteData {
   paciente: {
@@ -34,9 +35,9 @@ interface FichaPacienteData {
   }>;
 }
 
-const resolveLogoUrl = (): string => {
-  if (logoSms.startsWith('http') || logoSms.startsWith('/')) return logoSms;
-  return logoSms;
+const resolveLogoUrl = (src: string): string => {
+  if (src.startsWith('http') || src.startsWith('/')) return src;
+  return src;
 };
 
 const formatarData = (data: string): string => {
