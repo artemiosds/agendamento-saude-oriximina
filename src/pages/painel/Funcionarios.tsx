@@ -59,6 +59,8 @@ const Funcionarios: React.FC = () => {
   const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
   const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();
+  const { resolved: customConfig } = useCustomFields('funcionario', user?.unidadeId);
+  const [customData, setCustomData] = useState<Record<string, any>>({});
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
