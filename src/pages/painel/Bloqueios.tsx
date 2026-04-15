@@ -92,7 +92,8 @@ const Bloqueios: React.FC = () => {
 
   // Filtro de busca por nome
   const profissionaisFiltrados = useMemo(() => {
-    const base = (isCoordenador || (isMaster && user?.unidadeId))
+    const isAdminGlobal = user?.usuario === 'admin.sms';
+    const base = (!isAdminGlobal && (isCoordenador || (isMaster && user?.unidadeId)))
       ? todosProfissionais.filter(p => p.unidadeId === user?.unidadeId)
       : todosProfissionais;
 
@@ -106,7 +107,8 @@ const Bloqueios: React.FC = () => {
   }, [todosProfissionais, buscaProfissional, isCoordenador, user?.unidadeId]);
 
   const visibleBloqueios = useMemo(() => {
-    if (isMaster && !user?.unidadeId) return bloqueios; // Global master sees all
+    if (user?.usuario === 'admin.sms') return bloqueios; // Global admin sees all
+    if (isMaster && !user?.unidadeId) return bloqueios;
     if (user?.unidadeId) {
       return bloqueios.filter(b => !b.unidadeId || b.unidadeId === user.unidadeId);
     }

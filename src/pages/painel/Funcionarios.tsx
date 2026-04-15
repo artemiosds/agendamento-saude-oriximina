@@ -251,12 +251,12 @@ const Funcionarios: React.FC = () => {
   };
 
   /** Check if a given employee is the global master (protected from unit masters) */
-  const isProtectedGlobalMaster = (f: FuncionarioDB) => f.role === 'master' && !f.unidade_id;
+  const isProtectedGlobalMaster = (f: FuncionarioDB) => f.usuario === 'admin.sms';
 
   const filteredFuncionarios = (() => {
     let list = funcionarios;
     // Unit-scoped users (including unit masters) only see their unit's employees
-    if (!isGlobalMaster && user?.unidadeId) {
+    if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
       list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
     }
     // For unit masters, hide the global master from the list entirely
