@@ -15,6 +15,8 @@ import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtoco
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMinutes } from "date-fns";
+import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { useCustomFields } from "@/hooks/useCustomFields";
 
 interface Agendamento {
   id: string;

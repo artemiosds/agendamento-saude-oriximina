@@ -9,6 +9,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Building2, DoorOpen, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
+import { useCustomFields } from '@/hooks/useCustomFields';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useData();
