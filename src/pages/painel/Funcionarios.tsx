@@ -210,6 +210,12 @@ const Funcionarios: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    // Prevent unit master from deleting global master
+    const target = funcionarios.find(f => f.id === id);
+    if (isUnitMaster && target && isProtectedGlobalMaster(target)) {
+      toast.error('Você não tem permissão para excluir o administrador global.');
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke('manage-employee', {
         body: { action: 'delete', id },
