@@ -629,7 +629,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
 
       {/* Custom Fields */}
       {customConfig.fields.length > 0 && (
-        <Card className="p-4 border bg-card">
+        <div className="p-4 border rounded-lg bg-card">
           <CustomFieldsRenderer
             fields={customConfig.fields}
             values={form.customData || {}}
@@ -637,7 +637,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               onChange({ ...form, customData: { ...(form.customData || {}), [fieldName]: value } })
             }
           />
-        </Card>
+        </div>
       )}
 
       {/* Save button */}
