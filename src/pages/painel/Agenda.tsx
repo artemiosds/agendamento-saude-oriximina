@@ -60,6 +60,7 @@ import { BuscaPaciente } from "@/components/BuscaPaciente";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
+import { whatsappService } from "@/services/whatsappService";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -703,6 +704,8 @@ const Agenda: React.FC = () => {
       id_agendamento: agId,
       observacoes: newAg.obs,
     });
+    // WhatsApp: confirmação de agendamento
+    whatsappService.sendByAgendamento(agId, "confirmacao").catch(() => {});
   };
 
   // NOVO: aprovar agendamento online
@@ -958,6 +961,16 @@ const Agenda: React.FC = () => {
         id_agendamento: agId,
       });
     }
+    // WhatsApp: enviar notificação por status
+    const statusToWhatsapp: Record<string, string> = {
+      cancelado: "cancelamento",
+      remarcado: "remarcacao",
+      falta: "falta",
+    };
+    const whatsappTipo = statusToWhatsapp[newStatus];
+    if (whatsappTipo) {
+      whatsappService.sendByAgendamento(agId, whatsappTipo).catch(() => {});
+    }
     if (newStatus === "cancelado" || newStatus === "falta") {
       await handleVagaLiberada(
         {
@@ -1048,8 +1061,9 @@ const Agenda: React.FC = () => {
           observacoes: `Motivo: ${cancelMotivo}`,
         });
       }
+      // WhatsApp: cancelamento
+      whatsappService.sendByAgendamento(ag.id, "cancelamento").catch(() => {});
 
-      // Liberar vaga
       if (cancelConfig.liberar_vaga_automaticamente) {
         await handleVagaLiberada(
           { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
