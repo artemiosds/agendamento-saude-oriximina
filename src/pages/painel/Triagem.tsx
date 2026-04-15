@@ -586,6 +586,13 @@ const Triagem: React.FC = () => {
               <Label>Observações</Label>
               <Textarea rows={3} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} placeholder="Observações relevantes da triagem..." />
             </div>
+            {customConfig.fields.length > 0 && (
+              <CustomFieldsRenderer
+                fields={customConfig.fields}
+                values={customData}
+                onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+              />
+            )}
             <div className="flex flex-col gap-2">
               <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho
