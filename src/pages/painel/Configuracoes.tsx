@@ -531,6 +531,9 @@ const Configuracoes: React.FC = () => {
       case 'campos':
         return <ConfigPersonalizarCampos />;
 
+      case 'whatsapp':
+        return <ConfigWhatsApp />;
+
       case 'fluxo':
         return (
           <div className="space-y-6">
