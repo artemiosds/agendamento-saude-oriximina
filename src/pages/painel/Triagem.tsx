@@ -206,6 +206,7 @@ const Triagem: React.FC = () => {
         medicamentos: [],
         observacoes: "",
       });
+      setCustomData({});
       setNewAlergia("");
       setNewMedicamento("");
     },
@@ -251,6 +252,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        custom_data: customData,
         iniciado_em: new Date().toISOString(),
       };
 
@@ -302,6 +304,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        custom_data: customData,
         confirmado_em: new Date().toISOString(),
       };
 
