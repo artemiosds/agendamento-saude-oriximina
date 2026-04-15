@@ -1,7 +1,8 @@
 import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
-import logoSms from '@/assets/logo-sms.jpeg';
+import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerFallback from '@/assets/logo-cer-ii.png';
 
 interface FichaData {
   paciente: {
@@ -83,9 +84,9 @@ interface FichaImpressaoProps {
   onPrintComplete?: () => void;
 }
 
-const resolveLogoUrl = (): string => {
-  if (logoSms.startsWith('http') || logoSms.startsWith('/')) return logoSms;
-  return logoSms;
+const resolveLogoUrl = (src: string): string => {
+  if (src.startsWith('http') || src.startsWith('/')) return src;
+  return src;
 };
 
 const PRINT_CSS = `
@@ -310,7 +311,8 @@ const PRINT_CSS = `
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'completa', onPrintComplete }) => {
   const somentePessoais = mode === 'dados_pessoais';
   const buildHTML = useCallback(() => {
-    const logo = resolveLogoUrl();
+    const logoLeft = resolveLogoUrl(logoSmsFallback);
+    const logoRight = resolveLogoUrl(logoCerFallback);
     const now = new Date();
     const dataAtual = formatarData(now.toISOString());
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -337,12 +339,15 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   <!-- CABEÇALHO -->
   <div class="header">
     <div class="header-logo">
-      <img src="${logo}" alt="Logo SMS" />
+      <img src="${logoLeft}" alt="Logo SMS Oriximiná" />
     </div>
     <div class="header-center">
       <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-      <h2>Centro Especializado em Reabilitação II &mdash; CER II</h2>
+      <h2>Centro Especializado em Reabilitação Nível II &mdash; CER II</h2>
       <div class="ficha-tipo">${somentePessoais ? 'Ficha Cadastral do Paciente' : 'Ficha de Atendimento / Prontuário'}</div>
+    </div>
+    <div class="header-logo">
+      <img src="${logoRight}" alt="Logo CER II" style="max-height:54px;max-width:100px;object-fit:contain;" />
     </div>
     <div class="header-right">
       <div><b>Data:</b> ${dataAtual}</div>
