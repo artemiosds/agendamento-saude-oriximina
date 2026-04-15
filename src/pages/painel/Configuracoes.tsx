@@ -1197,7 +1197,7 @@ const Configuracoes: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6 min-h-[70vh]">
         <nav className="lg:w-64 shrink-0">
           <div className="lg:sticky lg:top-4 space-y-1 bg-card rounded-xl border p-2">
-            {TABS.map(tab => {
+            {TABS.filter(t => !t.globalOnly || _isGlobalMaster).map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
