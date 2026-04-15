@@ -522,6 +522,9 @@ const Configuracoes: React.FC = () => {
       case 'especialidades':
         return <ConfigEspecialidades />;
 
+      case 'campos':
+        return <ConfigPersonalizarCampos />;
+
       case 'fluxo':
         return (
           <div className="space-y-6">
