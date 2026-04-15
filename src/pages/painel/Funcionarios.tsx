@@ -443,6 +443,13 @@ const Funcionarios: React.FC = () => {
                     </div>
                   </div>
                 )}
+                {customConfig.fields.length > 0 && (
+                  <CustomFieldsRenderer
+                    fields={customConfig.fields}
+                    values={customData}
+                    onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+                  />
+                )}
                 <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                   {editId ? 'Salvar' : 'Cadastrar'}

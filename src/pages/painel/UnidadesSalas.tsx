@@ -14,6 +14,8 @@ import { useCustomFields } from '@/hooks/useCustomFields';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useData();
+  const { resolved: customConfig } = useCustomFields('unidade');
+  const [customData, setCustomData] = useState<Record<string, any>>({});
   const [unitDialog, setUnitDialog] = useState(false);
   const [roomDialog, setRoomDialog] = useState(false);
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
