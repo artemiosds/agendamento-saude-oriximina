@@ -487,12 +487,17 @@ const Agenda: React.FC = () => {
     let cancelled = false;
     const loadLast = async () => {
       const results: typeof lastProntuarios = {};
-      const { data } = await (supabase as any)
+      let query = (supabase as any)
         .from("prontuarios")
-        .select("paciente_id,data_atendimento,profissional_nome,procedimentos_texto,queixa_principal")
+        .select("paciente_id,data_atendimento,profissional_id,profissional_nome,procedimentos_texto,queixa_principal")
         .in("paciente_id", pacienteIds)
-        .order("data_atendimento", { ascending: false })
-        .limit(pacienteIds.length * 2);
+        .order("data_atendimento", { ascending: false });
+      // For professionals, show only their own last records
+      if (isProfissional && user?.id) {
+        query = query.eq("profissional_id", user.id);
+      }
+      query = query.limit(pacienteIds.length * 2);
+      const { data } = await query;
       if (!cancelled && data) {
         for (const row of data) {
           if (!results[row.paciente_id]) {
@@ -802,6 +807,12 @@ const Agenda: React.FC = () => {
     if (!ag) return;
 
     if (newStatus === "concluido") {
+      // Block concluding appointments for future dates
+      const today = todayLocalStr();
+      if (ag.data > today) {
+        toast.error("⚠️ Não é possível concluir um agendamento antes da data marcada.");
+        return;
+      }
       try {
         const { count } = await supabase
           .from("prontuarios")
@@ -1090,6 +1101,13 @@ const Agenda: React.FC = () => {
   };
 
   const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0]) => {
+    // Block starting attendance for future dates
+    const today = todayLocalStr();
+    if (ag.data > today) {
+      toast.error("Não é possível iniciar atendimento antes da data agendada.");
+      return;
+    }
+
     const statusPermitidos = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
     if (!statusPermitidos.includes(ag.status)) {
       toast.error("Este agendamento ainda não está liberado para iniciar atendimento.");
@@ -1812,7 +1830,7 @@ const Agenda: React.FC = () => {
                 const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
-                const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && (ehHoje || ag.status === "apto_atendimento");
+                const canStart = isProfissional && STATUS_LIBERADOS.includes(ag.status) && ehHoje;
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
