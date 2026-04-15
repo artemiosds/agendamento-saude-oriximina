@@ -64,7 +64,7 @@ export async function runPhoneNormalizationMigration(): Promise<void> {
       }
     }
 
-    console.log(`[PhoneMigration] Complete: ${fixed} records fixed, ${skipped} skipped`);
+    // Migration complete — silent in production
     localStorage.setItem(MIGRATION_KEY, new Date().toISOString());
   } catch (err) {
     console.error("[PhoneMigration] Unexpected error:", err);
