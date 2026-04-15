@@ -171,7 +171,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // AuthContext já buscou o role da tabela 'funcionarios' — usar diretamente
       const role = (user.role || '').toLowerCase().trim();
 
-      if (import.meta.env.DEV) console.log('[Permissions] role:', role);
+      // role resolved from AuthContext
 
       if (!role) {
         console.warn('[Permissions] Role vazio');
@@ -202,7 +202,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      if (import.meta.env.DEV) console.log('[Permissions] Registros:', data?.length ?? 0, 'para role:', role);
+      // Permissions loaded from DB
 
       // Tabela vazia — gravar defaults e usar
       if (!data || data.length === 0) {

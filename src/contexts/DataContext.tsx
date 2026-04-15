@@ -739,6 +739,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           descricaoClinica: row.descricao_clinica || "",
           cid: row.cid || "",
           criadoEm: row.criado_em || "",
+          isGestante: !!row.is_gestante,
+          isPne: !!row.is_pne,
+          isAutista: !!row.is_autista,
         }),
       );
     },

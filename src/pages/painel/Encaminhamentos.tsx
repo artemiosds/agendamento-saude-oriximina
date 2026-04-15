@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import DOMPurify from 'dompurify';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -419,7 +420,7 @@ const Encaminhamentos: React.FC = () => {
           </DialogHeader>
           {previewDoc && (
             <div className="border rounded-lg p-5 bg-white">
-              <div dangerouslySetInnerHTML={{ __html: previewDoc.conteudo_html }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewDoc.conteudo_html) }} />
             </div>
           )}
           <DialogFooter>
