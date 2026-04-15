@@ -717,11 +717,20 @@ const Configuracoes: React.FC = () => {
                     <Separator className="my-4" />
                     <div className="space-y-2">
                       <Label className="text-[13px] font-bold text-foreground/80">Selecionar Agendamento</Label>
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar paciente..."
+                          className="h-8 pl-8 text-sm"
+                          value={reativarPacienteSearch}
+                          onChange={e => setReativarPacienteSearch(e.target.value)}
+                        />
+                      </div>
                       <div className="border rounded-lg overflow-hidden max-h-[200px] overflow-y-auto">
                         <Table>
                           <TableHeader><TableRow className="bg-muted/50"><TableHead className="text-xs">Paciente</TableHead><TableHead className="text-xs w-[90px]">Data</TableHead><TableHead className="text-xs w-[70px]">Hora</TableHead><TableHead className="text-xs w-[90px]">Status</TableHead></TableRow></TableHeader>
                           <TableBody>
-                            {reativarAgendamentos.map(ag => (
+                            {reativarAgendamentos.filter(ag => !reativarPacienteSearch || ag.paciente_nome?.toLowerCase().includes(reativarPacienteSearch.toLowerCase())).map(ag => (
                               <TableRow key={ag.id} className={cn("cursor-pointer hover:bg-primary/5", reativarAgId === ag.id && "bg-primary/10")} onClick={() => setReativarAgId(ag.id)}>
                                 <TableCell className="text-sm py-2">{ag.paciente_nome}</TableCell>
                                 <TableCell className="text-sm py-2">{ag.data ? new Date(ag.data + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</TableCell>
