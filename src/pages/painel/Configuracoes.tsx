@@ -41,16 +41,16 @@ import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCamp
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { id: 'prontuario', label: 'Prontuário', icon: FileText },
-  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope },
-  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp },
-  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList },
-  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity },
-  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon },
-  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users },
-  { id: 'unidades', label: 'Unidades e Setores', icon: Building2 },
-  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search },
-  { id: 'sistema', label: 'Sistema', icon: Monitor },
+  { id: 'prontuario', label: 'Prontuário', icon: FileText, globalOnly: false },
+  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope, globalOnly: false },
+  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp, globalOnly: false },
+  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
+  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
+  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
+  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
+  { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
+  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -129,6 +129,8 @@ const Configuracoes: React.FC = () => {
   const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
 
   const isMaster = user?.role === 'master';
+  const _isGlobalMaster = isMaster && !user?.unidadeId;
+  const _isUnitMaster = isMaster && !!user?.unidadeId;
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
   );
@@ -1195,7 +1197,7 @@ const Configuracoes: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6 min-h-[70vh]">
         <nav className="lg:w-64 shrink-0">
           <div className="lg:sticky lg:top-4 space-y-1 bg-card rounded-xl border p-2">
-            {TABS.map(tab => {
+            {TABS.filter(t => !t.globalOnly || _isGlobalMaster).map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (

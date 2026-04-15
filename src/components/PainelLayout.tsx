@@ -85,6 +85,7 @@ const PainelLayout: React.FC = () => {
   };
 
   const isItemVisible = (item: typeof menuItems[0]): boolean => {
+    // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
     if (item.hide_from_master && isMaster) return false;
     if (isMaster) return true;

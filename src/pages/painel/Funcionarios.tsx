@@ -54,8 +54,8 @@ interface FuncionarioDB {
 
 const Funcionarios: React.FC = () => {
   const { unidades, salas, refreshFuncionarios, logAction } = useData();
-  const { unidadesVisiveis } = useUnidadeFilter();
-  const { user } = useAuth();
+  const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
+  const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +114,8 @@ const Funcionarios: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
     setDialogOpen(true);
   };
 
@@ -225,14 +226,27 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const filteredFuncionarios = ((user?.role === 'coordenador' || user?.role === 'recepcao')
-    ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
-    : funcionarios
-  ).filter(f => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term);
-  });
+  /** Check if a given employee is the global master (protected from unit masters) */
+  const isProtectedGlobalMaster = (f: FuncionarioDB) => f.role === 'master' && !f.unidade_id;
+
+  const filteredFuncionarios = (() => {
+    let list = funcionarios;
+    // Unit-scoped users (including unit masters) only see their unit's employees
+    if (!isGlobalMaster && user?.unidadeId) {
+      list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
+    }
+    // For unit masters, hide the global master from the list entirely
+    if (isUnitMaster) {
+      list = list.filter(f => !isProtectedGlobalMaster(f));
+    }
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter(f =>
+        f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term)
+      );
+    }
+    return list;
+  })();
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -297,8 +311,8 @@ const Funcionarios: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
-                  <div><Label>Unidade</Label>
-                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
+                  <div><Label>Unidade {isUnitMaster ? '(fixada)' : ''}</Label>
+                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))} disabled={isUnitMaster}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                     </Select>

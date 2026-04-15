@@ -7,6 +7,10 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True when user is master with NO unit restriction (global owner) */
+  isGlobalMaster: boolean;
+  /** True when user is master scoped to a specific unit */
+  isUnitMaster: boolean;
   login: (usuario: string, senha: string) => Promise<{ success: boolean; error?: string; role?: string }>;
   logout: () => void;
   hasPermission: (roles: UserRole[]) => boolean;
@@ -187,6 +191,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   }, [user, logAuthAction]);
 
+  const isGlobalMaster = !!(user && user.role === 'master' && !user.unidadeId);
+  const isUnitMaster = !!(user && user.role === 'master' && !!user.unidadeId);
+
   const hasPermission = useCallback(
     (roles: UserRole[]) => {
       if (!user) return false;
@@ -197,7 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, isGlobalMaster, isUnitMaster, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );
