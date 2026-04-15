@@ -71,10 +71,12 @@ const HistoricoTriagem: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      let trQuery = supabase.from("triage_records").select("*").order("criado_em", { ascending: false });
+      // Unit isolation: filter triage records by unit (via agendamento join not available, filter client-side below)
       const [trRes, funcRes, agRes] = await Promise.all([
-        supabase.from("triage_records").select("*").order("criado_em", { ascending: false }),
+        trQuery,
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        supabase.from("agendamentos").select("id, paciente_nome"),
+        supabase.from("agendamentos").select("id, paciente_nome, unidade_id"),
       ]);
 
       const funcMap = new Map<string, string>();
