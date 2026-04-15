@@ -41,16 +41,16 @@ import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCamp
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { id: 'prontuario', label: 'Prontuário', icon: FileText },
-  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope },
-  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp },
-  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList },
-  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity },
-  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon },
-  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users },
-  { id: 'unidades', label: 'Unidades e Setores', icon: Building2 },
-  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search },
-  { id: 'sistema', label: 'Sistema', icon: Monitor },
+  { id: 'prontuario', label: 'Prontuário', icon: FileText, globalOnly: false },
+  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope, globalOnly: false },
+  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp, globalOnly: false },
+  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
+  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
+  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
+  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
+  { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
+  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
