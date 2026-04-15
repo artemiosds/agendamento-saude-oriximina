@@ -12,6 +12,9 @@ import { User, Building2, Stethoscope, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
+import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { useCustomFields } from "@/hooks/useCustomFields";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
