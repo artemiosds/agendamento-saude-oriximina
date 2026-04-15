@@ -23,8 +23,8 @@ const UnidadesSalas: React.FC = () => {
   const [unitForm, setUnitForm] = useState({ nome: '', endereco: '', telefone: '', whatsapp: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
 
-  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', endereco: '', telefone: '', whatsapp: '' }); setUnitDialog(true); };
-  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setUnitDialog(true); };
+  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', endereco: '', telefone: '', whatsapp: '' }); setCustomData({}); setUnitDialog(true); };
+  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setCustomData({}); setUnitDialog(true); };
   const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '' }); setRoomDialog(true); };
   const openEditRoom = (s: typeof salas[0]) => { setEditRoomId(s.id); setRoomForm({ nome: s.nome, unidadeId: s.unidadeId }); setRoomDialog(true); };
 
