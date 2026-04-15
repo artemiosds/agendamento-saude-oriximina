@@ -497,7 +497,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let from = 0;
       const PAGE = 1000;
       while (true) {
-        const { data, error } = await supabase
+        let query = supabase
           .from("agendamentos" as any)
           .select(
             "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
@@ -505,6 +505,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .gte("data", cutoff)
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
+        // Unit isolation
+        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        const { data, error } = await query;
         if (error || !data || data.length === 0) break;
         allData = allData.concat(data);
         if (data.length < PAGE) break;
@@ -537,7 +540,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadFila = useCallback(async () => {
     try {
