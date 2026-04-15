@@ -95,6 +95,11 @@ const Encaminhamentos: React.FC = () => {
         .in('tipo_documento', ['Encaminhamento', 'encaminhamento', 'Guia de Encaminhamento', 'guia de encaminhamento'])
         .order('created_at', { ascending: false });
 
+      // Unit isolation
+      if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
+        query = query.eq('unidade_id', user.unidadeId);
+      }
+
       if (!isMasterOrGestao) {
         query = query.eq('profissional_id', user?.id || '');
       }
@@ -103,7 +108,7 @@ const Encaminhamentos: React.FC = () => {
       setEnviados((data as unknown as DocEncaminhamento[]) || []);
     } catch (err) { console.error(err); }
     setLoadingEnviados(false);
-  }, [user?.id, isMasterOrGestao]);
+  }, [user?.id, user?.usuario, user?.unidadeId, isMasterOrGestao]);
 
   useEffect(() => {
     if (user?.id) { fetchRecebidos(); fetchEnviados(); }

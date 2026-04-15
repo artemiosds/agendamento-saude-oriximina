@@ -56,11 +56,12 @@ export const regulationService = {
     return data as PatientRegulation;
   },
 
-  async getEvaluations(filters?: { patientId?: string; regulationId?: string; status?: string }) {
+  async getEvaluations(filters?: { patientId?: string; regulationId?: string; status?: string; unitId?: string }) {
     let query = (supabase as any).from('patient_evaluations').select('*').order('created_at', { ascending: false });
     if (filters?.patientId) query = query.eq('patient_id', filters.patientId);
     if (filters?.regulationId) query = query.eq('regulation_id', filters.regulationId);
     if (filters?.status) query = query.eq('status', filters.status);
+    if (filters?.unitId) query = query.eq('unit_id', filters.unitId);
     const { data, error } = await query;
     if (error) throw error;
     return (data || []) as PatientEvaluation[];

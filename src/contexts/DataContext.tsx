@@ -25,6 +25,7 @@ const inlineSetores = [
 ];
 
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { getPublicIp, getDeviceInfo } from "@/lib/clientInfo";
 import { toast } from "sonner";
@@ -231,6 +232,10 @@ const statusOcupaVaga = (status: string) => !["cancelado", "falta"].includes(sta
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+  // Unit isolation: only admin.sms sees all; everyone else is filtered
+  const isGlobalAdmin = authUser?.usuario === 'admin.sms';
+  const userUnidadeId = authUser?.unidadeId || '';
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [fila, setFila] = useState<FilaEspera[]>([]);
@@ -345,7 +350,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUnidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      let query = supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      // Unit isolation: non-global users only see their own unit
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error)
         setUnidades(
           data.map((u: any) => ({
@@ -360,17 +368,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading unidades:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadSalas = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+      let query = supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error)
         setSalas(data.map((s: any) => ({ id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo })));
     } catch (err) {
       console.error("Error loading salas:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadFuncionarios = useCallback(async () => {
     try {
@@ -413,11 +423,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadDisponibilidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("disponibilidades" as any)
         .select(
           "id,profissional_id,unidade_id,sala_id,data_inicio,data_fim,hora_inicio,hora_fim,vagas_por_hora,vagas_por_dia,dias_semana,duracao_consulta",
         );
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setDisponibilidades(
           data.map((d: any) => ({
@@ -439,7 +451,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading disponibilidades:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadPacientes = useCallback(async () => {
     try {
@@ -485,7 +497,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let from = 0;
       const PAGE = 1000;
       while (true) {
-        const { data, error } = await supabase
+        let query = supabase
           .from("agendamentos" as any)
           .select(
             "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
@@ -493,6 +505,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .gte("data", cutoff)
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
+        // Unit isolation
+        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        const { data, error } = await query;
         if (error || !data || data.length === 0) break;
         allData = allData.concat(data);
         if (data.length < PAGE) break;
@@ -525,16 +540,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadFila = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("fila_espera" as any)
         .select(
           "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino",
         )
         .order("criado_em", { ascending: true });
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setFila(
           (data as any[]).map((f: any) => ({
@@ -565,7 +582,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading fila:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadBloqueios = useCallback(async () => {
     try {

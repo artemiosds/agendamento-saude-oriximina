@@ -150,6 +150,10 @@ const PTS: React.FC = () => {
   const loadPts = useCallback(async () => {
     setLoading(true);
     let query = supabase.from('pts').select('*').order('created_at', { ascending: false });
+    // Unit isolation: non-admin users only see their unit
+    if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
+      query = query.eq('unit_id', user.unidadeId);
+    }
     if (!isMaster && user?.role === 'profissional') {
       query = query.eq('professional_id', user.id);
     }
