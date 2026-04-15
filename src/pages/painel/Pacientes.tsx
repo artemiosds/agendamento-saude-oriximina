@@ -350,6 +350,7 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
+      custom_data: form.customData || {},
     };
 
     try {
