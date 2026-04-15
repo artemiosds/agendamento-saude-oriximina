@@ -80,6 +80,7 @@ const Configuracoes: React.FC = () => {
   const [reativarLoading, setReativarLoading] = useState(false);
   const [reativarProfSearch, setReativarProfSearch] = useState('');
   const [reativarBuscando, setReativarBuscando] = useState(false);
+  const [reativarPacienteSearch, setReativarPacienteSearch] = useState('');
 
   const [transferAgId, setTransferAgId] = useState('');
   const [transferNovoProfId, setTransferNovoProfId] = useState('');
