@@ -15,6 +15,8 @@ import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtoco
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMinutes } from "date-fns";
+import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { useCustomFields } from "@/hooks/useCustomFields";
 
 interface Agendamento {
   id: string;
@@ -77,6 +79,8 @@ const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
+  const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
+  const [customData, setCustomData] = useState<Record<string, any>>({});
 
   const [buscaInput, setBuscaInput] = useState("");
   const [busca, setBusca] = useState("");
@@ -202,6 +206,7 @@ const Triagem: React.FC = () => {
         medicamentos: [],
         observacoes: "",
       });
+      setCustomData({});
       setNewAlergia("");
       setNewMedicamento("");
     },
@@ -247,6 +252,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        custom_data: customData,
         iniciado_em: new Date().toISOString(),
       };
 
@@ -298,6 +304,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        custom_data: customData,
         confirmado_em: new Date().toISOString(),
       };
 
@@ -579,6 +586,13 @@ const Triagem: React.FC = () => {
               <Label>Observações</Label>
               <Textarea rows={3} value={form.observacoes} onChange={(e) => setForm((p) => ({ ...p, observacoes: e.target.value }))} placeholder="Observações relevantes da triagem..." />
             </div>
+            {customConfig.fields.length > 0 && (
+              <CustomFieldsRenderer
+                fields={customConfig.fields}
+                values={customData}
+                onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+              />
+            )}
             <div className="flex flex-col gap-2">
               <Button variant="outline" className="w-full" onClick={salvarRascunho} disabled={saving}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4" /> Salvar Rascunho

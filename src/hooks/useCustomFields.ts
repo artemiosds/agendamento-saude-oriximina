@@ -23,7 +23,14 @@ export type ScreenKey =
   | 'gestao_tratamento'
   | 'pts'
   | 'relatorio_multiprof'
-  | 'relatorio_alta';
+  | 'relatorio_alta'
+  | 'funcionario'
+  | 'unidade'
+  | 'triagem'
+  | 'prontuario'
+  | 'encaminhamento'
+  | 'fila_espera'
+  | 'atendimento';
 
 export const SCREEN_LABELS: Record<ScreenKey, string> = {
   paciente: 'Cadastro de Paciente',
@@ -32,6 +39,13 @@ export const SCREEN_LABELS: Record<ScreenKey, string> = {
   pts: 'PTS',
   relatorio_multiprof: 'Relatório Multiprofissional',
   relatorio_alta: 'Relatório de Alta',
+  funcionario: 'Funcionários',
+  unidade: 'Unidades',
+  triagem: 'Triagem',
+  prontuario: 'Prontuário',
+  encaminhamento: 'Encaminhamento',
+  fila_espera: 'Fila de Espera',
+  atendimento: 'Atendimentos',
 };
 
 export interface ScreenConfig {

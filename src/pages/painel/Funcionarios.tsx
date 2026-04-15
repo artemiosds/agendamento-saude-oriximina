@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import ProfissionaisExternos from './ProfissionaisExternos';
+import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
+import { useCustomFields } from '@/hooks/useCustomFields';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
@@ -57,6 +59,8 @@ const Funcionarios: React.FC = () => {
   const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
   const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();
+  const { resolved: customConfig } = useCustomFields('funcionario', user?.unidadeId);
+  const [customData, setCustomData] = useState<Record<string, any>>({});
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,6 +113,7 @@ const Funcionarios: React.FC = () => {
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
     });
+    setCustomData({});
     setDialogOpen(true);
   };
 
@@ -116,6 +121,7 @@ const Funcionarios: React.FC = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
     setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setCustomData({});
     setDialogOpen(true);
   };
 
@@ -436,6 +442,13 @@ const Funcionarios: React.FC = () => {
                       />
                     </div>
                   </div>
+                )}
+                {customConfig.fields.length > 0 && (
+                  <CustomFieldsRenderer
+                    fields={customConfig.fields}
+                    values={customData}
+                    onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+                  />
                 )}
                 <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

@@ -9,9 +9,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Building2, DoorOpen, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
+import { useCustomFields } from '@/hooks/useCustomFields';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useData();
+  const { resolved: customConfig } = useCustomFields('unidade');
+  const [customData, setCustomData] = useState<Record<string, any>>({});
   const [unitDialog, setUnitDialog] = useState(false);
   const [roomDialog, setRoomDialog] = useState(false);
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
@@ -19,8 +23,8 @@ const UnidadesSalas: React.FC = () => {
   const [unitForm, setUnitForm] = useState({ nome: '', endereco: '', telefone: '', whatsapp: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
 
-  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', endereco: '', telefone: '', whatsapp: '' }); setUnitDialog(true); };
-  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setUnitDialog(true); };
+  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', endereco: '', telefone: '', whatsapp: '' }); setCustomData({}); setUnitDialog(true); };
+  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setCustomData({}); setUnitDialog(true); };
   const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '' }); setRoomDialog(true); };
   const openEditRoom = (s: typeof salas[0]) => { setEditRoomId(s.id); setRoomForm({ nome: s.nome, unidadeId: s.unidadeId }); setRoomDialog(true); };
 
@@ -135,6 +139,13 @@ const UnidadesSalas: React.FC = () => {
               <div><Label>Telefone</Label><Input value={unitForm.telefone} onChange={e => setUnitForm(p => ({ ...p, telefone: e.target.value }))} /></div>
               <div><Label>WhatsApp</Label><Input value={unitForm.whatsapp} onChange={e => setUnitForm(p => ({ ...p, whatsapp: e.target.value }))} /></div>
             </div>
+            {customConfig.fields.length > 0 && (
+              <CustomFieldsRenderer
+                fields={customConfig.fields}
+                values={customData}
+                onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+              />
+            )}
             <Button onClick={handleSaveUnit} className="w-full gradient-primary text-primary-foreground">{editUnitId ? 'Salvar' : 'Criar'}</Button>
           </div>
         </DialogContent>
