@@ -975,6 +975,9 @@ ${dataRows}
       if (mapaProf !== 'all') {
         query = query.eq('profissional_id', mapaProf);
       }
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        query = query.eq('unidade_id', user.unidadeId);
+      }
 
       const { data: agend } = await query;
 
