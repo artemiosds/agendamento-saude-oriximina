@@ -371,6 +371,57 @@ export type Database = {
         }
         Relationships: []
       }
+      document_templates: {
+        Row: {
+          ativo: boolean
+          blocos_clinicos: Json
+          conteudo: string
+          created_at: string
+          criado_por: string
+          criado_por_nome: string
+          id: string
+          nome: string
+          perfis_permitidos: string[]
+          tipo: string
+          tipo_modelo: string
+          unidade_id: string | null
+          updated_at: string
+          versoes: Json
+        }
+        Insert: {
+          ativo?: boolean
+          blocos_clinicos?: Json
+          conteudo?: string
+          created_at?: string
+          criado_por?: string
+          criado_por_nome?: string
+          id?: string
+          nome?: string
+          perfis_permitidos?: string[]
+          tipo?: string
+          tipo_modelo?: string
+          unidade_id?: string | null
+          updated_at?: string
+          versoes?: Json
+        }
+        Update: {
+          ativo?: boolean
+          blocos_clinicos?: Json
+          conteudo?: string
+          created_at?: string
+          criado_por?: string
+          criado_por_nome?: string
+          id?: string
+          nome?: string
+          perfis_permitidos?: string[]
+          tipo?: string
+          tipo_modelo?: string
+          unidade_id?: string | null
+          updated_at?: string
+          versoes?: Json
+        }
+        Relationships: []
+      }
       documentos_gerados: {
         Row: {
           assinado_em: string | null

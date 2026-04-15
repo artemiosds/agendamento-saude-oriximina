@@ -84,16 +84,14 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const loadModelos = async () => {
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('configuracoes')
-        .eq('id', 'modelos_documentos')
-        .maybeSingle();
-      if (data?.configuracoes) {
-        const raw = data.configuracoes as Record<string, unknown>;
-        const all: DocumentTemplate[] = Array.isArray(raw) ? raw : ((raw as any).modelos || []);
-        setModelos(all.filter(m => m.ativo && m.perfis_permitidos.includes(user?.role || '')));
-      }
+      const { data, error } = await supabase
+        .from('document_templates')
+        .select('*')
+        .eq('ativo', true)
+        .order('nome');
+      if (error) throw error;
+      const all = (data || []) as unknown as DocumentTemplate[];
+      setModelos(all.filter(m => m.perfis_permitidos.includes(user?.role || '')));
     } catch (e) { console.error(e); }
   };
 
@@ -182,11 +180,12 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   const tipoLower = selected?.tipo.toLowerCase() || '';
 
   const buildHtmlBody = (signatureHtml: string) => {
-    const html = conteudoFinal.replace(/\n/g, '<br/>');
+    // Content may already be rich HTML from TipTap or plain text
+    const html = conteudoFinal.includes('<') ? conteudoFinal : conteudoFinal.replace(/\n/g, '<br/>');
     const carimboHtml = formatCarimboBlock(carimbo);
     return `
       <div class="content-block" style="margin-top:20px;">
-        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;white-space:pre-wrap;">${html}</div>
+        <div style="font-family:'Georgia','Times New Roman',serif;font-size:13px;line-height:1.8;">${html}</div>
       </div>
       <div class="doc-sign-footer">
         <div class="sign-block">${signatureHtml}</div>
