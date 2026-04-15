@@ -293,11 +293,15 @@ const Tratamentos: React.FC = () => {
       // Cross-reference: fetch agendamentos for all patient+professional pairs in sessions
       if (sData && sData.length > 0) {
         const patientIds = [...new Set(sData.map((s: any) => s.patient_id))];
-        const { data: agData } = await supabase
+        let agQuery = supabase
           .from("agendamentos")
           .select("id, data, hora, status, paciente_id, profissional_id")
           .in("paciente_id", patientIds)
           .not("status", "in", '("cancelado","falta","remarcado")');
+        if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+          agQuery = agQuery.eq("unidade_id", user.unidadeId);
+        }
+        const { data: agData } = await agQuery;
 
         const map: Record<string, { id: string; hora: string; status: string }> = {};
         if (agData) {
