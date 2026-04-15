@@ -173,10 +173,17 @@ const Pacientes: React.FC = () => {
   }, [fila]);
 
   // Profissionais só veem pacientes vinculados aos seus agendamentos
+  // Unit-scoped users see patients from their unit's agendamentos
   const visiblePacientes = useMemo(() => {
-    if (!isProfissional || !user) return pacientes;
-    const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
-    return pacientes.filter((p) => myPacienteIds.has(p.id));
+    if (isProfissional && user) {
+      const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
+      return pacientes.filter((p) => myPacienteIds.has(p.id));
+    }
+    if (user?.unidadeId) {
+      const unitPacienteIds = new Set(agendamentos.filter((a) => a.unidadeId === user.unidadeId).map((a) => a.pacienteId));
+      return pacientes.filter((p) => unitPacienteIds.has(p.id));
+    }
+    return pacientes;
   }, [pacientes, agendamentos, isProfissional, user]);
 
   const filtered = useMemo(() => {

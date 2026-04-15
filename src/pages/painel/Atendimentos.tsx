@@ -40,8 +40,7 @@ const Atendimentos: React.FC = () => {
     try {
       let query = (supabase as any).from('atendimentos').select('*').order('data', { ascending: false });
       if (user?.role === 'profissional') query = query.eq('profissional_id', user.id);
-      if (user?.role === 'coordenador' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
-      if (user?.role === 'recepcao' && user.unidadeId) query = query.eq('unidade_id', user.unidadeId);
+      if (user?.unidadeId) query = query.eq('unidade_id', user.unidadeId);
       const { data } = await query;
       if (data) setAtendimentos(data);
     } catch (err) {
