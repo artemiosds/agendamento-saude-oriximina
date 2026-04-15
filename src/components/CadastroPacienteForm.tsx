@@ -627,6 +627,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         </AccordionItem>
       </Accordion>
 
+      {/* Custom Fields */}
+      {customConfig.fields.length > 0 && (
+        <Card className="p-4 border bg-card">
+          <CustomFieldsRenderer
+            fields={customConfig.fields}
+            values={form.customData || {}}
+            onChange={(fieldName, value) =>
+              onChange({ ...form, customData: { ...(form.customData || {}), [fieldName]: value } })
+            }
+          />
+        </Card>
+      )}
+
       {/* Save button */}
       <Button className="w-full" onClick={onSave} disabled={saving}>
         {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
