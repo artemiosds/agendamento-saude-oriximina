@@ -38,6 +38,7 @@ import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
 import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
+import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
 import { cn } from '@/lib/utils';
 
 const TABS = [
