@@ -71,6 +71,7 @@ export type Database = {
           atualizado_em: string
           criado_em: string | null
           criado_por: string
+          custom_data: Json
           data: string
           google_event_id: string | null
           hora: string
@@ -99,6 +100,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data?: string
           google_event_id?: string | null
           hora?: string
@@ -127,6 +129,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data?: string
           google_event_id?: string | null
           hora?: string
@@ -156,6 +159,7 @@ export type Database = {
         Row: {
           agendamento_id: string
           criado_em: string | null
+          custom_data: Json
           data: string
           duracao_minutos: number | null
           hora_fim: string
@@ -175,6 +179,7 @@ export type Database = {
         Insert: {
           agendamento_id?: string
           criado_em?: string | null
+          custom_data?: Json
           data?: string
           duracao_minutos?: number | null
           hora_fim?: string
@@ -194,6 +199,7 @@ export type Database = {
         Update: {
           agendamento_id?: string
           criado_em?: string | null
+          custom_data?: Json
           data?: string
           duracao_minutos?: number | null
           hora_fim?: string
@@ -547,6 +553,7 @@ export type Database = {
           cid: string
           criado_em: string | null
           criado_por: string
+          custom_data: Json
           data_solicitacao_original: string
           descricao_clinica: string
           especialidade_destino: string
@@ -569,6 +576,7 @@ export type Database = {
           cid?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data_solicitacao_original?: string
           descricao_clinica?: string
           especialidade_destino?: string
@@ -591,6 +599,7 @@ export type Database = {
           cid?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data_solicitacao_original?: string
           descricao_clinica?: string
           especialidade_destino?: string
@@ -620,6 +629,7 @@ export type Database = {
           cpf: string
           criado_em: string | null
           criado_por: string | null
+          custom_data: Json
           email: string
           id: string
           nome: string
@@ -643,6 +653,7 @@ export type Database = {
           cpf?: string
           criado_em?: string | null
           criado_por?: string | null
+          custom_data?: Json
           email: string
           id?: string
           nome: string
@@ -666,6 +677,7 @@ export type Database = {
           cpf?: string
           criado_em?: string | null
           criado_por?: string | null
+          custom_data?: Json
           email?: string
           id?: string
           nome?: string
@@ -796,6 +808,7 @@ export type Database = {
           agendamento_id: string | null
           clinical_evaluation: string
           created_at: string
+          custom_data: Json
           evaluation_date: string
           id: string
           observations: string
@@ -811,6 +824,7 @@ export type Database = {
           agendamento_id?: string | null
           clinical_evaluation?: string
           created_at?: string
+          custom_data?: Json
           evaluation_date?: string
           id?: string
           observations?: string
@@ -826,6 +840,7 @@ export type Database = {
           agendamento_id?: string | null
           clinical_evaluation?: string
           created_at?: string
+          custom_data?: Json
           evaluation_date?: string
           id?: string
           observations?: string
@@ -945,6 +960,7 @@ export type Database = {
           cpf: string
           cpf_responsavel: string
           criado_em: string | null
+          custom_data: Json
           data_encaminhamento: string
           data_nascimento: string
           descricao_clinica: string
@@ -955,6 +971,9 @@ export type Database = {
           equipamentos: string[]
           especialidade_destino: string
           id: string
+          is_autista: boolean
+          is_gestante: boolean
+          is_pne: boolean
           justificativa: string
           menor_idade: boolean
           mobilidade: string
@@ -985,6 +1004,7 @@ export type Database = {
           cpf?: string
           cpf_responsavel?: string
           criado_em?: string | null
+          custom_data?: Json
           data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
@@ -995,6 +1015,9 @@ export type Database = {
           equipamentos?: string[]
           especialidade_destino?: string
           id: string
+          is_autista?: boolean
+          is_gestante?: boolean
+          is_pne?: boolean
           justificativa?: string
           menor_idade?: boolean
           mobilidade?: string
@@ -1025,6 +1048,7 @@ export type Database = {
           cpf?: string
           cpf_responsavel?: string
           criado_em?: string | null
+          custom_data?: Json
           data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
@@ -1035,6 +1059,9 @@ export type Database = {
           equipamentos?: string[]
           especialidade_destino?: string
           id?: string
+          is_autista?: boolean
+          is_gestante?: boolean
+          is_pne?: boolean
           justificativa?: string
           menor_idade?: boolean
           mobilidade?: string
@@ -1061,6 +1088,7 @@ export type Database = {
       patient_discharges: {
         Row: {
           created_at: string
+          custom_data: Json
           cycle_id: string
           discharge_date: string
           final_notes: string
@@ -1071,6 +1099,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_data?: Json
           cycle_id: string
           discharge_date?: string
           final_notes?: string
@@ -1081,6 +1110,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_data?: Json
           cycle_id?: string
           discharge_date?: string
           final_notes?: string
@@ -1474,6 +1504,7 @@ export type Database = {
           atualizado_em: string | null
           conduta: string | null
           criado_em: string | null
+          custom_data: Json
           data_atendimento: string
           episodio_id: string | null
           evolucao: string | null
@@ -1509,6 +1540,7 @@ export type Database = {
           atualizado_em?: string | null
           conduta?: string | null
           criado_em?: string | null
+          custom_data?: Json
           data_atendimento?: string
           episodio_id?: string | null
           evolucao?: string | null
@@ -1544,6 +1576,7 @@ export type Database = {
           atualizado_em?: string | null
           conduta?: string | null
           criado_em?: string | null
+          custom_data?: Json
           data_atendimento?: string
           episodio_id?: string | null
           evolucao?: string | null
@@ -1578,6 +1611,7 @@ export type Database = {
       pts: {
         Row: {
           created_at: string
+          custom_data: Json
           diagnostico_funcional: string
           especialidades_envolvidas: string[]
           id: string
@@ -1593,6 +1627,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_data?: Json
           diagnostico_funcional?: string
           especialidades_envolvidas?: string[]
           id?: string
@@ -1608,6 +1643,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_data?: Json
           diagnostico_funcional?: string
           especialidades_envolvidas?: string[]
           id?: string
@@ -1850,6 +1886,7 @@ export type Database = {
           clinical_notes: string
           created_at: string
           created_by: string
+          custom_data: Json
           end_date_predicted: string | null
           frequency: string
           id: string
@@ -1869,6 +1906,7 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           created_by?: string
+          custom_data?: Json
           end_date_predicted?: string | null
           frequency?: string
           id?: string
@@ -1888,6 +1926,7 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           created_by?: string
+          custom_data?: Json
           end_date_predicted?: string | null
           frequency?: string
           id?: string
@@ -2021,6 +2060,7 @@ export type Database = {
           classificacao_risco: string
           confirmado_em: string | null
           criado_em: string | null
+          custom_data: Json
           frequencia_cardiaca: number | null
           glicemia: number | null
           id: string
@@ -2041,6 +2081,7 @@ export type Database = {
           classificacao_risco?: string
           confirmado_em?: string | null
           criado_em?: string | null
+          custom_data?: Json
           frequencia_cardiaca?: number | null
           glicemia?: number | null
           id?: string
@@ -2061,6 +2102,7 @@ export type Database = {
           classificacao_risco?: string
           confirmado_em?: string | null
           criado_em?: string | null
+          custom_data?: Json
           frequencia_cardiaca?: number | null
           glicemia?: number | null
           id?: string
@@ -2107,6 +2149,7 @@ export type Database = {
         Row: {
           ativo: boolean
           criado_em: string | null
+          custom_data: Json
           endereco: string
           id: string
           nome: string
@@ -2116,6 +2159,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           criado_em?: string | null
+          custom_data?: Json
           endereco?: string
           id: string
           nome: string
@@ -2125,6 +2169,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           criado_em?: string | null
+          custom_data?: Json
           endereco?: string
           id?: string
           nome?: string

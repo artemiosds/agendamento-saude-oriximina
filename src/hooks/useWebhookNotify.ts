@@ -72,10 +72,7 @@ export function useWebhookNotify() {
     const shouldSendWebhook = (config.canal === 'webhook' || config.canal === 'ambos') && config.webhookAtivo && config.webhookUrl;
     const shouldSendGmail = (config.canal === 'gmail' || config.canal === 'ambos') && config.gmailAtivo;
 
-    if (isDev) {
-      console.log(`[Notificação] Canal: ${config.canal}, Webhook ativo: ${config.webhookAtivo}, Gmail ativo: ${config.gmailAtivo}`);
-      console.log(`[Notificação] Enviando para: ${shouldSendWebhook ? 'webhook' : ''} ${shouldSendGmail ? 'gmail' : ''}`);
-    }
+    // Debug logs removed for production cleanliness
 
     // Send webhook
     if (shouldSendWebhook) {
@@ -83,7 +80,7 @@ export function useWebhookNotify() {
         const { error } = await supabase.functions.invoke('webhook-notify', { body: payload });
         results.webhook = !error;
         if (error) console.error('Webhook error:', error);
-        else if (isDev) console.log('[Notificação] Webhook enviado com sucesso');
+        // success — no log needed
       } catch (err) {
         console.error('Webhook failed:', err);
         results.webhook = false;
@@ -103,7 +100,7 @@ export function useWebhookNotify() {
           if (error) {
             console.error('Gmail error:', error);
           } else if (data?.success) {
-            if (isDev) console.log('[Notificação] E-mail enviado com sucesso');
+            // success — no log needed
           } else {
             console.error('Gmail falhou:', data?.error || data?.message);
           }
@@ -117,20 +114,18 @@ export function useWebhookNotify() {
     // Fallback: if webhook failed and canal is 'ambos', Gmail already sent above
     // If canal is 'webhook' only and it failed, try Gmail as fallback if configured
     if (config.canal === 'webhook' && results.webhook === false && config.gmailAtivo && payload.email) {
-      if (isDev) console.log('[Notificação] Webhook falhou, tentando Gmail como fallback...');
+      // Webhook failed, trying Gmail fallback
       try {
         const { data, error } = await supabase.functions.invoke('send-email', { body: payload });
         results.gmail = !error && data?.success;
-        if (isDev && results.gmail) {
-          console.log('[Notificação] Gmail fallback enviado com sucesso');
-        }
+        // fallback result captured in results.gmail
       } catch {
         results.gmail = false;
       }
     }
 
     const success = results.webhook === true || results.gmail === true;
-    if (isDev) console.log(`[Notificação] Resultado final: ${success ? 'SUCESSO' : 'FALHA'}`, results);
+    // Final result captured in return value
     return { ...results, success };
   };
 

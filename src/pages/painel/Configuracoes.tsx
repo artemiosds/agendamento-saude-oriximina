@@ -37,18 +37,20 @@ import ConfigImpressaoDocumentos from '@/components/config/ConfigImpressaoDocume
 import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
 import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
+import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { id: 'prontuario', label: 'Prontuário', icon: FileText },
-  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope },
-  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp },
-  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList },
-  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity },
-  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users },
-  { id: 'unidades', label: 'Unidades e Setores', icon: Building2 },
-  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search },
-  { id: 'sistema', label: 'Sistema', icon: Monitor },
+  { id: 'prontuario', label: 'Prontuário', icon: FileText, globalOnly: false },
+  { id: 'medicamentos', label: 'Medicamentos e Exames', icon: Stethoscope, globalOnly: false },
+  { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp, globalOnly: false },
+  { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
+  { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
+  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
+  { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
+  { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
+  { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -76,6 +78,7 @@ const Configuracoes: React.FC = () => {
   const [reativarAgendamentos, setReativarAgendamentos] = useState<any[]>([]);
   const [reativarAgId, setReativarAgId] = useState('');
   const [reativarLoading, setReativarLoading] = useState(false);
+  const [reativarProfSearch, setReativarProfSearch] = useState('');
   const [reativarBuscando, setReativarBuscando] = useState(false);
 
   const [transferAgId, setTransferAgId] = useState('');
@@ -126,6 +129,8 @@ const Configuracoes: React.FC = () => {
   const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
 
   const isMaster = user?.role === 'master';
+  const _isGlobalMaster = isMaster && !user?.unidadeId;
+  const _isUnitMaster = isMaster && !!user?.unidadeId;
   const profissionaisAtivos = [...funcionarios].sort((a, b) =>
     a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
   );
@@ -520,6 +525,9 @@ const Configuracoes: React.FC = () => {
       case 'especialidades':
         return <ConfigEspecialidades />;
 
+      case 'campos':
+        return <ConfigPersonalizarCampos />;
+
       case 'fluxo':
         return (
           <div className="space-y-6">
@@ -681,9 +689,23 @@ const Configuracoes: React.FC = () => {
                   <Select value={reativarProfId} onValueChange={v => { setReativarProfId(v); setReativarAgId(''); buscarAgendamentosReativar(v); }}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
                     <SelectContent>
-                      {profissionaisAtivos.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
-                      ))}
+                      <div className="px-2 pb-2 pt-1 sticky top-0 bg-popover z-10">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Buscar profissional..."
+                            className="h-8 pl-8 text-sm"
+                            value={reativarProfSearch}
+                            onChange={e => setReativarProfSearch(e.target.value)}
+                            onKeyDown={e => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+                      {profissionaisAtivos
+                        .filter(p => !reativarProfSearch || p.nome.toLowerCase().includes(reativarProfSearch.toLowerCase()))
+                        .map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1175,7 +1197,7 @@ const Configuracoes: React.FC = () => {
       <div className="flex flex-col lg:flex-row gap-6 min-h-[70vh]">
         <nav className="lg:w-64 shrink-0">
           <div className="lg:sticky lg:top-4 space-y-1 bg-card rounded-xl border p-2">
-            {TABS.map(tab => {
+            {TABS.filter(t => !t.globalOnly || _isGlobalMaster).map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (

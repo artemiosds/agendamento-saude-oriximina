@@ -19,6 +19,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import ProfissionaisExternos from './ProfissionaisExternos';
+import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
+import { useCustomFields } from '@/hooks/useCustomFields';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
@@ -54,9 +56,11 @@ interface FuncionarioDB {
 
 const Funcionarios: React.FC = () => {
   const { unidades, salas, refreshFuncionarios, logAction } = useData();
-  const { unidadesVisiveis } = useUnidadeFilter();
-  const { user } = useAuth();
+  const { unidadesVisiveis, isGlobalMaster } = useUnidadeFilter();
+  const { user, isUnitMaster } = useAuth();
   const { can } = usePermissions();
+  const { resolved: customConfig } = useCustomFields('funcionario', user?.unidadeId);
+  const [customData, setCustomData] = useState<Record<string, any>>({});
   const [funcionarios, setFuncionarios] = useState<FuncionarioDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,12 +113,15 @@ const Funcionarios: React.FC = () => {
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
     });
+    setCustomData({});
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setCustomData({});
     setDialogOpen(true);
   };
 
@@ -122,6 +129,18 @@ const Funcionarios: React.FC = () => {
     if (!form.nome || !form.usuario || !form.email || !form.role) {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
+    }
+    // Unit master: force unit to their own and block editing global master
+    if (isUnitMaster) {
+      if (editId) {
+        const target = funcionarios.find(f => f.id === editId);
+        if (target && isProtectedGlobalMaster(target)) {
+          toast.error('Você não tem permissão para editar o administrador global.');
+          return;
+        }
+      }
+      // Force unit_id to the user's unit
+      form.unidade_id = user?.unidadeId || '';
     }
 
     setSaving(true);
@@ -209,6 +228,12 @@ const Funcionarios: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    // Prevent unit master from deleting global master
+    const target = funcionarios.find(f => f.id === id);
+    if (isUnitMaster && target && isProtectedGlobalMaster(target)) {
+      toast.error('Você não tem permissão para excluir o administrador global.');
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke('manage-employee', {
         body: { action: 'delete', id },
@@ -225,14 +250,27 @@ const Funcionarios: React.FC = () => {
     }
   };
 
-  const filteredFuncionarios = ((user?.role === 'coordenador' || user?.role === 'recepcao')
-    ? funcionarios.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id)
-    : funcionarios
-  ).filter(f => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term);
-  });
+  /** Check if a given employee is the global master (protected from unit masters) */
+  const isProtectedGlobalMaster = (f: FuncionarioDB) => f.role === 'master' && !f.unidade_id;
+
+  const filteredFuncionarios = (() => {
+    let list = funcionarios;
+    // Unit-scoped users (including unit masters) only see their unit's employees
+    if (!isGlobalMaster && user?.unidadeId) {
+      list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
+    }
+    // For unit masters, hide the global master from the list entirely
+    if (isUnitMaster) {
+      list = list.filter(f => !isProtectedGlobalMaster(f));
+    }
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter(f =>
+        f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term)
+      );
+    }
+    return list;
+  })();
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -297,8 +335,8 @@ const Funcionarios: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Setor</Label><Input value={form.setor} onChange={e => setForm(p => ({ ...p, setor: e.target.value }))} /></div>
-                  <div><Label>Unidade</Label>
-                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
+                  <div><Label>Unidade {isUnitMaster ? '(fixada)' : ''}</Label>
+                    <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))} disabled={isUnitMaster}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                       <SelectContent>{unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
                     </Select>
@@ -405,6 +443,13 @@ const Funcionarios: React.FC = () => {
                     </div>
                   </div>
                 )}
+                {customConfig.fields.length > 0 && (
+                  <CustomFieldsRenderer
+                    fields={customConfig.fields}
+                    values={customData}
+                    onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
+                  />
+                )}
                 <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
                   {editId ? 'Salvar' : 'Cadastrar'}
@@ -445,9 +490,12 @@ const Funcionarios: React.FC = () => {
                       <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
                         {roleLabels[f.role as UserRole] || f.role}
                       </Badge>
-                      {canManage && (
+                      {canManage && !(isUnitMaster && isProtectedGlobalMaster(f)) && (
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          {/* Unit masters cannot edit employees from other units */}
+                          {!(isUnitMaster && f.unidade_id && f.unidade_id !== user?.unidadeId) && (
+                            <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>

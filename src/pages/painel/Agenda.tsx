@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
@@ -216,6 +216,44 @@ const Agenda: React.FC = () => {
     })();
   }, []);
 
+  // ── Triage records + arrival times for priority sorting ──
+  const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
+  const [arrivalMap, setArrivalMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    if (dayAgIds.length === 0) { setTriageMap({}); setArrivalMap({}); return; }
+    (async () => {
+      const [triageRes, filaRes] = await Promise.all([
+        supabase
+          .from("triage_records")
+          .select("agendamento_id, classificacao_risco")
+          .in("agendamento_id", dayAgIds),
+        supabase
+          .from("fila_espera" as any)
+          .select("id, hora_chegada")
+          .in("id", dayAgIds),
+      ]);
+      if (!cancelled) {
+        if (triageRes.data) {
+          const m: Record<string, { risco: string }> = {};
+          for (const r of triageRes.data) {
+            m[r.agendamento_id] = { risco: (r.classificacao_risco || "").toLowerCase() };
+          }
+          setTriageMap(m);
+        }
+        if (filaRes.data) {
+          const a: Record<string, string> = {};
+          for (const f of filaRes.data as any[]) {
+            if (f.hora_chegada) a[f.id] = f.hora_chegada;
+          }
+          setArrivalMap(a);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [agendamentos, selectedDate]);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
@@ -313,6 +351,82 @@ const Agenda: React.FC = () => {
   }, [profissionais, filterUnit]);
 
   const filtered = useMemo(() => {
+    // Statuses that indicate the patient is physically present
+    const CHECKED_IN_STATUSES = new Set([
+      "confirmado_chegada", "aguardando_triagem", "aguardando_atendimento",
+      "em_atendimento", "aguardando_enfermagem", "apto_atendimento",
+    ]);
+
+    // Dynamic priority from triage: 1=Vermelho, 2=Amarelo/Laranja, 4=Verde, 6=Azul
+    const RISCO_PRIO: Record<string, number> = {
+      vermelho: 1, laranja: 2, amarelo: 2, verde: 4, azul: 6,
+    };
+
+    const calcAge = (dob: string): number => {
+      if (!dob) return 0;
+      const parts = dob.includes("/") ? dob.split("/").reverse().join("-") : dob;
+      const birth = new Date(parts + "T12:00:00");
+      if (isNaN(birth.getTime())) return 0;
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age;
+    };
+
+    // Shift: morning (<12:00) vs afternoon (>=12:00)
+    const getShift = (hora: string): number => hora < "12:00" ? 0 : 1;
+
+    /**
+     * Unified priority hierarchy (lower = higher priority):
+     *  1 = Risco Vermelho (dynamic)
+     *  2 = Risco Amarelo/Laranja (dynamic)
+     *  3 = Dor intensa 7-10 (dynamic, future)
+     *  4 = Risco Verde (dynamic)
+     *  5 = Fixed: Gestante / PNE / Autista
+     *  6 = Fixed: Idoso (≥60) OR Risco Azul (dynamic)
+     *  7 = Fixed: Criança (0-12)
+     *  8 = Normal (no priority)
+     * 50 = Not checked in (before triage/dynamic, use fixed priority)
+     * 99 = Concluded
+     */
+    const getFixedPrio = (pac: (typeof pacientes)[0] | undefined, age: number): number => {
+      if (!pac) return 8;
+      if ((pac as any).isGestante || (pac as any).isPne || (pac as any).isAutista) return 5;
+      if (age >= 60) return 6;
+      if (age > 0 && age <= 12) return 7;
+      return 8;
+    };
+
+    const getPrioLevel = (ag: (typeof agendamentos)[0]): number => {
+      const st = ag.status as string;
+      if (st === "concluido") return 99;
+
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const age = pac ? calcAge(pac.dataNascimento) : 0;
+      const fixedPrio = getFixedPrio(pac, age);
+
+      // Not checked in — use fixed priority but put in 50+ range
+      // so they stay below all checked-in patients
+      if (!CHECKED_IN_STATUSES.has(st)) {
+        // Return 50 + a sub-priority so fixed priority still orders within unchecked group
+        return 50 + Math.min(fixedPrio, 8);
+      }
+
+      // Patient is present — check triage data (dynamic priority)
+      const triage = triageMap[ag.id];
+      const risco = triage?.risco || "";
+
+      if (risco && RISCO_PRIO[risco] !== undefined) {
+        const dynamicPrio = RISCO_PRIO[risco];
+        // Dynamic beats fixed. But for verde(4)/azul(6), if fixed is better, use fixed
+        return Math.min(dynamicPrio, fixedPrio);
+      }
+
+      // No triage classification — use fixed priority
+      return fixedPrio;
+    };
+
     const base = agendamentos
       .filter((a) => {
         if (a.data !== selectedDate) return false;
@@ -325,7 +439,29 @@ const Agenda: React.FC = () => {
         if (user?.role === "recepcao" && user.unidadeId && a.unidadeId !== user.unidadeId) return false;
         return true;
       })
-      .sort((a, b) => a.hora.localeCompare(b.hora));
+      .sort((a, b) => {
+        // 1. Separate by shift (morning first)
+        const shiftA = getShift(a.hora);
+        const shiftB = getShift(b.hora);
+
+        // Concluded items go to the end of their own shift
+        const prioA = getPrioLevel(a);
+        const prioB = getPrioLevel(b);
+        const isConcA = prioA === 99;
+        const isConcB = prioB === 99;
+
+        // Sort: shift ASC, then non-concluded before concluded, then priority, then time
+        if (shiftA !== shiftB) return shiftA - shiftB;
+        if (isConcA !== isConcB) return isConcA ? 1 : -1;
+        if (prioA !== prioB) return prioA - prioB;
+
+        // Same priority — earlier check-in first; for non-checked-in use scheduled time
+        const isCheckedA = prioA < 50;
+        const isCheckedB = prioB < 50;
+        const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
+        const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
+        return ha.localeCompare(hb);
+      });
 
     if (!debouncedSearch) return base;
 
@@ -336,7 +472,7 @@ const Agenda: React.FC = () => {
       const cns = pac?.cns?.toLowerCase() || "";
       return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
     });
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap, arrivalMap]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -685,6 +821,8 @@ const Agenda: React.FC = () => {
     try {
       if (newStatus === "confirmado_chegada") {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        // Update local arrival map immediately for correct sorting
+        setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
 
         // Check per-professional triage setting
         let triagemHabilitada = true; // default: triage enabled
@@ -704,11 +842,7 @@ const Agenda: React.FC = () => {
           await updateAgendamento(agId, { status: "confirmado_chegada" as any });
 
           const filaExistente = fila.find(
-            (item) =>
-              item.id === agId ||
-              (item.pacienteId === ag.pacienteId &&
-                item.unidadeId === ag.unidadeId &&
-                !["atendido", "cancelado", "falta"].includes(item.status)),
+            (item) => item.id === agId,
           );
 
           if (filaExistente) {
@@ -745,11 +879,7 @@ const Agenda: React.FC = () => {
           await updateAgendamento(agId, { status: "apto_atendimento" as any });
 
           const filaExistente = fila.find(
-            (item) =>
-              item.id === agId ||
-              (item.pacienteId === ag.pacienteId &&
-                item.unidadeId === ag.unidadeId &&
-                !["atendido", "cancelado", "falta"].includes(item.status)),
+            (item) => item.id === agId,
           );
 
           if (filaExistente) {

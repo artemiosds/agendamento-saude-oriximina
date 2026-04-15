@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,9 @@ import { User, Building2, Stethoscope, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
+import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { useCustomFields } from "@/hooks/useCustomFields";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -90,6 +94,11 @@ export interface PacienteFormData {
   endereco: string;
   nomeMae: string;
   descricaoClinica: string;
+  // Prioridade especial
+  isGestante: boolean;
+  isPne: boolean;
+  isAutista: boolean;
+  customData?: Record<string, any>;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -127,6 +136,10 @@ export const emptyPacienteForm: PacienteFormData = {
   endereco: "",
   nomeMae: "",
   descricaoClinica: "",
+  isGestante: false,
+  isPne: false,
+  isAutista: false,
+  customData: {},
 };
 
 interface Props {
@@ -141,6 +154,8 @@ interface Props {
 const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const [uploading, setUploading] = useState(false);
+  const { user } = useAuth();
+  const { resolved: customConfig } = useCustomFields('paciente', user?.unidadeId);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -495,6 +510,28 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         )}
       </div>
 
+      {/* ═══ BLOCO 4 — PRIORIDADE ESPECIAL ═══ */}
+      <div className="space-y-3 border-t pt-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+          ⚡ Prioridade Especial
+        </div>
+        <p className="text-xs text-muted-foreground">Marque as condições aplicáveis. Idoso (≥60) é calculado automaticamente pela data de nascimento.</p>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isGestante} onCheckedChange={(v) => set("isGestante", !!v)} />
+            <span className="text-sm">Gestante</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isPne} onCheckedChange={(v) => set("isPne", !!v)} />
+            <span className="text-sm">PNE</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={form.isAutista} onCheckedChange={(v) => set("isAutista", !!v)} />
+            <span className="text-sm">Autista (TEA)</span>
+          </label>
+        </div>
+      </div>
+
       {/* ═══ BLOCO EXTRA (Accordion) ═══ */}
       <Accordion type="single" collapsible>
         <AccordionItem value="extra">
@@ -589,6 +626,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+
+      {/* Custom Fields */}
+      {customConfig.fields.length > 0 && (
+        <div className="p-4 border rounded-lg bg-card">
+          <CustomFieldsRenderer
+            fields={customConfig.fields}
+            values={form.customData || {}}
+            onChange={(fieldName, value) =>
+              onChange({ ...form, customData: { ...(form.customData || {}), [fieldName]: value } })
+            }
+          />
+        </div>
+      )}
 
       {/* Save button */}
       <Button className="w-full" onClick={onSave} disabled={saving}>
