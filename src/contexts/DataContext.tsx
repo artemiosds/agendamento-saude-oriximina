@@ -232,6 +232,10 @@ const statusOcupaVaga = (status: string) => !["cancelado", "falta"].includes(sta
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+  // Unit isolation: only admin.sms sees all; everyone else is filtered
+  const isGlobalAdmin = authUser?.usuario === 'admin.sms';
+  const userUnidadeId = authUser?.unidadeId || '';
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [fila, setFila] = useState<FilaEspera[]>([]);
