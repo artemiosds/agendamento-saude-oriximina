@@ -114,7 +114,8 @@ const Funcionarios: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
     setDialogOpen(true);
   };
 
