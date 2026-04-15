@@ -67,6 +67,8 @@ const Disponibilidade: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [manageProfId, setManageProfId] = useState<string | null>(null);
 
   const profissionais = funcionarios.filter(f => f.role === 'profissional' && f.ativo);
   const { unidadesVisiveis } = useUnidadeFilter();
