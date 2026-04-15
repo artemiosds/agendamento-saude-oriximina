@@ -544,12 +544,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFila = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("fila_espera" as any)
         .select(
           "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino",
         )
         .order("criado_em", { ascending: true });
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setFila(
           (data as any[]).map((f: any) => ({
@@ -580,7 +582,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading fila:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadBloqueios = useCallback(async () => {
     try {
