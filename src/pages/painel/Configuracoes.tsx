@@ -47,6 +47,7 @@ const TABS = [
   { id: 'especialidades', label: 'Especialidades', icon: ClipboardList, globalOnly: false },
   { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity, globalOnly: false },
   { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon, globalOnly: false },
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, globalOnly: false },
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
   { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
