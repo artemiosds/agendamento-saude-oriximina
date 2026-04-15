@@ -124,6 +124,18 @@ const Funcionarios: React.FC = () => {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
     }
+    // Unit master: force unit to their own and block editing global master
+    if (isUnitMaster) {
+      if (editId) {
+        const target = funcionarios.find(f => f.id === editId);
+        if (target && isProtectedGlobalMaster(target)) {
+          toast.error('Você não tem permissão para editar o administrador global.');
+          return;
+        }
+      }
+      // Force unit_id to the user's unit
+      form.unidade_id = user?.unidadeId || '';
+    }
 
     setSaving(true);
     try {
@@ -210,6 +222,12 @@ const Funcionarios: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    // Prevent unit master from deleting global master
+    const target = funcionarios.find(f => f.id === id);
+    if (isUnitMaster && target && isProtectedGlobalMaster(target)) {
+      toast.error('Você não tem permissão para excluir o administrador global.');
+      return;
+    }
     try {
       const { data, error } = await supabase.functions.invoke('manage-employee', {
         body: { action: 'delete', id },
@@ -459,9 +477,12 @@ const Funcionarios: React.FC = () => {
                       <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
                         {roleLabels[f.role as UserRole] || f.role}
                       </Badge>
-                      {canManage && (
+                      {canManage && !(isUnitMaster && isProtectedGlobalMaster(f)) && (
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          {/* Unit masters cannot edit employees from other units */}
+                          {!(isUnitMaster && f.unidade_id && f.unidade_id !== user?.unidadeId) && (
+                            <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
