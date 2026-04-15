@@ -266,12 +266,18 @@ const Tratamentos: React.FC = () => {
       if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
       if (user?.unidadeId && user?.usuario !== 'admin.sms') qCycles = qCycles.eq("unit_id", user.unidadeId);
 
+      let qExtensions = supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false });
+      let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qPts = qPts.eq("unit_id", user.unidadeId);
+      }
+
       const [{ data: cData }, sData, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
         qCycles,
         treatmentService.getSessions(),
-        supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false }),
+        qExtensions,
         procedureService.getActive(),
-        supabase.from("pts").select("*").order("created_at", { ascending: false }),
+        qPts,
       ]);
 
       if (cData) {
