@@ -350,7 +350,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUnidades = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      let query = supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      // Unit isolation: non-global users only see their own unit
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error)
         setUnidades(
           data.map((u: any) => ({
@@ -365,17 +368,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading unidades:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadSalas = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+      let query = supabase.from("salas" as any).select("id,nome,unidade_id,ativo");
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error)
         setSalas(data.map((s: any) => ({ id: s.id, nome: s.nome, unidadeId: s.unidade_id, ativo: s.ativo })));
     } catch (err) {
       console.error("Error loading salas:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadFuncionarios = useCallback(async () => {
     try {
