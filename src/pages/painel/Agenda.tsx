@@ -1101,6 +1101,13 @@ const Agenda: React.FC = () => {
   };
 
   const handleIniciarAtendimento = async (ag: (typeof agendamentos)[0]) => {
+    // Block starting attendance for future dates
+    const today = todayLocalStr();
+    if (ag.data > today) {
+      toast.error("Não é possível iniciar atendimento antes da data agendada.");
+      return;
+    }
+
     const statusPermitidos = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
     if (!statusPermitidos.includes(ag.status)) {
       toast.error("Este agendamento ainda não está liberado para iniciar atendimento.");
