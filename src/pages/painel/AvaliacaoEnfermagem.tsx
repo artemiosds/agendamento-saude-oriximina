@@ -153,12 +153,13 @@ const AvaliacaoEnfermagem: React.FC = () => {
 
   // Realtime on fila_espera
   useEffect(() => {
-    if (!user?.unidadeId) return;
+    const isAdmin = user?.usuario === 'admin.sms';
+    if (!isAdmin && !user?.unidadeId) return;
     const channel = supabase.channel('enfermagem-fila-espera')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fila_espera' }, () => loadFila())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user?.unidadeId, loadFila]);
+  }, [user?.unidadeId, user?.usuario, loadFila]);
 
   const openAvaliacao = async (item: FilaItem) => {
     setSelected(item);
