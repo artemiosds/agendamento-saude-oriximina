@@ -37,6 +37,7 @@ import ConfigImpressaoDocumentos from '@/components/config/ConfigImpressaoDocume
 import ConfigEspecialidades from '@/components/config/ConfigEspecialidades';
 import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
+import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import { cn } from '@/lib/utils';
 
 const TABS = [
@@ -45,6 +46,7 @@ const TABS = [
   { id: 'impressao', label: 'Impressão e Documentos', icon: Stamp },
   { id: 'especialidades', label: 'Especialidades', icon: ClipboardList },
   { id: 'fluxo', label: 'Fluxo de Atendimento', icon: Activity },
+  { id: 'campos', label: 'Personalizar Campos', icon: SettingsIcon },
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2 },
   { id: 'auditoria', label: 'Auditoria e Logs', icon: Search },
@@ -519,6 +521,9 @@ const Configuracoes: React.FC = () => {
 
       case 'especialidades':
         return <ConfigEspecialidades />;
+
+      case 'campos':
+        return <ConfigPersonalizarCampos />;
 
       case 'fluxo':
         return (

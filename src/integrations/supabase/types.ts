@@ -71,6 +71,7 @@ export type Database = {
           atualizado_em: string
           criado_em: string | null
           criado_por: string
+          custom_data: Json
           data: string
           google_event_id: string | null
           hora: string
@@ -99,6 +100,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data?: string
           google_event_id?: string | null
           hora?: string
@@ -127,6 +129,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string | null
           criado_por?: string
+          custom_data?: Json
           data?: string
           google_event_id?: string | null
           hora?: string
@@ -796,6 +799,7 @@ export type Database = {
           agendamento_id: string | null
           clinical_evaluation: string
           created_at: string
+          custom_data: Json
           evaluation_date: string
           id: string
           observations: string
@@ -811,6 +815,7 @@ export type Database = {
           agendamento_id?: string | null
           clinical_evaluation?: string
           created_at?: string
+          custom_data?: Json
           evaluation_date?: string
           id?: string
           observations?: string
@@ -826,6 +831,7 @@ export type Database = {
           agendamento_id?: string | null
           clinical_evaluation?: string
           created_at?: string
+          custom_data?: Json
           evaluation_date?: string
           id?: string
           observations?: string
@@ -945,6 +951,7 @@ export type Database = {
           cpf: string
           cpf_responsavel: string
           criado_em: string | null
+          custom_data: Json
           data_encaminhamento: string
           data_nascimento: string
           descricao_clinica: string
@@ -988,6 +995,7 @@ export type Database = {
           cpf?: string
           cpf_responsavel?: string
           criado_em?: string | null
+          custom_data?: Json
           data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
@@ -1031,6 +1039,7 @@ export type Database = {
           cpf?: string
           cpf_responsavel?: string
           criado_em?: string | null
+          custom_data?: Json
           data_encaminhamento?: string
           data_nascimento?: string
           descricao_clinica?: string
@@ -1070,6 +1079,7 @@ export type Database = {
       patient_discharges: {
         Row: {
           created_at: string
+          custom_data: Json
           cycle_id: string
           discharge_date: string
           final_notes: string
@@ -1080,6 +1090,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_data?: Json
           cycle_id: string
           discharge_date?: string
           final_notes?: string
@@ -1090,6 +1101,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_data?: Json
           cycle_id?: string
           discharge_date?: string
           final_notes?: string
@@ -1587,6 +1599,7 @@ export type Database = {
       pts: {
         Row: {
           created_at: string
+          custom_data: Json
           diagnostico_funcional: string
           especialidades_envolvidas: string[]
           id: string
@@ -1602,6 +1615,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_data?: Json
           diagnostico_funcional?: string
           especialidades_envolvidas?: string[]
           id?: string
@@ -1617,6 +1631,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_data?: Json
           diagnostico_funcional?: string
           especialidades_envolvidas?: string[]
           id?: string
@@ -1859,6 +1874,7 @@ export type Database = {
           clinical_notes: string
           created_at: string
           created_by: string
+          custom_data: Json
           end_date_predicted: string | null
           frequency: string
           id: string
@@ -1878,6 +1894,7 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           created_by?: string
+          custom_data?: Json
           end_date_predicted?: string | null
           frequency?: string
           id?: string
@@ -1897,6 +1914,7 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           created_by?: string
+          custom_data?: Json
           end_date_predicted?: string | null
           frequency?: string
           id?: string

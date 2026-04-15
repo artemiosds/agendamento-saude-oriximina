@@ -12,6 +12,9 @@ import { User, Building2, Stethoscope, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
+import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { useCustomFields } from "@/hooks/useCustomFields";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -95,6 +98,7 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+  customData?: Record<string, any>;
 }
 
 export const emptyPacienteForm: PacienteFormData = {
@@ -135,6 +139,7 @@ export const emptyPacienteForm: PacienteFormData = {
   isGestante: false,
   isPne: false,
   isAutista: false,
+  customData: {},
 };
 
 interface Props {
@@ -149,6 +154,8 @@ interface Props {
 const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const [uploading, setUploading] = useState(false);
+  const { user } = useAuth();
+  const { resolved: customConfig } = useCustomFields('paciente', user?.unidadeId);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -619,6 +626,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+
+      {/* Custom Fields */}
+      {customConfig.fields.length > 0 && (
+        <div className="p-4 border rounded-lg bg-card">
+          <CustomFieldsRenderer
+            fields={customConfig.fields}
+            values={form.customData || {}}
+            onChange={(fieldName, value) =>
+              onChange({ ...form, customData: { ...(form.customData || {}), [fieldName]: value } })
+            }
+          />
+        </div>
+      )}
 
       {/* Save button */}
       <Button className="w-full" onClick={onSave} disabled={saving}>
