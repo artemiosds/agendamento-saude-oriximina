@@ -687,9 +687,23 @@ const Configuracoes: React.FC = () => {
                   <Select value={reativarProfId} onValueChange={v => { setReativarProfId(v); setReativarAgId(''); buscarAgendamentosReativar(v); }}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o profissional" /></SelectTrigger>
                     <SelectContent>
-                      {profissionaisAtivos.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
-                      ))}
+                      <div className="px-2 pb-2 pt-1 sticky top-0 bg-popover z-10">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Buscar profissional..."
+                            className="h-8 pl-8 text-sm"
+                            value={reativarProfSearch}
+                            onChange={e => setReativarProfSearch(e.target.value)}
+                            onKeyDown={e => e.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+                      {profissionaisAtivos
+                        .filter(p => !reativarProfSearch || p.nome.toLowerCase().includes(reativarProfSearch.toLowerCase()))
+                        .map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome} — {p.profissao || p.role}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
