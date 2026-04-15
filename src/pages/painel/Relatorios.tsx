@@ -13,6 +13,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
+import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerFallback from '@/assets/logo-cer-ii.png';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
@@ -1054,8 +1056,8 @@ ${dataRows}
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const logoSrc = '/logo-sms.jpeg';
-    const logoUrl = window.location.origin + logoSrc;
+    const logoUrl = logoSmsFallback;
+    const logoUrlRight = logoCerFallback;
 
     printWindow.document.write(`<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
@@ -1082,12 +1084,13 @@ ${dataRows}
   @media print { body { padding:6px; } .no-print { display:none !important; } }
 </style></head><body>
   <div class="doc-header">
-    <img src="${logoUrl}" alt="Logo" />
+    <img src="${logoUrl}" alt="Logo SMS" />
     <div class="header-text">
       <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
-      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO II</div>
+      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div>
       <div class="doc-title">Mapa de Atendimentos Concluídos</div>
     </div>
+    <img src="${logoUrlRight}" alt="Logo CER II" style="max-height:48px;max-width:90px;object-fit:contain;" />
     <div class="emit-date">Data de emissão:<br/>${now}</div>
   </div>
   <div class="periodo">Período: ${periodo}</div>
