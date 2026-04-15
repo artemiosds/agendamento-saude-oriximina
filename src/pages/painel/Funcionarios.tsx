@@ -459,9 +459,12 @@ const Funcionarios: React.FC = () => {
                       <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
                         {roleLabels[f.role as UserRole] || f.role}
                       </Badge>
-                      {canManage && (
+                      {canManage && !(isUnitMaster && isProtectedGlobalMaster(f)) && (
                         <div className="flex gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          {/* Unit masters cannot edit employees from other units */}
+                          {!(isUnitMaster && f.unidade_id && f.unidade_id !== user?.unidadeId) && (
+                            <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
