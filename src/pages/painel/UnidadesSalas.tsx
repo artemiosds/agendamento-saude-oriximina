@@ -20,11 +20,11 @@ const UnidadesSalas: React.FC = () => {
   const [roomDialog, setRoomDialog] = useState(false);
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
   const [editRoomId, setEditRoomId] = useState<string | null>(null);
-  const [unitForm, setUnitForm] = useState({ nome: '', endereco: '', telefone: '', whatsapp: '' });
+  const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
 
-  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', endereco: '', telefone: '', whatsapp: '' }); setCustomData({}); setUnitDialog(true); };
-  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setCustomData({}); setUnitDialog(true); };
+  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '' }); setCustomData({}); setUnitDialog(true); };
+  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, nomeExibicao: u.nomeExibicao || '', endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setCustomData({}); setUnitDialog(true); };
   const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '' }); setRoomDialog(true); };
   const openEditRoom = (s: typeof salas[0]) => { setEditRoomId(s.id); setRoomForm({ nome: s.nome, unidadeId: s.unidadeId }); setRoomDialog(true); };
 
@@ -134,6 +134,7 @@ const UnidadesSalas: React.FC = () => {
           <DialogHeader><DialogTitle className="font-display">{editUnitId ? 'Editar' : 'Nova'} Unidade</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Nome *</Label><Input value={unitForm.nome} onChange={e => setUnitForm(p => ({ ...p, nome: e.target.value }))} /></div>
+            <div><Label>Nome exibido no sistema</Label><Input value={unitForm.nomeExibicao} onChange={e => setUnitForm(p => ({ ...p, nomeExibicao: e.target.value }))} placeholder="Ex: CER II (aparece no menu lateral)" /></div>
             <div><Label>Endereço</Label><Input value={unitForm.endereco} onChange={e => setUnitForm(p => ({ ...p, endereco: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Telefone</Label><Input value={unitForm.telefone} onChange={e => setUnitForm(p => ({ ...p, telefone: e.target.value }))} /></div>

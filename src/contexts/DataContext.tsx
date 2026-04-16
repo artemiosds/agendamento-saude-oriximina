@@ -1196,6 +1196,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (id: string, data: Partial<Unidade>) => {
       const dbData: any = {};
       if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.nomeExibicao !== undefined) dbData.nome_exibicao = data.nomeExibicao;
       if (data.endereco !== undefined) dbData.endereco = data.endereco;
       if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.whatsapp !== undefined) dbData.whatsapp = data.whatsapp;
