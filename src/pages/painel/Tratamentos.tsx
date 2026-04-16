@@ -1650,12 +1650,41 @@ const Tratamentos: React.FC = () => {
 
     return (
       <div className="space-y-4 animate-fade-in overflow-y-auto max-h-[calc(100vh-80px)] pr-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Button variant="ghost" size="sm" onClick={() => setSelectedCycle(null)}>
             <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
           </Button>
           <h1 className="text-xl font-bold font-display text-foreground">Detalhe do Ciclo</h1>
+          {canAgendarSessao && selectedCycle.status === "em_andamento" && pendingCount > 0 && (
+            <Button
+              size="sm"
+              onClick={handleAgendarCicloCompleto}
+              disabled={agendandoCiclo}
+              className="ml-auto bg-primary hover:bg-primary/90"
+            >
+              {agendandoCiclo ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <CalendarCheck className="w-4 h-4 mr-2" />
+              )}
+              {agendandoCiclo
+                ? "Agendando..."
+                : `Agendar Todas as Sessões (${pendingCount})`}
+            </Button>
+          )}
         </div>
+
+        {resumoCiclo && (
+          <ResumoAgendamentoCiclo
+            pacienteNome={pac?.nome || "Paciente"}
+            pacienteTelefone={(pac as any)?.telefone}
+            profissionalNome={prof?.nome || "Profissional"}
+            tratamento={selectedCycle.treatment_type}
+            itens={resumoCiclo}
+            onClose={() => setResumoCiclo(null)}
+          />
+        )}
+
 
         <Card className="shadow-card border-0">
           <CardContent className="p-5 space-y-3">
