@@ -30,15 +30,27 @@ interface TriageRecord {
   alergias: string[] | null;
   medicamentos: string[] | null;
   queixa: string | null;
+  observacoes: string | null;
   iniciado_em: string | null;
   confirmado_em: string | null;
   criado_em: string | null;
+}
+
+interface NursingEval {
+  anamnese_resumida: string | null;
+  observacoes_clinicas: string | null;
+  avaliacao_risco: string | null;
+  condicao_clinica: string | null;
+  motivo_inapto: string | null;
+  prioridade: string | null;
+  resultado: string | null;
 }
 
 interface EnrichedRecord extends TriageRecord {
   pacienteNome: string;
   profissionalNome: string;
   classificacaoRisco: string;
+  nursing?: NursingEval | null;
 }
 
 const PAGE_SIZE = 20;
