@@ -47,6 +47,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates } from "@/lib/treatmentSessionGenerator";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
+import { CalendarCheck } from "lucide-react";
 
 interface TreatmentCycle {
   id: string;
