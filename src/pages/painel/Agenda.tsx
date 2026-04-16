@@ -814,6 +814,12 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
+    // Intercept "falta" — open modal with justification
+    if (newStatus === "falta") {
+      setFaltaTarget(ag);
+      return;
+    }
+
     if (newStatus === "concluido") {
       // Block concluding appointments for future dates
       const today = todayLocalStr();
