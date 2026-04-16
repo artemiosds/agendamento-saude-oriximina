@@ -86,6 +86,7 @@ export interface Prontuario {
 export interface Unidade {
   id: string;
   nome: string;
+  nomeExibicao?: string;
   endereco: string;
   telefone: string;
   whatsapp: string;

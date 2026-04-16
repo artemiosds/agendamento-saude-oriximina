@@ -350,7 +350,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUnidades = useCallback(async () => {
     try {
-      let query = supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo");
       // Unit isolation: non-global users only see their own unit
       if (!isGlobalAdmin && userUnidadeId) query = query.eq('id', userUnidadeId);
       const { data, error } = await query;
@@ -359,6 +359,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data.map((u: any) => ({
             id: u.id,
             nome: u.nome,
+            nomeExibicao: u.nome_exibicao || "",
             endereco: u.endereco || "",
             telefone: u.telefone || "",
             whatsapp: u.whatsapp || "",
@@ -1178,6 +1179,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.from("unidades" as any).insert({
         id: u.id,
         nome: u.nome,
+        nome_exibicao: u.nomeExibicao || '',
         endereco: u.endereco,
         telefone: u.telefone,
         whatsapp: u.whatsapp,
@@ -1195,6 +1197,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (id: string, data: Partial<Unidade>) => {
       const dbData: any = {};
       if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.nomeExibicao !== undefined) dbData.nome_exibicao = data.nomeExibicao;
       if (data.endereco !== undefined) dbData.endereco = data.endereco;
       if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.whatsapp !== undefined) dbData.whatsapp = data.whatsapp;
