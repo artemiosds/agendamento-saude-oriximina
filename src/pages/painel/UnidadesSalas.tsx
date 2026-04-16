@@ -72,6 +72,7 @@ const UnidadesSalas: React.FC = () => {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold text-foreground">{u.nome}</h3>
+                    {u.nomeExibicao && <p className="text-xs text-primary font-medium">Exibido como: {u.nomeExibicao}</p>}
                     <p className="text-sm text-muted-foreground mt-1">{u.endereco}</p>
                     <p className="text-sm text-muted-foreground">{u.telefone} • {u.whatsapp}</p>
                     <span className="text-xs text-muted-foreground">{salas.filter(s => s.unidadeId === u.id).length} sala(s)</span>
