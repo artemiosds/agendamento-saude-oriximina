@@ -41,7 +41,7 @@ const ESCALAS_DISPONIVEIS = [
   { id: 'imc', nome: 'IMC — Índice de Massa Corporal' },
 ];
 
-type TabId = 'blocos' | 'visual' | 'impressao' | 'medicamentos' | 'exames' | 'escalas' | 'especialidade' | 'campos_extras';
+type TabId = 'blocos' | 'visual' | 'impressao' | 'carimbo' | 'medicamentos' | 'exames' | 'escalas' | 'especialidade' | 'campos_extras';
 
 interface CampoExtra {
   id: string;
