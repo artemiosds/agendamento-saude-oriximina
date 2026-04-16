@@ -1996,6 +1996,14 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+                        {/* Botão individual de aviso — MASTER e RECEPCAO */}
+                        {(user?.role === "master" || user?.role === "recepcao") && (
+                          <AgendaNotificacaoIndividual
+                            ag={ag}
+                            paciente={paciente}
+                            unidade={unidades.find((u) => u.id === ag.unidadeId)}
+                          />
+                        )}
                         {canEdit && !["cancelado", "concluido"].includes(ag.status) && (
                           <Button
                             size="sm"
