@@ -200,7 +200,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   useEffect(() => {
     const m = modelos.find(x => x.id === selectedId);
     if (m) setConteudoFinal(substituir(m.conteudo));
-  }, [campos, medicamentos]);
+  }, [campos, medicamentos, carimbo]);
 
   const selected = modelos.find(x => x.id === selectedId);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
