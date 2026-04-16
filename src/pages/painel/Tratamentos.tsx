@@ -358,6 +358,31 @@ const Tratamentos: React.FC = () => {
     debounceMs: 1000,
   });
 
+  // O(1) lookup maps to avoid .find() per row
+  const pacientesMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of pacientes) m.set(p.id, p);
+    return m;
+  }, [pacientes]);
+
+  const funcionariosMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const f of funcionarios) m.set(f.id, f);
+    return m;
+  }, [funcionarios]);
+
+  // Pre-aggregate session counts per cycle (avoids O(n*m) on every render)
+  const sessionStatsByCycle = useMemo(() => {
+    const stats = new Map<string, { pendingAg: number; faltas: number }>();
+    for (const s of sessions) {
+      const cur = stats.get(s.cycle_id) || { pendingAg: 0, faltas: 0 };
+      if (s.status === "pendente_agendamento") cur.pendingAg++;
+      else if (s.status === "paciente_faltou") cur.faltas++;
+      stats.set(s.cycle_id, cur);
+    }
+    return stats;
+  }, [sessions]);
+
   const filteredCycles = useMemo(() => {
     let result = cycles.filter((c) => {
       if (filterProf !== "all" && c.professional_id !== filterProf) return false;
@@ -368,7 +393,7 @@ const Tratamentos: React.FC = () => {
     if (searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       result = result.filter((c) => {
-        const pac = pacientes.find((p: any) => p.id === c.patient_id);
+        const pac = pacientesMap.get(c.patient_id);
         const pacNome = pac?.nome?.toLowerCase() || '';
         const pacCpf = pac?.cpf?.toLowerCase() || '';
         const pacCns = pac?.cns?.toLowerCase() || '';
@@ -378,7 +403,19 @@ const Tratamentos: React.FC = () => {
       });
     }
     return result;
-  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientes]);
+  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientesMap]);
+
+  // Reset pagination when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterProf, filterUnit, filterStatus, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCycles.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedCycles = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredCycles.slice(start, start + PAGE_SIZE);
+  }, [filteredCycles, safePage]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
