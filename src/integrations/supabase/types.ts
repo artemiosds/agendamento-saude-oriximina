@@ -2274,6 +2274,7 @@ export type Database = {
           endereco: string
           id: string
           nome: string
+          nome_exibicao: string
           telefone: string
           whatsapp: string
         }
@@ -2284,6 +2285,7 @@ export type Database = {
           endereco?: string
           id: string
           nome: string
+          nome_exibicao?: string
           telefone?: string
           whatsapp?: string
         }
@@ -2294,6 +2296,7 @@ export type Database = {
           endereco?: string
           id?: string
           nome?: string
+          nome_exibicao?: string
           telefone?: string
           whatsapp?: string
         }
