@@ -1043,6 +1043,7 @@ export type Database = {
           transporte: string
           turno_preferido: string
           ubs_origem: string
+          unidade_id: string
           usa_dispositivo: boolean
           usa_equipamentos: boolean
         }
@@ -1087,6 +1088,7 @@ export type Database = {
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
         }
@@ -1131,6 +1133,7 @@ export type Database = {
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
         }
