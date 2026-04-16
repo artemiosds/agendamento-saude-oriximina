@@ -464,8 +464,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select(
           "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
         );
-      // Unit isolation for pacientes
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      // Unit isolation for pacientes — include patients with matching unit OR no unit (legacy)
+      if (!isGlobalAdmin && userUnidadeId) {
+        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+      }
       const { data, error } = await query;
       if (data && !error) {
         setPacientes(
