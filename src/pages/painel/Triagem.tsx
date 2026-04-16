@@ -98,6 +98,58 @@ const Triagem: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<Agendamento | null>(null);
   const [pacienteInfo, setPacienteInfo] = useState<Paciente | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'release'; item: Agendamento } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleRemoverDaTriagem = async (item: Agendamento) => {
+    setActionLoading(true);
+    try {
+      await updateFila(item.filaId, { status: 'removido_triagem' as any });
+      await updateAgendamento(item.id, { status: 'confirmado_chegada' as any });
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      await logAction({
+        acao: 'remover_da_triagem',
+        entidade: 'fila_espera',
+        entidadeId: item.filaId,
+        modulo: 'triagem',
+        user,
+        detalhes: { paciente: item.pacienteNome, agendamentoId: item.id },
+      });
+      toast.success('Paciente removido da fila de triagem.');
+      setConfirmAction(null);
+    } catch (err) {
+      console.error('Erro ao remover da triagem:', err);
+      toast.error('Erro ao remover paciente da triagem.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleLiberarSemTriagem = async (item: Agendamento) => {
+    setActionLoading(true);
+    try {
+      await Promise.all([
+        updateFila(item.filaId, { status: 'apto_atendimento' as any }),
+        updateAgendamento(item.id, { status: 'apto_atendimento' as any }),
+      ]);
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      await logAction({
+        acao: 'liberar_sem_triagem',
+        entidade: 'agendamento',
+        entidadeId: item.id,
+        modulo: 'triagem',
+        user,
+        detalhes: { paciente: item.pacienteNome, profissional: item.profissionalNome },
+      });
+      toast.success('Paciente liberado para atendimento sem triagem.');
+      setConfirmAction(null);
+    } catch (err) {
+      console.error('Erro ao liberar sem triagem:', err);
+      toast.error('Erro ao liberar paciente sem triagem.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const [form, setForm] = useState<TriagemForm>({
     peso: "",
