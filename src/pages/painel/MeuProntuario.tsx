@@ -125,6 +125,7 @@ const MeuProntuario: React.FC = () => {
     { id: 'blocos', label: 'Blocos', icon: LayoutGrid, group: 1 },
     { id: 'visual', label: 'Visual', icon: Palette, group: 1 },
     { id: 'impressao', label: 'Impressão', icon: Printer, group: 1 },
+    { id: 'carimbo', label: 'Carimbo & Assinatura', icon: Stamp, group: 1 },
     { id: 'medicamentos', label: 'Medicamentos', icon: Pill, group: 2 },
     { id: 'exames', label: 'Exames', icon: FlaskConical, group: 2 },
     { id: 'escalas', label: 'Escalas Clínicas', icon: Ruler, group: 2 },
