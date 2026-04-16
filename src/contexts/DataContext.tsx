@@ -384,11 +384,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("funcionarios" as any)
         .select(
           "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
         );
+      // Unit isolation: non-global users only see employees from their unit
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setFuncionarios(
           data.map((f: any) => ({
@@ -419,7 +422,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading funcionarios:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadDisponibilidades = useCallback(async () => {
     try {
@@ -455,11 +458,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("pacientes" as any)
         .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista",
+          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
         );
+      // Unit isolation for pacientes
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setPacientes(
           data.map((p: any) => ({
@@ -476,6 +482,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             descricaoClinica: p.descricao_clinica || "",
             cid: p.cid || "",
             criadoEm: p.criado_em || "",
+            unidadeId: p.unidade_id || "",
             isGestante: !!p.is_gestante,
             isPne: !!p.is_pne,
             isAutista: !!p.is_autista,
@@ -485,7 +492,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadAgendamentos = useCallback(async () => {
     try {
@@ -664,6 +671,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation: skip events from other units
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setAgendamentos((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -702,6 +711,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setFila((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -741,6 +752,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation: skip events from other units
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setPacientes((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -756,6 +769,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           descricaoClinica: row.descricao_clinica || "",
           cid: row.cid || "",
           criadoEm: row.criado_em || "",
+          unidadeId: row.unidade_id || "",
           isGestante: !!row.is_gestante,
           isPne: !!row.is_pne,
           isAutista: !!row.is_autista,
@@ -836,6 +850,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setFuncionarios((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -976,6 +992,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
+      // Auto-inject unidade_id if not set
+      const unidadeIdToUse = p.unidadeId || userUnidadeId || '';
       const { error } = await supabase.from("pacientes" as any).insert({
         id: p.id,
         nome: p.nome,
@@ -990,13 +1008,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         descricao_clinica: p.descricaoClinica,
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
+        unidade_id: unidadeIdToUse,
       } as any);
       if (!error) {
-        setPacientes((prev) => [p, ...prev]);
+        setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
       } else console.error("Error adding paciente:", error);
     },
-    [invalidateCache],
+    [invalidateCache, userUnidadeId],
   );
 
   const updatePaciente = useCallback(
