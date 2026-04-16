@@ -107,6 +107,32 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   const hoje = new Date().toLocaleDateString('pt-BR');
 
+  // Build the {{carimbo_profissional}} replacement (HTML block matching the configured carimbo)
+  const carimboInlineHtml = (() => {
+    if (!carimbo) {
+      // Fallback: build a minimal carimbo from professional cadastre
+      const nome = profissional?.nome || user?.nome || '—';
+      const consName = profissional?.tipo_conselho || '';
+      const consNum = profissional?.numero_conselho || '';
+      const consUf = profissional?.uf_conselho || '';
+      return `<div class="carimbo-digital" style="display:inline-block;border:1px solid #1e293b;border-radius:6px;padding:8px 14px;text-align:center;font-size:12px;line-height:1.4;">
+        <div style="font-weight:700;">${nome}</div>
+        ${consName ? `<div>${consName} ${consNum}${consUf ? '/' + consUf : ''}</div>` : ''}
+        <div style="font-size:10px;color:#64748b;">${unidade || 'CER II — Oriximiná/PA'}</div>
+      </div>`;
+    }
+    if (carimbo.tipo === 'imagem' && carimbo.imagem_url) {
+      return `<img src="${carimbo.imagem_url}" alt="Carimbo" style="max-width:250px;max-height:120px;" />`;
+    }
+    return `<div class="carimbo-digital" style="display:inline-block;border:1px solid #1e293b;border-radius:6px;padding:8px 14px;text-align:center;font-size:12px;line-height:1.4;">
+      <div style="font-weight:700;">${carimbo.nome || profissional?.nome || ''}</div>
+      <div>${carimbo.conselho} ${carimbo.numero_registro}${carimbo.uf ? '-' + carimbo.uf : ''}</div>
+      ${carimbo.especialidade ? `<div>${carimbo.especialidade}</div>` : ''}
+      ${carimbo.cargo ? `<div>${carimbo.cargo}</div>` : ''}
+      <div style="font-size:10px;color:#64748b;">CER II — Oriximiná/PA</div>
+    </div>`;
+  })();
+
   const substituir = (conteudo: string): string => {
     let text = conteudo
       .replace(/\{\{nome_paciente\}\}/g, paciente?.nome || '—')
@@ -114,6 +140,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       .replace(/\{\{cns\}\}/g, paciente?.cns || '—')
       .replace(/\{\{data_nascimento\}\}/g, paciente?.data_nascimento || '—')
       .replace(/\{\{data_atendimento\}\}/g, dataAtendimento || hoje)
+      .replace(/\{\{carimbo_profissional\}\}/g, carimboInlineHtml)
       .replace(/\{\{profissional\}\}/g, profissional?.nome || '—')
       .replace(/\{\{cid\}\}/g, paciente?.cid || '—')
       .replace(/\{\{especialidade\}\}/g, paciente?.especialidade_destino || '—')
@@ -173,7 +200,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
   useEffect(() => {
     const m = modelos.find(x => x.id === selectedId);
     if (m) setConteudoFinal(substituir(m.conteudo));
-  }, [campos, medicamentos]);
+  }, [campos, medicamentos, carimbo]);
 
   const selected = modelos.find(x => x.id === selectedId);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
