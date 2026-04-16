@@ -2188,6 +2188,7 @@ export type Database = {
           imc: number | null
           iniciado_em: string | null
           medicamentos: string[] | null
+          observacoes: string
           peso: number | null
           pressao_arterial: string | null
           queixa: string | null
@@ -2209,6 +2210,7 @@ export type Database = {
           imc?: number | null
           iniciado_em?: string | null
           medicamentos?: string[] | null
+          observacoes?: string
           peso?: number | null
           pressao_arterial?: string | null
           queixa?: string | null
@@ -2230,6 +2232,7 @@ export type Database = {
           imc?: number | null
           iniciado_em?: string | null
           medicamentos?: string[] | null
+          observacoes?: string
           peso?: number | null
           pressao_arterial?: string | null
           queixa?: string | null
