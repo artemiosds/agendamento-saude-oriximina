@@ -2727,6 +2727,24 @@ const Agenda: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Falta com Justificativa */}
+      <RegistrarFaltaModal
+        open={!!faltaTarget}
+        onOpenChange={(o) => { if (!o) setFaltaTarget(null); }}
+        agendamento={faltaTarget ? {
+          id: faltaTarget.id,
+          pacienteId: faltaTarget.pacienteId,
+          pacienteNome: faltaTarget.pacienteNome,
+          profissionalId: faltaTarget.profissionalId,
+          profissionalNome: faltaTarget.profissionalNome,
+          data: faltaTarget.data,
+          hora: faltaTarget.hora,
+          unidadeId: faltaTarget.unidadeId,
+          tipo: faltaTarget.tipo,
+        } : null}
+        onConfirm={handleRegistrarFalta}
+      />
     </div>
   );
 };
