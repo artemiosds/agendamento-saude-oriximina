@@ -61,6 +61,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
+import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -1363,6 +1364,15 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
+            {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+            {(user?.role === "master" || user?.role === "recepcao") && (
+              <AgendaNotificacoesMassa
+                agendamentos={filtered}
+                pacientes={pacientes}
+                unidades={unidades}
+                selectedDate={selectedDate}
+              />
+            )}
             {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
@@ -1986,6 +1996,14 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+                        {/* Botão individual de aviso — MASTER e RECEPCAO */}
+                        {(user?.role === "master" || user?.role === "recepcao") && (
+                          <AgendaNotificacaoIndividual
+                            ag={ag}
+                            paciente={paciente}
+                            unidade={unidades.find((u) => u.id === ag.unidadeId)}
+                          />
+                        )}
                         {canEdit && !["cancelado", "concluido"].includes(ag.status) && (
                           <Button
                             size="sm"
