@@ -19,9 +19,10 @@ import { toast } from 'sonner';
 import {
   Eye, EyeOff, Star, Lock, ChevronUp, ChevronDown, GripVertical,
   Settings, Loader2, CheckCircle, LayoutGrid, Printer, Palette, ShieldAlert, Info,
-  Pill, FlaskConical, Ruler, Stethoscope, Plus, Search, Pencil, Trash2, X
+  Pill, FlaskConical, Ruler, Stethoscope, Plus, Search, Pencil, Trash2, X, Stamp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import CarimboConfig from '@/components/CarimboConfig';
 
 // ── Escalas clínicas disponíveis ──
 const ESCALAS_DISPONIVEIS = [
