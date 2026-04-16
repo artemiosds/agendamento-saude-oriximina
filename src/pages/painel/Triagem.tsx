@@ -465,12 +465,28 @@ const Triagem: React.FC = () => {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="mr-1 h-3 w-3" /> {waitLabel}
                     </Badge>
                     <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(item)}>
                       <Play className="mr-1 h-3.5 w-3.5" /> Iniciar triagem
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-success/40 text-success hover:bg-success/10"
+                      onClick={() => setConfirmAction({ type: 'release', item })}
+                    >
+                      <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmAction({ type: 'remove', item })}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
                     </Button>
                   </div>
                 </CardContent>
