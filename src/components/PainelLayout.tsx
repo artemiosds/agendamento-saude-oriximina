@@ -1,6 +1,7 @@
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useMemo } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useData } from '@/contexts/DataContext';
 import { usePermissions, ModuleName } from '@/contexts/PermissionsContext';
 import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
