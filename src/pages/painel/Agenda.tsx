@@ -1364,6 +1364,15 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
+            {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+            {(user?.role === "master" || user?.role === "recepcao") && (
+              <AgendaNotificacoesMassa
+                agendamentos={filtered}
+                pacientes={pacientes}
+                unidades={unidades}
+                selectedDate={selectedDate}
+              />
+            )}
             {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
