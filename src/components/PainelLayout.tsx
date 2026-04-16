@@ -65,7 +65,8 @@ const roleLabels: Record<string, string> = {
 
 
 const PainelLayout: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isGlobalAdmin } = useAuth();
+  const { unidades } = useData();
   const { can, loading: permLoading } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -73,6 +74,13 @@ const PainelLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isMaster = user?.role?.toLowerCase().trim() === 'master';
+
+  // Resolve display name for the current user's unit
+  const unitDisplayName = useMemo(() => {
+    if (isGlobalAdmin) return 'SMS Oriximiná';
+    const userUnit = unidades.find(u => u.id === user?.unidadeId);
+    return userUnit?.nomeExibicao || userUnit?.nome || 'Sistema';
+  }, [isGlobalAdmin, unidades, user?.unidadeId]);
 
   // Auto-close sidebar on route change (mobile)
   React.useEffect(() => {
@@ -115,7 +123,7 @@ const PainelLayout: React.FC = () => {
         <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
           <img src={logoSms} alt="SMS Oriximiná" className="w-10 h-10 rounded-xl object-cover ring-2 ring-sidebar-primary/20" />
           <div>
-            <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight">CER II</h2>
+            <h2 className="text-lg font-bold font-display text-sidebar-foreground leading-tight truncate max-w-[160px]">{unitDisplayName}</h2>
             <p className="text-xs text-sidebar-foreground/60">Oriximiná</p>
           </div>
         </div>
