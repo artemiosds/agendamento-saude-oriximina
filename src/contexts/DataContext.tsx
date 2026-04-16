@@ -1179,6 +1179,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.from("unidades" as any).insert({
         id: u.id,
         nome: u.nome,
+        nome_exibicao: u.nomeExibicao || '',
         endereco: u.endereco,
         telefone: u.telefone,
         whatsapp: u.whatsapp,
