@@ -748,6 +748,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation: skip events from other units
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setPacientes((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -763,6 +765,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           descricaoClinica: row.descricao_clinica || "",
           cid: row.cid || "",
           criadoEm: row.criado_em || "",
+          unidadeId: row.unidade_id || "",
           isGestante: !!row.is_gestante,
           isPne: !!row.is_pne,
           isAutista: !!row.is_autista,
