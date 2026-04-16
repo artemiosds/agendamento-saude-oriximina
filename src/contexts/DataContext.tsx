@@ -466,7 +466,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       // Unit isolation for pacientes — include patients with matching unit OR no unit (legacy)
       if (!isGlobalAdmin && userUnidadeId) {
-        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.%00`).or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
       }
       const { data, error } = await query;
       if (data && !error) {
