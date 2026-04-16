@@ -687,6 +687,45 @@ const Triagem: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(o) => !o && !actionLoading && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === 'remove' ? 'Excluir paciente da triagem?' : 'Liberar paciente sem triagem?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === 'remove' ? (
+                <>
+                  O paciente <strong>{confirmAction?.item.pacienteNome}</strong> será removido apenas da fila de triagem.
+                  O cadastro do paciente, prontuário e dados do profissional <strong>não</strong> serão afetados.
+                </>
+              ) : (
+                <>
+                  O paciente <strong>{confirmAction?.item.pacienteNome}</strong> pulará a triagem e será encaminhado diretamente
+                  ao profissional <strong>{confirmAction?.item.profissionalNome}</strong> com status "Liberado para atendimento".
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionLoading}
+              className={confirmAction?.type === 'remove' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-success text-success-foreground hover:bg-success/90'}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!confirmAction) return;
+                if (confirmAction.type === 'remove') handleRemoverDaTriagem(confirmAction.item);
+                else handleLiberarSemTriagem(confirmAction.item);
+              }}
+            >
+              {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {confirmAction?.type === 'remove' ? 'Excluir' : 'Liberar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
