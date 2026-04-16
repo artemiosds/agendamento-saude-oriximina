@@ -19,9 +19,10 @@ import { toast } from 'sonner';
 import {
   Eye, EyeOff, Star, Lock, ChevronUp, ChevronDown, GripVertical,
   Settings, Loader2, CheckCircle, LayoutGrid, Printer, Palette, ShieldAlert, Info,
-  Pill, FlaskConical, Ruler, Stethoscope, Plus, Search, Pencil, Trash2, X
+  Pill, FlaskConical, Ruler, Stethoscope, Plus, Search, Pencil, Trash2, X, Stamp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import CarimboConfig from '@/components/CarimboConfig';
 
 // ── Escalas clínicas disponíveis ──
 const ESCALAS_DISPONIVEIS = [
@@ -40,7 +41,7 @@ const ESCALAS_DISPONIVEIS = [
   { id: 'imc', nome: 'IMC — Índice de Massa Corporal' },
 ];
 
-type TabId = 'blocos' | 'visual' | 'impressao' | 'medicamentos' | 'exames' | 'escalas' | 'especialidade' | 'campos_extras';
+type TabId = 'blocos' | 'visual' | 'impressao' | 'carimbo' | 'medicamentos' | 'exames' | 'escalas' | 'especialidade' | 'campos_extras';
 
 interface CampoExtra {
   id: string;
@@ -124,6 +125,7 @@ const MeuProntuario: React.FC = () => {
     { id: 'blocos', label: 'Blocos', icon: LayoutGrid, group: 1 },
     { id: 'visual', label: 'Visual', icon: Palette, group: 1 },
     { id: 'impressao', label: 'Impressão', icon: Printer, group: 1 },
+    { id: 'carimbo', label: 'Carimbo & Assinatura', icon: Stamp, group: 1 },
     { id: 'medicamentos', label: 'Medicamentos', icon: Pill, group: 2 },
     { id: 'exames', label: 'Exames', icon: FlaskConical, group: 2 },
     { id: 'escalas', label: 'Escalas Clínicas', icon: Ruler, group: 2 },
@@ -215,6 +217,9 @@ const MeuProntuario: React.FC = () => {
             )}
             {activeTab === 'impressao' && (
               <ImpressaoTab localConfig={localConfig} persist={persist} />
+            )}
+            {activeTab === 'carimbo' && (
+              <CarimboConfig />
             )}
             {activeTab === 'medicamentos' && (
               <MedicamentosTab profissionalId={user.id} localConfig={localConfig} persist={persist} />
