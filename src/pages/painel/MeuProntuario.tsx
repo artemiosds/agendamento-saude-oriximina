@@ -218,6 +218,9 @@ const MeuProntuario: React.FC = () => {
             {activeTab === 'impressao' && (
               <ImpressaoTab localConfig={localConfig} persist={persist} />
             )}
+            {activeTab === 'carimbo' && (
+              <CarimboConfig />
+            )}
             {activeTab === 'medicamentos' && (
               <MedicamentosTab profissionalId={user.id} localConfig={localConfig} persist={persist} />
             )}
