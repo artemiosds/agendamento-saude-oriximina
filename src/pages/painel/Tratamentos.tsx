@@ -995,6 +995,160 @@ const Tratamentos: React.FC = () => {
     }
   };
 
+  /**
+   * Agenda em lote todas as sessões pendentes do ciclo selecionado.
+   * - Verifica duplicidade por (paciente_id, profissional_id, data) na tabela `agendamentos`
+   * - Se já existe: marca como "ja_agendada" no resumo (e vincula appointment_id na sessão se faltar)
+   * - Se não existe: insere agendamento e atualiza a sessão para "agendada"
+   * - Mostra resumo no fim com opção de notificar paciente via WhatsApp
+   */
+  const handleAgendarCicloCompleto = async () => {
+    if (!selectedCycle) return;
+    const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
+    const prof = funcionarios.find((f) => f.id === selectedCycle.professional_id);
+    if (!pac || !prof) {
+      toast.error("Paciente ou profissional não encontrado.");
+      return;
+    }
+
+    const pendentes = cycleSessions.filter((s) => {
+      if (s.status !== "pendente_agendamento") return false;
+      return !!s.scheduled_date;
+    });
+
+    if (pendentes.length === 0) {
+      toast.info("Não há sessões pendentes para agendar.");
+      return;
+    }
+
+    setAgendandoCiclo(true);
+    const resumo: ResumoSessaoItem[] = [];
+
+    try {
+      for (const sess of pendentes) {
+        try {
+          // 1) Verificar duplicidade no Supabase
+          const { data: existente, error: checkErr } = await supabase
+            .from("agendamentos")
+            .select("id, hora, status")
+            .eq("paciente_id", sess.patient_id)
+            .eq("profissional_id", sess.professional_id)
+            .eq("data", sess.scheduled_date)
+            .not("status", "in", '("cancelado","falta","remarcado")')
+            .order("criado_em", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (checkErr) throw checkErr;
+
+          if (existente) {
+            // Já existe — apenas vincula na sessão se necessário
+            if (!sess.appointment_id || sess.status !== "agendada") {
+              await supabase
+                .from("treatment_sessions")
+                .update({ appointment_id: existente.id, status: "agendada" })
+                .eq("id", sess.id);
+            }
+            resumo.push({
+              numero: sess.session_number,
+              data: sess.scheduled_date,
+              hora: existente.hora,
+              status: "ja_agendada",
+            });
+            continue;
+          }
+
+          // 2) Inserir novo agendamento (default 08:00 — recepção pode ajustar depois)
+          const horaPadrao = "08:00";
+          const agId = `ag${Date.now()}${sess.session_number}`;
+          await addAgendamento({
+            id: agId,
+            pacienteId: sess.patient_id,
+            pacienteNome: pac.nome,
+            unidadeId: selectedCycle.unit_id,
+            salaId: "",
+            setorId: "",
+            profissionalId: sess.professional_id,
+            profissionalNome: prof.nome,
+            data: sess.scheduled_date,
+            hora: horaPadrao,
+            status: "confirmado",
+            tipo: "Sessão de Tratamento",
+            observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${selectedCycle.treatment_type} (lote)`,
+            origem: "recepcao",
+            criadoEm: new Date().toISOString(),
+            criadoPor: user?.id || "",
+          } as any);
+
+          // 3) Atualizar sessão como agendada
+          const { error: updErr } = await supabase
+            .from("treatment_sessions")
+            .update({ appointment_id: agId, status: "agendada" })
+            .eq("id", sess.id);
+          if (updErr) throw updErr;
+
+          // 4) Atualizar UI imediatamente (otimista) — antes do realtime/loadData
+          setSessions((prev) =>
+            prev.map((x) =>
+              x.id === sess.id ? { ...x, appointment_id: agId, status: "agendada" } : x,
+            ),
+          );
+          setAgendamentoMap((prev) => ({
+            ...prev,
+            [`${sess.patient_id}|${sess.professional_id}|${sess.scheduled_date}`]: {
+              id: agId,
+              hora: horaPadrao,
+              status: "confirmado",
+            },
+          }));
+
+          resumo.push({
+            numero: sess.session_number,
+            data: sess.scheduled_date,
+            hora: horaPadrao,
+            status: "agendada",
+          });
+        } catch (innerErr: any) {
+          console.error(`[AgendarCiclo] sessão ${sess.session_number}:`, innerErr);
+          resumo.push({
+            numero: sess.session_number,
+            data: sess.scheduled_date,
+            status: "erro",
+            mensagem: innerErr?.message || "falha ao agendar",
+          });
+        }
+      }
+
+      const novas = resumo.filter((r) => r.status === "agendada").length;
+      const jaExist = resumo.filter((r) => r.status === "ja_agendada").length;
+      const erros = resumo.filter((r) => r.status === "erro").length;
+
+      await logAction({
+        acao: "agendar_ciclo_completo",
+        entidade: "treatment_cycle",
+        entidadeId: selectedCycle.id,
+        modulo: "tratamentos",
+        user,
+        detalhes: { total: pendentes.length, novas, ja_existiam: jaExist, erros },
+      });
+
+      if (erros > 0) {
+        toast.warning(`Ciclo processado com ${erros} erro(s). Veja o resumo abaixo.`);
+      } else {
+        toast.success(`Ciclo agendado: ${novas} nova(s), ${jaExist} já existia(m).`);
+      }
+
+      setResumoCiclo(resumo);
+      // Recarrega em segundo plano para sincronizar
+      loadData(true);
+    } catch (err: any) {
+      console.error("[AgendarCiclo] erro geral:", err);
+      toast.error(err?.message || "Erro ao agendar ciclo completo.");
+    } finally {
+      setAgendandoCiclo(false);
+    }
+  };
+
   const isMaster = user?.role === 'master';
   const canControlSessions = isMaster || isProfissional;
 
