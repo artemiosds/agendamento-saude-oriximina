@@ -1367,10 +1367,12 @@ const Agenda: React.FC = () => {
             {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
             {(user?.role === "master" || user?.role === "recepcao") && (
               <AgendaNotificacoesMassa
-                agendamentos={filtered}
+                agendamentos={agendamentos}
                 pacientes={pacientes}
                 unidades={unidades}
                 selectedDate={selectedDate}
+                userUnidadeId={user?.unidadeId || ""}
+                userUsuario={user?.usuario || ""}
               />
             )}
             {/* NOVO: botão Pendentes Online com badge */}
