@@ -38,20 +38,24 @@ interface Unidade {
   nome: string;
 }
 
-interface Props {
+interface IndividualProps {
+  ag: Agendamento;
+  paciente?: Paciente;
+  unidade?: Unidade;
+}
+
+interface MassaProps {
   agendamentos: Agendamento[];
   pacientes: Paciente[];
   unidades: Unidade[];
   selectedDate: string;
+  userUnidadeId?: string;
+  userUsuario?: string;
 }
 
 const CANCELADOS = new Set(["cancelado", "falta", "concluido"]);
 
-export const AgendaNotificacaoIndividual: React.FC<{
-  ag: Agendamento;
-  paciente?: Paciente;
-  unidade?: Unidade;
-}> = ({ ag, paciente, unidade }) => {
+export const AgendaNotificacaoIndividual: React.FC<IndividualProps> = ({ ag, paciente, unidade }) => {
   const [loading, setLoading] = useState(false);
   const { notify } = useWebhookNotify();
 
@@ -69,39 +73,44 @@ export const AgendaNotificacaoIndividual: React.FC<{
         return;
       }
 
-      const mensagem = `Olá ${ag.pacienteNome}, este é um lembrete do seu atendimento no dia ${new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR")} às ${ag.hora}. Por favor, evite atrasos.`;
+      const promises: Promise<any>[] = [];
 
       // Send WhatsApp if phone available
       if (telefone) {
-        await whatsappService.sendDirect({
-          tipo: "lembrete_manual",
-          telefone,
-          paciente_nome: ag.pacienteNome,
-          profissional: ag.profissionalNome,
-          unidade: unidade?.nome || "",
-          data_consulta: ag.data,
-          hora_consulta: ag.hora,
-        });
+        promises.push(
+          whatsappService.sendDirect({
+            tipo: "lembrete_manual",
+            telefone,
+            paciente_nome: ag.pacienteNome,
+            profissional: ag.profissionalNome,
+            unidade: unidade?.nome || "",
+            data_consulta: ag.data,
+            hora_consulta: ag.hora,
+          })
+        );
       }
 
       // Send email notification
       if (email) {
-        await notify({
-          evento: "lembrete_1h",
-          paciente_nome: ag.pacienteNome,
-          telefone,
-          email,
-          data_consulta: ag.data,
-          hora_consulta: ag.hora,
-          unidade: unidade?.nome || "",
-          profissional: ag.profissionalNome,
-          tipo_atendimento: ag.tipo,
-          status_agendamento: ag.status,
-          id_agendamento: ag.id,
-          observacoes: "Lembrete enviado manualmente.",
-        });
+        promises.push(
+          notify({
+            evento: "lembrete_1h",
+            paciente_nome: ag.pacienteNome,
+            telefone,
+            email,
+            data_consulta: ag.data,
+            hora_consulta: ag.hora,
+            unidade: unidade?.nome || "",
+            profissional: ag.profissionalNome,
+            tipo_atendimento: ag.tipo,
+            status_agendamento: ag.status,
+            id_agendamento: ag.id,
+            observacoes: "Lembrete enviado manualmente.",
+          })
+        );
       }
 
+      await Promise.allSettled(promises);
       toast.success(`✔️ Aviso enviado para ${ag.pacienteNome}`);
     } catch (err) {
       console.error("Erro ao enviar aviso:", err);
@@ -125,25 +134,28 @@ export const AgendaNotificacaoIndividual: React.FC<{
   );
 };
 
-export const AgendaNotificacoesMassa: React.FC<Props> = ({
+export const AgendaNotificacoesMassa: React.FC<MassaProps> = ({
   agendamentos,
   pacientes,
   unidades,
   selectedDate,
+  userUnidadeId,
+  userUsuario,
 }) => {
   const [loading, setLoading] = useState<string | null>(null);
   const { notify } = useWebhookNotify();
 
-  const agAtivos = React.useMemo(
-    () => agendamentos.filter((a) => !CANCELADOS.has(a.status)),
-    [agendamentos],
-  );
+  // Filter by unit (same logic as Agenda) and exclude cancelled/completed
+  const agAtivos = React.useMemo(() => {
+    return agendamentos.filter((a) => {
+      if (CANCELADOS.has(a.status)) return false;
+      // Unit isolation: if user has a unit and is not admin.sms, only their unit
+      if (userUnidadeId && userUsuario !== "admin.sms" && a.unidadeId !== userUnidadeId) return false;
+      return true;
+    });
+  }, [agendamentos, userUnidadeId, userUsuario]);
 
-  const enviarParaLista = async (
-    lista: Agendamento[],
-    tipo: string,
-    buildMsg: (ag: Agendamento) => string,
-  ) => {
+  const enviarParaLista = async (lista: Agendamento[], tipo: string) => {
     if (lista.length === 0) {
       toast.info("Nenhum agendamento ativo para enviar aviso.");
       return;
@@ -170,35 +182,42 @@ export const AgendaNotificacoesMassa: React.FC<Props> = ({
       }
 
       try {
+        const promises: Promise<any>[] = [];
+
         if (telefone) {
-          await whatsappService.sendDirect({
-            tipo: "lembrete_manual",
-            telefone,
-            paciente_nome: ag.pacienteNome,
-            profissional: ag.profissionalNome,
-            unidade: unidade?.nome || "",
-            data_consulta: ag.data,
-            hora_consulta: ag.hora,
-          });
+          promises.push(
+            whatsappService.sendDirect({
+              tipo: "lembrete_manual",
+              telefone,
+              paciente_nome: ag.pacienteNome,
+              profissional: ag.profissionalNome,
+              unidade: unidade?.nome || "",
+              data_consulta: ag.data,
+              hora_consulta: ag.hora,
+            })
+          );
         }
 
         if (email) {
-          await notify({
-            evento: "lembrete_1h",
-            paciente_nome: ag.pacienteNome,
-            telefone,
-            email,
-            data_consulta: ag.data,
-            hora_consulta: ag.hora,
-            unidade: unidade?.nome || "",
-            profissional: ag.profissionalNome,
-            tipo_atendimento: ag.tipo,
-            status_agendamento: ag.status,
-            id_agendamento: ag.id,
-            observacoes: `Lembrete em massa (${tipo}).`,
-          });
+          promises.push(
+            notify({
+              evento: "lembrete_1h",
+              paciente_nome: ag.pacienteNome,
+              telefone,
+              email,
+              data_consulta: ag.data,
+              hora_consulta: ag.hora,
+              unidade: unidade?.nome || "",
+              profissional: ag.profissionalNome,
+              tipo_atendimento: ag.tipo,
+              status_agendamento: ag.status,
+              id_agendamento: ag.id,
+              observacoes: `Lembrete em massa (${tipo}).`,
+            })
+          );
         }
 
+        await Promise.allSettled(promises);
         enviados++;
       } catch {
         erros++;
@@ -214,58 +233,30 @@ export const AgendaNotificacoesMassa: React.FC<Props> = ({
   };
 
   const handleHoje = () => {
-    const hojeAgs = agAtivos.filter((a) => a.data === selectedDate);
-    enviarParaLista(
-      hojeAgs,
-      "hoje",
-      (ag) =>
-        `Olá ${ag.pacienteNome}, você possui atendimento hoje às ${ag.hora}. Evite faltar.`,
-    );
+    const hoje = todayLocalStr();
+    const hojeAgs = agAtivos.filter((a) => a.data === hoje);
+    enviarParaLista(hojeAgs, "hoje");
   };
 
   const handleAmanha = () => {
-    const amanha = addDaysToDateStr(selectedDate, 1);
+    const amanha = addDaysToDateStr(todayLocalStr(), 1);
     const amanhaAgs = agAtivos.filter((a) => a.data === amanha);
-    if (amanhaAgs.length === 0) {
-      // Also try: all appointments for tomorrow regardless of selectedDate
-      const realAmanha = addDaysToDateStr(todayLocalStr(), 1);
-      const realAgs = agAtivos.filter((a) => a.data === realAmanha);
-      if (realAgs.length > 0) {
-        enviarParaLista(
-          realAgs,
-          "amanha",
-          (ag) =>
-            `Olá ${ag.pacienteNome}, você possui atendimento amanhã às ${ag.hora}. Pedimos que compareça no horário.`,
-        );
-        return;
-      }
-      toast.info("Nenhum agendamento ativo para amanhã.");
-      return;
-    }
-    enviarParaLista(
-      amanhaAgs,
-      "amanha",
-      (ag) =>
-        `Olá ${ag.pacienteNome}, você possui atendimento amanhã às ${ag.hora}. Pedimos que compareça no horário.`,
-    );
+    enviarParaLista(amanhaAgs, "amanha");
   };
 
   const handle1Hora = () => {
     const agora = new Date();
+    const hoje = todayLocalStr();
     const proximos = agAtivos.filter((a) => {
-      if (a.data !== todayLocalStr()) return false;
+      if (a.data !== hoje) return false;
       const [h, m] = a.hora.split(":").map(Number);
+      if (isNaN(h) || isNaN(m)) return false;
       const horaAg = new Date();
       horaAg.setHours(h, m, 0, 0);
       const diff = horaAg.getTime() - agora.getTime();
       return diff > 0 && diff <= 3600000;
     });
-    enviarParaLista(
-      proximos,
-      "1hora",
-      (ag) =>
-        `Olá ${ag.pacienteNome}, seu atendimento será em aproximadamente 1 hora (${ag.hora}). Aguardamos você.`,
-    );
+    enviarParaLista(proximos, "1hora");
   };
 
   return (
