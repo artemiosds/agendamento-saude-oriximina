@@ -384,11 +384,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("funcionarios" as any)
         .select(
           "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
         );
+      // Unit isolation: non-global users only see employees from their unit
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setFuncionarios(
           data.map((f: any) => ({
@@ -419,7 +422,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading funcionarios:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadDisponibilidades = useCallback(async () => {
     try {
@@ -455,11 +458,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("pacientes" as any)
         .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista",
+          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
         );
+      // Unit isolation for pacientes
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setPacientes(
           data.map((p: any) => ({
@@ -476,6 +482,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             descricaoClinica: p.descricao_clinica || "",
             cid: p.cid || "",
             criadoEm: p.criado_em || "",
+            unidadeId: p.unidade_id || "",
             isGestante: !!p.is_gestante,
             isPne: !!p.is_pne,
             isAutista: !!p.is_autista,
@@ -485,7 +492,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadAgendamentos = useCallback(async () => {
     try {
