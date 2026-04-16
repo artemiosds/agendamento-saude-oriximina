@@ -10,7 +10,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { Search, Loader2, Play, CheckCircle, Save, X, Plus, Clock } from "lucide-react";
+import { Search, Loader2, Play, CheckCircle, Save, X, Plus, Clock, Trash2, FastForward } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtocol";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -88,6 +98,58 @@ const Triagem: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<Agendamento | null>(null);
   const [pacienteInfo, setPacienteInfo] = useState<Paciente | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'remove' | 'release'; item: Agendamento } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleRemoverDaTriagem = async (item: Agendamento) => {
+    setActionLoading(true);
+    try {
+      await updateFila(item.filaId, { status: 'removido_triagem' as any });
+      await updateAgendamento(item.id, { status: 'confirmado_chegada' as any });
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      await logAction({
+        acao: 'remover_da_triagem',
+        entidade: 'fila_espera',
+        entidadeId: item.filaId,
+        modulo: 'triagem',
+        user,
+        detalhes: { paciente: item.pacienteNome, agendamentoId: item.id },
+      });
+      toast.success('Paciente removido da fila de triagem.');
+      setConfirmAction(null);
+    } catch (err) {
+      console.error('Erro ao remover da triagem:', err);
+      toast.error('Erro ao remover paciente da triagem.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleLiberarSemTriagem = async (item: Agendamento) => {
+    setActionLoading(true);
+    try {
+      await Promise.all([
+        updateFila(item.filaId, { status: 'apto_atendimento' as any }),
+        updateAgendamento(item.id, { status: 'apto_atendimento' as any }),
+      ]);
+      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      await logAction({
+        acao: 'liberar_sem_triagem',
+        entidade: 'agendamento',
+        entidadeId: item.id,
+        modulo: 'triagem',
+        user,
+        detalhes: { paciente: item.pacienteNome, profissional: item.profissionalNome },
+      });
+      toast.success('Paciente liberado para atendimento sem triagem.');
+      setConfirmAction(null);
+    } catch (err) {
+      console.error('Erro ao liberar sem triagem:', err);
+      toast.error('Erro ao liberar paciente sem triagem.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const [form, setForm] = useState<TriagemForm>({
     peso: "",
@@ -403,12 +465,28 @@ const Triagem: React.FC = () => {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="text-xs">
                       <Clock className="mr-1 h-3 w-3" /> {waitLabel}
                     </Badge>
                     <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => openTriagem(item)}>
                       <Play className="mr-1 h-3.5 w-3.5" /> Iniciar triagem
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-success/40 text-success hover:bg-success/10"
+                      onClick={() => setConfirmAction({ type: 'release', item })}
+                    >
+                      <FastForward className="mr-1 h-3.5 w-3.5" /> Liberar sem triagem
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmAction({ type: 'remove', item })}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Excluir da triagem
                     </Button>
                   </div>
                 </CardContent>
@@ -609,6 +687,45 @@ const Triagem: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(o) => !o && !actionLoading && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.type === 'remove' ? 'Excluir paciente da triagem?' : 'Liberar paciente sem triagem?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.type === 'remove' ? (
+                <>
+                  O paciente <strong>{confirmAction?.item.pacienteNome}</strong> será removido apenas da fila de triagem.
+                  O cadastro do paciente, prontuário e dados do profissional <strong>não</strong> serão afetados.
+                </>
+              ) : (
+                <>
+                  O paciente <strong>{confirmAction?.item.pacienteNome}</strong> pulará a triagem e será encaminhado diretamente
+                  ao profissional <strong>{confirmAction?.item.profissionalNome}</strong> com status "Liberado para atendimento".
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={actionLoading}
+              className={confirmAction?.type === 'remove' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-success text-success-foreground hover:bg-success/90'}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!confirmAction) return;
+                if (confirmAction.type === 'remove') handleRemoverDaTriagem(confirmAction.item);
+                else handleLiberarSemTriagem(confirmAction.item);
+              }}
+            >
+              {actionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {confirmAction?.type === 'remove' ? 'Excluir' : 'Liberar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
