@@ -120,14 +120,18 @@ const Triagem: React.FC = () => {
         return;
       }
 
-      if (filaAtual.status !== 'aguardando_triagem') {
+      // Aceita apenas status da fila de triagem (chegada confirmada ou aguardando triagem)
+      const STATUS_PERMITIDOS = ['aguardando_triagem', 'chegada_confirmada'];
+      if (!STATUS_PERMITIDOS.includes(filaAtual.status)) {
         toast.error(
-          `Não é possível excluir: o paciente está com status "${filaAtual.status}" e não está mais aguardando triagem.`
+          `Não é possível excluir: o paciente está com status "${filaAtual.status}" e não está mais na fila de triagem.`
         );
         setConfirmAction(null);
         await Promise.all([refreshFila(), refreshAgendamentos()]);
         return;
       }
+
+      const statusAnterior = filaAtual.status;
 
       // ✅ ÚNICA alteração permitida: status da fila → 'excluido_da_fila_triagem'
       // NÃO altera agendamento, paciente, prontuário, profissional ou qualquer outra entidade
@@ -135,7 +139,7 @@ const Triagem: React.FC = () => {
         .from('fila_espera')
         .update({ status: 'excluido_da_fila_triagem' })
         .eq('id', item.filaId)
-        .eq('status', 'aguardando_triagem'); // dupla proteção: WHERE garante atomicidade
+        .in('status', STATUS_PERMITIDOS); // dupla proteção: WHERE garante atomicidade
 
       if (updErr) throw updErr;
 
@@ -146,7 +150,7 @@ const Triagem: React.FC = () => {
         entidadeId: item.filaId,
         modulo: 'triagem',
         user,
-        detalhes: { paciente: item.pacienteNome, statusAnterior: 'aguardando_triagem', statusNovo: 'excluido_da_fila_triagem' },
+        detalhes: { paciente: item.pacienteNome, statusAnterior, statusNovo: 'excluido_da_fila_triagem' },
       });
       toast.success('Paciente removido da fila de triagem.');
       setConfirmAction(null);
