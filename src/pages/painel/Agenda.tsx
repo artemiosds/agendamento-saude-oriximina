@@ -61,6 +61,8 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
+import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
+import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -185,6 +187,9 @@ const Agenda: React.FC = () => {
   const [cancelTarget, setCancelTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [cancelMotivo, setCancelMotivo] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // FALTA com justificativa
+  const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [cancelConfig, setCancelConfig] = useState<{
     prazo_minimo_horas: number;
     limite_cancelamentos_mes: number;
@@ -809,6 +814,12 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
+    // Intercept "falta" — open modal with justification
+    if (newStatus === "falta") {
+      setFaltaTarget(ag);
+      return;
+    }
+
     if (newStatus === "concluido") {
       // Block concluding appointments for future dates
       const today = todayLocalStr();
@@ -1092,6 +1103,118 @@ const Agenda: React.FC = () => {
     }
   };
 
+  // ── Registrar falta com justificativa ──
+  const handleRegistrarFalta = async (dados: {
+    tipoFalta: "justificada" | "injustificada";
+    documento?: string;
+    descricao?: string;
+    anexoUrl?: string;
+  }) => {
+    if (!faltaTarget) return;
+    const ag = faltaTarget;
+
+    if (ag.status === "falta" || ag.status === "concluido") {
+      toast.error("Esta sessão já possui registro.");
+      setFaltaTarget(null);
+      return;
+    }
+
+    const obsAnterior = ag.observacoes || "";
+    const detalheFalta = [
+      `[FALTA ${dados.tipoFalta.toUpperCase()}]`,
+      dados.documento ? `Documento: ${dados.documento}` : "",
+      dados.descricao ? `Motivo: ${dados.descricao}` : "",
+      `Por: ${user?.nome || "Sistema"} | Em: ${new Date().toLocaleString("pt-BR")}`,
+    ].filter(Boolean).join(" | ");
+    const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
+
+    await updateAgendamento(ag.id, { status: "falta" as any });
+    await (supabase as any).from("agendamentos").update({ observacoes: novaObs }).eq("id", ag.id);
+
+    // Update linked treatment session
+    try {
+      const { data: linkedSession } = await (supabase as any)
+        .from("treatment_sessions")
+        .select("id, cycle_id, status")
+        .eq("appointment_id", ag.id)
+        .in("status", ["pendente", "agendada"])
+        .maybeSingle();
+
+      if (linkedSession) {
+        await (supabase as any)
+          .from("treatment_sessions")
+          .update({
+            status: "falta",
+            absence_type: dados.tipoFalta,
+            clinical_notes: JSON.stringify({
+              tipo: "falta",
+              tipo_falta: dados.tipoFalta,
+              documento: dados.documento || null,
+              descricao: dados.descricao || null,
+              anexo_url: dados.anexoUrl || null,
+              registrado_em: new Date().toISOString(),
+              registrado_por: user?.nome || "Sistema",
+            }),
+          })
+          .eq("id", linkedSession.id);
+      }
+    } catch (err) {
+      console.error("Erro ao atualizar sessão de tratamento:", err);
+    }
+
+    await logAction({
+      acao: "registrar_falta",
+      entidade: "agendamento",
+      entidadeId: ag.id,
+      modulo: "agenda",
+      user,
+      detalhes: {
+        paciente: ag.pacienteNome,
+        tipo_falta: dados.tipoFalta,
+        documento: dados.documento || "",
+        descricao: dados.descricao || "",
+        anexo_url: dados.anexoUrl || "",
+      },
+    });
+
+    const paciente = pacientes.find((p) => p.id === ag.pacienteId);
+    const unidade = unidades.find((u) => u.id === ag.unidadeId);
+    await notify({
+      evento: "nao_compareceu" as any,
+      paciente_nome: ag.pacienteNome,
+      telefone: paciente?.telefone || "",
+      email: paciente?.email || "",
+      data_consulta: ag.data,
+      hora_consulta: ag.hora,
+      unidade: unidade?.nome || "",
+      profissional: ag.profissionalNome,
+      tipo_atendimento: ag.tipo,
+      status_agendamento: "falta",
+      id_agendamento: ag.id,
+      observacoes: dados.descricao || "",
+    });
+    whatsappService.sendByAgendamento(ag.id, "falta").catch(() => {});
+
+    await handleVagaLiberada(
+      {
+        id: ag.id,
+        data: ag.data,
+        hora: ag.hora,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        unidadeId: ag.unidadeId,
+        salaId: ag.salaId,
+        tipo: ag.tipo,
+      },
+      "falta",
+      user,
+    );
+
+    await Promise.all([refreshAgendamentos(), refreshFila()]);
+    toast.success(`Falta registrada para ${ag.pacienteNome}.`);
+    setFaltaTarget(null);
+  };
+
   const handleDeleteAgendamento = async (agId: string) => {
     if (!can("agenda", "can_delete")) {
       toast.error("Sem permissão para excluir.");
@@ -1363,6 +1486,17 @@ const Agenda: React.FC = () => {
         </div>
         {!isProfissional && (
           <div className="flex gap-2 flex-wrap">
+            {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+            {(user?.role === "master" || user?.role === "recepcao") && (
+              <AgendaNotificacoesMassa
+                agendamentos={agendamentos}
+                pacientes={pacientes}
+                unidades={unidades}
+                selectedDate={selectedDate}
+                userUnidadeId={user?.unidadeId || ""}
+                userUsuario={user?.usuario || ""}
+              />
+            )}
             {/* NOVO: botão Pendentes Online com badge */}
             {canAprovar && agendamentosPendentesOnline.length > 0 && (
               <Button
@@ -1986,6 +2120,14 @@ const Agenda: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Button>
+                        {/* Botão individual de aviso — MASTER e RECEPCAO */}
+                        {(user?.role === "master" || user?.role === "recepcao") && (
+                          <AgendaNotificacaoIndividual
+                            ag={ag}
+                            paciente={paciente}
+                            unidade={unidades.find((u) => u.id === ag.unidadeId)}
+                          />
+                        )}
                         {canEdit && !["cancelado", "concluido"].includes(ag.status) && (
                           <Button
                             size="sm"
@@ -2585,6 +2727,24 @@ const Agenda: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Falta com Justificativa */}
+      <RegistrarFaltaModal
+        open={!!faltaTarget}
+        onOpenChange={(o) => { if (!o) setFaltaTarget(null); }}
+        agendamento={faltaTarget ? {
+          id: faltaTarget.id,
+          pacienteId: faltaTarget.pacienteId,
+          pacienteNome: faltaTarget.pacienteNome,
+          profissionalId: faltaTarget.profissionalId,
+          profissionalNome: faltaTarget.profissionalNome,
+          data: faltaTarget.data,
+          hora: faltaTarget.hora,
+          unidadeId: faltaTarget.unidadeId,
+          tipo: faltaTarget.tipo,
+        } : null}
+        onConfirm={handleRegistrarFalta}
+      />
     </div>
   );
 };

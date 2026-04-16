@@ -86,6 +86,7 @@ export interface Prontuario {
 export interface Unidade {
   id: string;
   nome: string;
+  nomeExibicao?: string;
   endereco: string;
   telefone: string;
   whatsapp: string;
@@ -118,6 +119,7 @@ export interface Paciente {
   descricaoClinica: string;
   cid: string;
   criadoEm: string;
+  unidadeId?: string;
   isGestante?: boolean;
   isPne?: boolean;
   isAutista?: boolean;

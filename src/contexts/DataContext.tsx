@@ -350,7 +350,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUnidades = useCallback(async () => {
     try {
-      let query = supabase.from("unidades" as any).select("id,nome,endereco,telefone,whatsapp,ativo");
+      let query = supabase.from("unidades" as any).select("id,nome,nome_exibicao,endereco,telefone,whatsapp,ativo");
       // Unit isolation: non-global users only see their own unit
       if (!isGlobalAdmin && userUnidadeId) query = query.eq('id', userUnidadeId);
       const { data, error } = await query;
@@ -359,6 +359,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           data.map((u: any) => ({
             id: u.id,
             nome: u.nome,
+            nomeExibicao: u.nome_exibicao || "",
             endereco: u.endereco || "",
             telefone: u.telefone || "",
             whatsapp: u.whatsapp || "",
@@ -384,11 +385,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("funcionarios" as any)
         .select(
           "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
         );
+      // Unit isolation: non-global users only see employees from their unit
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setFuncionarios(
           data.map((f: any) => ({
@@ -419,7 +423,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading funcionarios:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadDisponibilidades = useCallback(async () => {
     try {
@@ -455,11 +459,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("pacientes" as any)
         .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista",
+          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
         );
+      // Unit isolation for pacientes
+      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+      const { data, error } = await query;
       if (data && !error) {
         setPacientes(
           data.map((p: any) => ({
@@ -476,6 +483,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             descricaoClinica: p.descricao_clinica || "",
             cid: p.cid || "",
             criadoEm: p.criado_em || "",
+            unidadeId: p.unidade_id || "",
             isGestante: !!p.is_gestante,
             isPne: !!p.is_pne,
             isAutista: !!p.is_autista,
@@ -485,7 +493,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, []);
+  }, [isGlobalAdmin, userUnidadeId]);
 
   const loadAgendamentos = useCallback(async () => {
     try {
@@ -642,8 +650,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ]);
 
   useEffect(() => {
+    // Guard: don't load until auth user is resolved to avoid loading unfiltered data
+    if (!authUser) return;
     loadAll();
-  }, [loadAll]);
+  }, [loadAll, authUser]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -655,6 +665,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeById = <T extends { id: string }>(prev: T[], id: string) => prev.filter((item) => item.id !== id);
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "agendamentos",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -664,6 +675,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation: skip events from other units
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setAgendamentos((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -693,6 +706,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "fila_espera",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -702,6 +716,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setFila((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -732,6 +748,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "pacientes",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -741,6 +758,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation: skip events from other units
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setPacientes((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -756,6 +775,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           descricaoClinica: row.descricao_clinica || "",
           cid: row.cid || "",
           criadoEm: row.criado_em || "",
+          unidadeId: row.unidade_id || "",
           isGestante: !!row.is_gestante,
           isPne: !!row.is_pne,
           isAutista: !!row.is_autista,
@@ -766,6 +786,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "disponibilidades",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -796,6 +817,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "bloqueios",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -825,6 +847,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "funcionarios",
     debounceMs: 1000,
     pollIntervalMs: 120000,
@@ -836,6 +859,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
+      // Unit isolation
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
       setFuncionarios((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -867,6 +892,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Realtime sync for system_config — reflects Master changes to all users instantly
   useRealtimeSync({
+    enabled: !!authUser,
     table: "system_config",
     debounceMs: 500,
     onEvent: (payload) => {
@@ -976,6 +1002,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
+      // Auto-inject unidade_id if not set
+      const unidadeIdToUse = p.unidadeId || userUnidadeId || '';
       const { error } = await supabase.from("pacientes" as any).insert({
         id: p.id,
         nome: p.nome,
@@ -990,13 +1018,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         descricao_clinica: p.descricaoClinica,
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
+        unidade_id: unidadeIdToUse,
       } as any);
       if (!error) {
-        setPacientes((prev) => [p, ...prev]);
+        setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
       } else console.error("Error adding paciente:", error);
     },
-    [invalidateCache],
+    [invalidateCache, userUnidadeId],
   );
 
   const updatePaciente = useCallback(
@@ -1159,6 +1188,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.from("unidades" as any).insert({
         id: u.id,
         nome: u.nome,
+        nome_exibicao: u.nomeExibicao || '',
         endereco: u.endereco,
         telefone: u.telefone,
         whatsapp: u.whatsapp,
@@ -1176,6 +1206,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async (id: string, data: Partial<Unidade>) => {
       const dbData: any = {};
       if (data.nome !== undefined) dbData.nome = data.nome;
+      if (data.nomeExibicao !== undefined) dbData.nome_exibicao = data.nomeExibicao;
       if (data.endereco !== undefined) dbData.endereco = data.endereco;
       if (data.telefone !== undefined) dbData.telefone = data.telefone;
       if (data.whatsapp !== undefined) dbData.whatsapp = data.whatsapp;

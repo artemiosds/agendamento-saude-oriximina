@@ -1043,6 +1043,7 @@ export type Database = {
           transporte: string
           turno_preferido: string
           ubs_origem: string
+          unidade_id: string
           usa_dispositivo: boolean
           usa_equipamentos: boolean
         }
@@ -1087,6 +1088,7 @@ export type Database = {
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
         }
@@ -1131,6 +1133,7 @@ export type Database = {
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
         }
@@ -2271,6 +2274,7 @@ export type Database = {
           endereco: string
           id: string
           nome: string
+          nome_exibicao: string
           telefone: string
           whatsapp: string
         }
@@ -2281,6 +2285,7 @@ export type Database = {
           endereco?: string
           id: string
           nome: string
+          nome_exibicao?: string
           telefone?: string
           whatsapp?: string
         }
@@ -2291,6 +2296,7 @@ export type Database = {
           endereco?: string
           id?: string
           nome?: string
+          nome_exibicao?: string
           telefone?: string
           whatsapp?: string
         }
