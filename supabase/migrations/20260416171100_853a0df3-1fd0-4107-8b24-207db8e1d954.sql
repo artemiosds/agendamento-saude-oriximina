@@ -1,0 +1,1 @@
+ALTER TABLE public.triage_records ADD COLUMN IF NOT EXISTS observacoes text NOT NULL DEFAULT '';

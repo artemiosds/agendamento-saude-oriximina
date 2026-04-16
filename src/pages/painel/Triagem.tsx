@@ -104,16 +104,53 @@ const Triagem: React.FC = () => {
   const handleRemoverDaTriagem = async (item: Agendamento) => {
     setActionLoading(true);
     try {
-      await updateFila(item.filaId, { status: 'removido_triagem' as any });
-      await updateAgendamento(item.id, { status: 'confirmado_chegada' as any });
-      await Promise.all([refreshFila(), refreshAgendamentos()]);
+      // 🛡️ VERIFICAÇÃO DE SEGURANÇA SERVER-SIDE: ler status atual direto do banco
+      const { data: filaAtual, error: readErr } = await supabase
+        .from('fila_espera')
+        .select('id, status')
+        .eq('id', item.filaId)
+        .maybeSingle();
+
+      if (readErr) throw readErr;
+
+      if (!filaAtual) {
+        toast.error('Registro não encontrado na fila.');
+        setConfirmAction(null);
+        await Promise.all([refreshFila(), refreshAgendamentos()]);
+        return;
+      }
+
+      // Aceita apenas status da fila de triagem (chegada confirmada ou aguardando triagem)
+      const STATUS_PERMITIDOS = ['aguardando_triagem', 'chegada_confirmada'];
+      if (!STATUS_PERMITIDOS.includes(filaAtual.status)) {
+        toast.error(
+          `Não é possível excluir: o paciente está com status "${filaAtual.status}" e não está mais na fila de triagem.`
+        );
+        setConfirmAction(null);
+        await Promise.all([refreshFila(), refreshAgendamentos()]);
+        return;
+      }
+
+      const statusAnterior = filaAtual.status;
+
+      // ✅ ÚNICA alteração permitida: status da fila → 'excluido_da_fila_triagem'
+      // NÃO altera agendamento, paciente, prontuário, profissional ou qualquer outra entidade
+      const { error: updErr } = await supabase
+        .from('fila_espera')
+        .update({ status: 'excluido_da_fila_triagem' })
+        .eq('id', item.filaId)
+        .in('status', STATUS_PERMITIDOS); // dupla proteção: WHERE garante atomicidade
+
+      if (updErr) throw updErr;
+
+      await refreshFila();
       await logAction({
         acao: 'remover_da_triagem',
         entidade: 'fila_espera',
         entidadeId: item.filaId,
         modulo: 'triagem',
         user,
-        detalhes: { paciente: item.pacienteNome, agendamentoId: item.id },
+        detalhes: { paciente: item.pacienteNome, statusAnterior, statusNovo: 'excluido_da_fila_triagem' },
       });
       toast.success('Paciente removido da fila de triagem.');
       setConfirmAction(null);
@@ -314,6 +351,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        observacoes: form.observacoes || '',
         custom_data: customData,
         iniciado_em: new Date().toISOString(),
       };
@@ -366,6 +404,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        observacoes: form.observacoes || '',
         custom_data: customData,
         confirmado_em: new Date().toISOString(),
       };
