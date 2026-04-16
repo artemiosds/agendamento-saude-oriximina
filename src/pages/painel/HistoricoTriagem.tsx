@@ -84,11 +84,12 @@ const HistoricoTriagem: React.FC = () => {
     setLoading(true);
     try {
       let trQuery = supabase.from("triage_records").select("*").order("criado_em", { ascending: false });
-      // Unit isolation: filter triage records by unit (via agendamento join not available, filter client-side below)
-      const [trRes, funcRes, agRes] = await Promise.all([
+      const [trRes, funcRes, agRes, pacRes, nursRes] = await Promise.all([
         trQuery,
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        supabase.from("agendamentos").select("id, paciente_nome, unidade_id"),
+        supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id"),
+        supabase.from("pacientes").select("id, nome"),
+        supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado"),
       ]);
 
       const funcMap = new Map<string, string>();
@@ -97,26 +98,36 @@ const HistoricoTriagem: React.FC = () => {
         if (f.auth_user_id) funcMap.set(String(f.auth_user_id), f.nome);
       });
 
-      const agMap = new Map<string, string>();
-      // Build a set of agendamento IDs belonging to the user's unit for filtering
+      const pacMap = new Map<string, string>();
+      (pacRes.data || []).forEach((p: any) => pacMap.set(String(p.id), p.nome));
+
+      const agMap = new Map<string, { nome: string; pacienteId: string }>();
       const unitAgIds = new Set<string>();
       (agRes.data || []).forEach((a: any) => {
-        agMap.set(a.id, a.paciente_nome);
-        // Track which agendamentos belong to user's unit
+        agMap.set(a.id, { nome: a.paciente_nome, pacienteId: a.paciente_id });
         if (user?.usuario === 'admin.sms' || !user?.unidadeId || a.unidade_id === user?.unidadeId) {
           unitAgIds.add(a.id);
         }
       });
 
+      const nursMap = new Map<string, NursingEval>();
+      (nursRes.data || []).forEach((n: any) => {
+        if (n.agendamento_id) nursMap.set(n.agendamento_id, n);
+      });
+
       const enriched: EnrichedRecord[] = (trRes.data || [])
-        // Unit isolation: only show triage records linked to agendamentos in user's unit
         .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
-        .map((r: any) => ({
-          ...r,
-          pacienteNome: agMap.get(r.agendamento_id) || "Paciente",
-          profissionalNome: funcMap.get(r.tecnico_id) || "—",
-          classificacaoRisco: r.classificacao_risco || "",
-        }));
+        .map((r: any) => {
+          const ag = agMap.get(r.agendamento_id);
+          const nomeReal = (ag && pacMap.get(ag.pacienteId)) || ag?.nome || "Paciente não encontrado";
+          return {
+            ...r,
+            pacienteNome: nomeReal,
+            profissionalNome: funcMap.get(r.tecnico_id) || "—",
+            classificacaoRisco: r.classificacao_risco || "",
+            nursing: nursMap.get(r.agendamento_id) || null,
+          };
+        });
 
       setRecords(enriched);
     } catch (err) {
