@@ -650,8 +650,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ]);
 
   useEffect(() => {
+    // Guard: don't load until auth user is resolved to avoid loading unfiltered data
+    if (!authUser) return;
     loadAll();
-  }, [loadAll]);
+  }, [loadAll, authUser]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -663,6 +665,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeById = <T extends { id: string }>(prev: T[], id: string) => prev.filter((item) => item.id !== id);
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "agendamentos",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -703,6 +706,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "fila_espera",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -744,6 +748,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "pacientes",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -781,6 +786,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "disponibilidades",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -811,6 +817,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "bloqueios",
     onEvent: (payload) => {
       if (payload.eventType === "DELETE") {
@@ -840,6 +847,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   useRealtimeSync({
+    enabled: !!authUser,
     table: "funcionarios",
     debounceMs: 1000,
     pollIntervalMs: 120000,
@@ -884,6 +892,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Realtime sync for system_config — reflects Master changes to all users instantly
   useRealtimeSync({
+    enabled: !!authUser,
     table: "system_config",
     debounceMs: 500,
     onEvent: (payload) => {
