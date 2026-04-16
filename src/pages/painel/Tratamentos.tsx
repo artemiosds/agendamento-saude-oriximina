@@ -193,6 +193,10 @@ const Tratamentos: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [extensionOpen, setExtensionOpen] = useState(false);
