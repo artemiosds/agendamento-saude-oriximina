@@ -49,6 +49,7 @@ import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
 import { CalendarCheck } from "lucide-react";
+import { CardListSkeleton } from "@/components/skeletons/CardListSkeleton";
 
 interface TreatmentCycle {
   id: string;
