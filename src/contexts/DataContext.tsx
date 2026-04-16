@@ -983,6 +983,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
+      // Auto-inject unidade_id if not set
+      const unidadeIdToUse = p.unidadeId || userUnidadeId || '';
       const { error } = await supabase.from("pacientes" as any).insert({
         id: p.id,
         nome: p.nome,
@@ -997,13 +999,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         descricao_clinica: p.descricaoClinica,
         cid: p.cid,
         criado_em: p.criadoEm || new Date().toISOString(),
+        unidade_id: unidadeIdToUse,
       } as any);
       if (!error) {
-        setPacientes((prev) => [p, ...prev]);
+        setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
       } else console.error("Error adding paciente:", error);
     },
-    [invalidateCache],
+    [invalidateCache, userUnidadeId],
   );
 
   const updatePaciente = useCallback(
