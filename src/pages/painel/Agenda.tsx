@@ -62,6 +62,7 @@ import { SlotInfoBadge } from "@/components/SlotInfoBadge";
 import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
+import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -186,6 +187,9 @@ const Agenda: React.FC = () => {
   const [cancelTarget, setCancelTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [cancelMotivo, setCancelMotivo] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // FALTA com justificativa
+  const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
   const [cancelConfig, setCancelConfig] = useState<{
     prazo_minimo_horas: number;
     limite_cancelamentos_mes: number;
