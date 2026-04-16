@@ -49,6 +49,7 @@ import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
 import { CalendarCheck } from "lucide-react";
+import { CardListSkeleton } from "@/components/skeletons/CardListSkeleton";
 
 interface TreatmentCycle {
   id: string;
@@ -192,6 +193,10 @@ const Tratamentos: React.FC = () => {
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pagination
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -354,6 +359,31 @@ const Tratamentos: React.FC = () => {
     debounceMs: 1000,
   });
 
+  // O(1) lookup maps to avoid .find() per row
+  const pacientesMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of pacientes) m.set(p.id, p);
+    return m;
+  }, [pacientes]);
+
+  const funcionariosMap = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const f of funcionarios) m.set(f.id, f);
+    return m;
+  }, [funcionarios]);
+
+  // Pre-aggregate session counts per cycle (avoids O(n*m) on every render)
+  const sessionStatsByCycle = useMemo(() => {
+    const stats = new Map<string, { pendingAg: number; faltas: number }>();
+    for (const s of sessions) {
+      const cur = stats.get(s.cycle_id) || { pendingAg: 0, faltas: 0 };
+      if (s.status === "pendente_agendamento") cur.pendingAg++;
+      else if (s.status === "paciente_faltou") cur.faltas++;
+      stats.set(s.cycle_id, cur);
+    }
+    return stats;
+  }, [sessions]);
+
   const filteredCycles = useMemo(() => {
     let result = cycles.filter((c) => {
       if (filterProf !== "all" && c.professional_id !== filterProf) return false;
@@ -364,7 +394,7 @@ const Tratamentos: React.FC = () => {
     if (searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
       result = result.filter((c) => {
-        const pac = pacientes.find((p: any) => p.id === c.patient_id);
+        const pac = pacientesMap.get(c.patient_id);
         const pacNome = pac?.nome?.toLowerCase() || '';
         const pacCpf = pac?.cpf?.toLowerCase() || '';
         const pacCns = pac?.cns?.toLowerCase() || '';
@@ -374,7 +404,19 @@ const Tratamentos: React.FC = () => {
       });
     }
     return result;
-  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientes]);
+  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientesMap]);
+
+  // Reset pagination when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterProf, filterUnit, filterStatus, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCycles.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedCycles = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredCycles.slice(start, start + PAGE_SIZE);
+  }, [filteredCycles, safePage]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
@@ -2877,7 +2919,9 @@ const Tratamentos: React.FC = () => {
         </Select>
       </div>
 
-      {filteredCycles.length === 0 ? (
+      {loading ? (
+        <CardListSkeleton count={6} showSearch={false} />
+      ) : filteredCycles.length === 0 ? (
         <Card className="shadow-card border-0">
           <CardContent className="p-8 text-center">
             <p className="text-muted-foreground mb-3">Nenhum ciclo de tratamento encontrado.</p>
@@ -2889,82 +2933,117 @@ const Tratamentos: React.FC = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {filteredCycles.map((cycle) => {
-            const pac = pacientes.find((p) => p.id === cycle.patient_id);
-            const prof = funcionarios.find((f) => f.id === cycle.professional_id);
-            const progressPct =
-              cycle.total_sessions > 0 ? Math.round((cycle.sessions_done / cycle.total_sessions) * 100) : 0;
-            const cycleSess = sessions.filter((s) => s.cycle_id === cycle.id);
-            const pendingAg = cycleSess.filter((s) => s.status === "pendente_agendamento").length;
-            const cycleFaltasCount = cycleSess.filter((s) => s.status === "paciente_faltou").length;
+        <>
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+            <span>
+              Exibindo <strong>{(safePage - 1) * PAGE_SIZE + 1}</strong>–
+              <strong>{Math.min(safePage * PAGE_SIZE, filteredCycles.length)}</strong> de{" "}
+              <strong>{filteredCycles.length}</strong> ciclo(s)
+            </span>
+            <span>
+              Página {safePage} de {totalPages}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {paginatedCycles.map((cycle) => {
+              const pac = pacientesMap.get(cycle.patient_id);
+              const prof = funcionariosMap.get(cycle.professional_id);
+              const progressPct =
+                cycle.total_sessions > 0 ? Math.round((cycle.sessions_done / cycle.total_sessions) * 100) : 0;
+              const stats = sessionStatsByCycle.get(cycle.id) || { pendingAg: 0, faltas: 0 };
+              const pendingAg = stats.pendingAg;
+              const cycleFaltasCount = stats.faltas;
 
-            return (
-              <Card
-                key={cycle.id}
-                className={cn(
-                  "shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all",
-                  cycleFaltasCount >= 3 && "border-l-4 border-l-warning",
-                  cycleFaltasCount >= 5 && "border-l-4 border-l-destructive",
-                )}
-                onClick={() => setSelectedCycle(cycle)}
+              return (
+                <Card
+                  key={cycle.id}
+                  className={cn(
+                    "shadow-card border-0 cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all",
+                    cycleFaltasCount >= 3 && "border-l-4 border-l-warning",
+                    cycleFaltasCount >= 5 && "border-l-4 border-l-destructive",
+                  )}
+                  onClick={() => setSelectedCycle(cycle)}
+                >
+                  <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground">{pac?.nome || "—"}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {prof?.nome || "—"} • {cycle.treatment_type}
+                      </p>
+                      {pendingAg > 0 && (
+                        <p className="text-xs text-warning mt-0.5">⏳ {pendingAg} sessão(ões) aguardando agendamento</p>
+                      )}
+                      {cycleFaltasCount > 0 && (
+                        <p className="text-xs text-destructive mt-0.5">⚠️ {cycleFaltasCount} falta(s) registrada(s)</p>
+                      )}
+                      {cycle.pts_id && <p className="text-xs text-purple-500 mt-0.5">📋 PTS vinculado</p>}
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Sessões</p>
+                        <p className="text-sm font-bold">
+                          {cycle.sessions_done}/{cycle.total_sessions}
+                        </p>
+                      </div>
+                      <div className="w-24">
+                        <Progress value={progressPct} className="h-2" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Início</p>
+                        <p className="text-sm">
+                          {new Date(cycle.start_date + "T12:00:00").toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <Badge className={cn("border text-xs", statusColors[cycle.status])}>
+                        {statusLabels[cycle.status]}
+                      </Badge>
+                      {(user?.role === "master" || user?.role === "profissional") && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(cycle);
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
               >
-                <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{pac?.nome || "—"}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {prof?.nome || "—"} • {cycle.treatment_type}
-                    </p>
-                    {pendingAg > 0 && (
-                      <p className="text-xs text-warning mt-0.5">⏳ {pendingAg} sessão(ões) aguardando agendamento</p>
-                    )}
-                    {cycleFaltasCount > 0 && (
-                      <p className="text-xs text-destructive mt-0.5">⚠️ {cycleFaltasCount} falta(s) registrada(s)</p>
-                    )}
-                    {cycle.pts_id && <p className="text-xs text-purple-500 mt-0.5">📋 PTS vinculado</p>}
-                  </div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Sessões</p>
-                      <p className="text-sm font-bold">
-                        {cycle.sessions_done}/{cycle.total_sessions}
-                      </p>
-                    </div>
-                    <div className="w-24">
-                      <Progress value={progressPct} className="h-2" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Início</p>
-                      <p className="text-sm">
-                        {new Date(cycle.start_date + "T12:00:00").toLocaleDateString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                    <Badge className={cn("border text-xs", statusColors[cycle.status])}>
-                      {statusLabels[cycle.status]}
-                    </Badge>
-                    {(user?.role === "master" || user?.role === "profissional") && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:bg-destructive/10 h-7 w-7 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteTarget(cycle);
-                        }}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                <ChevronRight className="w-4 h-4 mr-1 rotate-180" /> Anterior
+              </Button>
+              <span className="text-sm text-muted-foreground px-3">
+                {safePage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                Próxima <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
