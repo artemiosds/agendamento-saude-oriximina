@@ -210,6 +210,10 @@ const Tratamentos: React.FC = () => {
   const [remarcarBlockedMsg, setRemarcarBlockedMsg] = useState("");
   const [remarcarSaving, setRemarcarSaving] = useState(false);
 
+  // Agendar ciclo completo
+  const [agendandoCiclo, setAgendandoCiclo] = useState(false);
+  const [resumoCiclo, setResumoCiclo] = useState<ResumoSessaoItem[] | null>(null);
+
   // Master: add intermediate session
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
