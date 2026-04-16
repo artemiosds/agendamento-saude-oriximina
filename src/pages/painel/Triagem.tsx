@@ -367,6 +367,7 @@ const Triagem: React.FC = () => {
         medicamentos: form.medicamentos,
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
+        observacoes: form.observacoes || '',
         custom_data: customData,
         confirmado_em: new Date().toISOString(),
       };
