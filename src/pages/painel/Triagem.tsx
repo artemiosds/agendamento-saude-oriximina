@@ -10,7 +10,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { Search, Loader2, Play, CheckCircle, Save, X, Plus, Clock } from "lucide-react";
+import { Search, Loader2, Play, CheckCircle, Save, X, Plus, Clock, Trash2, FastForward } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MANCHESTER_LEVELS, type ManchesterLevel } from "@/lib/manchesterProtocol";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
