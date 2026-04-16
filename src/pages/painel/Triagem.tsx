@@ -150,7 +150,7 @@ const Triagem: React.FC = () => {
         entidadeId: item.filaId,
         modulo: 'triagem',
         user,
-        detalhes: { paciente: item.pacienteNome, statusAnterior: 'aguardando_triagem', statusNovo: 'excluido_da_fila_triagem' },
+        detalhes: { paciente: item.pacienteNome, statusAnterior, statusNovo: 'excluido_da_fila_triagem' },
       });
       toast.success('Paciente removido da fila de triagem.');
       setConfirmAction(null);
