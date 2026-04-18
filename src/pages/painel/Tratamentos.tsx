@@ -254,6 +254,10 @@ const Tratamentos: React.FC = () => {
     absence_type: "",
   });
 
+  // Etapa 1: seleção da sessão a registrar (escopo individual por profissional)
+  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
+  const [selectedSessionForRegister, setSelectedSessionForRegister] = useState<TreatmentSession | null>(null);
+
   const [soapNotes, setSoapNotes] = useState({
     subjetivo: "",
     objetivo: "",
@@ -721,12 +725,27 @@ const Tratamentos: React.FC = () => {
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
 
-    const nextSession = cycleSessions
-      .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
-      .sort((a, b) => a.session_number - b.session_number)[0];
+    // Usa a sessão escolhida na Etapa 1; fallback para a próxima pendente
+    const nextSession =
+      selectedSessionForRegister ||
+      cycleSessions
+        .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
+        .sort((a, b) => a.session_number - b.session_number)[0];
 
     if (!nextSession) {
       toast.error("Não há sessões pendentes neste ciclo.");
+      return;
+    }
+
+    // Bloqueio de duplicidade: sessão já concluída
+    if (nextSession.status === "realizada") {
+      toast.error("Esta sessão já foi registrada.");
+      return;
+    }
+
+    // Garantia de escopo: a sessão deve pertencer ao profissional do ciclo
+    if (nextSession.professional_id !== selectedCycle.professional_id) {
+      toast.error("Esta sessão pertence a outro profissional e não pode ser registrada aqui.");
       return;
     }
 
@@ -790,6 +809,7 @@ const Tratamentos: React.FC = () => {
           : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
       );
       setSessionOpen(false);
+      setSelectedSessionForRegister(null);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
       setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
     } catch (err: any) {
@@ -1907,9 +1927,8 @@ const Tratamentos: React.FC = () => {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
-                      setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
-                      setSessionOpen(true);
+                      setSelectedSessionForRegister(null);
+                      setSelectSessionOpen(true);
                     }}
                   >
                     <Play className="w-3.5 h-3.5 mr-1" /> Registrar Sessão
@@ -2244,6 +2263,86 @@ const Tratamentos: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Etapa 1: Seleção da sessão a ser registrada (escopo individual por profissional) */}
+        <Dialog open={selectSessionOpen} onOpenChange={setSelectSessionOpen}>
+          <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Selecione a sessão a registrar</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Apenas sessões agendadas para{" "}
+                <strong>
+                  {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome || "este profissional"}
+                </strong>{" "}
+                são listadas. Registrar não afeta sessões de outros profissionais.
+              </p>
+              {(() => {
+                const sessoesDisponiveis = cycleSessions
+                  .filter(
+                    (s) =>
+                      ["agendada", "pendente_agendamento"].includes(s.status) &&
+                      s.professional_id === selectedCycle?.professional_id,
+                  )
+                  .sort((a, b) => a.session_number - b.session_number);
+
+                if (sessoesDisponiveis.length === 0) {
+                  return (
+                    <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/30">
+                      Nenhuma sessão disponível para registrar.
+                    </div>
+                  );
+                }
+
+                return sessoesDisponiveis.map((s) => {
+                  const dataFmt = s.scheduled_date
+                    ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
+                      })
+                    : "Sem data";
+                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+                  const ag = agendamentoMap[agKey];
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSessionForRegister(s);
+                        setSelectSessionOpen(false);
+                        setNewSession({
+                          clinical_notes: "",
+                          procedure_done: "",
+                          status: "realizada",
+                          absence_type: "",
+                        });
+                        setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+                        setSessionOpen(true);
+                      }}
+                      className="w-full text-left p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">
+                          Sessão {s.session_number}/{selectedCycle?.total_sessions}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {dataFmt}
+                          {ag?.hora ? ` • ${ag.hora.slice(0, 5)}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant={s.status === "agendada" ? "default" : "secondary"} className="text-xs shrink-0">
+                        {statusLabels[s.status] || s.status}
+                      </Badge>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
