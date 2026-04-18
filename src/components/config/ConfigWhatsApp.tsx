@@ -17,8 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   MessageSquare, Send, Loader2, CheckCircle2, XCircle, AlertCircle,
   RefreshCw, Eye, RotateCcw, Clock, Calendar, Bell, Settings,
-  Smartphone, FileText, Zap
+  Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
+import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
 import { toast } from 'sonner';
 
 const TEMPLATE_TYPES = [
