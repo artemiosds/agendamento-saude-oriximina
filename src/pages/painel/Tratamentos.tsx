@@ -809,6 +809,7 @@ const Tratamentos: React.FC = () => {
           : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
       );
       setSessionOpen(false);
+      setSelectedSessionForRegister(null);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
       setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
     } catch (err: any) {
@@ -1926,9 +1927,8 @@ const Tratamentos: React.FC = () => {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
-                      setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
-                      setSessionOpen(true);
+                      setSelectedSessionForRegister(null);
+                      setSelectSessionOpen(true);
                     }}
                   >
                     <Play className="w-3.5 h-3.5 mr-1" /> Registrar Sessão
