@@ -223,6 +223,10 @@ const ProntuarioPage: React.FC = () => {
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
+  const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
+  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
+  const [novoProcOpen, setNovoProcOpen] = useState(false);
 
   const isProfissional = user?.role === "profissional";
   const canEdit = can('prontuario', 'can_edit');
