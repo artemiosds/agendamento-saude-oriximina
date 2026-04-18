@@ -2333,7 +2333,7 @@ const Tratamentos: React.FC = () => {
                         </p>
                       </div>
                       <Badge variant={s.status === "agendada" ? "default" : "secondary"} className="text-xs shrink-0">
-                        {STATUS_LABELS[s.status] || s.status}
+                        {statusLabels[s.status] || s.status}
                       </Badge>
                       <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     </button>
