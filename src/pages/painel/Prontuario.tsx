@@ -231,6 +231,10 @@ const ProntuarioPage: React.FC = () => {
   const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
   const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
+  const [procSearch, setProcSearch] = useState("");
+  const [cidSearchByProc, setCidSearchByProc] = useState<Record<string, string>>({});
+  const [cidSearchResults, setCidSearchResults] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [cidSearchLoading, setCidSearchLoading] = useState<Record<string, boolean>>({});
 
   const loadCidsForProc = useCallback((procId: string) => {
     if (cidsByProc[procId]) return;
