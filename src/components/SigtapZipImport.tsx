@@ -272,11 +272,10 @@ const SigtapZipImport: React.FC = () => {
       if (!/^\d{10}$/.test(codigo) || !nome) continue;
 
       // Codigo SIGTAP: GG SS FF NNNN — grupo (2) + subgrupo (2) + forma (2) + sequencial (4)
-      const grupo = codigo.substring(0, 2);
+      const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
-      if (grupo !== SELECTED_GROUP) continue;
 
-      const especialidade = SUBGROUP_SPECIALTY_MAP[subgrupo];
+      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub];
       if (!especialidade) continue;
       if (!selected.has(especialidade)) continue;
 
