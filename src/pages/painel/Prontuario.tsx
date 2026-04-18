@@ -2214,6 +2214,15 @@ const ProntuarioPage: React.FC = () => {
                     </Button>
                   )}
                 </div>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={procSearch}
+                    onChange={(e) => setProcSearch(e.target.value)}
+                    placeholder="Pesquisar procedimento (nome, código SIGTAP, especialidade)..."
+                    className="pl-7 h-8 text-sm"
+                  />
+                </div>
                 {filteredProcedimentos.length > 0 ? (
                   <div className="grid grid-cols-1 gap-2 bg-muted/30 rounded-lg p-3 border max-h-64 overflow-y-auto">
                     {filteredProcedimentos.map((proc) => {
