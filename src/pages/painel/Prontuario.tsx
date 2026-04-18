@@ -26,7 +26,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon } from "lucide-react";
+import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
+import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -93,6 +95,7 @@ interface ProcedimentoDB {
   especialidade: string;
   profissionais_ids: string[] | null;
   ativo: boolean;
+  origem?: 'SIGTAP' | 'PERSONALIZADO';
 }
 
 const TIPOS_REGISTRO = [
@@ -223,6 +226,31 @@ const ProntuarioPage: React.FC = () => {
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
+  const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
+  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
+  const [novoProcOpen, setNovoProcOpen] = useState(false);
+  const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
+  const [procSearch, setProcSearch] = useState("");
+  const [cidSearchByProc, setCidSearchByProc] = useState<Record<string, string>>({});
+  const [cidSearchResults, setCidSearchResults] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
+  const [cidSearchLoading, setCidSearchLoading] = useState<Record<string, boolean>>({});
+
+  const loadCidsForProc = useCallback((procId: string) => {
+    if (cidsByProc[procId]) return;
+    procedureService.getCidsForProcedure(procId).then((list) => {
+      setCidsByProc((m) => ({ ...m, [procId]: list }));
+      setSelectedCidsByProc((m) => ({ ...m, [procId]: m[procId] ?? list.map((x) => x.codigo) }));
+    });
+  }, [cidsByProc]);
+
+  const toggleExpandProc = useCallback((procId: string) => {
+    setExpandedProcId((prev) => {
+      const next = prev === procId ? null : procId;
+      if (next) loadCidsForProc(next);
+      return next;
+    });
+  }, [loadCidsForProc]);
 
   const isProfissional = user?.role === "profissional";
   const canEdit = can('prontuario', 'can_edit');
@@ -451,14 +479,17 @@ const ProntuarioPage: React.FC = () => {
 
   const filteredProcedimentos = useMemo(() => {
     if (!user) return [];
-    // Filtra por especialidade SIGTAP correspondente à profissão do logado;
-    // aplica vínculo profissional explícito quando existir.
+    const q = procSearch.trim().toLowerCase();
     return procedimentos.filter((p) => {
       if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
       if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
+      if (q) {
+        const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [procedimentos, user]);
+  }, [procedimentos, user, procSearch]);
 
   const loadProntuarios = async () => {
     setLoading(true);
@@ -676,6 +707,29 @@ const ProntuarioPage: React.FC = () => {
       .filter((p) => p.paciente_id === form.paciente_id && p.id !== editId)
       .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
   }, [form.paciente_id, prontuarios, editId]);
+
+  // Carrega histórico de procedimentos do paciente (sugestões)
+  useEffect(() => {
+    if (!form.paciente_id) { setPacienteProcHistory([]); return; }
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("prontuario_procedimentos")
+        .select("procedimento_id, prontuarios!inner(paciente_id, data_atendimento)")
+        .eq("prontuarios.paciente_id", form.paciente_id)
+        .order("criado_em", { ascending: false })
+        .limit(50);
+      const seen = new Map<string, { id: string; nome: string; ultima: string }>();
+      (data || []).forEach((r: any) => {
+        const proc = procedimentos.find((p) => p.id === r.procedimento_id);
+        if (proc && !seen.has(proc.id)) {
+          const dt = r.prontuarios?.data_atendimento || '';
+          const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
+          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima });
+        }
+      });
+      setPacienteProcHistory(Array.from(seen.values()));
+    })();
+  }, [form.paciente_id, procedimentos]);
 
   const openNew = () => {
     setEditId(null);
@@ -2123,21 +2177,195 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
-            {/* Procedimentos Realizados — checkboxes */}
-            {isProfBlocoVisible('procedimentos') && filteredProcedimentos.length > 0 && (
-              <div>
-                <Label className="mb-2 block">Procedimentos Realizados</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/30 rounded-lg p-3 border max-h-40 overflow-y-auto">
-                  {filteredProcedimentos.map((proc) => (
-                    <div key={proc.id} className="flex items-center gap-2">
-                      <Checkbox id={`proc-${proc.id}`} checked={selectedProcIds.includes(proc.id)}
-                        onCheckedChange={(checked) => { setSelectedProcIds((prev) => checked ? [...prev, proc.id] : prev.filter((id) => id !== proc.id)); }} />
-                      <label htmlFor={`proc-${proc.id}`} className="text-sm cursor-pointer">
-                        {proc.nome}{proc.especialidade && <span className="text-xs text-muted-foreground ml-1">({proc.especialidade})</span>}
-                      </label>
-                    </div>
+            {/* Histórico de Procedimentos do Paciente */}
+            {isProfBlocoVisible('procedimentos') && form.paciente_id && pacienteProcHistory.length > 0 && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <Label className="mb-2 flex items-center gap-2 text-primary">
+                  <History className="h-4 w-4" /> Histórico do paciente
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {pacienteProcHistory.slice(0, 6).map((h) => (
+                    <Button
+                      key={h.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-auto py-1 text-xs"
+                      onClick={() => {
+                        if (!selectedProcIds.includes(h.id)) setSelectedProcIds((prev) => [...prev, h.id]);
+                      }}
+                    >
+                      <Clock className="h-3 w-3 mr-1" /> {h.nome}
+                      <span className="ml-1 text-muted-foreground">({h.ultima})</span>
+                    </Button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Procedimentos Realizados — checkboxes */}
+            {isProfBlocoVisible('procedimentos') && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Procedimentos Realizados</Label>
+                  {user?.role === 'master' && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
+                      <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
+                    </Button>
+                  )}
+                </div>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={procSearch}
+                    onChange={(e) => setProcSearch(e.target.value)}
+                    placeholder="Pesquisar procedimento (nome, código SIGTAP, especialidade)..."
+                    className="pl-7 h-8 text-sm"
+                  />
+                </div>
+                {filteredProcedimentos.length > 0 ? (
+                  <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
+                    {filteredProcedimentos.map((proc) => {
+                      const checked = selectedProcIds.includes(proc.id);
+                      const cids = cidsByProc[proc.id] || [];
+                      const selCids = selectedCidsByProc[proc.id] || [];
+                      const isCustom = proc.origem === 'PERSONALIZADO';
+                      const isExpanded = expandedProcId === proc.id;
+                      const cidQuery = (cidSearchByProc[proc.id] || '').trim().toLowerCase();
+                      const filteredCids = cidQuery
+                        ? cids.filter((c) => c.codigo.toLowerCase().includes(cidQuery) || (c.descricao || '').toLowerCase().includes(cidQuery))
+                        : cids;
+                      const searchResults = cidSearchResults[proc.id] || [];
+                      return (
+                        <div key={proc.id} className={`rounded-md border bg-background transition-colors ${checked ? 'border-primary/40' : ''}`}>
+                          <div
+                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded-md px-2 py-1.5"
+                            onClick={() => toggleExpandProc(proc.id)}
+                          >
+                            <Checkbox
+                              id={`proc-${proc.id}`}
+                              checked={checked}
+                              onClick={(e) => e.stopPropagation()}
+                              onCheckedChange={(c) => {
+                                setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
+                                if (c) loadCidsForProc(proc.id);
+                              }}
+                            />
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? '' : '-rotate-90'}`} />
+                            {isCustom
+                              ? <PencilIcon className="h-3 w-3 text-accent-foreground shrink-0" />
+                              : <Tag className="h-3 w-3 text-muted-foreground shrink-0" />}
+                            <span className="text-sm flex-1 truncate select-none">
+                              {!isCustom && (
+                                <span className="font-mono text-[11px] text-muted-foreground mr-2">{proc.id}</span>
+                              )}
+                              {proc.nome}
+                            </span>
+                            {checked && selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                          </div>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10">
+                              {proc.especialidade && (
+                                <p className="text-[11px] text-muted-foreground mb-2">{proc.especialidade}</p>
+                              )}
+                              {/* Lupa unificada de CIDs */}
+                              <div className="relative mb-2">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                                <Input
+                                  value={cidSearchByProc[proc.id] || ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
+                                    const q = v.trim();
+                                    if (q.length < 2) {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
+                                      return;
+                                    }
+                                    setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
+                                    procedureService.searchCids(q).then((res) => {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
+                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
+                                    });
+                                  }}
+                                  placeholder="Pesquisar CIDs (filtra sugeridos e busca novos)..."
+                                  className="pl-7 h-8 text-xs"
+                                />
+                              </div>
+
+                              {/* CIDs sugeridos (filtrados) */}
+                              <p className="text-[11px] font-medium text-muted-foreground mb-1">📋 Sugeridos</p>
+                              {!cidsByProc[proc.id] ? (
+                                <p className="text-xs text-muted-foreground italic">Carregando...</p>
+                              ) : filteredCids.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic">
+                                  {cids.length === 0 ? 'Nenhum CID vinculado.' : 'Nenhum CID sugerido corresponde à busca.'}
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {filteredCids.map((c) => {
+                                    const isSel = selCids.includes(c.codigo);
+                                    return (
+                                      <Badge
+                                        key={c.codigo}
+                                        variant={isSel ? "default" : "outline"}
+                                        className="cursor-pointer text-[11px] font-normal"
+                                        onClick={() => {
+                                          setSelectedCidsByProc((m) => ({
+                                            ...m,
+                                            [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                          }));
+                                        }}
+                                      >
+                                        {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Resultados externos da busca */}
+                              {cidSearchLoading[proc.id] && (
+                                <p className="text-xs text-muted-foreground italic mt-2">Buscando no catálogo...</p>
+                              )}
+                              {searchResults.length > 0 && (
+                                <>
+                                  <p className="text-[11px] font-medium text-muted-foreground mt-2 mb-1">🔎 Outros resultados</p>
+                                  <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                                    {searchResults
+                                      .filter((c) => !cids.some((x) => x.codigo === c.codigo))
+                                      .map((c) => {
+                                        const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
+                                        return (
+                                          <Badge
+                                            key={c.codigo}
+                                            variant={isSel ? "default" : "secondary"}
+                                            className="cursor-pointer text-[11px] font-normal"
+                                            onClick={() => {
+                                              setCidsByProc((m) => ({ ...m, [proc.id]: [...(m[proc.id] || []), c] }));
+                                              setSelectedCidsByProc((m) => ({
+                                                ...m,
+                                                [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                              }));
+                                            }}
+                                          >
+                                            + {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
+                                          </Badge>
+                                        );
+                                      })}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nenhum procedimento disponível para sua profissão.</p>
+                )}
               </div>
             )}
 
@@ -2145,6 +2373,18 @@ const ProntuarioPage: React.FC = () => {
               <Label>Outro Procedimento</Label>
               <Input value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
             </div>
+
+            <NovoProcedimentoModal
+              open={novoProcOpen}
+              onOpenChange={setNovoProcOpen}
+              defaultProfissao={user?.profissao}
+              criadoPor={user?.id}
+              onCreated={async (codigo) => {
+                const list = await procedureService.getActive();
+                setProcedimentos(list as any);
+                setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+              }}
+            />
 
             {isProfBlocoVisible('indicacao_retorno') && (
             <div>
