@@ -484,7 +484,7 @@ const ProntuarioPage: React.FC = () => {
       if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
       if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
       if (q) {
-        const hay = `${p.nome} ${p.id} ${p.especialidade} ${p.descricao || ''}`.toLowerCase();
+        const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
