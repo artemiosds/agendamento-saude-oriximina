@@ -1332,6 +1332,35 @@ export type Database = {
         }
         Relationships: []
       }
+      procedimento_profissionais: {
+        Row: {
+          created_at: string
+          id: string
+          procedimento_codigo: string
+          profissional_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          procedimento_codigo: string
+          profissional_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          procedimento_codigo?: string
+          profissional_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedimento_profissionais_procedimento_codigo_fkey"
+            columns: ["procedimento_codigo"]
+            isOneToOne: false
+            referencedRelation: "sigtap_procedimentos"
+            referencedColumns: ["codigo"]
+          },
+        ]
+      }
       procedimentos: {
         Row: {
           ativo: boolean
