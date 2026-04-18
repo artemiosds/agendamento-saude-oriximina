@@ -17,8 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   MessageSquare, Send, Loader2, CheckCircle2, XCircle, AlertCircle,
   RefreshCw, Eye, RotateCcw, Clock, Calendar, Bell, Settings,
-  Smartphone, FileText, Zap
+  Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
+import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
 import { toast } from 'sonner';
 
 const TEMPLATE_TYPES = [
@@ -358,12 +359,17 @@ const ConfigWhatsApp: React.FC = () => {
       </div>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="conexao" className="gap-1.5"><Zap className="w-4 h-4" /> Conexão</TabsTrigger>
           <TabsTrigger value="mensagens" className="gap-1.5"><FileText className="w-4 h-4" /> Mensagens</TabsTrigger>
           <TabsTrigger value="eventos" className="gap-1.5"><Bell className="w-4 h-4" /> Eventos</TabsTrigger>
+          <TabsTrigger value="antiban" className="gap-1.5"><Shield className="w-4 h-4" /> Anti-Ban</TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5"><Clock className="w-4 h-4" /> Logs</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="antiban" className="mt-4">
+          <ConfigWhatsAppAntiBan />
+        </TabsContent>
 
         {/* ─── CONEXÃO ─── */}
         <TabsContent value="conexao" className="space-y-4 mt-4">
