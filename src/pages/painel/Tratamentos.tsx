@@ -169,6 +169,7 @@ const Tratamentos: React.FC = () => {
     getAvailableDates,
     addAgendamento,
     cancelAgendamento,
+    deleteAgendamento,
   } = useData();
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -936,11 +937,7 @@ const Tratamentos: React.FC = () => {
       // 1. EXCLUIR (DELETE) o agendamento da agenda — não apenas cancelar.
       // Isso libera o slot para reagendamento imediato.
       if (session.appointment_id) {
-        const { error: delErr } = await supabase
-          .from("agendamentos")
-          .delete()
-          .eq("id", session.appointment_id);
-        if (delErr) throw delErr;
+        await deleteAgendamento(session.appointment_id);
       }
 
       // 2. Reverter sessão do ciclo para aguardando agendamento
@@ -966,9 +963,9 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      // 3. Atualização otimista — remove agendamento do estado global e do mapa
+      // 3. Atualização otimista — o estado global de agendamentos já foi
+      // atualizado por deleteAgendamento. Aqui só limpamos o mapa local.
       if (session.appointment_id) {
-        setAgendamentos((prev) => prev.filter((a) => a.id !== session.appointment_id));
         setAgendamentoMap((prev) => {
           const next = { ...prev };
           const key = `${session.patient_id}|${session.professional_id}|${session.scheduled_date}`;
