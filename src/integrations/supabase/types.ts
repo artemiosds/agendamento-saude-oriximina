@@ -1958,31 +1958,43 @@ export type Database = {
           ativo: boolean
           codigo: string
           created_at: string
+          criado_por: string
+          descricao: string
           especialidade: string
           id: string
           nome: string
+          origem: string
           total_cids: number
           updated_at: string
+          valor: number | null
         }
         Insert: {
           ativo?: boolean
           codigo: string
           created_at?: string
+          criado_por?: string
+          descricao?: string
           especialidade?: string
           id?: string
           nome: string
+          origem?: string
           total_cids?: number
           updated_at?: string
+          valor?: number | null
         }
         Update: {
           ativo?: boolean
           codigo?: string
           created_at?: string
+          criado_por?: string
+          descricao?: string
           especialidade?: string
           id?: string
           nome?: string
+          origem?: string
           total_cids?: number
           updated_at?: string
+          valor?: number | null
         }
         Relationships: []
       }
