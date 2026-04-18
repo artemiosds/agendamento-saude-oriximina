@@ -332,6 +332,79 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           </ScrollArea>
         )}
       </div>
+
+      {/* Drawer de visualização rápida */}
+      <Sheet open={!!viewerItem} onOpenChange={(o) => !o && setViewerItem(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          {viewerItem && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Prontuário — {formatDateBR(viewerItem.data_atendimento)}
+                  {viewerItem.hora_atendimento && (
+                    <span className="text-sm text-muted-foreground font-normal">{viewerItem.hora_atendimento}</span>
+                  )}
+                </SheetTitle>
+                <SheetDescription>
+                  {viewerItem.profissional_nome}
+                  {viewerItem.profissional_id === currentProfissionalId && (
+                    <span className="text-primary ml-1">(você)</span>
+                  )}
+                </SheetDescription>
+              </SheetHeader>
+              <Separator className="my-4" />
+              <div className="space-y-4 text-sm">
+                {viewerItem.queixa_principal && (
+                  <Section label="Queixa principal" value={viewerItem.queixa_principal} />
+                )}
+                {viewerItem.evolucao && <Section label="Evolução / SOAP" value={viewerItem.evolucao} />}
+                {viewerItem.conduta && <Section label="Conduta" value={viewerItem.conduta} />}
+                {viewerItem.procedimentos_texto && (
+                  <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />
+                )}
+                {viewerItem.outro_procedimento && (
+                  <Section label="Outro procedimento" value={viewerItem.outro_procedimento} />
+                )}
+                {viewerItem.indicacao_retorno && (
+                  <Section label="Indicação de retorno" value={viewerItem.indicacao_retorno} />
+                )}
+              </div>
+              <Separator className="my-4" />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>
+                  Fechar
+                </Button>
+                <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}>
+                  <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <HistoricoCompletoModal
+        open={historicoOpen}
+        onOpenChange={setHistoricoOpen}
+        pacienteId={pacienteId}
+        pacienteNome={pacienteNome}
+        unidades={unidades}
+        currentProfissionalId={currentProfissionalId}
+      />
+
+      <GerarDocumentoModal
+        open={docModalOpen}
+        onOpenChange={setDocModalOpen}
+        paciente={{ id: pacienteId, nome: pacienteNome, cpf: '', cns: '', data_nascimento: '', cid: '', especialidade_destino: '' }}
+      />
     </div>
   );
 };
+
+const Section: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div>
+    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{value}</p>
+  </div>
+);
