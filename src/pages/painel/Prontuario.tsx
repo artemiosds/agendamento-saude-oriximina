@@ -28,6 +28,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon } from "lucide-react";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
+import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
@@ -94,6 +95,7 @@ interface ProcedimentoDB {
   especialidade: string;
   profissionais_ids: string[] | null;
   ativo: boolean;
+  origem?: 'SIGTAP' | 'PERSONALIZADO';
 }
 
 const TIPOS_REGISTRO = [
