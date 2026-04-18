@@ -2255,7 +2255,12 @@ const ProntuarioPage: React.FC = () => {
                             {isCustom
                               ? <PencilIcon className="h-3 w-3 text-accent-foreground shrink-0" />
                               : <Tag className="h-3 w-3 text-muted-foreground shrink-0" />}
-                            <span className="text-sm flex-1 truncate select-none">{proc.nome}</span>
+                            <span className="text-sm flex-1 truncate select-none">
+                              {!isCustom && (
+                                <span className="font-mono text-[11px] text-muted-foreground mr-2">{proc.id}</span>
+                              )}
+                              {proc.nome}
+                            </span>
                             {checked && selCids.length > 0 && (
                               <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
                             )}
