@@ -168,6 +168,72 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   const activeEpisodios = episodios.filter((e) => e.status === "ativo");
 
+  const buildProntuarioHTML = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    const css = buildInstitutionalCSS();
+    const row = (label: string, val?: string) =>
+      val ? `<div class="section"><h3>${label}</h3><p>${String(val).replace(/\n/g, "<br/>")}</p></div>` : "";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Prontuário ${pacienteNome}</title>${css}</head>
+      <body>
+        <h1 style="margin:0 0 4px">Prontuário Clínico</h1>
+        <div class="doc-meta">
+          <strong>Paciente:</strong> ${pacienteNome} &nbsp;|&nbsp;
+          <strong>Data:</strong> ${formatDateBR(item.data_atendimento)} ${item.hora_atendimento || ""} &nbsp;|&nbsp;
+          <strong>Profissional:</strong> ${item.profissional_nome || "-"}
+          ${item.unidadeNome ? `&nbsp;|&nbsp; <strong>Unidade:</strong> ${item.unidadeNome}` : ""}
+        </div>
+        ${row("Queixa principal", item.queixa_principal)}
+        ${row("Evolução / SOAP", item.evolucao)}
+        ${row("Conduta", item.conduta)}
+        ${row("Procedimentos", item.procedimentos_texto)}
+        ${row("Outro procedimento", item.outro_procedimento)}
+        ${row("Indicação de retorno", item.indicacao_retorno)}
+        <div style="margin-top:48px; border-top:1px solid #333; padding-top:8px; text-align:center;">
+          ${item.profissional_nome || ""}
+        </div>
+      </body></html>`;
+  };
+
+  const handlePrint = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      toast.error("Permita pop-ups para imprimir");
+      return;
+    }
+    win.document.write(buildProntuarioHTML(item));
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 300);
+  };
+
+  const handleDownloadPDF = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    // Browser print → "Save as PDF" — uses same institutional layout
+    handlePrint(item);
+    toast.info("Use 'Salvar como PDF' na janela de impressão");
+  };
+
+  const handleExportJSON = (item: ProntuarioItem) => {
+    const blob = new Blob([JSON.stringify(item, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prontuario_${pacienteNome.replace(/\s+/g, "_")}_${item.data_atendimento}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("JSON exportado");
+  };
+
+  const handleCopyLink = async (item: ProntuarioItem) => {
+    const url = `${window.location.origin}/painel/prontuario?pacienteId=${pacienteId}&prontuarioId=${item.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copiado");
+    } catch {
+      toast.error("Não foi possível copiar o link");
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
