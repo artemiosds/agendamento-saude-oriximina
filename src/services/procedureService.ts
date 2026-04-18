@@ -29,7 +29,7 @@ export const SIGTAP_ESPECIALIDADE_TO_PROFISSAO: Record<string, string[]> = {
   servico_social: ['Assistente Social'],
   medico: ['Médico', 'Médica'],
   medicina: ['Médico', 'Médica'],
-  odontologia: ['Odontólogo', 'Odontóloga', 'Dentista', 'Cirurgião-Dentista'],
+  odontologia: ['Odontólogo', 'Odontóloga', 'Dentista', 'Cirurgião-Dentista', 'Cirurgiã-Dentista', 'Odontologia'],
   farmacia: ['Farmacêutico', 'Farmacêutica'],
   biomedicina: ['Biomédico', 'Biomédica'],
   educacao_fisica: ['Educador Físico', 'Profissional de Educação Física'],
@@ -59,14 +59,18 @@ export const ESPECIALIDADES_DISPONIVEIS: { key: string; label: string }[] = [
   { key: 'outros', label: 'Outros' },
 ];
 
+const normalize = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
 const PROFISSAO_TO_SIGTAP: Record<string, string> = {};
 for (const [esp, profs] of Object.entries(SIGTAP_ESPECIALIDADE_TO_PROFISSAO)) {
-  profs.forEach((p) => (PROFISSAO_TO_SIGTAP[p.toLowerCase()] = esp));
+  profs.forEach((p) => (PROFISSAO_TO_SIGTAP[normalize(p)] = esp));
+  PROFISSAO_TO_SIGTAP[normalize(esp)] = esp;
 }
 
 export const profissaoToEspecialidadeSigtap = (profissao?: string | null): string | null => {
   if (!profissao) return null;
-  return PROFISSAO_TO_SIGTAP[profissao.toLowerCase().trim()] || null;
+  return PROFISSAO_TO_SIGTAP[normalize(profissao)] || null;
 };
 
 let cached: ProcedimentoDB[] | null = null;
@@ -133,7 +137,10 @@ export const procedureService = {
     const all = await this.getActive();
     if (!profissao) return all;
     const espKey = profissaoToEspecialidadeSigtap(profissao);
-    if (!espKey) return all.filter((p) => p.profissao.toLowerCase() === profissao.toLowerCase());
+    if (!espKey) {
+      const np = normalize(profissao);
+      return all.filter((p) => normalize(p.profissao) === np || normalize(p.especialidade) === np);
+    }
     return all.filter((p) => p.especialidade === espKey);
   },
 
