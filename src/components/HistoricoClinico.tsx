@@ -494,9 +494,15 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                 )}
               </div>
               <Separator className="my-4" />
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>
                   Fechar
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handlePrint(viewerItem)}>
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(viewerItem)}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
                 </Button>
                 <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}>
                   <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
