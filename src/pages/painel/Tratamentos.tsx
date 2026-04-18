@@ -725,12 +725,27 @@ const Tratamentos: React.FC = () => {
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
 
-    const nextSession = cycleSessions
-      .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
-      .sort((a, b) => a.session_number - b.session_number)[0];
+    // Usa a sessão escolhida na Etapa 1; fallback para a próxima pendente
+    const nextSession =
+      selectedSessionForRegister ||
+      cycleSessions
+        .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
+        .sort((a, b) => a.session_number - b.session_number)[0];
 
     if (!nextSession) {
       toast.error("Não há sessões pendentes neste ciclo.");
+      return;
+    }
+
+    // Bloqueio de duplicidade: sessão já concluída
+    if (nextSession.status === "realizada") {
+      toast.error("Esta sessão já foi registrada.");
+      return;
+    }
+
+    // Garantia de escopo: a sessão deve pertencer ao profissional do ciclo
+    if (nextSession.professional_id !== selectedCycle.professional_id) {
+      toast.error("Esta sessão pertence a outro profissional e não pode ser registrada aqui.");
       return;
     }
 
