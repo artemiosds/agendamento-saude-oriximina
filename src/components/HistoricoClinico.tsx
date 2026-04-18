@@ -63,6 +63,9 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewerItem, setViewerItem] = useState<ProntuarioItem | null>(null);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [docModalOpen, setDocModalOpen] = useState(false);
   const cancelledRef = useRef(false);
 
   const loadData = useCallback(async () => {
