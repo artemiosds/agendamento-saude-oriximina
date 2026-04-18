@@ -943,7 +943,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prioridade_perfil: "normal",
       } as any);
       if (!error) {
-        setAgendamentos((prev) => [...prev, ag]);
+        setAgendamentos((prev) => [...prev, { ...ag, status: statusInicial as any }]);
         await logAction({
           acao: "criar",
           entidade: "agendamento",
