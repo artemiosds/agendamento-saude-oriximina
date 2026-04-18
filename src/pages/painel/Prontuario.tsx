@@ -2216,51 +2216,57 @@ const ProntuarioPage: React.FC = () => {
                       const isCustom = proc.origem === 'PERSONALIZADO';
                       return (
                         <div key={proc.id} className="rounded border bg-background p-2">
-                          <div className="flex items-start gap-2">
+                          <div
+                            className="flex items-start gap-2 cursor-pointer hover:bg-muted/40 rounded p-1 -m-1"
+                            onClick={() => toggleExpandProc(proc.id)}
+                          >
                             <Checkbox
                               id={`proc-${proc.id}`}
                               checked={checked}
+                              onClick={(e) => e.stopPropagation()}
                               onCheckedChange={(c) => {
                                 setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
-                                if (c && !cidsByProc[proc.id]) {
-                                  procedureService.getCidsForProcedure(proc.id).then((list) => {
-                                    setCidsByProc((m) => ({ ...m, [proc.id]: list }));
-                                    setSelectedCidsByProc((m) => ({ ...m, [proc.id]: list.map((x) => x.codigo) }));
-                                  });
-                                }
+                                if (c) loadCidsForProc(proc.id);
                               }}
                             />
-                            <label htmlFor={`proc-${proc.id}`} className="text-sm cursor-pointer flex-1">
+                            <div className="text-sm flex-1 select-none">
                               <span className="inline-flex items-center gap-1">
+                                <ChevronDown className={`h-3 w-3 transition-transform ${expandedProcId === proc.id ? '' : '-rotate-90'}`} />
                                 {isCustom ? <PencilIcon className="h-3 w-3 text-accent-foreground" /> : <Tag className="h-3 w-3 text-muted-foreground" />}
                                 {proc.nome}
                               </span>
                               {proc.especialidade && <span className="text-xs text-muted-foreground ml-1">({proc.especialidade})</span>}
-                            </label>
+                            </div>
                           </div>
-                          {checked && cids.length > 0 && (
+                          {expandedProcId === proc.id && (
                             <div className="ml-6 mt-2 pt-2 border-t">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">CIDs sugeridos</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {cids.map((c) => {
-                                  const isSel = selCids.includes(c.codigo);
-                                  return (
-                                    <Badge
-                                      key={c.codigo}
-                                      variant={isSel ? "default" : "outline"}
-                                      className="cursor-pointer text-xs"
-                                      onClick={() => {
-                                        setSelectedCidsByProc((m) => ({
-                                          ...m,
-                                          [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
-                                        }));
-                                      }}
-                                    >
-                                      {c.codigo}{c.descricao ? ` - ${c.descricao.slice(0, 40)}` : ''}
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
+                              <p className="text-xs font-medium text-muted-foreground mb-1">📋 CIDs sugeridos</p>
+                              {!cidsByProc[proc.id] ? (
+                                <p className="text-xs text-muted-foreground italic">Carregando CIDs...</p>
+                              ) : cids.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic">Nenhum CID vinculado a este procedimento.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {cids.map((c) => {
+                                    const isSel = selCids.includes(c.codigo);
+                                    return (
+                                      <Badge
+                                        key={c.codigo}
+                                        variant={isSel ? "default" : "outline"}
+                                        className="cursor-pointer text-xs"
+                                        onClick={() => {
+                                          setSelectedCidsByProc((m) => ({
+                                            ...m,
+                                            [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                          }));
+                                        }}
+                                      >
+                                        {c.codigo}{c.descricao ? ` - ${c.descricao.slice(0, 40)}` : ''}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
