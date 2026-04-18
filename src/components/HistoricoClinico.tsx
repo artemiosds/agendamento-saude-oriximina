@@ -342,10 +342,58 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                               className="h-7 w-7 p-0"
                               onClick={() => setViewerItem(item)}
                               aria-label="Visualizar prontuário"
-                              title="Visualizar prontuário"
+                              title="Visualizar"
                             >
                               <Eye className="w-3.5 h-3.5 text-primary" />
                             </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => setHistoricoOpen(true)}
+                              aria-label="Histórico do paciente"
+                              title="Histórico do paciente"
+                            >
+                              <History className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleDownloadPDF(item)}
+                              aria-label="Baixar PDF"
+                              title="Baixar PDF"
+                            >
+                              <FileDown className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  aria-label="Mais ações"
+                                  title="Mais ações"
+                                >
+                                  <MoreVertical className="w-3.5 h-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => handlePrint(item)}>
+                                  <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExportJSON(item)}>
+                                  <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleCopyLink(item)}>
+                                  <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => { setViewerItem(item); setTimeout(() => setDocModalOpen(true), 100); }}>
+                                  <FileSignature className="w-3.5 h-3.5 mr-2" /> Gerar documento
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             {item.queixa_principal && (
                               <Button
                                 size="sm"
