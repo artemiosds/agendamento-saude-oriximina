@@ -59,14 +59,18 @@ export const ESPECIALIDADES_DISPONIVEIS: { key: string; label: string }[] = [
   { key: 'outros', label: 'Outros' },
 ];
 
+const normalize = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
 const PROFISSAO_TO_SIGTAP: Record<string, string> = {};
 for (const [esp, profs] of Object.entries(SIGTAP_ESPECIALIDADE_TO_PROFISSAO)) {
-  profs.forEach((p) => (PROFISSAO_TO_SIGTAP[p.toLowerCase()] = esp));
+  profs.forEach((p) => (PROFISSAO_TO_SIGTAP[normalize(p)] = esp));
+  PROFISSAO_TO_SIGTAP[normalize(esp)] = esp;
 }
 
 export const profissaoToEspecialidadeSigtap = (profissao?: string | null): string | null => {
   if (!profissao) return null;
-  return PROFISSAO_TO_SIGTAP[profissao.toLowerCase().trim()] || null;
+  return PROFISSAO_TO_SIGTAP[normalize(profissao)] || null;
 };
 
 let cached: ProcedimentoDB[] | null = null;
