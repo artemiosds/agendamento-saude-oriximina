@@ -909,6 +909,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addAgendamento = useCallback(
     async (ag: Agendamento) => {
+      // SAFEGUARD: Novos agendamentos NUNCA podem herdar status de atendimentos
+      // anteriores (ex.: "concluido", "em_atendimento", "apto_atendimento").
+      // Apenas status iniciais são permitidos na criação. Qualquer outro valor
+      // é forçado para "confirmado".
+      const STATUS_INICIAIS_PERMITIDOS = ["confirmado", "pendente", "agendado"];
+      const statusInicial = STATUS_INICIAIS_PERMITIDOS.includes(ag.status as string)
+        ? ag.status
+        : "confirmado";
+      if (statusInicial !== ag.status) {
+        console.warn(
+          `[addAgendamento] Status "${ag.status}" não permitido na criação. Forçado para "confirmado".`,
+        );
+      }
       const { error } = await supabase.from("agendamentos" as any).insert({
         id: ag.id,
         paciente_id: ag.pacienteId,
@@ -920,7 +933,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profissional_nome: ag.profissionalNome,
         data: ag.data,
         hora: ag.hora,
-        status: ag.status,
+        status: statusInicial,
         tipo: ag.tipo,
         observacoes: ag.observacoes,
         origem: ag.origem,
@@ -930,7 +943,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prioridade_perfil: "normal",
       } as any);
       if (!error) {
-        setAgendamentos((prev) => [...prev, ag]);
+        setAgendamentos((prev) => [...prev, { ...ag, status: statusInicial as any }]);
         await logAction({
           acao: "criar",
           entidade: "agendamento",
