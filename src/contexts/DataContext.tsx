@@ -121,6 +121,7 @@ interface DataContextType {
   addAgendamento: (ag: Agendamento) => Promise<void>;
   updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
+  deleteAgendamento: (id: string) => Promise<void>;
   addPaciente: (p: Paciente) => Promise<void>;
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   addToFila: (f: FilaEspera) => Promise<void>;
@@ -1015,6 +1016,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [invalidateCache],
   );
 
+  /**
+   * DELETE real do agendamento — usado por "Desmarcar" (libera o slot).
+   * Diferente de cancelAgendamento (que mantém histórico com status "cancelado").
+   */
+  const deleteAgendamento = useCallback(
+    async (id: string): Promise<void> => {
+      const { error } = await supabase
+        .from("agendamentos" as any)
+        .delete()
+        .eq("id", id);
+      if (error) {
+        console.error("Error deleting agendamento:", error);
+        throw new Error("Erro ao excluir agendamento.");
+      }
+      setAgendamentos((prev) => prev.filter((a) => a.id !== id));
+      invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
+    },
+    [invalidateCache],
+  );
+
   const addPaciente = useCallback(
     async (p: Paciente) => {
       // Auto-inject unidade_id if not set
@@ -1848,6 +1869,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAgendamento,
     updateAgendamento,
     cancelAgendamento,
+    deleteAgendamento,
     addPaciente,
     updatePaciente,
     addToFila,
@@ -1891,6 +1913,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAgendamento,
     updateAgendamento,
     cancelAgendamento,
+    deleteAgendamento,
     addPaciente,
     updatePaciente,
     addToFila,

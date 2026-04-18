@@ -169,6 +169,7 @@ const Tratamentos: React.FC = () => {
     getAvailableDates,
     addAgendamento,
     cancelAgendamento,
+    deleteAgendamento,
   } = useData();
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -920,17 +921,26 @@ const Tratamentos: React.FC = () => {
 
   const handleDesmarcarSessao = async (session: TreatmentSession) => {
     if (!selectedCycle) return;
+
+    // Validação: sessão concluída não pode ser desmarcada
+    if (session.status === "realizada") {
+      toast.error("Sessão já realizada não pode ser desmarcada.");
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será removido da agenda e o status voltará para "Aguardando agendamento".`
+      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será EXCLUÍDO da agenda (horário liberado) e a sessão voltará para "Aguardando agendamento".`
     );
     if (!confirmed) return;
+
     try {
-      // Remove the linked appointment from the main schedule
+      // 1. EXCLUIR (DELETE) o agendamento da agenda — não apenas cancelar.
+      // Isso libera o slot para reagendamento imediato.
       if (session.appointment_id) {
-        await cancelAgendamento(session.appointment_id);
+        await deleteAgendamento(session.appointment_id);
       }
 
-      // Revert session to pending
+      // 2. Reverter sessão do ciclo para aguardando agendamento
       const { error } = await supabase
         .from("treatment_sessions")
         .update({
@@ -949,18 +959,12 @@ const Tratamentos: React.FC = () => {
         detalhes: {
           ciclo: selectedCycle.id,
           sessao: session.session_number,
-          agendamento_removido: session.appointment_id,
+          agendamento_excluido: session.appointment_id,
         },
       });
 
-      // Atualização otimista — sem reload completo
-      setSessions((prev) =>
-        prev.map((x) =>
-          x.id === session.id
-            ? { ...x, status: "pendente_agendamento", appointment_id: null }
-            : x,
-        ),
-      );
+      // 3. Atualização otimista — o estado global de agendamentos já foi
+      // atualizado por deleteAgendamento. Aqui só limpamos o mapa local.
       if (session.appointment_id) {
         setAgendamentoMap((prev) => {
           const next = { ...prev };
@@ -969,9 +973,16 @@ const Tratamentos: React.FC = () => {
           return next;
         });
       }
+      setSessions((prev) =>
+        prev.map((x) =>
+          x.id === session.id
+            ? { ...x, status: "pendente_agendamento", appointment_id: null }
+            : x,
+        ),
+      );
 
-      toast.success(`Sessão ${session.session_number} desmarcada. O horário foi liberado na agenda.`);
-      // Refresh em background para sincronização final (não bloqueia UI)
+      toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
+      // Refresh em background
       loadData(true);
     } catch (err: any) {
       console.error(err);
