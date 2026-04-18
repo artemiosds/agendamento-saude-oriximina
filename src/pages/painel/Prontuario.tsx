@@ -230,6 +230,23 @@ const ProntuarioPage: React.FC = () => {
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
   const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
+  const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
+
+  const loadCidsForProc = useCallback((procId: string) => {
+    if (cidsByProc[procId]) return;
+    procedureService.getCidsForProcedure(procId).then((list) => {
+      setCidsByProc((m) => ({ ...m, [procId]: list }));
+      setSelectedCidsByProc((m) => ({ ...m, [procId]: m[procId] ?? list.map((x) => x.codigo) }));
+    });
+  }, [cidsByProc]);
+
+  const toggleExpandProc = useCallback((procId: string) => {
+    setExpandedProcId((prev) => {
+      const next = prev === procId ? null : procId;
+      if (next) loadCidsForProc(next);
+      return next;
+    });
+  }, [loadCidsForProc]);
 
   const isProfissional = user?.role === "profissional";
   const canEdit = can('prontuario', 'can_edit');
