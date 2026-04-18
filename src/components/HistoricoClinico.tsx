@@ -260,22 +260,34 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                               </p>
                             )}
                           </div>
-                          {item.queixa_principal && (
+                          <div className="flex items-center gap-1 shrink-0">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 w-6 p-0 shrink-0"
-                              onClick={() => setExpandedId(expanded ? null : item.id)}
-                              aria-label={expanded ? "Recolher" : "Expandir"}
-                              aria-expanded={expanded}
+                              className="h-7 w-7 p-0"
+                              onClick={() => setViewerItem(item)}
+                              aria-label="Visualizar prontuário"
+                              title="Visualizar prontuário"
                             >
-                              {expanded ? (
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              )}
+                              <Eye className="w-3.5 h-3.5 text-primary" />
                             </Button>
-                          )}
+                            {item.queixa_principal && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setExpandedId(expanded ? null : item.id)}
+                                aria-label={expanded ? "Recolher" : "Expandir"}
+                                aria-expanded={expanded}
+                              >
+                                {expanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {expanded && (
                           <div className="mt-2 space-y-1 text-xs border-t pt-2">
