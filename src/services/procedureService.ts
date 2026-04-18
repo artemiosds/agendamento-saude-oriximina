@@ -137,7 +137,10 @@ export const procedureService = {
     const all = await this.getActive();
     if (!profissao) return all;
     const espKey = profissaoToEspecialidadeSigtap(profissao);
-    if (!espKey) return all.filter((p) => p.profissao.toLowerCase() === profissao.toLowerCase());
+    if (!espKey) {
+      const np = normalize(profissao);
+      return all.filter((p) => normalize(p.profissao) === np || normalize(p.especialidade) === np);
+    }
     return all.filter((p) => p.especialidade === espKey);
   },
 
