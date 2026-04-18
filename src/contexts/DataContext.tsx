@@ -121,6 +121,7 @@ interface DataContextType {
   addAgendamento: (ag: Agendamento) => Promise<void>;
   updateAgendamento: (id: string, data: Partial<Agendamento>) => Promise<void>;
   cancelAgendamento: (id: string) => Promise<FilaEspera[]>;
+  deleteAgendamento: (id: string) => Promise<void>;
   addPaciente: (p: Paciente) => Promise<void>;
   updatePaciente: (id: string, data: Partial<Paciente>) => Promise<void>;
   addToFila: (f: FilaEspera) => Promise<void>;
@@ -1868,49 +1869,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addAgendamento,
     updateAgendamento,
     cancelAgendamento,
-    addPaciente,
-    updatePaciente,
-    addToFila,
-    updateFila,
-    removeFromFila,
-    addAtendimento,
-    updateAtendimento,
-    addUnidade,
-    updateUnidade,
-    deleteUnidade,
-    addSala,
-    updateSala,
-    deleteSala,
-    addFuncionario,
-    updateFuncionario,
-    deleteFuncionario,
-    addDisponibilidade,
-    updateDisponibilidade,
-    deleteDisponibilidade,
-    addBloqueio,
-    updateBloqueio,
-    deleteBloqueio,
-    getAvailableSlots,
-    getTurnoInfo,
-    getAvailableDates,
-    getNextAvailableSlots,
-    getBlockingInfo,
-    getDayInfoMap,
-    updateConfiguracoes,
-    checkFilaForSlot,
-    encaixarDaFila,
-    refreshFuncionarios,
-    refreshDisponibilidades,
-    refreshAgendamentos,
-    refreshPacientes,
-    refreshFila,
-    refreshBloqueios,
-    logAction,
-  });
-  stableFunctions.current = {
-    addAgendamento,
-    updateAgendamento,
-    cancelAgendamento,
+    deleteAgendamento,
     addPaciente,
     updatePaciente,
     addToFila,
