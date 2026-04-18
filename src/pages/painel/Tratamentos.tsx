@@ -254,6 +254,10 @@ const Tratamentos: React.FC = () => {
     absence_type: "",
   });
 
+  // Etapa 1: seleção da sessão a registrar (escopo individual por profissional)
+  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
+  const [selectedSessionForRegister, setSelectedSessionForRegister] = useState<TreatmentSession | null>(null);
+
   const [soapNotes, setSoapNotes] = useState({
     subjetivo: "",
     objetivo: "",
