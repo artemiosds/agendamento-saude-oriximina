@@ -169,6 +169,7 @@ const Tratamentos: React.FC = () => {
     getAvailableDates,
     addAgendamento,
     cancelAgendamento,
+    deleteAgendamento,
   } = useData();
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -253,6 +254,10 @@ const Tratamentos: React.FC = () => {
     status: "realizada",
     absence_type: "",
   });
+
+  // Etapa 1: seleção da sessão a registrar (escopo individual por profissional)
+  const [selectSessionOpen, setSelectSessionOpen] = useState(false);
+  const [selectedSessionForRegister, setSelectedSessionForRegister] = useState<TreatmentSession | null>(null);
 
   const [soapNotes, setSoapNotes] = useState({
     subjetivo: "",
@@ -721,12 +726,27 @@ const Tratamentos: React.FC = () => {
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
 
-    const nextSession = cycleSessions
-      .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
-      .sort((a, b) => a.session_number - b.session_number)[0];
+    // Usa a sessão escolhida na Etapa 1; fallback para a próxima pendente
+    const nextSession =
+      selectedSessionForRegister ||
+      cycleSessions
+        .filter((s) => ["agendada", "pendente_agendamento"].includes(s.status))
+        .sort((a, b) => a.session_number - b.session_number)[0];
 
     if (!nextSession) {
       toast.error("Não há sessões pendentes neste ciclo.");
+      return;
+    }
+
+    // Bloqueio de duplicidade: sessão já concluída
+    if (nextSession.status === "realizada") {
+      toast.error("Esta sessão já foi registrada.");
+      return;
+    }
+
+    // Garantia de escopo: a sessão deve pertencer ao profissional do ciclo
+    if (nextSession.professional_id !== selectedCycle.professional_id) {
+      toast.error("Esta sessão pertence a outro profissional e não pode ser registrada aqui.");
       return;
     }
 
@@ -790,6 +810,7 @@ const Tratamentos: React.FC = () => {
           : `Sessão ${nextSession.session_number}/${selectedCycle.total_sessions} registrada!`,
       );
       setSessionOpen(false);
+      setSelectedSessionForRegister(null);
       setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
       setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
     } catch (err: any) {
@@ -900,17 +921,26 @@ const Tratamentos: React.FC = () => {
 
   const handleDesmarcarSessao = async (session: TreatmentSession) => {
     if (!selectedCycle) return;
+
+    // Validação: sessão concluída não pode ser desmarcada
+    if (session.status === "realizada") {
+      toast.error("Sessão já realizada não pode ser desmarcada.");
+      return;
+    }
+
     const confirmed = window.confirm(
-      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será removido da agenda e o status voltará para "Aguardando agendamento".`
+      `Desmarcar a sessão ${session.session_number}/${session.total_sessions}?\n\nO agendamento será EXCLUÍDO da agenda (horário liberado) e a sessão voltará para "Aguardando agendamento".`
     );
     if (!confirmed) return;
+
     try {
-      // Remove the linked appointment from the main schedule
+      // 1. EXCLUIR (DELETE) o agendamento da agenda — não apenas cancelar.
+      // Isso libera o slot para reagendamento imediato.
       if (session.appointment_id) {
-        await cancelAgendamento(session.appointment_id);
+        await deleteAgendamento(session.appointment_id);
       }
 
-      // Revert session to pending
+      // 2. Reverter sessão do ciclo para aguardando agendamento
       const { error } = await supabase
         .from("treatment_sessions")
         .update({
@@ -929,12 +959,31 @@ const Tratamentos: React.FC = () => {
         detalhes: {
           ciclo: selectedCycle.id,
           sessao: session.session_number,
-          agendamento_removido: session.appointment_id,
+          agendamento_excluido: session.appointment_id,
         },
       });
 
-      toast.success(`Sessão ${session.session_number} desmarcada. O horário foi liberado na agenda.`);
-      loadData();
+      // 3. Atualização otimista — o estado global de agendamentos já foi
+      // atualizado por deleteAgendamento. Aqui só limpamos o mapa local.
+      if (session.appointment_id) {
+        setAgendamentoMap((prev) => {
+          const next = { ...prev };
+          const key = `${session.patient_id}|${session.professional_id}|${session.scheduled_date}`;
+          delete next[key];
+          return next;
+        });
+      }
+      setSessions((prev) =>
+        prev.map((x) =>
+          x.id === session.id
+            ? { ...x, status: "pendente_agendamento", appointment_id: null }
+            : x,
+        ),
+      );
+
+      toast.success(`Sessão ${session.session_number} desmarcada e horário liberado na agenda.`);
+      // Refresh em background
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao desmarcar sessão: " + (err?.message || ""));
@@ -1066,10 +1115,44 @@ const Tratamentos: React.FC = () => {
     setAgendandoCiclo(true);
     const resumo: ResumoSessaoItem[] = [];
 
+    // Track horários já usados nesta execução em lote (evita conflito entre as próprias sessões do lote)
+    const horariosUsadosLote: Record<string, Set<string>> = {};
+    const usar = (data: string, hora: string) => {
+      if (!horariosUsadosLote[data]) horariosUsadosLote[data] = new Set();
+      horariosUsadosLote[data].add(hora);
+    };
+    const estaLivreNoLote = (data: string, hora: string) =>
+      !(horariosUsadosLote[data] && horariosUsadosLote[data].has(hora));
+
+    /**
+     * Encontra o próximo slot válido para a sessão respeitando:
+     * - Disponibilidade configurada do profissional (getAvailableSlots)
+     * - Conflitos com agendamentos existentes (já filtrado por getAvailableSlots)
+     * - Conflitos com horários alocados anteriormente neste mesmo lote
+     * - Avança até 30 dias se a data sugerida estiver totalmente cheia
+     */
+    const encontrarSlotValido = (
+      dataSugerida: string,
+      profId: string,
+      unidadeId: string,
+    ): { data: string; hora: string } | null => {
+      let dataAtual = dataSugerida;
+      for (let tentativa = 0; tentativa < 30; tentativa++) {
+        const slots = getAvailableSlots(profId, unidadeId, dataAtual);
+        const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
+        if (slotLivre) return { data: dataAtual, hora: slotLivre };
+        // Avança 1 dia
+        const d = new Date(dataAtual + "T12:00:00");
+        d.setDate(d.getDate() + 1);
+        dataAtual = d.toISOString().split("T")[0];
+      }
+      return null;
+    };
+
     try {
       for (const sess of pendentes) {
         try {
-          // 1) Verificar duplicidade no Supabase
+          // 1) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
             .select("id, hora, status")
@@ -1084,13 +1167,13 @@ const Tratamentos: React.FC = () => {
           if (checkErr) throw checkErr;
 
           if (existente) {
-            // Já existe — apenas vincula na sessão se necessário
             if (!sess.appointment_id || sess.status !== "agendada") {
               await supabase
                 .from("treatment_sessions")
                 .update({ appointment_id: existente.id, status: "agendada" })
                 .eq("id", sess.id);
             }
+            usar(sess.scheduled_date, existente.hora);
             resumo.push({
               numero: sess.session_number,
               data: sess.scheduled_date,
@@ -1100,8 +1183,24 @@ const Tratamentos: React.FC = () => {
             continue;
           }
 
-          // 2) Inserir novo agendamento (default 08:00 — recepção pode ajustar depois)
-          const horaPadrao = "08:00";
+          // 2) Encontrar slot válido respeitando disponibilidade do profissional
+          const slot = encontrarSlotValido(
+            sess.scheduled_date,
+            sess.professional_id,
+            selectedCycle.unit_id,
+          );
+
+          if (!slot) {
+            resumo.push({
+              numero: sess.session_number,
+              data: sess.scheduled_date,
+              status: "erro",
+              mensagem: "Sem horário disponível na agenda do profissional (próximos 30 dias)",
+            });
+            continue;
+          }
+
+          // 3) Inserir novo agendamento no horário válido
           const agId = `ag${Date.now()}${sess.session_number}`;
           await addAgendamento({
             id: agId,
@@ -1112,8 +1211,8 @@ const Tratamentos: React.FC = () => {
             setorId: "",
             profissionalId: sess.professional_id,
             profissionalNome: prof.nome,
-            data: sess.scheduled_date,
-            hora: horaPadrao,
+            data: slot.data,
+            hora: slot.hora,
             status: "confirmado",
             tipo: "Sessão de Tratamento",
             observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${selectedCycle.treatment_type} (lote)`,
@@ -1122,32 +1221,37 @@ const Tratamentos: React.FC = () => {
             criadoPor: user?.id || "",
           } as any);
 
-          // 3) Atualizar sessão como agendada
+          // 4) Atualizar sessão como agendada (e ajustar scheduled_date se mudou)
+          const updates: any = { appointment_id: agId, status: "agendada" };
+          if (slot.data !== sess.scheduled_date) updates.scheduled_date = slot.data;
           const { error: updErr } = await supabase
             .from("treatment_sessions")
-            .update({ appointment_id: agId, status: "agendada" })
+            .update(updates)
             .eq("id", sess.id);
           if (updErr) throw updErr;
 
-          // 4) Atualizar UI imediatamente (otimista) — antes do realtime/loadData
+          // 5) Atualização otimista da UI
           setSessions((prev) =>
             prev.map((x) =>
-              x.id === sess.id ? { ...x, appointment_id: agId, status: "agendada" } : x,
+              x.id === sess.id
+                ? { ...x, appointment_id: agId, status: "agendada", scheduled_date: slot.data }
+                : x,
             ),
           );
           setAgendamentoMap((prev) => ({
             ...prev,
-            [`${sess.patient_id}|${sess.professional_id}|${sess.scheduled_date}`]: {
+            [`${sess.patient_id}|${sess.professional_id}|${slot.data}`]: {
               id: agId,
-              hora: horaPadrao,
+              hora: slot.hora,
               status: "confirmado",
             },
           }));
 
+          usar(slot.data, slot.hora);
           resumo.push({
             numero: sess.session_number,
-            data: sess.scheduled_date,
-            hora: horaPadrao,
+            data: slot.data,
+            hora: slot.hora,
             status: "agendada",
           });
         } catch (innerErr: any) {
@@ -1175,13 +1279,15 @@ const Tratamentos: React.FC = () => {
       });
 
       if (erros > 0) {
-        toast.warning(`Ciclo processado com ${erros} erro(s). Veja o resumo abaixo.`);
+        toast.warning(
+          `${novas} sessão(ões) agendada(s). ${erros} não pôde(ram) ser agendada(s) por falta de horário disponível na agenda do profissional.`,
+        );
       } else {
         toast.success(`Ciclo agendado: ${novas} nova(s), ${jaExist} já existia(m).`);
       }
 
       setResumoCiclo(resumo);
-      // Recarrega em segundo plano para sincronizar
+      // Refresh em background para sincronização final
       loadData(true);
     } catch (err: any) {
       console.error("[AgendarCiclo] erro geral:", err);
@@ -1832,9 +1938,8 @@ const Tratamentos: React.FC = () => {
                   <Button
                     size="sm"
                     onClick={() => {
-                      setNewSession({ clinical_notes: "", procedure_done: "", status: "realizada", absence_type: "" });
-                      setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
-                      setSessionOpen(true);
+                      setSelectedSessionForRegister(null);
+                      setSelectSessionOpen(true);
                     }}
                   >
                     <Play className="w-3.5 h-3.5 mr-1" /> Registrar Sessão
@@ -2169,6 +2274,86 @@ const Tratamentos: React.FC = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Etapa 1: Seleção da sessão a ser registrada (escopo individual por profissional) */}
+        <Dialog open={selectSessionOpen} onOpenChange={setSelectSessionOpen}>
+          <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Selecione a sessão a registrar</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Apenas sessões agendadas para{" "}
+                <strong>
+                  {funcionarios.find((f) => f.id === selectedCycle?.professional_id)?.nome || "este profissional"}
+                </strong>{" "}
+                são listadas. Registrar não afeta sessões de outros profissionais.
+              </p>
+              {(() => {
+                const sessoesDisponiveis = cycleSessions
+                  .filter(
+                    (s) =>
+                      ["agendada", "pendente_agendamento"].includes(s.status) &&
+                      s.professional_id === selectedCycle?.professional_id,
+                  )
+                  .sort((a, b) => a.session_number - b.session_number);
+
+                if (sessoesDisponiveis.length === 0) {
+                  return (
+                    <div className="p-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/30">
+                      Nenhuma sessão disponível para registrar.
+                    </div>
+                  );
+                }
+
+                return sessoesDisponiveis.map((s) => {
+                  const dataFmt = s.scheduled_date
+                    ? new Date(s.scheduled_date + "T12:00:00").toLocaleDateString("pt-BR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
+                      })
+                    : "Sem data";
+                  const agKey = `${s.patient_id}|${s.professional_id}|${s.scheduled_date}`;
+                  const ag = agendamentoMap[agKey];
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSessionForRegister(s);
+                        setSelectSessionOpen(false);
+                        setNewSession({
+                          clinical_notes: "",
+                          procedure_done: "",
+                          status: "realizada",
+                          absence_type: "",
+                        });
+                        setSoapNotes({ subjetivo: "", objetivo: "", avaliacao: "", plano: "" });
+                        setSessionOpen(true);
+                      }}
+                      className="w-full text-left p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold">
+                          Sessão {s.session_number}/{selectedCycle?.total_sessions}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {dataFmt}
+                          {ag?.hora ? ` • ${ag.hora.slice(0, 5)}` : ""}
+                        </p>
+                      </div>
+                      <Badge variant={s.status === "agendada" ? "default" : "secondary"} className="text-xs shrink-0">
+                        {statusLabels[s.status] || s.status}
+                      </Badge>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
           <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>

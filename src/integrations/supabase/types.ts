@@ -1332,6 +1332,35 @@ export type Database = {
         }
         Relationships: []
       }
+      procedimento_profissionais: {
+        Row: {
+          created_at: string
+          id: string
+          procedimento_codigo: string
+          profissional_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          procedimento_codigo: string
+          profissional_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          procedimento_codigo?: string
+          profissional_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedimento_profissionais_procedimento_codigo_fkey"
+            columns: ["procedimento_codigo"]
+            isOneToOne: false
+            referencedRelation: "sigtap_procedimentos"
+            referencedColumns: ["codigo"]
+          },
+        ]
+      }
       procedimentos: {
         Row: {
           ativo: boolean
@@ -1929,31 +1958,43 @@ export type Database = {
           ativo: boolean
           codigo: string
           created_at: string
+          criado_por: string
+          descricao: string
           especialidade: string
           id: string
           nome: string
+          origem: string
           total_cids: number
           updated_at: string
+          valor: number | null
         }
         Insert: {
           ativo?: boolean
           codigo: string
           created_at?: string
+          criado_por?: string
+          descricao?: string
           especialidade?: string
           id?: string
           nome: string
+          origem?: string
           total_cids?: number
           updated_at?: string
+          valor?: number | null
         }
         Update: {
           ativo?: boolean
           codigo?: string
           created_at?: string
+          criado_por?: string
+          descricao?: string
           especialidade?: string
           id?: string
           nome?: string
+          origem?: string
           total_cids?: number
           updated_at?: string
+          valor?: number | null
         }
         Relationships: []
       }

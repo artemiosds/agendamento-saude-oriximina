@@ -436,12 +436,13 @@ const ProntuarioPage: React.FC = () => {
     if (!user?.id) return;
     const profId = user.id;
     const loadAll = async () => {
-      const [procsRes, medsRes, prefsRes] = await Promise.all([
-        supabase.from("procedimentos").select("*").eq("ativo", true),
+      const { procedureService } = await import("@/services/procedureService");
+      const [procsList, medsRes, prefsRes] = await Promise.all([
+        procedureService.getActive(),
         (supabase as any).from("medications").select("*").or(`is_global.eq.true,profissional_id.eq.${profId}`),
         supabase.from("professional_preferences").select("tipo,item_id,desabilitado").eq("profissional_id", profId),
       ]);
-      if (procsRes.data) setProcedimentos(procsRes.data as ProcedimentoDB[]);
+      setProcedimentos(procsList as any as ProcedimentoDB[]);
       if (medsRes.data) setMedications(medsRes.data as MedicationDB[]);
       if (prefsRes.data) setProfPreferences(prefsRes.data as any[]);
     };
@@ -450,8 +451,10 @@ const ProntuarioPage: React.FC = () => {
 
   const filteredProcedimentos = useMemo(() => {
     if (!user) return [];
+    // Filtra por especialidade SIGTAP correspondente à profissão do logado;
+    // aplica vínculo profissional explícito quando existir.
     return procedimentos.filter((p) => {
-      if (p.profissao && user.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
+      if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
       if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
       return true;
     });

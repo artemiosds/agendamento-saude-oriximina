@@ -14,31 +14,49 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// SIGTAP grupo 03 = Procedimentos clínicos
-// Mapeamento subgrupo → especialidade interna
+// Mapeamento grupo+subgrupo SIGTAP → especialidade interna
+// Chave = "GGSS" (4 dígitos do início do código SIGTAP)
 const SUBGROUP_SPECIALTY_MAP: Record<string, string> = {
-  '01': 'enfermagem',
-  '02': 'medico',
-  '05': 'fisioterapia',
-  '06': 'fisioterapia',
-  '07': 'nutricao',
-  '08': 'psicologia',
-  '09': 'terapia_ocupacional',
-  '10': 'fonoaudiologia',
-  '11': 'assistencia_social',
+  // Grupo 03 — Procedimentos clínicos
+  '0301': 'enfermagem',
+  '0302': 'medico',
+  '0303': 'odontologia',
+  '0304': 'odontologia',
+  '0305': 'fisioterapia',
+  '0306': 'fisioterapia',
+  '0307': 'nutricao',
+  '0308': 'psicologia',
+  '0309': 'terapia_ocupacional',
+  '0310': 'fonoaudiologia',
+  '0311': 'assistencia_social',
+  '0312': 'farmacia',
+  '0313': 'farmacia',
+  '0314': 'biomedicina',
+  '0315': 'educacao_fisica',
+  '0316': 'podologia',
+  '0317': 'optometria',
+  '0318': 'saude_coletiva',
+  '0319': 'outros',
+  // Grupo 04 — Procedimentos cirúrgicos (odontologia inclusa)
+  '0414': 'odontologia',
 };
 
-const SELECTED_GROUP = '03';
-
 const SPECIALTY_OPTIONS = [
-  { key: 'fisioterapia', label: 'Fisioterapia', subgrupos: '05, 06' },
-  { key: 'psicologia', label: 'Psicologia', subgrupos: '08' },
-  { key: 'fonoaudiologia', label: 'Fonoaudiologia', subgrupos: '10' },
-  { key: 'nutricao', label: 'Nutrição', subgrupos: '07' },
-  { key: 'terapia_ocupacional', label: 'Terapia Ocupacional', subgrupos: '09' },
-  { key: 'assistencia_social', label: 'Assistência Social', subgrupos: '11' },
-  { key: 'enfermagem', label: 'Enfermagem', subgrupos: '01' },
-  { key: 'medico', label: 'Médico', subgrupos: '02' },
+  { key: 'enfermagem', label: 'Enfermagem', subgrupos: '03.01' },
+  { key: 'medico', label: 'Médico', subgrupos: '03.02' },
+  { key: 'odontologia', label: 'Odontologia', subgrupos: '03.03, 03.04, 04.14' },
+  { key: 'fisioterapia', label: 'Fisioterapia', subgrupos: '03.05, 03.06' },
+  { key: 'nutricao', label: 'Nutrição', subgrupos: '03.07' },
+  { key: 'psicologia', label: 'Psicologia', subgrupos: '03.08' },
+  { key: 'terapia_ocupacional', label: 'Terapia Ocupacional', subgrupos: '03.09' },
+  { key: 'fonoaudiologia', label: 'Fonoaudiologia', subgrupos: '03.10' },
+  { key: 'assistencia_social', label: 'Assistência Social', subgrupos: '03.11' },
+  { key: 'farmacia', label: 'Farmácia', subgrupos: '03.12, 03.13' },
+  { key: 'biomedicina', label: 'Biomedicina', subgrupos: '03.14' },
+  { key: 'educacao_fisica', label: 'Educação Física', subgrupos: '03.15' },
+  { key: 'podologia', label: 'Podologia', subgrupos: '03.16' },
+  { key: 'optometria', label: 'Optometria', subgrupos: '03.17' },
+  { key: 'saude_coletiva', label: 'Saúde Coletiva', subgrupos: '03.18' },
 ];
 
 const GITHUB_REPO = 'RenatoKR/SIGTAP';
@@ -254,11 +272,10 @@ const SigtapZipImport: React.FC = () => {
       if (!/^\d{10}$/.test(codigo) || !nome) continue;
 
       // Codigo SIGTAP: GG SS FF NNNN — grupo (2) + subgrupo (2) + forma (2) + sequencial (4)
-      const grupo = codigo.substring(0, 2);
+      const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
-      if (grupo !== SELECTED_GROUP) continue;
 
-      const especialidade = SUBGROUP_SPECIALTY_MAP[subgrupo];
+      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub];
       if (!especialidade) continue;
       if (!selected.has(especialidade)) continue;
 
