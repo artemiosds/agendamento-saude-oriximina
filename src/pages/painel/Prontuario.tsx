@@ -2224,16 +2224,22 @@ const ProntuarioPage: React.FC = () => {
                   />
                 </div>
                 {filteredProcedimentos.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-2 bg-muted/30 rounded-lg p-3 border max-h-64 overflow-y-auto">
+                  <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
                     {filteredProcedimentos.map((proc) => {
                       const checked = selectedProcIds.includes(proc.id);
                       const cids = cidsByProc[proc.id] || [];
                       const selCids = selectedCidsByProc[proc.id] || [];
                       const isCustom = proc.origem === 'PERSONALIZADO';
+                      const isExpanded = expandedProcId === proc.id;
+                      const cidQuery = (cidSearchByProc[proc.id] || '').trim().toLowerCase();
+                      const filteredCids = cidQuery
+                        ? cids.filter((c) => c.codigo.toLowerCase().includes(cidQuery) || (c.descricao || '').toLowerCase().includes(cidQuery))
+                        : cids;
+                      const searchResults = cidSearchResults[proc.id] || [];
                       return (
-                        <div key={proc.id} className="rounded border bg-background p-2">
+                        <div key={proc.id} className={`rounded-md border bg-background transition-colors ${checked ? 'border-primary/40' : ''}`}>
                           <div
-                            className="flex items-start gap-2 cursor-pointer hover:bg-muted/40 rounded p-1 -m-1"
+                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded-md px-2 py-1.5"
                             onClick={() => toggleExpandProc(proc.id)}
                           >
                             <Checkbox
@@ -2245,31 +2251,61 @@ const ProntuarioPage: React.FC = () => {
                                 if (c) loadCidsForProc(proc.id);
                               }}
                             />
-                            <div className="text-sm flex-1 select-none">
-                              <span className="inline-flex items-center gap-1">
-                                <ChevronDown className={`h-3 w-3 transition-transform ${expandedProcId === proc.id ? '' : '-rotate-90'}`} />
-                                {isCustom ? <PencilIcon className="h-3 w-3 text-accent-foreground" /> : <Tag className="h-3 w-3 text-muted-foreground" />}
-                                {proc.nome}
-                              </span>
-                              {proc.especialidade && <span className="text-xs text-muted-foreground ml-1">({proc.especialidade})</span>}
-                            </div>
+                            <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? '' : '-rotate-90'}`} />
+                            {isCustom
+                              ? <PencilIcon className="h-3 w-3 text-accent-foreground shrink-0" />
+                              : <Tag className="h-3 w-3 text-muted-foreground shrink-0" />}
+                            <span className="text-sm flex-1 truncate select-none">{proc.nome}</span>
+                            {checked && selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
                           </div>
-                          {expandedProcId === proc.id && (
-                            <div className="ml-6 mt-2 pt-2 border-t">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">📋 CIDs sugeridos</p>
+                          {isExpanded && (
+                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10">
+                              {proc.especialidade && (
+                                <p className="text-[11px] text-muted-foreground mb-2">{proc.especialidade}</p>
+                              )}
+                              {/* Lupa unificada de CIDs */}
+                              <div className="relative mb-2">
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                                <Input
+                                  value={cidSearchByProc[proc.id] || ''}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
+                                    const q = v.trim();
+                                    if (q.length < 2) {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
+                                      return;
+                                    }
+                                    setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
+                                    procedureService.searchCids(q).then((res) => {
+                                      setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
+                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
+                                    });
+                                  }}
+                                  placeholder="Pesquisar CIDs (filtra sugeridos e busca novos)..."
+                                  className="pl-7 h-8 text-xs"
+                                />
+                              </div>
+
+                              {/* CIDs sugeridos (filtrados) */}
+                              <p className="text-[11px] font-medium text-muted-foreground mb-1">📋 Sugeridos</p>
                               {!cidsByProc[proc.id] ? (
-                                <p className="text-xs text-muted-foreground italic">Carregando CIDs...</p>
-                              ) : cids.length === 0 ? (
-                                <p className="text-xs text-muted-foreground italic">Nenhum CID vinculado a este procedimento.</p>
+                                <p className="text-xs text-muted-foreground italic">Carregando...</p>
+                              ) : filteredCids.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic">
+                                  {cids.length === 0 ? 'Nenhum CID vinculado.' : 'Nenhum CID sugerido corresponde à busca.'}
+                                </p>
                               ) : (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {cids.map((c) => {
+                                <div className="flex flex-wrap gap-1">
+                                  {filteredCids.map((c) => {
                                     const isSel = selCids.includes(c.codigo);
                                     return (
                                       <Badge
                                         key={c.codigo}
                                         variant={isSel ? "default" : "outline"}
-                                        className="cursor-pointer text-xs"
+                                        className="cursor-pointer text-[11px] font-normal"
                                         onClick={() => {
                                           setSelectedCidsByProc((m) => ({
                                             ...m,
@@ -2277,67 +2313,45 @@ const ProntuarioPage: React.FC = () => {
                                           }));
                                         }}
                                       >
-                                        {c.codigo}{c.descricao ? ` - ${c.descricao.slice(0, 40)}` : ''}
+                                        {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
                                       </Badge>
                                     );
                                   })}
                                 </div>
                               )}
 
-                              {/* Busca manual de CID */}
-                              <div className="mt-3 pt-2 border-t">
-                                <p className="text-xs font-medium text-muted-foreground mb-1">🔎 Buscar outro CID</p>
-                                <div className="relative">
-                                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                                  <Input
-                                    value={cidSearchByProc[proc.id] || ''}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
-                                      const q = v.trim();
-                                      if (q.length < 2) {
-                                        setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
-                                        return;
-                                      }
-                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
-                                      procedureService.searchCids(q).then((res) => {
-                                        setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
-                                        setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
-                                      });
-                                    }}
-                                    placeholder="Pesquisar CID por código ou descrição..."
-                                    className="pl-7 h-8 text-xs"
-                                  />
-                                </div>
-                                {cidSearchLoading[proc.id] && (
-                                  <p className="text-xs text-muted-foreground italic mt-1">Buscando...</p>
-                                )}
-                                {(cidSearchResults[proc.id] || []).length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                                    {(cidSearchResults[proc.id] || []).map((c) => {
-                                      const already = (cidsByProc[proc.id] || []).some((x) => x.codigo === c.codigo);
-                                      const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
-                                      return (
-                                        <Badge
-                                          key={c.codigo}
-                                          variant={isSel ? "default" : "secondary"}
-                                          className="cursor-pointer text-xs"
-                                          onClick={() => {
-                                            // adiciona à lista de cids do procedimento (se ainda não estiver) e marca
-                                            setCidsByProc((m) => already ? m : ({ ...m, [proc.id]: [...(m[proc.id] || []), c] }));
-                                            setSelectedCidsByProc((m) => ({
-                                              ...m,
-                                              [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
-                                            }));
-                                          }}
-                                        >
-                                          + {c.codigo}{c.descricao ? ` - ${c.descricao.slice(0, 40)}` : ''}
-                                        </Badge>
-                                      );
-                                    })}
+                              {/* Resultados externos da busca */}
+                              {cidSearchLoading[proc.id] && (
+                                <p className="text-xs text-muted-foreground italic mt-2">Buscando no catálogo...</p>
+                              )}
+                              {searchResults.length > 0 && (
+                                <>
+                                  <p className="text-[11px] font-medium text-muted-foreground mt-2 mb-1">🔎 Outros resultados</p>
+                                  <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                                    {searchResults
+                                      .filter((c) => !cids.some((x) => x.codigo === c.codigo))
+                                      .map((c) => {
+                                        const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
+                                        return (
+                                          <Badge
+                                            key={c.codigo}
+                                            variant={isSel ? "default" : "secondary"}
+                                            className="cursor-pointer text-[11px] font-normal"
+                                            onClick={() => {
+                                              setCidsByProc((m) => ({ ...m, [proc.id]: [...(m[proc.id] || []), c] }));
+                                              setSelectedCidsByProc((m) => ({
+                                                ...m,
+                                                [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                              }));
+                                            }}
+                                          >
+                                            + {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
+                                          </Badge>
+                                        );
+                                      })}
                                   </div>
-                                )}
-                              </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
