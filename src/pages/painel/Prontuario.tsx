@@ -684,6 +684,29 @@ const ProntuarioPage: React.FC = () => {
       .sort((a, b) => b.data_atendimento.localeCompare(a.data_atendimento));
   }, [form.paciente_id, prontuarios, editId]);
 
+  // Carrega histórico de procedimentos do paciente (sugestões)
+  useEffect(() => {
+    if (!form.paciente_id) { setPacienteProcHistory([]); return; }
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("prontuario_procedimentos")
+        .select("procedimento_id, prontuarios!inner(paciente_id, data_atendimento)")
+        .eq("prontuarios.paciente_id", form.paciente_id)
+        .order("criado_em", { ascending: false })
+        .limit(50);
+      const seen = new Map<string, { id: string; nome: string; ultima: string }>();
+      (data || []).forEach((r: any) => {
+        const proc = procedimentos.find((p) => p.id === r.procedimento_id);
+        if (proc && !seen.has(proc.id)) {
+          const dt = r.prontuarios?.data_atendimento || '';
+          const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
+          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima });
+        }
+      });
+      setPacienteProcHistory(Array.from(seen.values()));
+    })();
+  }, [form.paciente_id, procedimentos]);
+
   const openNew = () => {
     setEditId(null);
     setActiveAtendimento(null);
