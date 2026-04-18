@@ -933,8 +933,26 @@ const Tratamentos: React.FC = () => {
         },
       });
 
+      // Atualização otimista — sem reload completo
+      setSessions((prev) =>
+        prev.map((x) =>
+          x.id === session.id
+            ? { ...x, status: "pendente_agendamento", appointment_id: null }
+            : x,
+        ),
+      );
+      if (session.appointment_id) {
+        setAgendamentoMap((prev) => {
+          const next = { ...prev };
+          const key = `${session.patient_id}|${session.professional_id}|${session.scheduled_date}`;
+          delete next[key];
+          return next;
+        });
+      }
+
       toast.success(`Sessão ${session.session_number} desmarcada. O horário foi liberado na agenda.`);
-      loadData();
+      // Refresh em background para sincronização final (não bloqueia UI)
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao desmarcar sessão: " + (err?.message || ""));
