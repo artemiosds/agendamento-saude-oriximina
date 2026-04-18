@@ -328,7 +328,9 @@ const GerenciarProcedimentos: React.FC = () => {
                             <div className="text-sm font-medium">{p.nome}</div>
                             <div className="text-xs text-muted-foreground">
                               {p.profissao}
-                              {p.numero_conselho ? ` • ${p.tipo_conselho || ""} ${p.numero_conselho}` : ""}
+                              {(p as any).numeroConselho
+                                ? ` • ${(p as any).tipoConselho || ""} ${(p as any).numeroConselho}`
+                                : ""}
                             </div>
                           </div>
                         </div>
