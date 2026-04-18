@@ -2283,6 +2283,61 @@ const ProntuarioPage: React.FC = () => {
                                   })}
                                 </div>
                               )}
+
+                              {/* Busca manual de CID */}
+                              <div className="mt-3 pt-2 border-t">
+                                <p className="text-xs font-medium text-muted-foreground mb-1">🔎 Buscar outro CID</p>
+                                <div className="relative">
+                                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                                  <Input
+                                    value={cidSearchByProc[proc.id] || ''}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setCidSearchByProc((m) => ({ ...m, [proc.id]: v }));
+                                      const q = v.trim();
+                                      if (q.length < 2) {
+                                        setCidSearchResults((m) => ({ ...m, [proc.id]: [] }));
+                                        return;
+                                      }
+                                      setCidSearchLoading((m) => ({ ...m, [proc.id]: true }));
+                                      procedureService.searchCids(q).then((res) => {
+                                        setCidSearchResults((m) => ({ ...m, [proc.id]: res }));
+                                        setCidSearchLoading((m) => ({ ...m, [proc.id]: false }));
+                                      });
+                                    }}
+                                    placeholder="Pesquisar CID por código ou descrição..."
+                                    className="pl-7 h-8 text-xs"
+                                  />
+                                </div>
+                                {cidSearchLoading[proc.id] && (
+                                  <p className="text-xs text-muted-foreground italic mt-1">Buscando...</p>
+                                )}
+                                {(cidSearchResults[proc.id] || []).length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                                    {(cidSearchResults[proc.id] || []).map((c) => {
+                                      const already = (cidsByProc[proc.id] || []).some((x) => x.codigo === c.codigo);
+                                      const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
+                                      return (
+                                        <Badge
+                                          key={c.codigo}
+                                          variant={isSel ? "default" : "secondary"}
+                                          className="cursor-pointer text-xs"
+                                          onClick={() => {
+                                            // adiciona à lista de cids do procedimento (se ainda não estiver) e marca
+                                            setCidsByProc((m) => already ? m : ({ ...m, [proc.id]: [...(m[proc.id] || []), c] }));
+                                            setSelectedCidsByProc((m) => ({
+                                              ...m,
+                                              [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                            }));
+                                          }}
+                                        >
+                                          + {c.codigo}{c.descricao ? ` - ${c.descricao.slice(0, 40)}` : ''}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
