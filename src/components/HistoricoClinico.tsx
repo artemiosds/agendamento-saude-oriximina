@@ -161,6 +161,21 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   return (
     <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
+        </h3>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+            <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
+            <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+          </Button>
+        </div>
+      </div>
+
       {/* Tratamentos ativos */}
       {activeEpisodios.length > 0 && (
         <div className="space-y-2">
