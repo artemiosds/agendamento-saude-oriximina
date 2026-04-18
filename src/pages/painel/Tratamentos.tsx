@@ -1066,10 +1066,44 @@ const Tratamentos: React.FC = () => {
     setAgendandoCiclo(true);
     const resumo: ResumoSessaoItem[] = [];
 
+    // Track horários já usados nesta execução em lote (evita conflito entre as próprias sessões do lote)
+    const horariosUsadosLote: Record<string, Set<string>> = {};
+    const usar = (data: string, hora: string) => {
+      if (!horariosUsadosLote[data]) horariosUsadosLote[data] = new Set();
+      horariosUsadosLote[data].add(hora);
+    };
+    const estaLivreNoLote = (data: string, hora: string) =>
+      !(horariosUsadosLote[data] && horariosUsadosLote[data].has(hora));
+
+    /**
+     * Encontra o próximo slot válido para a sessão respeitando:
+     * - Disponibilidade configurada do profissional (getAvailableSlots)
+     * - Conflitos com agendamentos existentes (já filtrado por getAvailableSlots)
+     * - Conflitos com horários alocados anteriormente neste mesmo lote
+     * - Avança até 30 dias se a data sugerida estiver totalmente cheia
+     */
+    const encontrarSlotValido = (
+      dataSugerida: string,
+      profId: string,
+      unidadeId: string,
+    ): { data: string; hora: string } | null => {
+      let dataAtual = dataSugerida;
+      for (let tentativa = 0; tentativa < 30; tentativa++) {
+        const slots = getAvailableSlots(profId, unidadeId, dataAtual);
+        const slotLivre = slots.find((s) => estaLivreNoLote(dataAtual, s));
+        if (slotLivre) return { data: dataAtual, hora: slotLivre };
+        // Avança 1 dia
+        const d = new Date(dataAtual + "T12:00:00");
+        d.setDate(d.getDate() + 1);
+        dataAtual = d.toISOString().split("T")[0];
+      }
+      return null;
+    };
+
     try {
       for (const sess of pendentes) {
         try {
-          // 1) Verificar duplicidade no Supabase
+          // 1) Verificar duplicidade no Supabase (mesmo paciente/prof/data ativo)
           const { data: existente, error: checkErr } = await supabase
             .from("agendamentos")
             .select("id, hora, status")
@@ -1084,13 +1118,13 @@ const Tratamentos: React.FC = () => {
           if (checkErr) throw checkErr;
 
           if (existente) {
-            // Já existe — apenas vincula na sessão se necessário
             if (!sess.appointment_id || sess.status !== "agendada") {
               await supabase
                 .from("treatment_sessions")
                 .update({ appointment_id: existente.id, status: "agendada" })
                 .eq("id", sess.id);
             }
+            usar(sess.scheduled_date, existente.hora);
             resumo.push({
               numero: sess.session_number,
               data: sess.scheduled_date,
@@ -1100,8 +1134,24 @@ const Tratamentos: React.FC = () => {
             continue;
           }
 
-          // 2) Inserir novo agendamento (default 08:00 — recepção pode ajustar depois)
-          const horaPadrao = "08:00";
+          // 2) Encontrar slot válido respeitando disponibilidade do profissional
+          const slot = encontrarSlotValido(
+            sess.scheduled_date,
+            sess.professional_id,
+            selectedCycle.unit_id,
+          );
+
+          if (!slot) {
+            resumo.push({
+              numero: sess.session_number,
+              data: sess.scheduled_date,
+              status: "erro",
+              mensagem: "Sem horário disponível na agenda do profissional (próximos 30 dias)",
+            });
+            continue;
+          }
+
+          // 3) Inserir novo agendamento no horário válido
           const agId = `ag${Date.now()}${sess.session_number}`;
           await addAgendamento({
             id: agId,
@@ -1112,8 +1162,8 @@ const Tratamentos: React.FC = () => {
             setorId: "",
             profissionalId: sess.professional_id,
             profissionalNome: prof.nome,
-            data: sess.scheduled_date,
-            hora: horaPadrao,
+            data: slot.data,
+            hora: slot.hora,
             status: "confirmado",
             tipo: "Sessão de Tratamento",
             observacoes: `Sessão ${sess.session_number}/${sess.total_sessions} — ${selectedCycle.treatment_type} (lote)`,
@@ -1122,32 +1172,37 @@ const Tratamentos: React.FC = () => {
             criadoPor: user?.id || "",
           } as any);
 
-          // 3) Atualizar sessão como agendada
+          // 4) Atualizar sessão como agendada (e ajustar scheduled_date se mudou)
+          const updates: any = { appointment_id: agId, status: "agendada" };
+          if (slot.data !== sess.scheduled_date) updates.scheduled_date = slot.data;
           const { error: updErr } = await supabase
             .from("treatment_sessions")
-            .update({ appointment_id: agId, status: "agendada" })
+            .update(updates)
             .eq("id", sess.id);
           if (updErr) throw updErr;
 
-          // 4) Atualizar UI imediatamente (otimista) — antes do realtime/loadData
+          // 5) Atualização otimista da UI
           setSessions((prev) =>
             prev.map((x) =>
-              x.id === sess.id ? { ...x, appointment_id: agId, status: "agendada" } : x,
+              x.id === sess.id
+                ? { ...x, appointment_id: agId, status: "agendada", scheduled_date: slot.data }
+                : x,
             ),
           );
           setAgendamentoMap((prev) => ({
             ...prev,
-            [`${sess.patient_id}|${sess.professional_id}|${sess.scheduled_date}`]: {
+            [`${sess.patient_id}|${sess.professional_id}|${slot.data}`]: {
               id: agId,
-              hora: horaPadrao,
+              hora: slot.hora,
               status: "confirmado",
             },
           }));
 
+          usar(slot.data, slot.hora);
           resumo.push({
             numero: sess.session_number,
-            data: sess.scheduled_date,
-            hora: horaPadrao,
+            data: slot.data,
+            hora: slot.hora,
             status: "agendada",
           });
         } catch (innerErr: any) {
@@ -1175,13 +1230,15 @@ const Tratamentos: React.FC = () => {
       });
 
       if (erros > 0) {
-        toast.warning(`Ciclo processado com ${erros} erro(s). Veja o resumo abaixo.`);
+        toast.warning(
+          `${novas} sessão(ões) agendada(s). ${erros} não pôde(ram) ser agendada(s) por falta de horário disponível na agenda do profissional.`,
+        );
       } else {
         toast.success(`Ciclo agendado: ${novas} nova(s), ${jaExist} já existia(m).`);
       }
 
       setResumoCiclo(resumo);
-      // Recarrega em segundo plano para sincronizar
+      // Refresh em background para sincronização final
       loadData(true);
     } catch (err: any) {
       console.error("[AgendarCiclo] erro geral:", err);
