@@ -2305,6 +2305,207 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_config: {
+        Row: {
+          bloquear_sem_interacao_previa: boolean
+          created_at: string
+          delay_aleatorio_max_seg: number
+          delay_aleatorio_min_seg: number
+          dias_permitidos: number[]
+          horario_fim: string
+          horario_inicio: string
+          id: string
+          intervalo_minimo_minutos: number
+          limite_global_por_minuto: number
+          max_msgs_paciente_dia: number
+          max_msgs_paciente_semana: number
+          modo_estrito: boolean
+          respeitar_opt_out: boolean
+          unidade_id: string
+          updated_at: string
+          whatsapp_ativo: boolean
+        }
+        Insert: {
+          bloquear_sem_interacao_previa?: boolean
+          created_at?: string
+          delay_aleatorio_max_seg?: number
+          delay_aleatorio_min_seg?: number
+          dias_permitidos?: number[]
+          horario_fim?: string
+          horario_inicio?: string
+          id?: string
+          intervalo_minimo_minutos?: number
+          limite_global_por_minuto?: number
+          max_msgs_paciente_dia?: number
+          max_msgs_paciente_semana?: number
+          modo_estrito?: boolean
+          respeitar_opt_out?: boolean
+          unidade_id: string
+          updated_at?: string
+          whatsapp_ativo?: boolean
+        }
+        Update: {
+          bloquear_sem_interacao_previa?: boolean
+          created_at?: string
+          delay_aleatorio_max_seg?: number
+          delay_aleatorio_min_seg?: number
+          dias_permitidos?: number[]
+          horario_fim?: string
+          horario_inicio?: string
+          id?: string
+          intervalo_minimo_minutos?: number
+          limite_global_por_minuto?: number
+          max_msgs_paciente_dia?: number
+          max_msgs_paciente_semana?: number
+          modo_estrito?: boolean
+          respeitar_opt_out?: boolean
+          unidade_id?: string
+          updated_at?: string
+          whatsapp_ativo?: boolean
+        }
+        Relationships: []
+      }
+      whatsapp_consents: {
+        Row: {
+          criado_em: string
+          criado_por: string
+          detalhes: Json
+          id: string
+          origem: string
+          paciente_id: string
+          telefone: string
+          tipo: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string
+          detalhes?: Json
+          id?: string
+          origem?: string
+          paciente_id: string
+          telefone: string
+          tipo: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string
+          detalhes?: Json
+          id?: string
+          origem?: string
+          paciente_id?: string
+          telefone?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      whatsapp_event_config: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          delay_envio_min: number
+          evento: string
+          exigir_confirmacao: boolean
+          horario_personalizado: string
+          id: string
+          limite_por_paciente: number
+          prioridade: string
+          template_mensagem: string
+          unidade_id: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          delay_envio_min?: number
+          evento: string
+          exigir_confirmacao?: boolean
+          horario_personalizado?: string
+          id?: string
+          limite_por_paciente?: number
+          prioridade?: string
+          template_mensagem?: string
+          unidade_id: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          delay_envio_min?: number
+          evento?: string
+          exigir_confirmacao?: boolean
+          horario_personalizado?: string
+          id?: string
+          limite_por_paciente?: number
+          prioridade?: string
+          template_mensagem?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_queue: {
+        Row: {
+          agendado_para: string
+          agendamento_id: string
+          criado_em: string
+          evento: string
+          id: string
+          mensagem: string
+          metadados: Json
+          motivo_bloqueio: string
+          motivo_erro: string
+          paciente_id: string
+          paciente_nome: string
+          prioridade: string
+          processado_em: string | null
+          status: string
+          telefone: string
+          tentativas: number
+          unidade_id: string
+          updated_at: string
+        }
+        Insert: {
+          agendado_para?: string
+          agendamento_id?: string
+          criado_em?: string
+          evento: string
+          id?: string
+          mensagem: string
+          metadados?: Json
+          motivo_bloqueio?: string
+          motivo_erro?: string
+          paciente_id?: string
+          paciente_nome?: string
+          prioridade?: string
+          processado_em?: string | null
+          status?: string
+          telefone: string
+          tentativas?: number
+          unidade_id?: string
+          updated_at?: string
+        }
+        Update: {
+          agendado_para?: string
+          agendamento_id?: string
+          criado_em?: string
+          evento?: string
+          id?: string
+          mensagem?: string
+          metadados?: Json
+          motivo_bloqueio?: string
+          motivo_erro?: string
+          paciente_id?: string
+          paciente_nome?: string
+          prioridade?: string
+          processado_em?: string | null
+          status?: string
+          telefone?: string
+          tentativas?: number
+          unidade_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_templates: {
         Row: {
           ativo: boolean
