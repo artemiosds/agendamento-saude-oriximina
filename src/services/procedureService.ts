@@ -161,6 +161,17 @@ export const procedureService = {
     return (data || []).map((r: any) => ({ codigo: r.cid_codigo, descricao: r.cid_descricao }));
   },
 
+  async searchCids(query: string): Promise<{ codigo: string; descricao: string }[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const { data } = await (supabase as any)
+      .from('cid10_codigos')
+      .select('codigo, descricao')
+      .or(`codigo.ilike.%${q}%,descricao.ilike.%${q}%`)
+      .limit(20);
+    return (data || []).map((r: any) => ({ codigo: r.codigo, descricao: r.descricao }));
+  },
+
   async createCustom(input: {
     codigo?: string;
     nome: string;
