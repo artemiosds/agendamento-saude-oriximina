@@ -4,7 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 
 interface ProntuarioItem {
   id: string;
@@ -59,6 +63,9 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewerItem, setViewerItem] = useState<ProntuarioItem | null>(null);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [docModalOpen, setDocModalOpen] = useState(false);
   const cancelledRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -154,6 +161,21 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   return (
     <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
+        </h3>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+            <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
+            <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+          </Button>
+        </div>
+      </div>
+
       {/* Tratamentos ativos */}
       {activeEpisodios.length > 0 && (
         <div className="space-y-2">
@@ -238,22 +260,34 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                               </p>
                             )}
                           </div>
-                          {item.queixa_principal && (
+                          <div className="flex items-center gap-1 shrink-0">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 w-6 p-0 shrink-0"
-                              onClick={() => setExpandedId(expanded ? null : item.id)}
-                              aria-label={expanded ? "Recolher" : "Expandir"}
-                              aria-expanded={expanded}
+                              className="h-7 w-7 p-0"
+                              onClick={() => setViewerItem(item)}
+                              aria-label="Visualizar prontuário"
+                              title="Visualizar prontuário"
                             >
-                              {expanded ? (
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              )}
+                              <Eye className="w-3.5 h-3.5 text-primary" />
                             </Button>
-                          )}
+                            {item.queixa_principal && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setExpandedId(expanded ? null : item.id)}
+                                aria-label={expanded ? "Recolher" : "Expandir"}
+                                aria-expanded={expanded}
+                              >
+                                {expanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {expanded && (
                           <div className="mt-2 space-y-1 text-xs border-t pt-2">
@@ -298,6 +332,79 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           </ScrollArea>
         )}
       </div>
+
+      {/* Drawer de visualização rápida */}
+      <Sheet open={!!viewerItem} onOpenChange={(o) => !o && setViewerItem(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          {viewerItem && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Prontuário — {formatDateBR(viewerItem.data_atendimento)}
+                  {viewerItem.hora_atendimento && (
+                    <span className="text-sm text-muted-foreground font-normal">{viewerItem.hora_atendimento}</span>
+                  )}
+                </SheetTitle>
+                <SheetDescription>
+                  {viewerItem.profissional_nome}
+                  {viewerItem.profissional_id === currentProfissionalId && (
+                    <span className="text-primary ml-1">(você)</span>
+                  )}
+                </SheetDescription>
+              </SheetHeader>
+              <Separator className="my-4" />
+              <div className="space-y-4 text-sm">
+                {viewerItem.queixa_principal && (
+                  <Section label="Queixa principal" value={viewerItem.queixa_principal} />
+                )}
+                {viewerItem.evolucao && <Section label="Evolução / SOAP" value={viewerItem.evolucao} />}
+                {viewerItem.conduta && <Section label="Conduta" value={viewerItem.conduta} />}
+                {viewerItem.procedimentos_texto && (
+                  <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />
+                )}
+                {viewerItem.outro_procedimento && (
+                  <Section label="Outro procedimento" value={viewerItem.outro_procedimento} />
+                )}
+                {viewerItem.indicacao_retorno && (
+                  <Section label="Indicação de retorno" value={viewerItem.indicacao_retorno} />
+                )}
+              </div>
+              <Separator className="my-4" />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>
+                  Fechar
+                </Button>
+                <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}>
+                  <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <HistoricoCompletoModal
+        open={historicoOpen}
+        onOpenChange={setHistoricoOpen}
+        pacienteId={pacienteId}
+        pacienteNome={pacienteNome}
+        unidades={unidades}
+        currentProfissionalId={currentProfissionalId}
+      />
+
+      <GerarDocumentoModal
+        open={docModalOpen}
+        onOpenChange={setDocModalOpen}
+        paciente={{ id: pacienteId, nome: pacienteNome, cpf: '', cns: '', data_nascimento: '', cid: '', especialidade_destino: '' }}
+      />
     </div>
   );
 };
+
+const Section: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div>
+    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{value}</p>
+  </div>
+);
