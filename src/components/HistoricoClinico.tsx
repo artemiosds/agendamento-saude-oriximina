@@ -17,7 +17,7 @@ import {
 import { toast } from "sonner";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
-import { printHTML } from "@/lib/printLayout";
+import { buildInstitutionalCSS } from "@/lib/printLayout";
 
 interface ProntuarioItem {
   id: string;
