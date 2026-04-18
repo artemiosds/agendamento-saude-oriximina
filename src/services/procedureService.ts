@@ -29,7 +29,7 @@ export const SIGTAP_ESPECIALIDADE_TO_PROFISSAO: Record<string, string[]> = {
   servico_social: ['Assistente Social'],
   medico: ['Médico', 'Médica'],
   medicina: ['Médico', 'Médica'],
-  odontologia: ['Odontólogo', 'Odontóloga', 'Dentista', 'Cirurgião-Dentista'],
+  odontologia: ['Odontólogo', 'Odontóloga', 'Dentista', 'Cirurgião-Dentista', 'Cirurgiã-Dentista', 'Odontologia'],
   farmacia: ['Farmacêutico', 'Farmacêutica'],
   biomedicina: ['Biomédico', 'Biomédica'],
   educacao_fisica: ['Educador Físico', 'Profissional de Educação Física'],
