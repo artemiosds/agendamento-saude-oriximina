@@ -748,6 +748,7 @@ const Tratamentos: React.FC = () => {
 
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
+    if (registeringSession) return; // Double-click guard
 
     // Usa a sessão escolhida na Etapa 1; fallback para a próxima pendente
     const nextSession =
@@ -785,6 +786,7 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
+    setRegisteringSession(true);
     try {
       if (newSession.status === "realizada") {
         const soapPayload = normalizeSoapPayload(soapNotes);
@@ -825,7 +827,11 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      await loadData(true);
+      // Optimistic refresh: reload only this cycle's sessions + silent cycle stats refresh
+      await Promise.all([
+        loadSessionsForCycle(selectedCycle, true),
+        loadData(true),
+      ]);
 
       toast.success(
         newSession.status === "realizada"
@@ -839,6 +845,8 @@ const Tratamentos: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message?.startsWith('Preencha') ? err.message : "❌ Erro ao registrar sessão. Tente novamente.");
+    } finally {
+      setRegisteringSession(false);
     }
   };
 
