@@ -3026,8 +3026,11 @@ const ProntuarioPage: React.FC = () => {
               <Separator className="my-4" />
 
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
-                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir / PDF
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
                 </Button>
                 <Button
                   size="sm"
