@@ -185,9 +185,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
+        defaults.situacao = 'compareceu';
         defaults.horario_entrada = `${hh}:${mm}`;
         defaults.horario_saida = `${hh}:${mm}`;
         defaults.finalidade = 'consulta';
+        defaults.motivo_falta = '';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
