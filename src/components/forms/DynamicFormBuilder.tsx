@@ -237,7 +237,7 @@ export function DynamicFormBuilder({ availableSlugs, scope, onAfterSave }: Dynam
           {template && (
             <DynamicFormRenderer
               schema={template.schema}
-              onSubmit={() => toast.info('Preview: envio desabilitado')}
+              onSubmit={() => { toast.info('Preview: envio desabilitado'); }}
               submitLabel="Enviar (preview)"
             />
           )}
