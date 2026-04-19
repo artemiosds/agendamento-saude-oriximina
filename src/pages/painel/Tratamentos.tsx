@@ -3141,8 +3141,8 @@ const Tratamentos: React.FC = () => {
           <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
             <span>
               Exibindo <strong>{(safePage - 1) * PAGE_SIZE + 1}</strong>–
-              <strong>{Math.min(safePage * PAGE_SIZE, filteredCycles.length)}</strong> de{" "}
-              <strong>{filteredCycles.length}</strong> ciclo(s)
+              <strong>{Math.min(safePage * PAGE_SIZE, totalCycles)}</strong> de{" "}
+              <strong>{totalCycles}</strong> ciclo(s)
             </span>
             <span>
               Página {safePage} de {totalPages}
