@@ -353,7 +353,7 @@ const EventDetail: React.FC<{ event: FullEvent }> = ({ event }) => {
 
 // ── Main Component ─────────────────────────────────────────
 export const HistoricoCompletoModal: React.FC<Props> = ({
-  open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId,
+  open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId, onViewProntuario,
 }) => {
   const { events, professionals, loading, error, reload } = useFullHistory(pacienteId, unidades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -391,6 +391,32 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
   };
 
   const typeOptions = ["avaliacao_inicial", "retorno", "sessao", "urgencia", "procedimento", "consulta", "alta", "falta"];
+
+  // Summary stats
+  const summaryStats = useMemo(() => {
+    if (events.length === 0) return null;
+    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
+    return {
+      total: events.length,
+      first: sorted[0].date,
+      last: sorted[sorted.length - 1].date,
+    };
+  }, [events]);
+
+  const handleGenerateReport = () => {
+    downloadFullHistoryPdf(
+      pacienteNome,
+      filteredEvents.map((e) => ({
+        date: e.date,
+        type: TYPE_CONFIG[e.type]?.label || e.type,
+        professional: e.professional,
+        specialty: e.specialty,
+        summary: e.summary || e.queixaPrincipal || e.conduta || "",
+        unidade: e.unidade,
+        sessionInfo: e.sessionInfo,
+      })),
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
