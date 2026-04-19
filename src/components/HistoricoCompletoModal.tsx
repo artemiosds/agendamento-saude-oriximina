@@ -93,15 +93,22 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
     try {
       const unidadeMap = new Map(unidades.map(u => [u.id, u.nome]));
 
-      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, triageRes] = await Promise.all([
+      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, triageRes, funcionariosRes] = await Promise.all([
         (supabase as any).from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }),
         supabase.from("agendamentos").select("id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id").eq("paciente_id", pacienteId).eq("status", "falta").order("data", { ascending: false }),
         (supabase as any).from("treatment_sessions").select("id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id").eq("patient_id", pacienteId).neq("status", "agendada").order("scheduled_date", { ascending: false }),
         (supabase as any).from("patient_discharges").select("id, cycle_id, professional_id, discharge_date, reason, final_notes").eq("patient_id", pacienteId),
-        (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", pacienteId).limit(0), // placeholder to batch
+        (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", pacienteId).limit(0),
+        (supabase as any).from("funcionarios").select("id, profissao"),
       ]);
 
       if (cancelRef.current) return;
+
+      // map professional → specialty
+      const specialtyMap = new Map<string, string>();
+      for (const f of (funcionariosRes.data || []) as any[]) {
+        if (f?.id && f?.profissao) specialtyMap.set(f.id, f.profissao);
+      }
 
       // Fetch triage for all agendamento_ids from prontuarios
       const prontuarios = (prontuariosRes.data || []) as any[];
