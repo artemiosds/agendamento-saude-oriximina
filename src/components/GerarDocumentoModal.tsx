@@ -147,9 +147,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       .replace(/\{\{unidade\}\}/g, unidade || 'CER II Oriximiná')
       .replace(/\{\{data_hoje\}\}/g, hoje);
 
-    // Extended variables from campos
+    // Extended variables from campos (datas yyyy-mm-dd → dd/mm/yyyy)
+    const formatIfDate = (val: string) => {
+      if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        const [y, m, d] = val.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return val;
+    };
     Object.entries(campos).forEach(([k, v]) => {
-      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v || '—');
+      const out = v ? formatIfDate(v) : '—';
+      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), out);
     });
 
     // Medicamentos
