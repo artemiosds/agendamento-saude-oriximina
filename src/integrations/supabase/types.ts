@@ -671,6 +671,51 @@ export type Database = {
         }
         Relationships: []
       }
+      form_templates: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          criado_por: string
+          descricao: string
+          display_name: string
+          form_slug: string
+          id: string
+          profissional_id: string
+          schema: Json
+          unidade_id: string
+          updated_at: string
+          versao: number
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          descricao?: string
+          display_name?: string
+          form_slug: string
+          id?: string
+          profissional_id?: string
+          schema?: Json
+          unidade_id?: string
+          updated_at?: string
+          versao?: number
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          descricao?: string
+          display_name?: string
+          form_slug?: string
+          id?: string
+          profissional_id?: string
+          schema?: Json
+          unidade_id?: string
+          updated_at?: string
+          versao?: number
+        }
+        Relationships: []
+      }
       funcionarios: {
         Row: {
           ativo: boolean | null
@@ -2695,6 +2740,14 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      resolve_form_template: {
+        Args: {
+          p_form_slug: string
+          p_profissional_id?: string
+          p_unidade_id?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
