@@ -193,6 +193,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           time: a.hora || undefined,
           professional: a.profissional_nome || "",
           professionalId: a.profissional_id,
+          specialty: specialtyMap.get(a.profissional_id) || undefined,
           summary: "Paciente não compareceu",
           unidade: unidadeMap.get(a.unidade_id),
           status: "falta",
@@ -208,6 +209,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           date: s.scheduled_date,
           professional: "",
           professionalId: s.professional_id,
+          specialty: specialtyMap.get(s.professional_id) || cycle?.specialty || undefined,
           summary: s.clinical_notes || s.procedure_done || "",
           sessionInfo: `Sessão ${s.session_number}/${s.total_sessions}`,
           unidade: cycle?.unit_id ? unidadeMap.get(cycle.unit_id) : undefined,
@@ -224,6 +226,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           date: d.discharge_date,
           professional: "",
           professionalId: d.professional_id,
+          specialty: specialtyMap.get(d.professional_id) || cycle?.specialty || undefined,
           summary: [d.reason, d.final_notes].filter(Boolean).join(" — "),
         });
       }
