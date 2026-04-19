@@ -2939,6 +2939,7 @@ const ProntuarioPage: React.FC = () => {
           pacienteNome={historicoPacienteId?.nome || queryPacienteNome || form.paciente_nome || "Paciente"}
           unidades={unidades}
           currentProfissionalId={user?.id}
+          onViewProntuario={(p) => { setViewerProntuario(p); setHistoricoCompletoOpen(false); }}
         />
       )}
 
