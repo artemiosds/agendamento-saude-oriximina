@@ -2595,8 +2595,16 @@ const Tratamentos: React.FC = () => {
                 </p>
               )}
 
-              <Button onClick={handleRegisterSession} disabled={!canSubmitSessionRegistration} className="w-full gradient-primary text-primary-foreground">
-                Registrar
+              <Button
+                onClick={handleRegisterSession}
+                disabled={!canSubmitSessionRegistration || registeringSession}
+                className="w-full gradient-primary text-primary-foreground"
+              >
+                {registeringSession ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Registrando...</>
+                ) : (
+                  "Registrar"
+                )}
               </Button>
             </div>
           </DialogContent>
