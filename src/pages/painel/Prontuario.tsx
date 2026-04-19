@@ -38,6 +38,8 @@ import { Progress } from "@/components/ui/progress";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
+import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+import { Lock, FileDown } from "lucide-react";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
@@ -2747,7 +2749,10 @@ const ProntuarioPage: React.FC = () => {
           {filtered.map((p) => {
             const isOwn = p.profissional_id === user?.id;
             return (
-              <Card key={p.id} className="shadow-card border-0">
+              <Card
+                key={p.id}
+                className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200"
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -2782,9 +2787,10 @@ const ProntuarioPage: React.FC = () => {
                         </p>
                       )}
                       {!isOwn && isProfissional && (
-                        <p className="text-xs text-warning mt-1 italic">
-                          Prontuário de outro profissional (somente leitura)
-                        </p>
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+                          <Lock className="w-3 h-3" />
+                          <span className="font-medium">Prontuário de outro profissional (somente leitura)</span>
+                        </div>
                       )}
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -2814,7 +2820,16 @@ const ProntuarioPage: React.FC = () => {
                           <Pencil className="w-4 h-4" />
                         </Button>
                       )}
-                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir / PDF">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                        title="Baixar PDF"
+                        aria-label="Baixar PDF"
+                      >
+                        <FileDown className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir">
                         <Printer className="w-4 h-4" />
                       </Button>
                       <DropdownMenu>
@@ -2924,6 +2939,7 @@ const ProntuarioPage: React.FC = () => {
           pacienteNome={historicoPacienteId?.nome || queryPacienteNome || form.paciente_nome || "Paciente"}
           unidades={unidades}
           currentProfissionalId={user?.id}
+          onViewProntuario={(p) => { setViewerProntuario(p); setHistoricoCompletoOpen(false); }}
         />
       )}
 
@@ -3010,8 +3026,11 @@ const ProntuarioPage: React.FC = () => {
               <Separator className="my-4" />
 
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
-                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir / PDF
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
                 </Button>
                 <Button
                   size="sm"
