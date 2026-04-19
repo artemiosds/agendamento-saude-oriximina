@@ -183,7 +183,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       }
       if (tipo.includes('declaraç') || tipo.includes('comparecimento')) {
         const now = new Date();
-        defaults.hora_entrada = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        defaults.horario_entrada = `${hh}:${mm}`;
+        defaults.horario_saida = `${hh}:${mm}`;
+        defaults.finalidade = 'consulta';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
