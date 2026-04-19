@@ -2978,9 +2978,13 @@ const Tratamentos: React.FC = () => {
               <Button
                 onClick={handleAddIntermediateSession}
                 className="w-full gradient-primary text-primary-foreground"
-                disabled={!intermediateDate}
+                disabled={!intermediateDate || addingIntermediate}
               >
-                <Plus className="w-4 h-4 mr-2" /> Adicionar Sessão
+                {addingIntermediate ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adicionando...</>
+                ) : (
+                  <><Plus className="w-4 h-4 mr-2" /> Adicionar Sessão</>
+                )}
               </Button>
             </div>
           </DialogContent>
