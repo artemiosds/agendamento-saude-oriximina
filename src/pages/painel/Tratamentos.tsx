@@ -69,6 +69,9 @@ interface TreatmentCycle {
   created_at: string;
   updated_at: string;
   pts_id: string | null;
+  // Lightweight stats from server-side RPC
+  pending_ag?: number;
+  faltas?: number;
 }
 
 interface TreatmentSession {
