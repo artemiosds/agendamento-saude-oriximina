@@ -6,16 +6,74 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProfissao } from "@/hooks/useProntuarioConfig";
+
+type TipoProntuario = 'avaliacao' | 'retorno' | 'sessao' | 'urgencia' | 'procedimento';
 
 interface CamposEspecialidadeProps {
   profissao: string;
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
   profissionalId?: string;
+  tipoProntuario?: TipoProntuario;
 }
+
+interface CondicaoVisibilidade {
+  campo: string;
+  operador: 'igual' | 'diferente' | 'maior' | 'menor' | 'preenchido';
+  valor?: string;
+}
+
+interface MasterCampo {
+  id: string;
+  key: string;
+  label: string;
+  tipo: string;
+  obrigatorio: boolean;
+  habilitado: boolean;
+  isBuiltin: boolean;
+  order: number;
+  opcoes?: string[];
+  tipos_prontuario?: TipoProntuario[];
+  ajuda?: string;
+  valor_padrao?: string;
+  condicao?: CondicaoVisibilidade;
+}
+
+interface MasterEspecialidade {
+  key: string;
+  label: string;
+  ativa: boolean;
+  profissoes: string[];
+  campos: MasterCampo[];
+}
+
+const DEFAULT_TIPOS: TipoProntuario[] = ['avaliacao', 'retorno'];
+
+// Mapeamento entre o `key` exibido na config Master e o `fieldKey` interno usado pelos blocos
+// (alguns são iguais, outros divergem por motivos históricos)
+const KEY_ALIASES: Record<string, string> = {
+  forca_muscular: 'forca_mrc',
+  comportamento: 'comportamento_obs',
+  risco: 'risco_agressao',
+  peso: 'peso_kg',
+  altura: 'altura_m',
+  habitos: 'habitos_alimentares',
+  mif: 'mif_score',
+  contexto: 'contexto_ambiental',
+  exame_fisico: 'exame_fisico_geral',
+  sistemas: 'sistemas_avaliados',
+  plano_tratamento: 'plano_tratamento_odonto',
+  avaliacao_enfermagem: 'avaliacao_enf',
+  cuidados: 'cuidados_realizados',
+  intercorrencias: 'intercorrencias_enf',
+  queixa_odonto: 'queixa_odonto',
+};
+
+const aliasFor = (k: string) => KEY_ALIASES[k] || k;
 
 const classificarIMC = (imc: number): { label: string; color: string } => {
   if (imc < 18.5) return { label: "Abaixo do peso", color: "text-warning" };
@@ -72,9 +130,10 @@ interface ProfConfig {
   }>;
 }
 
-const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, values, onChange, profissionalId }) => {
+const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, values, onChange, profissionalId, tipoProntuario }) => {
   const prof = normalizeProfissao(profissao);
   const [profConfig, setProfConfig] = useState<ProfConfig | null>(null);
+  const [masterEsp, setMasterEsp] = useState<MasterEspecialidade | null>(null);
 
   // Load professional config for custom fields
   useEffect(() => {
@@ -93,22 +152,78 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
     return () => { cancelled = true; };
   }, [profissionalId]);
 
+  // Load Master config for this specialty + Realtime
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = (data?.configuracoes as any)?.config_especialidades_campos as MasterEspecialidade[] | undefined;
+      if (cancelled || !cfg) return;
+      const found = cfg.find(e => e.profissoes.includes(prof) || e.key === prof);
+      setMasterEsp(found || null);
+    };
+    load();
+    const channel = supabase
+      .channel(`camposesp_realtime_${prof}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config', filter: 'id=eq.default' }, load)
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [prof]);
+
   if (!SPECIALTY_CONFIG[prof]) return null;
 
   const config = SPECIALTY_CONFIG[prof];
   const v = (key: string) => values[`esp_${key}`] || "";
   const set = (key: string, val: string) => onChange(`esp_${key}`, val);
 
-  // Check if a built-in field is visible based on professional config
+  const masterCampoFor = (fieldKey: string): MasterCampo | undefined => {
+    if (!masterEsp) return undefined;
+    return masterEsp.campos.find(c => aliasFor(c.key) === fieldKey || c.key === fieldKey);
+  };
+
+  const condicaoSatisfeita = (cond?: CondicaoVisibilidade): boolean => {
+    if (!cond) return true;
+    const otherKey = aliasFor(cond.campo);
+    const raw = values[`esp_${otherKey}`] ?? '';
+    const val = String(raw).trim();
+    switch (cond.operador) {
+      case 'preenchido': return val.length > 0;
+      case 'igual': return val === (cond.valor ?? '');
+      case 'diferente': return val !== (cond.valor ?? '');
+      case 'maior': return parseFloat(val) > parseFloat(cond.valor ?? '0');
+      case 'menor': return parseFloat(val) < parseFloat(cond.valor ?? '0');
+      default: return true;
+    }
+  };
+
+  // Built-in field visibility: profissional pref AND master habilitado AND tipoProntuario AND condicional
   const isFieldVisible = (fieldKey: string) => {
-    if (!profConfig?.campos_especialidade) return true;
-    const cfg = profConfig.campos_especialidade[fieldKey];
-    if (cfg && cfg.visivel === false) return false;
+    if (profConfig?.campos_especialidade) {
+      const cfg = profConfig.campos_especialidade[fieldKey];
+      if (cfg && cfg.visivel === false) return false;
+    }
+    const m = masterCampoFor(fieldKey);
+    if (m) {
+      if (!m.habilitado) return false;
+      const tipos = m.tipos_prontuario && m.tipos_prontuario.length > 0 ? m.tipos_prontuario : DEFAULT_TIPOS;
+      if (tipoProntuario && !tipos.includes(tipoProntuario)) return false;
+      if (!condicaoSatisfeita(m.condicao)) return false;
+    }
     return true;
   };
 
-  // Get custom fields
+  // Get custom fields (do profissional)
   const customFields = profConfig?.campos_especialidade_custom || [];
+
+  // Custom fields criados pelo Master nesta especialidade
+  const masterCustomFields: MasterCampo[] = (masterEsp?.campos || []).filter(c => {
+    if (c.isBuiltin) return false;
+    if (!c.habilitado) return false;
+    const tipos = c.tipos_prontuario && c.tipos_prontuario.length > 0 ? c.tipos_prontuario : DEFAULT_TIPOS;
+    if (tipoProntuario && !tipos.includes(tipoProntuario)) return false;
+    if (!condicaoSatisfeita(c.condicao)) return false;
+    return true;
+  });
 
   const renderFisioterapia = () => {
     const mrc = parseInt(v("forca_mrc") || "0");
@@ -371,6 +486,47 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       <CardContent className="px-4 pb-4 pt-0 space-y-0">
         {renderFields()}
         {renderCustomFields()}
+        {masterCustomFields.length > 0 && (
+          <div className="space-y-3 pt-2 border-t border-border/40 mt-3">
+            {masterCustomFields.map(campo => {
+              const fieldKey = campo.key;
+              return (
+                <div key={fieldKey}>
+                  <Label className="flex items-center gap-2">
+                    {campo.label}
+                    {campo.obrigatorio && <span className="text-destructive">*</span>}
+                    <Badge variant="outline" className="text-[9px] px-1 py-0">Master</Badge>
+                  </Label>
+                  {campo.tipo === 'textarea' && <Textarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'text' && <Input value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'number' && <Input type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'date' && <Input type="date" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'checkbox' && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Checkbox checked={v(fieldKey) === 'true'} onCheckedChange={(c) => set(fieldKey, c ? 'true' : 'false')} />
+                      <span className="text-xs text-muted-foreground">Marcar</span>
+                    </div>
+                  )}
+                  {campo.tipo === 'select' && campo.opcoes && (
+                    <Select value={v(fieldKey) || campo.valor_padrao || ''} onValueChange={val => set(fieldKey, val)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {campo.opcoes.map(op => <SelectItem key={op} value={op}>{op}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {campo.tipo === 'slider' && (
+                    <div>
+                      <Slider min={0} max={10} step={1} value={[parseInt(v(fieldKey) || campo.valor_padrao || "0")]} onValueChange={([val]) => set(fieldKey, String(val))} className="mt-2" />
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>0</span><span>10</span></div>
+                    </div>
+                  )}
+                  {campo.ajuda && <p className="text-[11px] text-muted-foreground italic mt-1">💡 {campo.ajuda}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

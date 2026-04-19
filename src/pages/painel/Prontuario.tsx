@@ -1894,6 +1894,7 @@ const ProntuarioPage: React.FC = () => {
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
@@ -1947,6 +1948,7 @@ const ProntuarioPage: React.FC = () => {
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
