@@ -128,8 +128,7 @@ const PacienteDetalheModal: React.FC<PacienteDetalheModalProps> = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        hideCloseButton
-        className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden"
+        className="p-0 gap-0 flex flex-col border-0 bg-background overflow-hidden [&>button.absolute]:hidden"
         style={{
           width: '95vw',
           maxWidth: '480px',
