@@ -2815,9 +2815,13 @@ const ProntuarioPage: React.FC = () => {
                       >
                         <History className="w-4 h-4 text-primary" />
                       </Button>
-                      {canEdit && (isProfissional ? isOwn : true) && (
+                      {(isProfissional ? isOwn : true) ? (
                         <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
+                          <Pencil className="w-4 h-4 opacity-40" />
                         </Button>
                       )}
                       <Button
