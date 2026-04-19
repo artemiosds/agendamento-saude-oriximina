@@ -116,6 +116,30 @@ serve(async (req) => {
       observacoes,
     } = payload;
 
+    // ===== Permission change events =====
+    // Triggered by DB triggers on `permissoes` and `permissoes_usuario`.
+    // No `paciente_nome`/`telefone` required — forward as-is to external integrations.
+    if (evento === "permissao_alterada") {
+      const webhookUrl = await getWebhookUrl(supabaseAdmin);
+      const permPayload = {
+        ...payload,
+        data_evento: new Date().toISOString(),
+      };
+      const result = await sendWithRetry(webhookUrl, permPayload);
+      await logNotification(supabaseAdmin, {
+        evento: "permissao_alterada",
+        canal: "webhook",
+        payload: permPayload,
+        status: result.ok ? "enviado" : "erro",
+        resposta: result.body,
+        erro: result.ok ? "" : `HTTP ${result.status}`,
+      });
+      return new Response(
+        JSON.stringify({ success: result.ok, status: result.status }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
     // Validate required fields
     const missingFields: string[] = [];
     if (!paciente_nome) missingFields.push("paciente_nome");
