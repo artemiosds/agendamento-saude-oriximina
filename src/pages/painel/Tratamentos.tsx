@@ -227,6 +227,10 @@ const Tratamentos: React.FC = () => {
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
   const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+  const [addingIntermediate, setAddingIntermediate] = useState(false);
+
+  // Submission lock for "Registrar Sessão" to prevent double-clicks
+  const [registeringSession, setRegisteringSession] = useState(false);
 
   // Master: edit realized session
   const [editRealizadaOpen, setEditRealizadaOpen] = useState(false);
