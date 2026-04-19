@@ -190,6 +190,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         defaults.horario_saida = `${hh}:${mm}`;
         defaults.finalidade = 'consulta';
         defaults.motivo_falta = '';
+        defaults.data_falta = new Date().toISOString().split('T')[0];
+        defaults.profissional_agendado = profissional?.nome || '';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
