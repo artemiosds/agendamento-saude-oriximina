@@ -101,6 +101,7 @@ const Pacientes: React.FC = () => {
   const canEdit = can("pacientes", "can_edit");
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
+  const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
