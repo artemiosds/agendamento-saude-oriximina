@@ -27,6 +27,7 @@ interface FullEvent {
   time?: string;
   professional: string;
   professionalId?: string;
+  specialty?: string;
   summary: string;
   soapSubjetivo?: string;
   soapObjetivo?: string;
@@ -42,6 +43,7 @@ interface FullEvent {
   sessionInfo?: string;
   procedimentos?: string;
   status?: string;
+  rawProntuario?: any;
 }
 
 interface Props {
@@ -51,6 +53,7 @@ interface Props {
   pacienteNome: string;
   unidades: { id: string; nome: string }[];
   currentProfissionalId?: string;
+  onViewProntuario?: (prontuario: any) => void;
 }
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string; border: string }> = {
