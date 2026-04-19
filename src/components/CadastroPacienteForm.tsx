@@ -155,7 +155,9 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const [uploading, setUploading] = useState(false);
   const { user } = useAuth();
-  const { resolved: customConfig } = useCustomFields('paciente', user?.unidadeId);
+  const { resolved: customConfig, getNativeLabel, isNativeHidden } = useCustomFields('paciente', user?.unidadeId);
+  const L = (name: string, fallback: string) => getNativeLabel(name, fallback);
+  const H = (name: string) => isNativeHidden(name);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
