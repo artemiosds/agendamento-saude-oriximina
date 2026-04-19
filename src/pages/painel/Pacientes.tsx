@@ -26,6 +26,7 @@ import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, File
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import PacienteDetalheModal, { PSecao, PCampo, AlergiasBlock, formatCPF, formatCNS, formatTelefoneBR, formatarDataBR } from "@/components/PacienteDetalheModal";
+import { useCustomFields } from "@/hooks/useCustomFields";
 import { toast } from "sonner";
 import { validatePacienteFields } from "@/lib/validation";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,6 +101,7 @@ const Pacientes: React.FC = () => {
   const canEdit = can("pacientes", "can_edit");
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
+  const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1108,17 +1110,17 @@ const Pacientes: React.FC = () => {
             footer={footer}
           >
             <PSecao titulo="Dados Pessoais">
-              <PCampo label="Nome completo" valor={detalhePaciente.nome} />
-              <PCampo label="CPF" valor={formatCPF(detalhePaciente.cpf)} />
-              <PCampo label="Cartão SUS" valor={formatCNS(detalhePaciente.cns)} />
-              <PCampo label="Nome da mãe" valor={detalhePaciente.nomeMae} />
+              <PCampo label={L('nome', 'Nome completo')} valor={detalhePaciente.nome} />
+              <PCampo label={L('cpf', 'CPF')} valor={formatCPF(detalhePaciente.cpf)} />
+              <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
+              <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="CID" valor={cidVal} />
             </PSecao>
 
             <PSecao titulo="Contato">
-              <PCampo label="Telefone" valor={formatTelefoneBR(detalhePaciente.telefone)} />
-              <PCampo label="E-mail" valor={detalhePaciente.email} />
-              <PCampo label="Endereço" valor={detalhePaciente.endereco} />
+              <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
+              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
             <PSecao titulo="Histórico">
@@ -1132,7 +1134,7 @@ const Pacientes: React.FC = () => {
             </PSecao>
 
             {detalhePaciente.observacoes && (
-              <PSecao titulo="Observações">
+              <PSecao titulo={L('observacoes', 'Observações')}>
                 <PCampo label="Notas" valor={detalhePaciente.observacoes} />
               </PSecao>
             )}
