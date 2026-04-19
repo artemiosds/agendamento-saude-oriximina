@@ -156,6 +156,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           time: p.hora_atendimento || undefined,
           professional: p.profissional_nome || "",
           professionalId: p.profissional_id,
+          specialty: specialtyMap.get(p.profissional_id) || undefined,
           summary: p.queixa_principal || p.evolucao || "",
           soapSubjetivo: p.soap_subjetivo || undefined,
           soapObjetivo: p.soap_objetivo || undefined,
@@ -178,6 +179,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           } : undefined,
           unidade: unidadeMap.get(p.unidade_id),
           procedimentos: p.procedimentos_texto || undefined,
+          rawProntuario: p,
         });
       }
 
