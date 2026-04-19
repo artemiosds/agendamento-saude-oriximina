@@ -403,7 +403,10 @@ const Tratamentos: React.FC = () => {
   }, [agendarSessaoTarget]);
 
   // Silent background refresh on realtime changes — no loading spinner
-  const silentRefresh = useCallback(() => loadData(true), [loadData]);
+  const silentRefresh = useCallback(() => {
+    loadData(true);
+    if (selectedCycle) loadSessionsForCycle(selectedCycle, true);
+  }, [loadData, loadSessionsForCycle, selectedCycle]);
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'treatment_sessions'],
