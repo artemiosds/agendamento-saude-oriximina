@@ -164,6 +164,17 @@ const Permissoes: React.FC = () => {
     return () => { supabase.removeChannel(ch); };
   }, [tab, loadPerfil, loadUser]);
 
+  // Filtragem de funcionários pela busca (hook ANTES do early return)
+  const funcionariosFiltered = useMemo(() => {
+    const q = searchUser.toLowerCase().trim();
+    let list = funcionarios;
+    if (selectedUnidade) list = list.filter((f) => f.unidade_id === selectedUnidade || !f.unidade_id);
+    if (!q) return list.slice(0, 50);
+    return list.filter((f) =>
+      f.nome.toLowerCase().includes(q) || f.usuario.toLowerCase().includes(q) || f.role.toLowerCase().includes(q)
+    ).slice(0, 50);
+  }, [funcionarios, searchUser, selectedUnidade]);
+
   if (!hasPermission(["master"])) {
     return (
       <div className="p-6 text-center text-muted-foreground">
