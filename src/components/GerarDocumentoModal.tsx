@@ -540,15 +540,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
               <Separator />
 
-              {/* Editable content */}
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
-                <Textarea
-                  value={conteudoFinal}
-                  onChange={e => setConteudoFinal(e.target.value)}
-                  className="min-h-[180px] text-sm font-serif"
-                />
-              </div>
+              {/* Editable raw HTML — hidden for cleaner UX on Declaração/Relatório de Evolução */}
+              {!(tipoLower.includes('declaraç') || tipoLower.includes('comparecimento') || tipoLower.includes('evoluç') || tipoLower.includes('relatório')) && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
+                  <Textarea
+                    value={conteudoFinal}
+                    onChange={e => setConteudoFinal(e.target.value)}
+                    className="min-h-[180px] text-sm font-serif"
+                  />
+                </div>
+              )}
 
               {/* Preview */}
               <div className="space-y-1.5">
