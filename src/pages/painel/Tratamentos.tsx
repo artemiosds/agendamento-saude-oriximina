@@ -69,6 +69,9 @@ interface TreatmentCycle {
   created_at: string;
   updated_at: string;
   pts_id: string | null;
+  // Lightweight stats from server-side RPC
+  pending_ag?: number;
+  faltas?: number;
 }
 
 interface TreatmentSession {
@@ -224,6 +227,10 @@ const Tratamentos: React.FC = () => {
   const [addIntermediateOpen, setAddIntermediateOpen] = useState(false);
   const [intermediateDate, setIntermediateDate] = useState("");
   const [intermediateAfterSession, setIntermediateAfterSession] = useState(0);
+  const [addingIntermediate, setAddingIntermediate] = useState(false);
+
+  // Submission lock for "Registrar Sessão" to prevent double-clicks
+  const [registeringSession, setRegisteringSession] = useState(false);
 
   // Master: edit realized session
   const [editRealizadaOpen, setEditRealizadaOpen] = useState(false);
@@ -275,40 +282,74 @@ const Tratamentos: React.FC = () => {
   const isProfissional = user?.role === "profissional";
   const canAgendarSessao = can('tratamento', 'can_execute');
 
+  // Total of cycles (server-side count)
+  const [totalCycles, setTotalCycles] = useState(0);
+  // Tracks which cycle has had its sessions loaded (lazy load)
+  const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
+
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      let qCycles = supabase.from("treatment_cycles").select("*").order("created_at", { ascending: false });
-      if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') qCycles = qCycles.eq("unit_id", user.unidadeId);
+      // Server-side paginated cycles via RPC (lightweight, with stats only)
+      const isProf = user?.role === "profissional";
+      const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
 
-      let qExtensions = supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false });
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
+        p_page: currentPage,
+        p_page_size: PAGE_SIZE,
+        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
+        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
+        p_status: filterStatus !== 'all' ? filterStatus : null,
+        p_search: searchTerm.trim() || null,
+        p_only_own_professional: false, // already handled via p_professional_id
+      });
+
+      if (rpcError) throw rpcError;
+
+      const cyclesData = (rpcData?.cycles || []) as TreatmentCycle[];
+      setCycles(cyclesData);
+      setTotalCycles(rpcData?.total || 0);
+      setSelectedCycle((current) => (current ? cyclesData.find((cycle) => cycle.id === current.id) || current : current));
+
+      // PTS list (lightweight, scoped by unit)
       let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qPts = qPts.eq("unit_id", user.unidadeId);
-      }
-
-      const [{ data: cData }, sData, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
-        qCycles,
-        treatmentService.getSessions(),
-        qExtensions,
-        procedureService.getActive(),
+      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
+      const [{ data: ptsData }, procsData] = await Promise.all([
         qPts,
+        procedureService.getActive(),
       ]);
 
-      if (cData) {
-        const nextCycles = cData as TreatmentCycle[];
-        setCycles(nextCycles);
-        setSelectedCycle((current) => (current ? nextCycles.find((cycle) => cycle.id === current.id) || null : current));
-      }
-      if (sData) setSessions(sData as TreatmentSession[]);
-      if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
+    } catch (err) {
+      console.error("Error loading treatments:", err);
+      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
+    }
+    if (!silent) setLoading(false);
+  }, [user, currentPage, filterProf, filterUnit, filterStatus, searchTerm]);
 
-      // Cross-reference: fetch agendamentos for all patient+professional pairs in sessions
-      if (sData && sData.length > 0) {
-        const patientIds = [...new Set(sData.map((s: any) => s.patient_id))];
+  // Lazy load: sessions, extensions and agendamento map only for the selected cycle
+  const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
+    try {
+      const [sData, eData] = await Promise.all([
+        treatmentService.getSessions(cycle.id),
+        supabase.from("treatment_extensions").select("*").eq("cycle_id", cycle.id).order("changed_at", { ascending: false }),
+      ]);
+      const sessionsData = (sData || []) as TreatmentSession[];
+      // Replace only this cycle's sessions in the global state
+      setSessions((prev) => {
+        const others = prev.filter((s) => s.cycle_id !== cycle.id);
+        return [...others, ...sessionsData];
+      });
+      setExtensions((prev) => {
+        const others = prev.filter((x) => x.cycle_id !== cycle.id);
+        return [...others, ...((eData.data || []) as TreatmentExtension[])];
+      });
+      setLoadedSessionsCycleId(cycle.id);
+
+      // Cross-reference agendamentos for this cycle's sessions only
+      if (sessionsData.length > 0) {
+        const patientIds = [...new Set(sessionsData.map((s) => s.patient_id))];
         let agQuery = supabase
           .from("agendamentos")
           .select("id, data, hora, status, paciente_id, profissional_id")
@@ -318,26 +359,33 @@ const Tratamentos: React.FC = () => {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
         }
         const { data: agData } = await agQuery;
-
-        const map: Record<string, { id: string; hora: string; status: string }> = {};
         if (agData) {
-          for (const ag of agData) {
-            const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
-            map[key] = { id: ag.id, hora: ag.hora, status: ag.status };
-          }
+          setAgendamentoMap((prev) => {
+            const next = { ...prev };
+            for (const ag of agData) {
+              const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
+              next[key] = { id: ag.id, hora: ag.hora, status: ag.status };
+            }
+            return next;
+          });
         }
-        setAgendamentoMap(map);
       }
     } catch (err) {
-      console.error("Error loading treatments:", err);
-      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
+      console.error("Error loading cycle sessions:", err);
+      if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
-    if (!silent) setLoading(false);
   }, [user]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Lazy load sessions when a cycle is selected
+  useEffect(() => {
+    if (selectedCycle && selectedCycle.id !== loadedSessionsCycleId) {
+      loadSessionsForCycle(selectedCycle, true);
+    }
+  }, [selectedCycle, loadedSessionsCycleId, loadSessionsForCycle]);
 
   // ESC key to clear scheduling state
   useEffect(() => {
@@ -355,7 +403,10 @@ const Tratamentos: React.FC = () => {
   }, [agendarSessaoTarget]);
 
   // Silent background refresh on realtime changes — no loading spinner
-  const silentRefresh = useCallback(() => loadData(true), [loadData]);
+  const silentRefresh = useCallback(() => {
+    loadData(true);
+    if (selectedCycle) loadSessionsForCycle(selectedCycle, true);
+  }, [loadData, loadSessionsForCycle, selectedCycle]);
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'treatment_sessions'],
@@ -377,51 +428,26 @@ const Tratamentos: React.FC = () => {
     return m;
   }, [funcionarios]);
 
-  // Pre-aggregate session counts per cycle (avoids O(n*m) on every render)
+  // Pre-aggregate session counts per cycle (now sourced from server-side RPC)
   const sessionStatsByCycle = useMemo(() => {
     const stats = new Map<string, { pendingAg: number; faltas: number }>();
-    for (const s of sessions) {
-      const cur = stats.get(s.cycle_id) || { pendingAg: 0, faltas: 0 };
-      if (s.status === "pendente_agendamento") cur.pendingAg++;
-      else if (s.status === "paciente_faltou") cur.faltas++;
-      stats.set(s.cycle_id, cur);
+    for (const c of cycles) {
+      stats.set(c.id, { pendingAg: c.pending_ag || 0, faltas: c.faltas || 0 });
     }
     return stats;
-  }, [sessions]);
+  }, [cycles]);
 
-  const filteredCycles = useMemo(() => {
-    let result = cycles.filter((c) => {
-      if (filterProf !== "all" && c.professional_id !== filterProf) return false;
-      if (filterUnit !== "all" && c.unit_id !== filterUnit) return false;
-      if (filterStatus !== "all" && c.status !== filterStatus) return false;
-      return true;
-    });
-    if (searchTerm.trim()) {
-      const term = searchTerm.trim().toLowerCase();
-      result = result.filter((c) => {
-        const pac = pacientesMap.get(c.patient_id);
-        const pacNome = pac?.nome?.toLowerCase() || '';
-        const pacCpf = pac?.cpf?.toLowerCase() || '';
-        const pacCns = pac?.cns?.toLowerCase() || '';
-        const tipo = c.treatment_type?.toLowerCase() || '';
-        const statusLabel = (statusLabels as any)[c.status]?.toLowerCase() || c.status?.toLowerCase() || '';
-        return pacNome.includes(term) || pacCpf.includes(term) || pacCns.includes(term) || tipo.includes(term) || statusLabel.includes(term);
-      });
-    }
-    return result;
-  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientesMap]);
+  // Server-side pagination: cycles are already filtered/paginated by RPC.
+  // Keep filteredCycles/paginatedCycles aliases for minimal UI changes.
+  const filteredCycles = cycles;
+  const paginatedCycles = cycles;
+  const totalPages = Math.max(1, Math.ceil(totalCycles / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
 
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
   }, [filterProf, filterUnit, filterStatus, searchTerm]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredCycles.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedCycles = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filteredCycles.slice(start, start + PAGE_SIZE);
-  }, [filteredCycles, safePage]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
@@ -689,7 +715,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
       setCreateOpen(false);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao criar ciclo de tratamento: " + err.message);
@@ -716,7 +742,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success("Ciclo excluído com sucesso.");
       setDeleteTarget(null);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao excluir ciclo.");
@@ -725,6 +751,7 @@ const Tratamentos: React.FC = () => {
 
   const handleRegisterSession = async () => {
     if (!selectedCycle) return;
+    if (registeringSession) return; // Double-click guard
 
     // Usa a sessão escolhida na Etapa 1; fallback para a próxima pendente
     const nextSession =
@@ -762,6 +789,7 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
+    setRegisteringSession(true);
     try {
       if (newSession.status === "realizada") {
         const soapPayload = normalizeSoapPayload(soapNotes);
@@ -802,7 +830,11 @@ const Tratamentos: React.FC = () => {
         },
       });
 
-      await loadData(true);
+      // Optimistic refresh: reload only this cycle's sessions + silent cycle stats refresh
+      await Promise.all([
+        loadSessionsForCycle(selectedCycle, true),
+        loadData(true),
+      ]);
 
       toast.success(
         newSession.status === "realizada"
@@ -816,6 +848,8 @@ const Tratamentos: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message?.startsWith('Preencha') ? err.message : "❌ Erro ao registrar sessão. Tente novamente.");
+    } finally {
+      setRegisteringSession(false);
     }
   };
 
@@ -864,7 +898,7 @@ const Tratamentos: React.FC = () => {
       toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada.`);
       setEditRealizadaOpen(false);
       setEditRealizadaTarget(null);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao editar sessão: " + err.message);
@@ -912,7 +946,7 @@ const Tratamentos: React.FC = () => {
       });
 
       toast.success(`Sessão ${session.session_number} revertida para "Agendada".`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao limpar sessão: " + err.message);
@@ -1077,7 +1111,7 @@ const Tratamentos: React.FC = () => {
       setAgendarSessaoData("");
       setAgendarSessaoHora("");
       setAgendarSessaoSalaId("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Erro ao agendar sessão.");
@@ -1369,7 +1403,7 @@ const Tratamentos: React.FC = () => {
       );
       setRemarcarTarget(null);
       setRemarcarData("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
@@ -1383,6 +1417,8 @@ const Tratamentos: React.FC = () => {
       toast.error("Selecione a data e a posição da sessão.");
       return;
     }
+    if (addingIntermediate) return; // Double-click guard
+    setAddingIntermediate(true);
     try {
       const currentSessions = sessions
         .filter((s) => s.cycle_id === selectedCycle.id)
@@ -1446,10 +1482,16 @@ const Tratamentos: React.FC = () => {
       setAddIntermediateOpen(false);
       setIntermediateDate("");
       setIntermediateAfterSession(0);
-      loadData();
+      // Optimistic refresh: reload only this cycle's sessions + silent stats refresh
+      await Promise.all([
+        loadSessionsForCycle(selectedCycle, true),
+        loadData(true),
+      ]);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
+    } finally {
+      setAddingIntermediate(false);
     }
   };
   const handleExtension = async () => {
@@ -1534,7 +1576,7 @@ const Tratamentos: React.FC = () => {
       toast.success("Extensão registrada com sucesso!");
       setExtensionOpen(false);
       setExtensionForm({ new_sessions: 0, reason: "" });
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar extensão: " + err.message);
@@ -1629,7 +1671,7 @@ const Tratamentos: React.FC = () => {
       setDischargeOpen(false);
       setDischargeForm({ reason: "", final_notes: "" });
       setDischargeFutureCount(0);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar alta: " + err.message);
@@ -1700,7 +1742,7 @@ const Tratamentos: React.FC = () => {
       toast.success("PTS vinculado ao ciclo de tratamento!");
       setVincularPtsOpen(false);
       setSelectedPtsId("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao vincular PTS: " + (err?.message || ""));
@@ -1728,7 +1770,7 @@ const Tratamentos: React.FC = () => {
       });
 
       toast.success("PTS desvinculado do ciclo.");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       toast.error("Erro ao desvincular: " + (err?.message || ""));
     }
@@ -2556,8 +2598,16 @@ const Tratamentos: React.FC = () => {
                 </p>
               )}
 
-              <Button onClick={handleRegisterSession} disabled={!canSubmitSessionRegistration} className="w-full gradient-primary text-primary-foreground">
-                Registrar
+              <Button
+                onClick={handleRegisterSession}
+                disabled={!canSubmitSessionRegistration || registeringSession}
+                className="w-full gradient-primary text-primary-foreground"
+              >
+                {registeringSession ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Registrando...</>
+                ) : (
+                  "Registrar"
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -2793,7 +2843,7 @@ const Tratamentos: React.FC = () => {
               });
               toast.success(`Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora}!`);
               setAgendarSessaoTarget(null);
-              loadData();
+              loadData(true);
             } catch (err: any) {
               console.error(err);
               toast.error(err?.message || "Erro ao agendar sessão.");
@@ -2878,7 +2928,7 @@ const Tratamentos: React.FC = () => {
               });
               toast.success(`Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
               setRemarcarTarget(null);
-              loadData();
+              loadData(true);
             } catch (err: any) {
               console.error(err);
               toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
@@ -2931,9 +2981,13 @@ const Tratamentos: React.FC = () => {
               <Button
                 onClick={handleAddIntermediateSession}
                 className="w-full gradient-primary text-primary-foreground"
-                disabled={!intermediateDate}
+                disabled={!intermediateDate || addingIntermediate}
               >
-                <Plus className="w-4 h-4 mr-2" /> Adicionar Sessão
+                {addingIntermediate ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adicionando...</>
+                ) : (
+                  <><Plus className="w-4 h-4 mr-2" /> Adicionar Sessão</>
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -3122,8 +3176,8 @@ const Tratamentos: React.FC = () => {
           <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
             <span>
               Exibindo <strong>{(safePage - 1) * PAGE_SIZE + 1}</strong>–
-              <strong>{Math.min(safePage * PAGE_SIZE, filteredCycles.length)}</strong> de{" "}
-              <strong>{filteredCycles.length}</strong> ciclo(s)
+              <strong>{Math.min(safePage * PAGE_SIZE, totalCycles)}</strong> de{" "}
+              <strong>{totalCycles}</strong> ciclo(s)
             </span>
             <span>
               Página {safePage} de {totalPages}
