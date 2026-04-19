@@ -422,19 +422,37 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-[95vh] p-0 gap-0 flex flex-col" aria-describedby={undefined}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-card shrink-0">
-          <div>
-            <h2 className="text-base sm:text-lg font-semibold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
-              Histórico Completo — {pacienteNome}
-            </h2>
-            <p className="text-xs text-muted-foreground">{filteredEvents.length} de {events.length} evento(s)</p>
+        <div className="px-4 sm:px-6 py-3 border-b bg-card shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
+                Histórico Completo — {pacienteNome}
+              </h2>
+              <p className="text-xs text-muted-foreground">{filteredEvents.length} de {events.length} evento(s)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="gap-1.5">
+                <Filter className="w-3.5 h-3.5" />
+                Filtros
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="gap-1.5">
-              <Filter className="w-3.5 h-3.5" />
-              Filtros
-            </Button>
-          </div>
+          {summaryStats && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-2">
+              <span className="inline-flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-primary" />
+                <strong className="text-foreground">{summaryStats.total}</strong> evento(s)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-primary" />
+                Primeiro: <strong className="text-foreground">{formatDateBR(summaryStats.first)}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                Último: <strong className="text-foreground">{formatDateBR(summaryStats.last)}</strong>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -511,13 +529,14 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
 
                 {!loading && !error && filteredEvents.map(event => {
                   const config = TYPE_CONFIG[event.type] || TYPE_CONFIG.consulta;
+                  const specColors = getSpecialtyColors(event.specialty);
                   const isExpanded = expandedId === event.id;
                   const isCurrent = currentProfissionalId && event.professionalId === currentProfissionalId;
 
                   return (
                     <div
                       key={event.id}
-                      className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-shadow hover:shadow-md cursor-pointer ${config.border} ${isCurrent ? 'ring-1 ring-primary/20' : ''}`}
+                      className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${specColors.border} ${isCurrent ? `ring-1 ${specColors.ring}` : ''}`}
                       onClick={() => setExpandedId(prev => prev === event.id ? null : event.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -529,6 +548,12 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                               {config.icon}
                               <span className="ml-1">{config.label}</span>
                             </Badge>
+                            {event.specialty && (
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${specColors.badge}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${specColors.dot}`} />
+                                {event.specialty}
+                              </span>
+                            )}
                             {event.sessionInfo && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-500/30 text-yellow-600" style={{ fontFamily: 'var(--font-clinical)' }}>
                                 {event.sessionInfo}
@@ -544,9 +569,22 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{event.summary.substring(0, 150)}{event.summary.length > 150 ? '…' : ''}</p>
                           )}
                         </div>
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {event.rawProntuario && onViewProntuario && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={(e) => { e.stopPropagation(); onViewProntuario(event.rawProntuario); }}
+                              title="Visualizar prontuário"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Visualizar
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </Button>
+                        </div>
                       </div>
 
                       {isExpanded && <EventDetail event={event} />}
@@ -556,6 +594,23 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
               </div>
             </ScrollArea>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 sm:px-6 py-3 border-t bg-card flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleGenerateReport}
+            disabled={filteredEvents.length === 0 || loading}
+            className="gap-1.5"
+          >
+            <FileDown className="w-4 h-4" />
+            Gerar Relatório Completo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
