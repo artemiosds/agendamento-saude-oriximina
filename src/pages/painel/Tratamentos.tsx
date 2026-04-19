@@ -1414,6 +1414,8 @@ const Tratamentos: React.FC = () => {
       toast.error("Selecione a data e a posição da sessão.");
       return;
     }
+    if (addingIntermediate) return; // Double-click guard
+    setAddingIntermediate(true);
     try {
       const currentSessions = sessions
         .filter((s) => s.cycle_id === selectedCycle.id)
@@ -1477,10 +1479,16 @@ const Tratamentos: React.FC = () => {
       setAddIntermediateOpen(false);
       setIntermediateDate("");
       setIntermediateAfterSession(0);
-      loadData();
+      // Optimistic refresh: reload only this cycle's sessions + silent stats refresh
+      await Promise.all([
+        loadSessionsForCycle(selectedCycle, true),
+        loadData(true),
+      ]);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
+    } finally {
+      setAddingIntermediate(false);
     }
   };
   const handleExtension = async () => {
