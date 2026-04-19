@@ -308,7 +308,7 @@ const Permissoes: React.FC = () => {
         <Shield className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-bold">Configuração de Permissões</h1>
         <Badge variant="outline" className="gap-1 ml-auto">
-          <Radio className="w-3 h-3 animate-pulse text-green-500" />
+          <Radio className="w-3 h-3 animate-pulse text-primary" />
           Tempo real
         </Badge>
       </div>
