@@ -195,63 +195,79 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="sm:col-span-2">
-            <Label>Nome completo *</Label>
-            <Input value={form.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" />
-            {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-          </div>
-          <div>
-            <Label>Data nasc.</Label>
-            <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
-          </div>
-          <div>
-            <Label>CPF</Label>
-            <Input value={form.cpf} onChange={(e) => set("cpf", e.target.value)} placeholder="000.000.000-00" />
-            {errors.cpf && <p className="text-xs text-destructive mt-1">{errors.cpf}</p>}
-          </div>
-          <div>
-            <Label>CNS</Label>
-            <Input value={form.cns} onChange={(e) => set("cns", e.target.value)} placeholder="Nº Cartão SUS" />
-            {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
-          </div>
-          <div>
-            <Label>Telefone *</Label>
-            <Input
-              value={form.telefone.length > 0 && !/[()-]/.test(form.telefone) ? formatPhoneForDisplay(form.telefone) : form.telefone}
-              onChange={(e) => set("telefone", applyPhoneMask(e.target.value))}
-              placeholder="(93) 99999-0000"
-            />
-            {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
-          </div>
-          <div>
-            <Label>Nome da Mãe</Label>
-            <Input value={form.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} placeholder="Nome da mãe" />
-            {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
-          </div>
-          <div>
-            <Label>Município</Label>
-            <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {MUNICIPIOS.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
-          </div>
-          <div>
-            <Label>Endereço</Label>
-            <Input
-              value={form.endereco}
-              onChange={(e) => set("endereco", e.target.value)}
-              placeholder="Rua, nº, bairro"
-            />
-          </div>
+          {!H('nome') && (
+            <div className="sm:col-span-2">
+              <Label>{L('nome', 'Nome completo')} *</Label>
+              <Input value={form.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" />
+              {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
+            </div>
+          )}
+          {!H('dataNascimento') && (
+            <div>
+              <Label>{L('dataNascimento', 'Data nasc.')}</Label>
+              <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+            </div>
+          )}
+          {!H('cpf') && (
+            <div>
+              <Label>{L('cpf', 'CPF')}</Label>
+              <Input value={form.cpf} onChange={(e) => set("cpf", e.target.value)} placeholder="000.000.000-00" />
+              {errors.cpf && <p className="text-xs text-destructive mt-1">{errors.cpf}</p>}
+            </div>
+          )}
+          {!H('cns') && (
+            <div>
+              <Label>{L('cns', 'CNS')}</Label>
+              <Input value={form.cns} onChange={(e) => set("cns", e.target.value)} placeholder="Nº Cartão SUS" />
+              {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
+            </div>
+          )}
+          {!H('telefone') && (
+            <div>
+              <Label>{L('telefone', 'Telefone')} *</Label>
+              <Input
+                value={form.telefone.length > 0 && !/[()-]/.test(form.telefone) ? formatPhoneForDisplay(form.telefone) : form.telefone}
+                onChange={(e) => set("telefone", applyPhoneMask(e.target.value))}
+                placeholder="(93) 99999-0000"
+              />
+              {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
+            </div>
+          )}
+          {!H('nomeMae') && (
+            <div>
+              <Label>{L('nomeMae', 'Nome da Mãe')}</Label>
+              <Input value={form.nomeMae} onChange={(e) => set("nomeMae", e.target.value)} placeholder="Nome da mãe" />
+              {errors.nomeMae && <p className="text-xs text-destructive mt-1">{errors.nomeMae}</p>}
+            </div>
+          )}
+          {!H('municipio') && (
+            <div>
+              <Label>{L('municipio', 'Município')}</Label>
+              <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MUNICIPIOS.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.municipio && <p className="text-xs text-destructive mt-1">{errors.municipio}</p>}
+            </div>
+          )}
+          {!H('endereco') && (
+            <div>
+              <Label>{L('endereco', 'Endereço')}</Label>
+              <Input
+                value={form.endereco}
+                onChange={(e) => set("endereco", e.target.value)}
+                placeholder="Rua, nº, bairro"
+              />
+            </div>
+          )}
         </div>
 
         {/* Menor de idade toggle */}
