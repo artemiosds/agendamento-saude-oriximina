@@ -1110,17 +1110,17 @@ const Pacientes: React.FC = () => {
             footer={footer}
           >
             <PSecao titulo="Dados Pessoais">
-              <PCampo label="Nome completo" valor={detalhePaciente.nome} />
-              <PCampo label="CPF" valor={formatCPF(detalhePaciente.cpf)} />
-              <PCampo label="Cartão SUS" valor={formatCNS(detalhePaciente.cns)} />
-              <PCampo label="Nome da mãe" valor={detalhePaciente.nomeMae} />
+              <PCampo label={L('nome', 'Nome completo')} valor={detalhePaciente.nome} />
+              <PCampo label={L('cpf', 'CPF')} valor={formatCPF(detalhePaciente.cpf)} />
+              <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
+              <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="CID" valor={cidVal} />
             </PSecao>
 
             <PSecao titulo="Contato">
-              <PCampo label="Telefone" valor={formatTelefoneBR(detalhePaciente.telefone)} />
-              <PCampo label="E-mail" valor={detalhePaciente.email} />
-              <PCampo label="Endereço" valor={detalhePaciente.endereco} />
+              <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
+              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
             <PSecao titulo="Histórico">
@@ -1134,7 +1134,7 @@ const Pacientes: React.FC = () => {
             </PSecao>
 
             {detalhePaciente.observacoes && (
-              <PSecao titulo="Observações">
+              <PSecao titulo={L('observacoes', 'Observações')}>
                 <PCampo label="Notas" valor={detalhePaciente.observacoes} />
               </PSecao>
             )}
