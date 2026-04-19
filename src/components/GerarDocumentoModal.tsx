@@ -468,11 +468,26 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               </div>
             </div>
           ) : (
-            <FieldArea
-              label="Motivo da Falta *"
-              value={campos.motivo_falta}
-              onChange={v => updateCampo('motivo_falta', v)}
-            />
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field
+                  label="Data da Falta *"
+                  value={campos.data_falta}
+                  onChange={v => updateCampo('data_falta', v)}
+                  type="date"
+                />
+                <Field
+                  label="Profissional Agendado *"
+                  value={campos.profissional_agendado}
+                  onChange={v => updateCampo('profissional_agendado', v)}
+                />
+              </div>
+              <FieldArea
+                label="Motivo da Falta *"
+                value={campos.motivo_falta}
+                onChange={v => updateCampo('motivo_falta', v)}
+              />
+            </div>
           )}
         </div>
       );
