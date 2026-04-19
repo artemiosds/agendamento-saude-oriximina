@@ -415,26 +415,55 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       );
     }
 
-    // DECLARAÇÃO DE COMPARECIMENTO
+    // DECLARAÇÃO DE COMPARECIMENTO / FALTA
     if (tipoLower.includes('declaraç') || tipoLower.includes('comparecimento')) {
+      const situacao = campos.situacao || 'compareceu';
       return (
         <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
           <h4 className="font-semibold text-xs uppercase text-primary">Campos da Declaração</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Field label="Horário de entrada" value={campos.horario_entrada} onChange={v => updateCampo('horario_entrada', v)} type="time" />
-            <Field label="Horário de saída" value={campos.horario_saida} onChange={v => updateCampo('horario_saida', v)} type="time" />
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Finalidade</Label>
-              <Select value={campos.finalidade || 'consulta'} onValueChange={v => updateCampo('finalidade', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {['consulta', 'exame', 'procedimento', 'outro'].map(f => (
-                    <SelectItem key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+          {/* Situação da Agenda */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Situação da Agenda *</Label>
+            <RadioGroup
+              value={situacao}
+              onValueChange={v => updateCampo('situacao', v)}
+              className="flex gap-4"
+            >
+              <div className="flex items-center gap-1.5">
+                <RadioGroupItem value="compareceu" id="sit-compareceu" />
+                <Label htmlFor="sit-compareceu" className="text-xs">Compareceu</Label>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <RadioGroupItem value="faltou" id="sit-faltou" />
+                <Label htmlFor="sit-faltou" className="text-xs">Faltou</Label>
+              </div>
+            </RadioGroup>
           </div>
+
+          {situacao === 'compareceu' ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Field label="Horário de entrada" value={campos.horario_entrada} onChange={v => updateCampo('horario_entrada', v)} type="time" />
+              <Field label="Horário de saída" value={campos.horario_saida} onChange={v => updateCampo('horario_saida', v)} type="time" />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Finalidade</Label>
+                <Select value={campos.finalidade || 'consulta'} onValueChange={v => updateCampo('finalidade', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['consulta', 'exame', 'procedimento', 'outro'].map(f => (
+                      <SelectItem key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <FieldArea
+              label="Motivo da Falta *"
+              value={campos.motivo_falta}
+              onChange={v => updateCampo('motivo_falta', v)}
+            />
+          )}
         </div>
       );
     }
