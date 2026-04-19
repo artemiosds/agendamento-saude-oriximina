@@ -147,9 +147,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       .replace(/\{\{unidade\}\}/g, unidade || 'CER II Oriximiná')
       .replace(/\{\{data_hoje\}\}/g, hoje);
 
-    // Extended variables from campos
+    // Extended variables from campos (datas yyyy-mm-dd → dd/mm/yyyy)
+    const formatIfDate = (val: string) => {
+      if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        const [y, m, d] = val.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return val;
+    };
     Object.entries(campos).forEach(([k, v]) => {
-      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v || '—');
+      const out = v ? formatIfDate(v) : '—';
+      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), out);
     });
 
     // Medicamentos
@@ -190,6 +198,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         defaults.horario_saida = `${hh}:${mm}`;
         defaults.finalidade = 'consulta';
         defaults.motivo_falta = '';
+        defaults.data_falta = new Date().toISOString().split('T')[0];
+        defaults.profissional_agendado = profissional?.nome || '';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
@@ -204,7 +214,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
   // Templates dinâmicos para Declaração de Comparecimento
   const DECL_COMPARECEU_HTML = `<p style='text-align: justify;'>Declaramos, para os devidos fins, que a paciente <strong>{{nome_paciente}}</strong>, CPF nº <strong>{{cpf}}</strong>, inscrita no CNS sob o nº <strong>{{cns}}</strong>, encontra-se em acompanhamento no Centro de Especialidades em Reabilitação — CER II. A referida paciente <strong>COMPARECEU</strong> a esta unidade na data de <strong>{{data_atendimento}}</strong>, no período das <strong>{{horario_entrada}}</strong> às <strong>{{horario_saida}}</strong>. O comparecimento deu-se para fins de: <strong>{{finalidade}}</strong>.</p><p style='text-align: justify;'>Expedimos a presente declaração para fins de justificativa junto às instituições que se fizerem necessárias.</p>`;
-  const DECL_FALTOU_HTML = `<p style='text-align: justify;'>Declaramos, para os devidos fins, que a paciente <strong>{{nome_paciente}}</strong>, CPF nº <strong>{{cpf}}</strong>, inscrita no CNS sob o nº <strong>{{cns}}</strong>, encontra-se em acompanhamento no Centro de Especialidades em Reabilitação — CER II. A referida paciente esteve <strong>AUSENTE</strong> ao atendimento agendado nesta unidade na data de <strong>{{data_atendimento}}</strong>.</p><p style='text-align: justify;'>A ausência deveu-se a motivo justificado: <strong>{{motivo_falta}}</strong>, impossibilitando seu comparecimento na data supracitada. Expedimos a presente declaração para fins de justificativa junto às instituições que se fizerem necessárias.</p>`;
+  const DECL_FALTOU_HTML = `<p style='text-align: justify;'>Declaramos, para os devidos fins, que a paciente <strong>{{nome_paciente}}</strong>, CPF nº <strong>{{cpf}}</strong>, inscrita no CNS sob o nº <strong>{{cns}}</strong>, encontra-se em acompanhamento no Centro de Especialidades em Reabilitação — CER II.</p><p style='text-align: justify;'>A referida paciente esteve <strong>AUSENTE</strong> ao atendimento agendado para a data de <strong>{{data_falta}}</strong>, sob responsabilidade do(a) profissional <strong>{{profissional_agendado}}</strong>.</p><p style='text-align: justify;'>A ausência deveu-se a motivo justificado: <strong>{{motivo_falta}}</strong>, impossibilitando seu comparecimento na data supracitada. Expedimos a presente declaração para fins de justificativa junto às instituições que se fizerem necessárias.</p>`;
 
   // Update conteudo when campos change
   useEffect(() => {
@@ -458,11 +468,26 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
               </div>
             </div>
           ) : (
-            <FieldArea
-              label="Motivo da Falta *"
-              value={campos.motivo_falta}
-              onChange={v => updateCampo('motivo_falta', v)}
-            />
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field
+                  label="Data da Falta *"
+                  value={campos.data_falta}
+                  onChange={v => updateCampo('data_falta', v)}
+                  type="date"
+                />
+                <Field
+                  label="Profissional Agendado *"
+                  value={campos.profissional_agendado}
+                  onChange={v => updateCampo('profissional_agendado', v)}
+                />
+              </div>
+              <FieldArea
+                label="Motivo da Falta *"
+                value={campos.motivo_falta}
+                onChange={v => updateCampo('motivo_falta', v)}
+              />
+            </div>
           )}
         </div>
       );
