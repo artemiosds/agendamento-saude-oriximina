@@ -486,6 +486,47 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       <CardContent className="px-4 pb-4 pt-0 space-y-0">
         {renderFields()}
         {renderCustomFields()}
+        {masterCustomFields.length > 0 && (
+          <div className="space-y-3 pt-2 border-t border-border/40 mt-3">
+            {masterCustomFields.map(campo => {
+              const fieldKey = campo.key;
+              return (
+                <div key={fieldKey}>
+                  <Label className="flex items-center gap-2">
+                    {campo.label}
+                    {campo.obrigatorio && <span className="text-destructive">*</span>}
+                    <Badge variant="outline" className="text-[9px] px-1 py-0">Master</Badge>
+                  </Label>
+                  {campo.tipo === 'textarea' && <Textarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'text' && <Input value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'number' && <Input type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'date' && <Input type="date" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'checkbox' && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <Checkbox checked={v(fieldKey) === 'true'} onCheckedChange={(c) => set(fieldKey, c ? 'true' : 'false')} />
+                      <span className="text-xs text-muted-foreground">Marcar</span>
+                    </div>
+                  )}
+                  {campo.tipo === 'select' && campo.opcoes && (
+                    <Select value={v(fieldKey) || campo.valor_padrao || ''} onValueChange={val => set(fieldKey, val)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {campo.opcoes.map(op => <SelectItem key={op} value={op}>{op}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {campo.tipo === 'slider' && (
+                    <div>
+                      <Slider min={0} max={10} step={1} value={[parseInt(v(fieldKey) || campo.valor_padrao || "0")]} onValueChange={([val]) => set(fieldKey, String(val))} className="mt-2" />
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>0</span><span>10</span></div>
+                    </div>
+                  )}
+                  {campo.ajuda && <p className="text-[11px] text-muted-foreground italic mt-1">💡 {campo.ajuda}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
