@@ -183,7 +183,11 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       }
       if (tipo.includes('declaraç') || tipo.includes('comparecimento')) {
         const now = new Date();
-        defaults.hora_entrada = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        defaults.horario_entrada = `${hh}:${mm}`;
+        defaults.horario_saida = `${hh}:${mm}`;
+        defaults.finalidade = 'consulta';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
@@ -405,8 +409,8 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
         <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
           <h4 className="font-semibold text-xs uppercase text-primary">Campos da Declaração</h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Field label="Horário de entrada" value={campos.hora_entrada} onChange={v => updateCampo('hora_entrada', v)} type="time" />
-            <Field label="Horário de saída" value={campos.hora_saida} onChange={v => updateCampo('hora_saida', v)} type="time" />
+            <Field label="Horário de entrada" value={campos.horario_entrada} onChange={v => updateCampo('horario_entrada', v)} type="time" />
+            <Field label="Horário de saída" value={campos.horario_saida} onChange={v => updateCampo('horario_saida', v)} type="time" />
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Finalidade</Label>
               <Select value={campos.finalidade || 'consulta'} onValueChange={v => updateCampo('finalidade', v)}>
@@ -536,15 +540,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
               <Separator />
 
-              {/* Editable content */}
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
-                <Textarea
-                  value={conteudoFinal}
-                  onChange={e => setConteudoFinal(e.target.value)}
-                  className="min-h-[180px] text-sm font-serif"
-                />
-              </div>
+              {/* Editable raw HTML — hidden for cleaner UX on Declaração/Relatório de Evolução */}
+              {!(tipoLower.includes('declaraç') || tipoLower.includes('comparecimento') || tipoLower.includes('evoluç') || tipoLower.includes('relatório')) && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
+                  <Textarea
+                    value={conteudoFinal}
+                    onChange={e => setConteudoFinal(e.target.value)}
+                    className="min-h-[180px] text-sm font-serif"
+                  />
+                </div>
+              )}
 
               {/* Preview */}
               <div className="space-y-1.5">
