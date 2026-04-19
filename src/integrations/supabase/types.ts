@@ -1304,6 +1304,7 @@ export type Database = {
           id: string
           modulo: string
           perfil: string
+          unidade_id: string
           updated_at: string
         }
         Insert: {
@@ -1316,6 +1317,7 @@ export type Database = {
           id?: string
           modulo: string
           perfil: string
+          unidade_id?: string
           updated_at?: string
         }
         Update: {
@@ -1328,7 +1330,50 @@ export type Database = {
           id?: string
           modulo?: string
           perfil?: string
+          unidade_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      permissoes_usuario: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_execute: boolean
+          can_view: boolean
+          created_at: string
+          id: string
+          modulo: string
+          unidade_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo: string
+          unidade_id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo?: string
+          unidade_id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
