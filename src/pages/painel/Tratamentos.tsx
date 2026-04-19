@@ -278,40 +278,74 @@ const Tratamentos: React.FC = () => {
   const isProfissional = user?.role === "profissional";
   const canAgendarSessao = can('tratamento', 'can_execute');
 
+  // Total of cycles (server-side count)
+  const [totalCycles, setTotalCycles] = useState(0);
+  // Tracks which cycle has had its sessions loaded (lazy load)
+  const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
+
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      let qCycles = supabase.from("treatment_cycles").select("*").order("created_at", { ascending: false });
-      if (user?.role === "profissional") qCycles = qCycles.eq("professional_id", user.id);
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') qCycles = qCycles.eq("unit_id", user.unidadeId);
+      // Server-side paginated cycles via RPC (lightweight, with stats only)
+      const isProf = user?.role === "profissional";
+      const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
 
-      let qExtensions = supabase.from("treatment_extensions").select("*").order("changed_at", { ascending: false });
+      const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
+        p_page: currentPage,
+        p_page_size: PAGE_SIZE,
+        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
+        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
+        p_status: filterStatus !== 'all' ? filterStatus : null,
+        p_search: searchTerm.trim() || null,
+        p_only_own_professional: false, // already handled via p_professional_id
+      });
+
+      if (rpcError) throw rpcError;
+
+      const cyclesData = (rpcData?.cycles || []) as TreatmentCycle[];
+      setCycles(cyclesData);
+      setTotalCycles(rpcData?.total || 0);
+      setSelectedCycle((current) => (current ? cyclesData.find((cycle) => cycle.id === current.id) || current : current));
+
+      // PTS list (lightweight, scoped by unit)
       let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qPts = qPts.eq("unit_id", user.unidadeId);
-      }
-
-      const [{ data: cData }, sData, { data: eData }, procsData, { data: ptsData }] = await Promise.all([
-        qCycles,
-        treatmentService.getSessions(),
-        qExtensions,
-        procedureService.getActive(),
+      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
+      const [{ data: ptsData }, procsData] = await Promise.all([
         qPts,
+        procedureService.getActive(),
       ]);
 
-      if (cData) {
-        const nextCycles = cData as TreatmentCycle[];
-        setCycles(nextCycles);
-        setSelectedCycle((current) => (current ? nextCycles.find((cycle) => cycle.id === current.id) || null : current));
-      }
-      if (sData) setSessions(sData as TreatmentSession[]);
-      if (eData) setExtensions(eData as TreatmentExtension[]);
       setProcedimentos(procsData);
       if (ptsData) setPtsList(ptsData as PTSRecord[]);
+    } catch (err) {
+      console.error("Error loading treatments:", err);
+      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
+    }
+    if (!silent) setLoading(false);
+  }, [user, currentPage, filterProf, filterUnit, filterStatus, searchTerm]);
 
-      // Cross-reference: fetch agendamentos for all patient+professional pairs in sessions
-      if (sData && sData.length > 0) {
-        const patientIds = [...new Set(sData.map((s: any) => s.patient_id))];
+  // Lazy load: sessions, extensions and agendamento map only for the selected cycle
+  const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
+    try {
+      const [sData, eData] = await Promise.all([
+        treatmentService.getSessions(cycle.id),
+        supabase.from("treatment_extensions").select("*").eq("cycle_id", cycle.id).order("changed_at", { ascending: false }),
+      ]);
+      const sessionsData = (sData || []) as TreatmentSession[];
+      // Replace only this cycle's sessions in the global state
+      setSessions((prev) => {
+        const others = prev.filter((s) => s.cycle_id !== cycle.id);
+        return [...others, ...sessionsData];
+      });
+      setExtensions((prev) => {
+        const others = prev.filter((x) => x.cycle_id !== cycle.id);
+        return [...others, ...((eData.data || []) as TreatmentExtension[])];
+      });
+      setLoadedSessionsCycleId(cycle.id);
+
+      // Cross-reference agendamentos for this cycle's sessions only
+      if (sessionsData.length > 0) {
+        const patientIds = [...new Set(sessionsData.map((s) => s.patient_id))];
         let agQuery = supabase
           .from("agendamentos")
           .select("id, data, hora, status, paciente_id, profissional_id")
@@ -321,26 +355,33 @@ const Tratamentos: React.FC = () => {
           agQuery = agQuery.eq("unidade_id", user.unidadeId);
         }
         const { data: agData } = await agQuery;
-
-        const map: Record<string, { id: string; hora: string; status: string }> = {};
         if (agData) {
-          for (const ag of agData) {
-            const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
-            map[key] = { id: ag.id, hora: ag.hora, status: ag.status };
-          }
+          setAgendamentoMap((prev) => {
+            const next = { ...prev };
+            for (const ag of agData) {
+              const key = `${ag.paciente_id}|${ag.profissional_id}|${ag.data}`;
+              next[key] = { id: ag.id, hora: ag.hora, status: ag.status };
+            }
+            return next;
+          });
         }
-        setAgendamentoMap(map);
       }
     } catch (err) {
-      console.error("Error loading treatments:", err);
-      if (!silent) toast.error("Erro ao carregar dados de tratamento.");
+      console.error("Error loading cycle sessions:", err);
+      if (!silent) toast.error("Erro ao carregar sessões do ciclo.");
     }
-    if (!silent) setLoading(false);
   }, [user]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Lazy load sessions when a cycle is selected
+  useEffect(() => {
+    if (selectedCycle && selectedCycle.id !== loadedSessionsCycleId) {
+      loadSessionsForCycle(selectedCycle, true);
+    }
+  }, [selectedCycle, loadedSessionsCycleId, loadSessionsForCycle]);
 
   // ESC key to clear scheduling state
   useEffect(() => {
