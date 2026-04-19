@@ -535,18 +535,24 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
         </div>
         <p className="text-xs text-muted-foreground">Marque as condições aplicáveis. Idoso (≥60) é calculado automaticamente pela data de nascimento.</p>
         <div className="flex flex-wrap gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox checked={form.isGestante} onCheckedChange={(v) => set("isGestante", !!v)} />
-            <span className="text-sm">Gestante</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox checked={form.isPne} onCheckedChange={(v) => set("isPne", !!v)} />
-            <span className="text-sm">PNE</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox checked={form.isAutista} onCheckedChange={(v) => set("isAutista", !!v)} />
-            <span className="text-sm">Autista (TEA)</span>
-          </label>
+          {!H('isGestante') && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox checked={form.isGestante} onCheckedChange={(v) => set("isGestante", !!v)} />
+              <span className="text-sm">{L('isGestante', 'Gestante')}</span>
+            </label>
+          )}
+          {!H('isPne') && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox checked={form.isPne} onCheckedChange={(v) => set("isPne", !!v)} />
+              <span className="text-sm">{L('isPne', 'PNE')}</span>
+            </label>
+          )}
+          {!H('isAutista') && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox checked={form.isAutista} onCheckedChange={(v) => set("isAutista", !!v)} />
+              <span className="text-sm">{L('isAutista', 'Autista (TEA)')}</span>
+            </label>
+          )}
         </div>
       </div>
 
@@ -618,17 +624,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
             </div>
 
-            {/* Email + Endereço */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label>E-mail</Label>
-                <Input
-                  value={form.email}
-                  onChange={(e) => set("email", e.target.value)}
-                  placeholder="email@exemplo.com"
-                />
+            {/* Email */}
+            {!H('email') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>{L('email', 'E-mail')}</Label>
+                  <Input
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Outro serviço SUS */}
             <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40">
