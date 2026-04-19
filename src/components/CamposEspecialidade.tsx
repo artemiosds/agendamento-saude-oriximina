@@ -6,16 +6,74 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { normalizeProfissao } from "@/hooks/useProntuarioConfig";
+
+type TipoProntuario = 'avaliacao' | 'retorno' | 'sessao' | 'urgencia' | 'procedimento';
 
 interface CamposEspecialidadeProps {
   profissao: string;
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
   profissionalId?: string;
+  tipoProntuario?: TipoProntuario;
 }
+
+interface CondicaoVisibilidade {
+  campo: string;
+  operador: 'igual' | 'diferente' | 'maior' | 'menor' | 'preenchido';
+  valor?: string;
+}
+
+interface MasterCampo {
+  id: string;
+  key: string;
+  label: string;
+  tipo: string;
+  obrigatorio: boolean;
+  habilitado: boolean;
+  isBuiltin: boolean;
+  order: number;
+  opcoes?: string[];
+  tipos_prontuario?: TipoProntuario[];
+  ajuda?: string;
+  valor_padrao?: string;
+  condicao?: CondicaoVisibilidade;
+}
+
+interface MasterEspecialidade {
+  key: string;
+  label: string;
+  ativa: boolean;
+  profissoes: string[];
+  campos: MasterCampo[];
+}
+
+const DEFAULT_TIPOS: TipoProntuario[] = ['avaliacao', 'retorno'];
+
+// Mapeamento entre o `key` exibido na config Master e o `fieldKey` interno usado pelos blocos
+// (alguns são iguais, outros divergem por motivos históricos)
+const KEY_ALIASES: Record<string, string> = {
+  forca_muscular: 'forca_mrc',
+  comportamento: 'comportamento_obs',
+  risco: 'risco_agressao',
+  peso: 'peso_kg',
+  altura: 'altura_m',
+  habitos: 'habitos_alimentares',
+  mif: 'mif_score',
+  contexto: 'contexto_ambiental',
+  exame_fisico: 'exame_fisico_geral',
+  sistemas: 'sistemas_avaliados',
+  plano_tratamento: 'plano_tratamento_odonto',
+  avaliacao_enfermagem: 'avaliacao_enf',
+  cuidados: 'cuidados_realizados',
+  intercorrencias: 'intercorrencias_enf',
+  queixa_odonto: 'queixa_odonto',
+};
+
+const aliasFor = (k: string) => KEY_ALIASES[k] || k;
 
 const classificarIMC = (imc: number): { label: string; color: string } => {
   if (imc < 18.5) return { label: "Abaixo do peso", color: "text-warning" };
