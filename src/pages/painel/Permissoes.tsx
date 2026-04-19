@@ -300,17 +300,6 @@ const Permissoes: React.FC = () => {
     setSaving(null);
   };
 
-  // Filtragem de funcionários pela busca
-  const funcionariosFiltered = useMemo(() => {
-    const q = searchUser.toLowerCase().trim();
-    let list = funcionarios;
-    if (selectedUnidade) list = list.filter((f) => f.unidade_id === selectedUnidade || !f.unidade_id);
-    if (!q) return list.slice(0, 50);
-    return list.filter((f) =>
-      f.nome.toLowerCase().includes(q) || f.usuario.toLowerCase().includes(q) || f.role.toLowerCase().includes(q)
-    ).slice(0, 50);
-  }, [funcionarios, searchUser, selectedUnidade]);
-
   const selectedUser = funcionarios.find((f) => f.id === selectedUserId);
 
   return (
