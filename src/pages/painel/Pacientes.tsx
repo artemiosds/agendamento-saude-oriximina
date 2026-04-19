@@ -1031,112 +1031,114 @@ const Pacientes: React.FC = () => {
       )}
       {canImportCSV && <ImportarPacientesCSV open={importOpen} onOpenChange={setImportOpen} />}
 
-      {/* Detalhe Drawer - Paciente */}
-      <DetalheDrawer open={detalheOpen} onOpenChange={setDetalheOpen} titulo="Detalhes do Paciente">
-        {detalhePaciente &&
-          (() => {
-            const naFila = pacientesNaFila.has(detalhePaciente.id);
-            const filaEntry = filaEntryMap.get(detalhePaciente.id);
-            const isDemanda = pacientesDemandaReprimida.has(detalhePaciente.id);
-            const totalAg = agendamentos.filter((a) => a.pacienteId === detalhePaciente.id).length;
-            const ultimoAg = agendamentos
-              .filter((a) => a.pacienteId === detalhePaciente.id && a.status === "concluido")
-              .sort((a, b) => b.data.localeCompare(a.data))[0];
-            return (
-              <>
-                <Secao titulo="Dados Pessoais">
-                  <Campo label="Nome" valor={detalhePaciente.nome} />
-                  <Campo label="CPF" valor={detalhePaciente.cpf} />
-                  <Campo label="Cartão SUS / CNS" valor={detalhePaciente.cns} hide />
-                  <Campo label="Nome da Mãe" valor={detalhePaciente.nomeMae} hide />
-                  <Campo
-                    label="Data de Nascimento"
-                    valor={detalhePaciente.dataNascimento ? formatarData(detalhePaciente.dataNascimento) : undefined}
-                    hide
-                  />
-                  <Campo
-                    label="Idade"
-                    valor={detalhePaciente.dataNascimento ? calcularIdade(detalhePaciente.dataNascimento) : undefined}
-                    hide
-                  />
-                </Secao>
-                <Secao titulo="Contato">
-                  <Campo label="Telefone" valor={detalhePaciente.telefone} />
-                  <Campo label="E-mail" valor={detalhePaciente.email} hide />
-                  <Campo label="Endereço" valor={detalhePaciente.endereco} hide />
-                </Secao>
-                {(detalhePaciente.descricaoClinica || detalhePaciente.cid || detalhePaciente.observacoes) && (
-                  <Secao titulo="Informações Clínicas">
-                    <Campo label="CID" valor={detalhePaciente.cid} hide />
-                    <Campo label="Descrição clínica" valor={detalhePaciente.descricaoClinica} hide />
-                    <Campo label="Observações" valor={detalhePaciente.observacoes} hide />
-                  </Secao>
-                )}
-                <Secao titulo="Histórico">
-                  <Campo
-                    label="Data de cadastro"
-                    valor={detalhePaciente.criadoEm ? formatarData(detalhePaciente.criadoEm) : undefined}
-                    hide
-                  />
-                  <Campo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : undefined} hide />
-                  <Campo label="Último atendimento" valor={ultimoAg ? formatarData(ultimoAg.data) : undefined} hide />
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setDetalheOpen(false);
-                        navigate(
-                          `/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`,
-                        );
-                      }}
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      Ver Prontuários
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
-                    >
-                      <Printer className="w-4 h-4 mr-2" />
-                      Ficha Completa
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
-                    >
-                      <Printer className="w-4 h-4 mr-2" />
-                      Só Dados
-                    </Button>
-                  </div>
-                </Secao>
-                {(naFila || isDemanda) && (
-                  <Secao titulo="Etiquetas">
-                    <div className="flex gap-2 flex-wrap py-1">
-                      {naFila && (
-                        <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
-                          Fila de Espera
-                        </Badge>
-                      )}
-                      {isDemanda && (
-                        <Badge
-                          variant="outline"
-                          className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-xs"
-                        >
-                          Demanda Reprimida
-                        </Badge>
-                      )}
-                    </div>
-                  </Secao>
-                )}
-              </>
-            );
-          })()}
-      </DetalheDrawer>
+      {/* Modal Detalhes - Paciente (página de Pacientes) */}
+      {detalhePaciente && (() => {
+        const naFila = pacientesNaFila.has(detalhePaciente.id);
+        const isDemanda = pacientesDemandaReprimida.has(detalhePaciente.id);
+        const totalAg = agendamentos.filter((a) => a.pacienteId === detalhePaciente.id).length;
+        const ultimoAg = agendamentos
+          .filter((a) => a.pacienteId === detalhePaciente.id && a.status === "concluido")
+          .sort((a, b) => b.data.localeCompare(a.data))[0];
+        const alergiasRaw = (detalhePaciente as any).alergias ?? (detalhePaciente as any).custom_data?.alergias;
+
+        const badges = (naFila || isDemanda) ? (
+          <>
+            {naFila && (
+              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[11px]">
+                Fila de Espera
+              </Badge>
+            )}
+            {isDemanda && (
+              <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[11px]">
+                Demanda Reprimida
+              </Badge>
+            )}
+          </>
+        ) : null;
+
+        const cidVal = [detalhePaciente.cid, detalhePaciente.descricaoClinica]
+          .filter((s) => s && String(s).trim() !== '')
+          .join(' — ');
+
+        const footer = (
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full min-w-0"
+              onClick={() => {
+                setDetalheOpen(false);
+                navigate(
+                  `/painel/prontuario?pacienteId=${detalhePaciente.id}&pacienteNome=${encodeURIComponent(detalhePaciente.nome)}`,
+                );
+              }}
+            >
+              <FileText className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Ver Prontuários</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full min-w-0"
+              onClick={() => handleOpenFicha(detalhePaciente, 'completa')}
+            >
+              <Printer className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Ficha Completa</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full col-span-2 min-w-0"
+              onClick={() => handleOpenFicha(detalhePaciente, 'dados_pessoais')}
+            >
+              <Printer className="w-4 h-4 mr-1.5" />
+              <span className="truncate">Imprimir Só Dados</span>
+            </Button>
+          </div>
+        );
+
+        return (
+          <PacienteDetalheModal
+            open={detalheOpen}
+            onOpenChange={setDetalheOpen}
+            nome={detalhePaciente.nome}
+            prontuarioNumero={(detalhePaciente as any).numeroProntuario || detalhePaciente.id?.slice(0, 8)}
+            dataNascimento={detalhePaciente.dataNascimento}
+            badges={badges}
+            footer={footer}
+          >
+            <PSecao titulo="Dados Pessoais">
+              <PCampo label="Nome completo" valor={detalhePaciente.nome} />
+              <PCampo label="CPF" valor={formatCPF(detalhePaciente.cpf)} />
+              <PCampo label="Cartão SUS" valor={formatCNS(detalhePaciente.cns)} />
+              <PCampo label="Nome da mãe" valor={detalhePaciente.nomeMae} />
+              <PCampo label="CID" valor={cidVal} />
+            </PSecao>
+
+            <PSecao titulo="Contato">
+              <PCampo label="Telefone" valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label="E-mail" valor={detalhePaciente.email} />
+              <PCampo label="Endereço" valor={detalhePaciente.endereco} />
+            </PSecao>
+
+            <PSecao titulo="Histórico">
+              <PCampo label="Data de cadastro" valor={detalhePaciente.criadoEm ? formatarDataBR(detalhePaciente.criadoEm) : ''} />
+              <PCampo label="Total de agendamentos" valor={totalAg > 0 ? String(totalAg) : ''} />
+              <PCampo label="Último atendimento" valor={ultimoAg ? formatarDataBR(ultimoAg.data) : ''} />
+            </PSecao>
+
+            <PSecao titulo="Alergias">
+              <AlergiasBlock alergias={alergiasRaw} />
+            </PSecao>
+
+            {detalhePaciente.observacoes && (
+              <PSecao titulo="Observações">
+                <PCampo label="Notas" valor={detalhePaciente.observacoes} />
+              </PSecao>
+            )}
+          </PacienteDetalheModal>
+        );
+      })()}
 
       {/* Dialog de impressão da ficha */}
       <Dialog open={fichaOpen} onOpenChange={(open) => { if (!open) { setFichaOpen(false); setFichaData(null); } }}>
