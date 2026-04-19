@@ -12,8 +12,10 @@ import {
   X, Loader2, ChevronDown, ChevronUp, FileText, Activity,
   Calendar, Stethoscope, ListOrdered, UserCheck, Clock,
   AlertTriangle, RefreshCw, Filter, Pill, FlaskConical,
-  HeartPulse,
+  HeartPulse, Eye, FileDown,
 } from "lucide-react";
+import { downloadFullHistoryPdf } from "@/lib/prontuarioPdf";
+import { getSpecialtyColors } from "@/lib/specialtyColors";
 
 // ── Types ──────────────────────────────────────────────────
 type EventType = "avaliacao_inicial" | "retorno" | "sessao" | "urgencia" | "procedimento" | "alta" | "falta" | "consulta";
