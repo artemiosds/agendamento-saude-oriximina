@@ -2815,9 +2815,13 @@ const ProntuarioPage: React.FC = () => {
                       >
                         <History className="w-4 h-4 text-primary" />
                       </Button>
-                      {canEdit && (isProfissional ? isOwn : true) && (
+                      {(isProfissional ? isOwn : true) ? (
                         <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
+                          <Pencil className="w-4 h-4 opacity-40" />
                         </Button>
                       )}
                       <Button
@@ -2874,7 +2878,7 @@ const ProntuarioPage: React.FC = () => {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      {canDelete && (
+                      {(canDelete || (isProfissional && isOwn)) && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="text-destructive">
