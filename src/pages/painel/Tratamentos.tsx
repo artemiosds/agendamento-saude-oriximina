@@ -421,51 +421,26 @@ const Tratamentos: React.FC = () => {
     return m;
   }, [funcionarios]);
 
-  // Pre-aggregate session counts per cycle (avoids O(n*m) on every render)
+  // Pre-aggregate session counts per cycle (now sourced from server-side RPC)
   const sessionStatsByCycle = useMemo(() => {
     const stats = new Map<string, { pendingAg: number; faltas: number }>();
-    for (const s of sessions) {
-      const cur = stats.get(s.cycle_id) || { pendingAg: 0, faltas: 0 };
-      if (s.status === "pendente_agendamento") cur.pendingAg++;
-      else if (s.status === "paciente_faltou") cur.faltas++;
-      stats.set(s.cycle_id, cur);
+    for (const c of cycles) {
+      stats.set(c.id, { pendingAg: c.pending_ag || 0, faltas: c.faltas || 0 });
     }
     return stats;
-  }, [sessions]);
+  }, [cycles]);
 
-  const filteredCycles = useMemo(() => {
-    let result = cycles.filter((c) => {
-      if (filterProf !== "all" && c.professional_id !== filterProf) return false;
-      if (filterUnit !== "all" && c.unit_id !== filterUnit) return false;
-      if (filterStatus !== "all" && c.status !== filterStatus) return false;
-      return true;
-    });
-    if (searchTerm.trim()) {
-      const term = searchTerm.trim().toLowerCase();
-      result = result.filter((c) => {
-        const pac = pacientesMap.get(c.patient_id);
-        const pacNome = pac?.nome?.toLowerCase() || '';
-        const pacCpf = pac?.cpf?.toLowerCase() || '';
-        const pacCns = pac?.cns?.toLowerCase() || '';
-        const tipo = c.treatment_type?.toLowerCase() || '';
-        const statusLabel = (statusLabels as any)[c.status]?.toLowerCase() || c.status?.toLowerCase() || '';
-        return pacNome.includes(term) || pacCpf.includes(term) || pacCns.includes(term) || tipo.includes(term) || statusLabel.includes(term);
-      });
-    }
-    return result;
-  }, [cycles, filterProf, filterUnit, filterStatus, searchTerm, pacientesMap]);
+  // Server-side pagination: cycles are already filtered/paginated by RPC.
+  // Keep filteredCycles/paginatedCycles aliases for minimal UI changes.
+  const filteredCycles = cycles;
+  const paginatedCycles = cycles;
+  const totalPages = Math.max(1, Math.ceil(totalCycles / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
 
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
   }, [filterProf, filterUnit, filterStatus, searchTerm]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredCycles.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages);
-  const paginatedCycles = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filteredCycles.slice(start, start + PAGE_SIZE);
-  }, [filteredCycles, safePage]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
