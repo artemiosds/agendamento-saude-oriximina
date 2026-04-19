@@ -2878,7 +2878,7 @@ const ProntuarioPage: React.FC = () => {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      {canDelete && (
+                      {(canDelete || (isProfissional && isOwn)) && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="text-destructive">
