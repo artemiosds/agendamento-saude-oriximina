@@ -712,7 +712,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success(`Ciclo criado com ${totalSessions} sessões! Aguardam agendamento pela recepção.`);
       setCreateOpen(false);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao criar ciclo de tratamento: " + err.message);
@@ -739,7 +739,7 @@ const Tratamentos: React.FC = () => {
 
       toast.success("Ciclo excluído com sucesso.");
       setDeleteTarget(null);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao excluir ciclo.");
@@ -895,7 +895,7 @@ const Tratamentos: React.FC = () => {
       toast.success(`Sessão ${editRealizadaTarget.session_number} atualizada.`);
       setEditRealizadaOpen(false);
       setEditRealizadaTarget(null);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao editar sessão: " + err.message);
@@ -943,7 +943,7 @@ const Tratamentos: React.FC = () => {
       });
 
       toast.success(`Sessão ${session.session_number} revertida para "Agendada".`);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao limpar sessão: " + err.message);
@@ -1108,7 +1108,7 @@ const Tratamentos: React.FC = () => {
       setAgendarSessaoData("");
       setAgendarSessaoHora("");
       setAgendarSessaoSalaId("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Erro ao agendar sessão.");
@@ -1400,7 +1400,7 @@ const Tratamentos: React.FC = () => {
       );
       setRemarcarTarget(null);
       setRemarcarData("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
@@ -1573,7 +1573,7 @@ const Tratamentos: React.FC = () => {
       toast.success("Extensão registrada com sucesso!");
       setExtensionOpen(false);
       setExtensionForm({ new_sessions: 0, reason: "" });
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar extensão: " + err.message);
@@ -1668,7 +1668,7 @@ const Tratamentos: React.FC = () => {
       setDischargeOpen(false);
       setDischargeForm({ reason: "", final_notes: "" });
       setDischargeFutureCount(0);
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao registrar alta: " + err.message);
@@ -1739,7 +1739,7 @@ const Tratamentos: React.FC = () => {
       toast.success("PTS vinculado ao ciclo de tratamento!");
       setVincularPtsOpen(false);
       setSelectedPtsId("");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao vincular PTS: " + (err?.message || ""));
@@ -1767,7 +1767,7 @@ const Tratamentos: React.FC = () => {
       });
 
       toast.success("PTS desvinculado do ciclo.");
-      loadData();
+      loadData(true);
     } catch (err: any) {
       toast.error("Erro ao desvincular: " + (err?.message || ""));
     }
@@ -2840,7 +2840,7 @@ const Tratamentos: React.FC = () => {
               });
               toast.success(`Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora}!`);
               setAgendarSessaoTarget(null);
-              loadData();
+              loadData(true);
             } catch (err: any) {
               console.error(err);
               toast.error(err?.message || "Erro ao agendar sessão.");
@@ -2925,7 +2925,7 @@ const Tratamentos: React.FC = () => {
               });
               toast.success(`Sessão ${remarcarTarget.session_number} remarcada de ${new Date(oldDate + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")}`);
               setRemarcarTarget(null);
-              loadData();
+              loadData(true);
             } catch (err: any) {
               console.error(err);
               toast.error("Erro ao remarcar sessão: " + (err?.message || ""));
