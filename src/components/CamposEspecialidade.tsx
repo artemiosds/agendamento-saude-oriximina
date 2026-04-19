@@ -130,9 +130,10 @@ interface ProfConfig {
   }>;
 }
 
-const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, values, onChange, profissionalId }) => {
+const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, values, onChange, profissionalId, tipoProntuario }) => {
   const prof = normalizeProfissao(profissao);
   const [profConfig, setProfConfig] = useState<ProfConfig | null>(null);
+  const [masterEsp, setMasterEsp] = useState<MasterEspecialidade | null>(null);
 
   // Load professional config for custom fields
   useEffect(() => {
@@ -151,22 +152,78 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
     return () => { cancelled = true; };
   }, [profissionalId]);
 
+  // Load Master config for this specialty + Realtime
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = (data?.configuracoes as any)?.config_especialidades_campos as MasterEspecialidade[] | undefined;
+      if (cancelled || !cfg) return;
+      const found = cfg.find(e => e.profissoes.includes(prof) || e.key === prof);
+      setMasterEsp(found || null);
+    };
+    load();
+    const channel = supabase
+      .channel(`camposesp_realtime_${prof}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config', filter: 'id=eq.default' }, load)
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [prof]);
+
   if (!SPECIALTY_CONFIG[prof]) return null;
 
   const config = SPECIALTY_CONFIG[prof];
   const v = (key: string) => values[`esp_${key}`] || "";
   const set = (key: string, val: string) => onChange(`esp_${key}`, val);
 
-  // Check if a built-in field is visible based on professional config
+  const masterCampoFor = (fieldKey: string): MasterCampo | undefined => {
+    if (!masterEsp) return undefined;
+    return masterEsp.campos.find(c => aliasFor(c.key) === fieldKey || c.key === fieldKey);
+  };
+
+  const condicaoSatisfeita = (cond?: CondicaoVisibilidade): boolean => {
+    if (!cond) return true;
+    const otherKey = aliasFor(cond.campo);
+    const raw = values[`esp_${otherKey}`] ?? '';
+    const val = String(raw).trim();
+    switch (cond.operador) {
+      case 'preenchido': return val.length > 0;
+      case 'igual': return val === (cond.valor ?? '');
+      case 'diferente': return val !== (cond.valor ?? '');
+      case 'maior': return parseFloat(val) > parseFloat(cond.valor ?? '0');
+      case 'menor': return parseFloat(val) < parseFloat(cond.valor ?? '0');
+      default: return true;
+    }
+  };
+
+  // Built-in field visibility: profissional pref AND master habilitado AND tipoProntuario AND condicional
   const isFieldVisible = (fieldKey: string) => {
-    if (!profConfig?.campos_especialidade) return true;
-    const cfg = profConfig.campos_especialidade[fieldKey];
-    if (cfg && cfg.visivel === false) return false;
+    if (profConfig?.campos_especialidade) {
+      const cfg = profConfig.campos_especialidade[fieldKey];
+      if (cfg && cfg.visivel === false) return false;
+    }
+    const m = masterCampoFor(fieldKey);
+    if (m) {
+      if (!m.habilitado) return false;
+      const tipos = m.tipos_prontuario && m.tipos_prontuario.length > 0 ? m.tipos_prontuario : DEFAULT_TIPOS;
+      if (tipoProntuario && !tipos.includes(tipoProntuario)) return false;
+      if (!condicaoSatisfeita(m.condicao)) return false;
+    }
     return true;
   };
 
-  // Get custom fields
+  // Get custom fields (do profissional)
   const customFields = profConfig?.campos_especialidade_custom || [];
+
+  // Custom fields criados pelo Master nesta especialidade
+  const masterCustomFields: MasterCampo[] = (masterEsp?.campos || []).filter(c => {
+    if (c.isBuiltin) return false;
+    if (!c.habilitado) return false;
+    const tipos = c.tipos_prontuario && c.tipos_prontuario.length > 0 ? c.tipos_prontuario : DEFAULT_TIPOS;
+    if (tipoProntuario && !tipos.includes(tipoProntuario)) return false;
+    if (!condicaoSatisfeita(c.condicao)) return false;
+    return true;
+  });
 
   const renderFisioterapia = () => {
     const mrc = parseInt(v("forca_mrc") || "0");
