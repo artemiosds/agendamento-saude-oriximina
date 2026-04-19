@@ -266,12 +266,15 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     loadPermissions();
   }, [loadPermissions]);
 
-  // Realtime
+  // Realtime: reage a mudanças em perfil OU overrides do usuário
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
       .channel(`permissoes-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => {
+        loadPermissions();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, () => {
         loadPermissions();
       })
       .subscribe();
