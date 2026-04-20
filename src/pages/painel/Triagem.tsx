@@ -683,6 +683,51 @@ const Triagem: React.FC = () => {
               <Textarea rows={2} value={form.queixaPrincipal} onChange={(e) => setForm((p) => ({ ...p, queixaPrincipal: e.target.value }))} placeholder="Queixa principal do paciente..." />
             </div>
             <div>
+              <Label>Histórico da Doença Atual (HDA)</Label>
+              <Textarea
+                rows={4}
+                value={form.historicoQueixa}
+                onChange={(e) => setForm((p) => ({ ...p, historicoQueixa: e.target.value }))}
+                placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
+              />
+            </div>
+            <div>
+              <Label>Comorbidades</Label>
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {COMORBIDADES_COMUNS.map((c) => {
+                  const checked = form.comorbidades.includes(c);
+                  return (
+                    <label
+                      key={c}
+                      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs cursor-pointer transition-colors ${
+                        checked ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-primary"
+                        checked={checked}
+                        onChange={() =>
+                          setForm((p) => ({
+                            ...p,
+                            comorbidades: checked
+                              ? p.comorbidades.filter((x) => x !== c)
+                              : [...p.comorbidades, c],
+                          }))
+                        }
+                      />
+                      <span className="leading-tight">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {form.comorbidades.length > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Selecionadas: <strong>{form.comorbidades.join(", ")}</strong>
+                </p>
+              )}
+            </div>
+            <div>
               <Label>Alergias</Label>
               <div className="mt-1 flex gap-2">
                 <Input value={newAlergia} onChange={(e) => setNewAlergia(e.target.value)} placeholder="Digitar alergia" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAlergia())} />
