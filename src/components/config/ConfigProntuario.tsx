@@ -408,6 +408,15 @@ const ConfigProntuario: React.FC = () => {
                     </TooltipProvider>
                   ) : (
                     <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        onClick={() => openEditField(campo)}
+                        title="Editar propriedades do campo"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
                       <Switch checked={campo.habilitado} onCheckedChange={() => toggleCampo(campo.id)} />
                       {!campo.isBuiltin && (
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/70 hover:text-destructive" onClick={() => setDeleteConfirm(campo.id)}>
