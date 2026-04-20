@@ -102,13 +102,15 @@ const DEFAULT_CONFIG: ProntuarioConfig = {
 };
 
 const FIELD_TYPES = [
-  { value: 'texto', label: 'Texto' },
+  { value: 'texto', label: 'Texto Curto' },
+  { value: 'textarea', label: 'Texto Longo (Textarea)' },
   { value: 'numero', label: 'Número' },
-  { value: 'textarea', label: 'Texto longo' },
-  { value: 'select', label: 'Seleção' },
+  { value: 'select', label: 'Seleção (Dropdown)' },
+  { value: 'checkbox', label: 'Checkbox (Múltipla escolha)' },
   { value: 'data', label: 'Data' },
-  { value: 'checkbox', label: 'Checkbox' },
 ];
+
+const TIPOS_COM_OPCOES = ['select', 'checkbox'];
 
 const ConfigProntuario: React.FC = () => {
   const [config, setConfig] = useState<ProntuarioConfig>(DEFAULT_CONFIG);
