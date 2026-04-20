@@ -9,10 +9,30 @@ const corsHeaders = {
 
 const PRIORITY_ORDER = { alta: 0, media: 1, baixa: 2 } as const;
 
+// ============================================================
+// LIMITES SOBERANOS DE SEGURANÇA (não podem ser violados)
+// ============================================================
+const HARD_DELAY_MIN_SEC = 10;   // mínimo absoluto entre mensagens
+const HARD_DELAY_MAX_SEC = 80;   // máximo absoluto entre mensagens
+const SMALL_BATCH = 8;           // lote padrão por execução (~ algumas mensagens / minuto)
+const ESCALATION_THRESHOLD = 50; // se houver +50 pendentes → modo escalonado (lote pequeno)
+const NORMAL_BATCH = 15;         // lote quando fila baixa (< 50)
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function effectiveDelays(cfg: any) {
+  // Soberania: independentemente do que o usuário cadastrou, aplicamos o piso/teto.
+  const min = clamp(Number(cfg?.delay_aleatorio_min_seg) || HARD_DELAY_MIN_SEC, HARD_DELAY_MIN_SEC, HARD_DELAY_MAX_SEC);
+  const maxRaw = Number(cfg?.delay_aleatorio_max_seg) || HARD_DELAY_MAX_SEC;
+  const max = clamp(Math.max(maxRaw, min), HARD_DELAY_MIN_SEC, HARD_DELAY_MAX_SEC);
+  return { min, max };
+}
+
 function randomDelay(minSec: number, maxSec: number) {
-  const min = Math.max(0, minSec);
-  const max = Math.max(min, maxSec);
-  return (Math.floor(Math.random() * (max - min + 1)) + min) * 1000;
+  const span = Math.max(0, maxSec - minSec);
+  return (minSec + Math.floor(Math.random() * (span + 1))) * 1000;
 }
 
 async function getClinicaConfig(supabase: any) {
@@ -41,6 +61,31 @@ async function sendEvolution(cfg: any, phone: string, message: string) {
   }
 }
 
+// Telefone BR válido = 13 dígitos começando em 55
+function isValidPhone(phone: string): boolean {
+  const digits = (phone || "").replace(/\D/g, "");
+  return digits.length === 13 && digits.startsWith("55");
+}
+
+// Verifica se o agendamento associado já passou (não enviar lembretes retroativos)
+function appointmentInPast(meta: any): boolean {
+  // meta pode vir tanto de whatsapp_queue.metadados (ex.: { data_consulta, hora_consulta })
+  // quanto carregado do agendamento ligado.
+  const dataStr: string | undefined = meta?.data_consulta || meta?.data;
+  const horaStr: string | undefined = meta?.hora_consulta || meta?.hora;
+  if (!dataStr) return false;
+  // dataStr aceito em ISO (YYYY-MM-DD) ou pt-BR (DD/MM/YYYY)
+  let iso = dataStr;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr)) {
+    const [d, m, y] = dataStr.split("/");
+    iso = `${y}-${m}-${d}`;
+  }
+  const hh = (horaStr && /^\d{2}:\d{2}/.test(horaStr)) ? horaStr.slice(0, 5) : "23:59";
+  const target = new Date(`${iso}T${hh}:00-03:00`); // BRT
+  if (isNaN(target.getTime())) return false;
+  return target.getTime() < Date.now();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -56,21 +101,31 @@ serve(async (req) => {
         { status: 400, headers: corsHeaders });
     }
 
-    // Pega até 30 mensagens pendentes prontas para envio
+    // 1️⃣  Conta total de pendentes para decidir o tamanho do lote (escalonamento).
     const nowIso = new Date().toISOString();
+    const { count: totalPending } = await supabase
+      .from("whatsapp_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pendente")
+      .lte("agendado_para", nowIso);
+
+    const batchSize = (totalPending ?? 0) > ESCALATION_THRESHOLD ? SMALL_BATCH : NORMAL_BATCH;
+
+    // 2️⃣  Pega o lote (já ordenado por prioridade + criação para FIFO real)
     const { data: pending } = await supabase
       .from("whatsapp_queue")
       .select("*")
       .eq("status", "pendente")
       .lte("agendado_para", nowIso)
-      .limit(30);
+      .order("criado_em", { ascending: true })
+      .limit(batchSize);
 
     if (!pending || pending.length === 0) {
-      return new Response(JSON.stringify({ success: true, processed: 0 }),
+      return new Response(JSON.stringify({ success: true, processed: 0, total_pending: totalPending ?? 0 }),
         { headers: corsHeaders });
     }
 
-    // Ordena por prioridade depois data
+    // Reordena por prioridade dentro do lote
     pending.sort((a: any, b: any) => {
       const pa = PRIORITY_ORDER[a.prioridade as keyof typeof PRIORITY_ORDER] ?? 1;
       const pb = PRIORITY_ORDER[b.prioridade as keyof typeof PRIORITY_ORDER] ?? 1;
@@ -87,7 +142,7 @@ serve(async (req) => {
         .select("whatsapp_ativo, delay_aleatorio_min_seg, delay_aleatorio_max_seg, limite_global_por_minuto")
         .eq("unidade_id", unidadeId)
         .maybeSingle();
-      const cfg = data || { whatsapp_ativo: true, delay_aleatorio_min_seg: 5, delay_aleatorio_max_seg: 30, limite_global_por_minuto: 20 };
+      const cfg = data || { whatsapp_ativo: true, delay_aleatorio_min_seg: HARD_DELAY_MIN_SEC, delay_aleatorio_max_seg: HARD_DELAY_MAX_SEC, limite_global_por_minuto: 20 };
       unitConfigs.set(unidadeId, cfg);
       return cfg;
     }
@@ -95,6 +150,8 @@ serve(async (req) => {
     let processed = 0;
     let errors = 0;
     let blocked = 0;
+    let skippedPast = 0;
+    let skippedInvalidPhone = 0;
 
     // Limite global por minuto: conta envios da última janela de 60s
     const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
@@ -111,7 +168,7 @@ serve(async (req) => {
 
       const cfg = await getUnitCfg(msg.unidade_id);
 
-      // 🔕 Modo silencioso: WhatsApp da unidade desativado → bloqueia envio
+      // 🔕  Modo silencioso da unidade
       if (cfg.whatsapp_ativo === false) {
         await supabase.from("whatsapp_queue").update({
           status: "bloqueado",
@@ -121,15 +178,55 @@ serve(async (req) => {
         continue;
       }
 
+      // 🚫  Telefone inválido → falha definitiva, não tenta de novo
+      if (!isValidPhone(msg.telefone)) {
+        await supabase.from("whatsapp_queue").update({
+          status: "erro",
+          motivo_erro: "Falha: Sem Telefone (ou inválido)",
+          processado_em: new Date().toISOString(),
+        }).eq("id", msg.id);
+        await supabase.from("notification_logs").insert({
+          agendamento_id: msg.agendamento_id || "",
+          evento: msg.evento,
+          canal: "whatsapp_evolution",
+          destinatario_telefone: msg.telefone || "",
+          status: "erro",
+          erro: "Falha: Sem Telefone",
+          payload: { queue_id: msg.id, motivo: "telefone_invalido" },
+        });
+        skippedInvalidPhone++;
+        continue;
+      }
+
+      // ⏰  Agendamento retroativo → não envia lembrete de consulta passada
+      let metaParaConferir = msg.metadados || {};
+      if (msg.agendamento_id) {
+        const { data: ag } = await supabase
+          .from("agendamentos")
+          .select("data, hora")
+          .eq("id", msg.agendamento_id)
+          .maybeSingle();
+        if (ag) metaParaConferir = { ...metaParaConferir, data: ag.data, hora: ag.hora };
+      }
+      const eventoEhLembrete = ["lembrete_24h", "lembrete_2h", "lembrete_1h", "lembrete_manual", "confirmacao", "agendamento_criado", "remarcacao"].includes(msg.evento);
+      if (eventoEhLembrete && appointmentInPast(metaParaConferir)) {
+        await supabase.from("whatsapp_queue").update({
+          status: "bloqueado",
+          motivo_erro: "agendamento_passado",
+          processado_em: new Date().toISOString(),
+        }).eq("id", msg.id);
+        skippedPast++;
+        continue;
+      }
+
       // Marca como processando
       await supabase.from("whatsapp_queue")
         .update({ status: "processando" })
         .eq("id", msg.id);
 
-      // Delay aleatório anti-ban
-      await new Promise((r) =>
-        setTimeout(r, randomDelay(cfg.delay_aleatorio_min_seg, cfg.delay_aleatorio_max_seg)),
-      );
+      // Delay aleatório anti-ban (clamp soberano 10–80s)
+      const { min, max } = effectiveDelays(cfg);
+      await new Promise((r) => setTimeout(r, randomDelay(min, max)));
 
       const result = await sendEvolution(evoCfg, msg.telefone, msg.mensagem);
 
@@ -181,7 +278,17 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, processed, errors, retried: blocked, total: pending.length }),
+      JSON.stringify({
+        success: true,
+        processed,
+        errors,
+        retried: blocked,
+        skipped_past: skippedPast,
+        skipped_invalid_phone: skippedInvalidPhone,
+        batch_size: batchSize,
+        total_pending: totalPending ?? 0,
+        escalated: (totalPending ?? 0) > ESCALATION_THRESHOLD,
+      }),
       { headers: corsHeaders },
     );
   } catch (err) {
