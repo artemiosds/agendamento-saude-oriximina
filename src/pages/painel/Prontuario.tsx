@@ -26,7 +26,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2 } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
@@ -48,6 +48,7 @@ import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import EncaminhamentoInternoModal from "@/components/EncaminhamentoInternoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
 import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
@@ -269,6 +270,7 @@ const ProntuarioPage: React.FC = () => {
   const soapCustom = useSoapCustomOptions(user?.id);
   const showSoapDropdown = hasDropdownSoap(user?.profissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
   const [historicoPacienteId, setHistoricoPacienteId] = useState<{ id: string; nome: string } | null>(null);
@@ -1574,6 +1576,13 @@ const ProntuarioPage: React.FC = () => {
               >
                 <Stamp className="w-4 h-4 mr-2" />
                 Gerar Documento
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setEncInternoOpen(true)}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Encaminhar Paciente
               </Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
@@ -2932,6 +2941,27 @@ const ProntuarioPage: React.FC = () => {
           dataAtendimento={new Date().toLocaleDateString('pt-BR')}
         />
       )}
+
+      {/* Modal Encaminhamento Interno */}
+      {encInternoOpen && queryPacienteId && (() => {
+        const p = pacientes.find(x => x.id === queryPacienteId);
+        if (!p) return null;
+        return (
+          <EncaminhamentoInternoModal
+            open={encInternoOpen}
+            onOpenChange={setEncInternoOpen}
+            paciente={{
+              id: p.id,
+              nome: p.nome,
+              cpf: p.cpf,
+              cns: p.cns,
+              data_nascimento: p.dataNascimento,
+              cid: p.cid,
+              unidadeId: p.unidadeId,
+            }}
+          />
+        );
+      })()}
 
       {/* Histórico Completo Modal */}
       {(historicoPacienteId || queryPacienteId || form.paciente_id) && (
