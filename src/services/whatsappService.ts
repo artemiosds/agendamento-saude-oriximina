@@ -19,13 +19,14 @@ export const whatsappService = {
     }
   },
 
-  /** Envia notificação direta (sem agendamento, ex: lista de espera) */
+  /** Envia notificação direta (sem agendamento, ex: lista de espera, aviso manual). */
   async sendDirect(params: {
     tipo: string;
     telefone: string;
     paciente_nome: string;
     profissional?: string;
     unidade?: string;
+    unidade_id?: string;
     data_consulta?: string;
     hora_consulta?: string;
     observacoes?: string;
@@ -39,6 +40,7 @@ export const whatsappService = {
           dados_direto: {
             profissional: params.profissional || '',
             unidade: params.unidade || '',
+            unidade_id: params.unidade_id || '',
             data_consulta: params.data_consulta || '',
             hora_consulta: params.hora_consulta || '',
             observacoes: params.observacoes || '',
