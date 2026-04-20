@@ -123,6 +123,53 @@ const ConfigProntuario: React.FC = () => {
   const [newAlert, setNewAlert] = useState({ campo: '', operador: '>=', valor: '', mensagem: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState<{ key: string; label: string } | null>(null);
+  const [editFieldDialog, setEditFieldDialog] = useState<CampoConfig | null>(null);
+  const [editDraft, setEditDraft] = useState<{ label: string; tipo: string; obrigatorio: boolean; opcoes: string[] }>({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: [] });
+  const [novaOpcao, setNovaOpcao] = useState('');
+
+  const openEditField = (campo: CampoConfig) => {
+    setEditDraft({
+      label: campo.label,
+      tipo: campo.tipo,
+      obrigatorio: campo.obrigatorio,
+      opcoes: campo.opcoes ?? [],
+    });
+    setNovaOpcao('');
+    setEditFieldDialog(campo);
+  };
+
+  const addOpcaoEdit = () => {
+    const v = novaOpcao.trim();
+    if (!v) return;
+    if (editDraft.opcoes.includes(v)) { toast.error('Opção já existe'); return; }
+    setEditDraft(p => ({ ...p, opcoes: [...p.opcoes, v] }));
+    setNovaOpcao('');
+  };
+
+  const removeOpcaoEdit = (idx: number) => {
+    setEditDraft(p => ({ ...p, opcoes: p.opcoes.filter((_, i) => i !== idx) }));
+  };
+
+  const saveEditField = () => {
+    if (!editFieldDialog) return;
+    if (!editDraft.label.trim()) { toast.error('Informe o label do campo'); return; }
+    if (TIPOS_COM_OPCOES.includes(editDraft.tipo) && editDraft.opcoes.length === 0) {
+      toast.error('Adicione ao menos uma opção'); return;
+    }
+    const updated = {
+      ...config,
+      campos: config.campos.map(c => c.id === editFieldDialog.id ? {
+        ...c,
+        label: editDraft.label.trim(),
+        tipo: isFixedField(c.key) ? c.tipo : editDraft.tipo,
+        obrigatorio: isFixedField(c.key) ? c.obrigatorio : editDraft.obrigatorio,
+        opcoes: TIPOS_COM_OPCOES.includes(editDraft.tipo) ? editDraft.opcoes : undefined,
+      } : c),
+    };
+    saveConfig(updated);
+    setEditFieldDialog(null);
+  };
+
   const loadConfig = useCallback(async () => {
     try {
       const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
