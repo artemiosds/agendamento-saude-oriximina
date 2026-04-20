@@ -505,8 +505,13 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
       {/* Fila */}
       <Card className="border-0 shadow-card">
         <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">Fila de envios</h3>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-foreground">Fila de envios</h3>
+              <Badge className="bg-primary/10 text-primary border-0">
+                Fila atual: {pendingCount} pendente{pendingCount === 1 ? '' : 's'}
+              </Badge>
+            </div>
             <div className="flex items-center gap-2">
               <Select value={queueFilter} onValueChange={setQueueFilter}>
                 <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
