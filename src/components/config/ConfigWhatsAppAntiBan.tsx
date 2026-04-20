@@ -278,12 +278,32 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
             <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : (
             <>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-foreground">WhatsApp ativo nesta unidade</h3>
-                  <p className="text-xs text-muted-foreground">Desligue para pausar todos os envios</p>
+              <div className={`flex items-center justify-between p-4 rounded-xl border-2 transition-colors ${
+                cfg.whatsapp_ativo
+                  ? 'bg-success/5 border-success/30'
+                  : 'bg-destructive/5 border-destructive/30'
+              }`}>
+                <div className="flex items-center gap-3">
+                  {cfg.whatsapp_ativo
+                    ? <Power className="w-6 h-6 text-success shrink-0" />
+                    : <PowerOff className="w-6 h-6 text-destructive shrink-0" />}
+                  <div>
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
+                      WhatsApp {cfg.whatsapp_ativo ? 'ATIVO' : 'PAUSADO'} nesta unidade
+                      {togglingActive && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {cfg.whatsapp_ativo
+                        ? 'Mensagens automáticas (lembretes, confirmações, cancelamentos) serão enviadas normalmente.'
+                        : 'Modo silencioso: nenhuma mensagem será enviada até reativar.'}
+                    </p>
+                  </div>
                 </div>
-                <Switch checked={cfg.whatsapp_ativo} onCheckedChange={v => setCfg(p => ({ ...p, whatsapp_ativo: v }))} />
+                <Switch
+                  checked={cfg.whatsapp_ativo}
+                  disabled={togglingActive}
+                  onCheckedChange={handleToggleAtivo}
+                />
               </div>
 
               <Separator />
