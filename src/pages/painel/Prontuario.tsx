@@ -1779,7 +1779,26 @@ const ProntuarioPage: React.FC = () => {
       >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+              <div className="text-xs flex items-center gap-1.5" aria-live="polite">
+                {autosaveStatus === 'saving' && (
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                  </span>
+                )}
+                {autosaveStatus === 'saved' && autosaveAt && (
+                  <span className="text-success flex items-center gap-1.5">
+                    <CheckCircle className="w-3 h-3" /> Salvo automaticamente às {autosaveAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                {autosaveStatus === 'error' && (
+                  <span className="text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3" /> Falha ao salvar — tentaremos novamente
+                  </span>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
           {activeAtendimento && (
