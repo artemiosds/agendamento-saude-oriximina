@@ -552,6 +552,15 @@ const ConfigProntuario: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {builderOpen && (
+        <ConstrutorProntuarioModal
+          open={!!builderOpen}
+          onOpenChange={(o) => { if (!o) setBuilderOpen(null); }}
+          tipoKey={builderOpen.key}
+          tipoLabel={builderOpen.label}
+        />
+      )}
     </div>
   );
 };
