@@ -377,7 +377,7 @@ const Triagem: React.FC = () => {
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
         observacoes: form.observacoes || '',
-        custom_data: customData,
+        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa },
         iniciado_em: new Date().toISOString(),
       };
 
@@ -430,7 +430,7 @@ const Triagem: React.FC = () => {
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
         observacoes: form.observacoes || '',
-        custom_data: customData,
+        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa },
         confirmado_em: new Date().toISOString(),
       };
 
