@@ -79,18 +79,37 @@ const HistoricoTriagem: React.FC = () => {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<EnrichedRecord | null>(null);
 
+  // Recursive pagination helper to bypass 1000-row default limit
+  const fetchAll = async (table: string, columns: string): Promise<any[]> => {
+    const PAGE = 1000;
+    const all: any[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase.from(table as any).select(columns).range(offset, offset + PAGE - 1);
+      if (error) throw error;
+      const chunk = (data || []) as any[];
+      all.push(...chunk);
+      if (chunk.length < PAGE) break;
+      offset += PAGE;
+    }
+    return all;
+  };
+
   // Map tecnico_id -> nome from funcionarios
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      let trQuery = supabase.from("triage_records").select("*").order("criado_em", { ascending: false });
-      const [trRes, funcRes, agRes, pacRes, nursRes] = await Promise.all([
+      const trQuery = supabase.from("triage_records").select("*").order("criado_em", { ascending: false });
+      const [trRes, funcRes, agAll, pacAll, nursAll] = await Promise.all([
         trQuery,
         supabase.from("funcionarios").select("id, nome, auth_user_id"),
-        supabase.from("agendamentos").select("id, paciente_id, paciente_nome, unidade_id"),
-        supabase.from("pacientes").select("id, nome"),
-        supabase.from("nursing_evaluations").select("agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado"),
+        fetchAll("agendamentos", "id, paciente_id, paciente_nome, unidade_id"),
+        fetchAll("pacientes", "id, nome"),
+        fetchAll("nursing_evaluations", "agendamento_id, anamnese_resumida, observacoes_clinicas, avaliacao_risco, condicao_clinica, motivo_inapto, prioridade, resultado"),
       ]);
+      const agRes = { data: agAll } as any;
+      const pacRes = { data: pacAll } as any;
+      const nursRes = { data: nursAll } as any;
 
       const funcMap = new Map<string, string>();
       (funcRes.data || []).forEach((f: any) => {
@@ -119,7 +138,12 @@ const HistoricoTriagem: React.FC = () => {
         .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
         .map((r: any) => {
           const ag = agMap.get(r.agendamento_id);
-          const nomeReal = (ag && pacMap.get(ag.pacienteId)) || ag?.nome || "Paciente não encontrado";
+          // Fallback chain: live patient name -> denormalized appointment name -> custom_data -> truncated ID
+          const nomeReal =
+            (ag && pacMap.get(ag.pacienteId)) ||
+            ag?.nome ||
+            r?.custom_data?.paciente_nome ||
+            (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
           return {
             ...r,
             pacienteNome: nomeReal,
