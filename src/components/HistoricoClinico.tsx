@@ -4,7 +4,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History, MoreVertical, Printer, Download, Link2, FileDown } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import { buildInstitutionalCSS } from "@/lib/printLayout";
 
 interface ProntuarioItem {
   id: string;
@@ -59,6 +72,9 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewerItem, setViewerItem] = useState<ProntuarioItem | null>(null);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [docModalOpen, setDocModalOpen] = useState(false);
   const cancelledRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -152,8 +168,89 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   const activeEpisodios = episodios.filter((e) => e.status === "ativo");
 
+  const buildProntuarioHTML = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    const css = buildInstitutionalCSS();
+    const row = (label: string, val?: string) =>
+      val ? `<div class="section"><h3>${label}</h3><p>${String(val).replace(/\n/g, "<br/>")}</p></div>` : "";
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Prontuário ${pacienteNome}</title>${css}</head>
+      <body>
+        <h1 style="margin:0 0 4px">Prontuário Clínico</h1>
+        <div class="doc-meta">
+          <strong>Paciente:</strong> ${pacienteNome} &nbsp;|&nbsp;
+          <strong>Data:</strong> ${formatDateBR(item.data_atendimento)} ${item.hora_atendimento || ""} &nbsp;|&nbsp;
+          <strong>Profissional:</strong> ${item.profissional_nome || "-"}
+          ${item.unidadeNome ? `&nbsp;|&nbsp; <strong>Unidade:</strong> ${item.unidadeNome}` : ""}
+        </div>
+        ${row("Queixa principal", item.queixa_principal)}
+        ${row("Evolução / SOAP", item.evolucao)}
+        ${row("Conduta", item.conduta)}
+        ${row("Procedimentos", item.procedimentos_texto)}
+        ${row("Outro procedimento", item.outro_procedimento)}
+        ${row("Indicação de retorno", item.indicacao_retorno)}
+        <div style="margin-top:48px; border-top:1px solid #333; padding-top:8px; text-align:center;">
+          ${item.profissional_nome || ""}
+        </div>
+      </body></html>`;
+  };
+
+  const handlePrint = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      toast.error("Permita pop-ups para imprimir");
+      return;
+    }
+    win.document.write(buildProntuarioHTML(item));
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 300);
+  };
+
+  const handleDownloadPDF = (item: ProntuarioItem & { unidadeNome?: string }) => {
+    // Browser print → "Save as PDF" — uses same institutional layout
+    handlePrint(item);
+    toast.info("Use 'Salvar como PDF' na janela de impressão");
+  };
+
+  const handleExportJSON = (item: ProntuarioItem) => {
+    const blob = new Blob([JSON.stringify(item, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prontuario_${pacienteNome.replace(/\s+/g, "_")}_${item.data_atendimento}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("JSON exportado");
+  };
+
+  const handleCopyLink = async (item: ProntuarioItem) => {
+    const url = `${window.location.origin}/painel/prontuario?pacienteId=${pacienteId}&prontuarioId=${item.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copiado");
+    } catch {
+      toast.error("Não foi possível copiar o link");
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
+        </h3>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+            <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
+            <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+          </Button>
+        </div>
+      </div>
+
       {/* Tratamentos ativos */}
       {activeEpisodios.length > 0 && (
         <div className="space-y-2">
@@ -238,22 +335,82 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                               </p>
                             )}
                           </div>
-                          {item.queixa_principal && (
+                          <div className="flex items-center gap-1 shrink-0">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 w-6 p-0 shrink-0"
-                              onClick={() => setExpandedId(expanded ? null : item.id)}
-                              aria-label={expanded ? "Recolher" : "Expandir"}
-                              aria-expanded={expanded}
+                              className="h-7 w-7 p-0"
+                              onClick={() => setViewerItem(item)}
+                              aria-label="Visualizar prontuário"
+                              title="Visualizar"
                             >
-                              {expanded ? (
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              ) : (
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              )}
+                              <Eye className="w-3.5 h-3.5 text-primary" />
                             </Button>
-                          )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => setHistoricoOpen(true)}
+                              aria-label="Histórico do paciente"
+                              title="Histórico do paciente"
+                            >
+                              <History className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleDownloadPDF(item)}
+                              aria-label="Baixar PDF"
+                              title="Baixar PDF"
+                            >
+                              <FileDown className="w-3.5 h-3.5 text-primary" />
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0"
+                                  aria-label="Mais ações"
+                                  title="Mais ações"
+                                >
+                                  <MoreVertical className="w-3.5 h-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => handlePrint(item)}>
+                                  <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExportJSON(item)}>
+                                  <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleCopyLink(item)}>
+                                  <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => { setViewerItem(item); setTimeout(() => setDocModalOpen(true), 100); }}>
+                                  <FileSignature className="w-3.5 h-3.5 mr-2" /> Gerar documento
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            {item.queixa_principal && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0"
+                                onClick={() => setExpandedId(expanded ? null : item.id)}
+                                aria-label={expanded ? "Recolher" : "Expandir"}
+                                aria-expanded={expanded}
+                              >
+                                {expanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         {expanded && (
                           <div className="mt-2 space-y-1 text-xs border-t pt-2">
@@ -298,6 +455,85 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           </ScrollArea>
         )}
       </div>
+
+      {/* Drawer de visualização rápida */}
+      <Sheet open={!!viewerItem} onOpenChange={(o) => !o && setViewerItem(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
+          {viewerItem && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Prontuário — {formatDateBR(viewerItem.data_atendimento)}
+                  {viewerItem.hora_atendimento && (
+                    <span className="text-sm text-muted-foreground font-normal">{viewerItem.hora_atendimento}</span>
+                  )}
+                </SheetTitle>
+                <SheetDescription>
+                  {viewerItem.profissional_nome}
+                  {viewerItem.profissional_id === currentProfissionalId && (
+                    <span className="text-primary ml-1">(você)</span>
+                  )}
+                </SheetDescription>
+              </SheetHeader>
+              <Separator className="my-4" />
+              <div className="space-y-4 text-sm">
+                {viewerItem.queixa_principal && (
+                  <Section label="Queixa principal" value={viewerItem.queixa_principal} />
+                )}
+                {viewerItem.evolucao && <Section label="Evolução / SOAP" value={viewerItem.evolucao} />}
+                {viewerItem.conduta && <Section label="Conduta" value={viewerItem.conduta} />}
+                {viewerItem.procedimentos_texto && (
+                  <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />
+                )}
+                {viewerItem.outro_procedimento && (
+                  <Section label="Outro procedimento" value={viewerItem.outro_procedimento} />
+                )}
+                {viewerItem.indicacao_retorno && (
+                  <Section label="Indicação de retorno" value={viewerItem.indicacao_retorno} />
+                )}
+              </div>
+              <Separator className="my-4" />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>
+                  Fechar
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handlePrint(viewerItem)}>
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(viewerItem)}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
+                </Button>
+                <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}>
+                  <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <HistoricoCompletoModal
+        open={historicoOpen}
+        onOpenChange={setHistoricoOpen}
+        pacienteId={pacienteId}
+        pacienteNome={pacienteNome}
+        unidades={unidades}
+        currentProfissionalId={currentProfissionalId}
+      />
+
+      <GerarDocumentoModal
+        open={docModalOpen}
+        onOpenChange={setDocModalOpen}
+        paciente={{ id: pacienteId, nome: pacienteNome, cpf: '', cns: '', data_nascimento: '', cid: '', especialidade_destino: '' }}
+      />
     </div>
   );
 };
+
+const Section: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div>
+    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{value}</p>
+  </div>
+);

@@ -671,6 +671,51 @@ export type Database = {
         }
         Relationships: []
       }
+      form_templates: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          criado_por: string
+          descricao: string
+          display_name: string
+          form_slug: string
+          id: string
+          profissional_id: string
+          schema: Json
+          unidade_id: string
+          updated_at: string
+          versao: number
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          descricao?: string
+          display_name?: string
+          form_slug: string
+          id?: string
+          profissional_id?: string
+          schema?: Json
+          unidade_id?: string
+          updated_at?: string
+          versao?: number
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          descricao?: string
+          display_name?: string
+          form_slug?: string
+          id?: string
+          profissional_id?: string
+          schema?: Json
+          unidade_id?: string
+          updated_at?: string
+          versao?: number
+        }
+        Relationships: []
+      }
       funcionarios: {
         Row: {
           ativo: boolean | null
@@ -1304,6 +1349,7 @@ export type Database = {
           id: string
           modulo: string
           perfil: string
+          unidade_id: string
           updated_at: string
         }
         Insert: {
@@ -1316,6 +1362,7 @@ export type Database = {
           id?: string
           modulo: string
           perfil: string
+          unidade_id?: string
           updated_at?: string
         }
         Update: {
@@ -1328,7 +1375,50 @@ export type Database = {
           id?: string
           modulo?: string
           perfil?: string
+          unidade_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      permissoes_usuario: {
+        Row: {
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_execute: boolean
+          can_view: boolean
+          created_at: string
+          id: string
+          modulo: string
+          unidade_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo: string
+          unidade_id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
+          created_at?: string
+          id?: string
+          modulo?: string
+          unidade_id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -2623,6 +2713,18 @@ export type Database = {
         }
         Returns: Json
       }
+      get_treatment_cycles_paginated: {
+        Args: {
+          p_only_own_professional?: boolean
+          p_page?: number
+          p_page_size?: number
+          p_professional_id?: string
+          p_search?: string
+          p_status?: string
+          p_unit_id?: string
+        }
+        Returns: Json
+      }
       has_staff_role: { Args: { _role: string }; Returns: boolean }
       iniciar_atendimento: {
         Args: { p_agendamento_id: string; p_profissional_id: string }
@@ -2638,6 +2740,14 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      resolve_form_template: {
+        Args: {
+          p_form_slug: string
+          p_profissional_id?: string
+          p_unidade_id?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -26,7 +26,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon } from "lucide-react";
+import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History, Trash2, Activity, ClipboardList, Heart, AlertTriangle, Clock, ChevronDown, Settings, X, Tag, Pencil as PencilIcon, Eye, MoreVertical, Download, Link2, Send } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
@@ -35,6 +38,8 @@ import { Progress } from "@/components/ui/progress";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import AtendimentoTimer from "@/components/AtendimentoTimer";
 import { openPrintDocument } from "@/lib/printLayout";
+import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+import { Lock, FileDown } from "lucide-react";
 import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
@@ -43,6 +48,7 @@ import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
+import EncaminhamentoInternoModal from "@/components/EncaminhamentoInternoModal";
 import SoapFieldsAdaptive from "@/components/SoapFieldsAdaptive";
 import { isMedico, hasDropdownSoap } from "@/data/soapOptionsByProfession";
 import { useSoapCustomOptions } from "@/hooks/useSoapCustomOptions";
@@ -264,7 +270,10 @@ const ProntuarioPage: React.FC = () => {
   const soapCustom = useSoapCustomOptions(user?.id);
   const showSoapDropdown = hasDropdownSoap(user?.profissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
+  const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
+  const [historicoPacienteId, setHistoricoPacienteId] = useState<{ id: string; nome: string } | null>(null);
   const [listaExames, setListaExames] = useState<{ id: string; nome: string; codigo_sus: string; indicacao: string }[]>([]);
   const [listaPrescricao, setListaPrescricao] = useState<{ id: string; nome: string; dosagem: string; via: string; posologia: string; duracao: string }[]>([]);
   const [especialidadeFields, setEspecialidadeFields] = useState<Record<string, string>>({});
@@ -1568,6 +1577,13 @@ const ProntuarioPage: React.FC = () => {
                 <Stamp className="w-4 h-4 mr-2" />
                 Gerar Documento
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setEncInternoOpen(true)}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Encaminhar Paciente
+              </Button>
               <Button variant="outline" onClick={() => navigate("/painel/prontuario")}>
                 Ver todos
               </Button>
@@ -1887,6 +1903,7 @@ const ProntuarioPage: React.FC = () => {
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
@@ -1940,6 +1957,7 @@ const ProntuarioPage: React.FC = () => {
                   <CamposEspecialidade
                     profissao={user.profissao}
                     profissionalId={user.id}
+                    tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
                     onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
                   />
@@ -2742,7 +2760,10 @@ const ProntuarioPage: React.FC = () => {
           {filtered.map((p) => {
             const isOwn = p.profissional_id === user?.id;
             return (
-              <Card key={p.id} className="shadow-card border-0">
+              <Card
+                key={p.id}
+                className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200"
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -2777,21 +2798,98 @@ const ProntuarioPage: React.FC = () => {
                         </p>
                       )}
                       {!isOwn && isProfissional && (
-                        <p className="text-xs text-warning mt-1 italic">
-                          Prontuário de outro profissional (somente leitura)
-                        </p>
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+                          <Lock className="w-3 h-3" />
+                          <span className="font-medium">Prontuário de outro profissional (somente leitura)</span>
+                        </div>
                       )}
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      {canEdit && (isProfissional ? isOwn : true) && (
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(p)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setViewerProntuario(p)}
+                        title="Visualizar prontuário"
+                        aria-label="Visualizar prontuário"
+                      >
+                        <Eye className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          setHistoricoPacienteId({ id: p.paciente_id, nome: p.paciente_nome });
+                          setHistoricoCompletoOpen(true);
+                        }}
+                        title="Histórico do paciente"
+                        aria-label="Histórico do paciente"
+                      >
+                        <History className="w-4 h-4 text-primary" />
+                      </Button>
+                      {(isProfissional ? isOwn : true) ? (
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
                           <Pencil className="w-4 h-4" />
                         </Button>
+                      ) : (
+                        <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
+                          <Pencil className="w-4 h-4 opacity-40" />
+                        </Button>
                       )}
-                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                        title="Baixar PDF"
+                        aria-label="Baixar PDF"
+                      >
+                        <FileDown className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir">
                         <Printer className="w-4 h-4" />
                       </Button>
-                      {canDelete && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost" title="Mais ações" aria-label="Mais ações">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `prontuario_${p.id}.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                              toast.success("JSON exportado");
+                            }}
+                          >
+                            <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              const link = `${window.location.origin}/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`;
+                              navigator.clipboard.writeText(link);
+                              toast.success("Link copiado");
+                            }}
+                          >
+                            <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() =>
+                              navigate(
+                                `/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`,
+                              )
+                            }
+                          >
+                            <FileText className="w-3.5 h-3.5 mr-2" /> Abrir histórico completo
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {(canDelete || (isProfissional && isOwn)) && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="text-destructive">
@@ -2844,17 +2942,147 @@ const ProntuarioPage: React.FC = () => {
         />
       )}
 
+      {/* Modal Encaminhamento Interno */}
+      {encInternoOpen && queryPacienteId && (() => {
+        const p = pacientes.find(x => x.id === queryPacienteId);
+        if (!p) return null;
+        return (
+          <EncaminhamentoInternoModal
+            open={encInternoOpen}
+            onOpenChange={setEncInternoOpen}
+            paciente={{
+              id: p.id,
+              nome: p.nome,
+              cpf: p.cpf,
+              cns: p.cns,
+              data_nascimento: p.dataNascimento,
+              cid: p.cid,
+              unidadeId: p.unidadeId,
+            }}
+          />
+        );
+      })()}
+
       {/* Histórico Completo Modal */}
-      {(queryPacienteId || form.paciente_id) && (
+      {(historicoPacienteId || queryPacienteId || form.paciente_id) && (
         <HistoricoCompletoModal
           open={historicoCompletoOpen}
-          onOpenChange={setHistoricoCompletoOpen}
-          pacienteId={queryPacienteId || form.paciente_id}
-          pacienteNome={queryPacienteNome || form.paciente_nome || "Paciente"}
+          onOpenChange={(open) => {
+            setHistoricoCompletoOpen(open);
+            if (!open) setHistoricoPacienteId(null);
+          }}
+          pacienteId={historicoPacienteId?.id || queryPacienteId || form.paciente_id}
+          pacienteNome={historicoPacienteId?.nome || queryPacienteNome || form.paciente_nome || "Paciente"}
           unidades={unidades}
           currentProfissionalId={user?.id}
+          onViewProntuario={(p) => { setViewerProntuario(p); setHistoricoCompletoOpen(false); }}
         />
       )}
+
+      {/* Drawer de visualização rápida do prontuário */}
+      <Sheet open={!!viewerProntuario} onOpenChange={(open) => !open && setViewerProntuario(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          {viewerProntuario && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Prontuário — {viewerProntuario.paciente_nome}
+                </SheetTitle>
+                <SheetDescription>
+                  {new Date(viewerProntuario.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                  {viewerProntuario.hora_atendimento && ` às ${viewerProntuario.hora_atendimento}`}
+                  {" • "}Prof. {viewerProntuario.profissional_nome}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="mt-4 space-y-4 text-sm">
+                {viewerProntuario.queixa_principal && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Queixa Principal</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.queixa_principal}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_subjetivo && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">S — Subjetivo</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_subjetivo}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_objetivo && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">O — Objetivo</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_objetivo}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_avaliacao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">A — Avaliação</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_avaliacao}</p>
+                  </div>
+                )}
+                {viewerProntuario.soap_plano && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">P — Plano</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.soap_plano}</p>
+                  </div>
+                )}
+                {viewerProntuario.evolucao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Evolução</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.evolucao}</p>
+                  </div>
+                )}
+                {viewerProntuario.conduta && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Conduta</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.conduta}</p>
+                  </div>
+                )}
+                {viewerProntuario.procedimentos_texto && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Procedimentos</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.procedimentos_texto}</p>
+                  </div>
+                )}
+                {viewerProntuario.prescricao && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Prescrição</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.prescricao}</p>
+                  </div>
+                )}
+                {viewerProntuario.solicitacao_exames && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Exames Solicitados</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => { downloadProntuarioPdf(viewerProntuario); toast.success("PDF gerado"); }}>
+                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handlePrint(viewerProntuario)}>
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setHistoricoPacienteId({ id: viewerProntuario.paciente_id, nome: viewerProntuario.paciente_nome });
+                    setHistoricoCompletoOpen(true);
+                  }}
+                >
+                  <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

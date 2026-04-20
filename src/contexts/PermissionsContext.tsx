@@ -189,51 +189,68 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return;
       }
 
-      // Buscar da tabela permissoes
-      const { data, error } = await (supabase as any)
-        .from('permissoes')
-        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute')
-        .eq('perfil', role);
+      const unidadeId = user.unidadeId || '';
 
-      if (error) {
-        console.error('[Permissions] Erro:', error);
+      // Buscar permissões de perfil (unidade específica + global como fallback)
+      const { data: perfilData, error: perfilErr } = await (supabase as any)
+        .from('permissoes')
+        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
+        .eq('perfil', role)
+        .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
+
+      if (perfilErr) {
+        console.error('[Permissions] Erro perfil:', perfilErr);
         setPermissions(buildFullMap(DEFAULT_PERMISSIONS_BY_ROLE[role] ?? {}));
         setLoading(false);
         return;
       }
 
-      // Permissions loaded from DB
+      // Buscar overrides do usuário
+      const { data: userOverrides } = await (supabase as any)
+        .from('permissoes_usuario')
+        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
+        .eq('user_id', user.id)
+        .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
 
-      // Tabela vazia — gravar defaults e usar
-      if (!data || data.length === 0) {
+      // Sem dados de perfil — semear defaults globais (unidade_id='')
+      if (!perfilData || perfilData.length === 0) {
         const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role];
         if (defaults) {
           const inserts = ALL_MODULES.map((m) => ({
             perfil: role,
             modulo: m,
+            unidade_id: '',
             ...(defaults[m] ?? defaultPerm),
           }));
           await (supabase as any)
             .from('permissoes')
-            .upsert(inserts, { onConflict: 'perfil,modulo' });
-          setPermissions(buildFullMap(defaults));
-        } else {
-          setPermissions(buildFullMap({}));
+            .upsert(inserts, { onConflict: 'perfil,modulo,unidade_id' });
         }
-        setLoading(false);
-        return;
       }
 
-      // Montar mapa
+      // Montar mapa: prioridade = override usuário (unidade > global) > perfil (unidade > global)
       const map: Partial<PermissionsMap> = {};
-      (data as any[]).forEach((row) => {
-        map[row.modulo as ModuleName] = {
-          can_view:    row.can_view    ?? false,
-          can_create:  row.can_create  ?? false,
-          can_edit:    row.can_edit    ?? false,
-          can_delete:  row.can_delete  ?? false,
-          can_execute: row.can_execute ?? false,
-        };
+      ALL_MODULES.forEach((m) => {
+        // perfil global
+        const pGlob = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === '');
+        // perfil unidade
+        const pUnid = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
+        // user global / unidade
+        const uGlob = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === '');
+        const uUnid = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
+
+        const pick = uUnid || uGlob || pUnid || pGlob;
+        if (pick) {
+          map[m] = {
+            can_view: pick.can_view ?? false,
+            can_create: pick.can_create ?? false,
+            can_edit: pick.can_edit ?? false,
+            can_delete: pick.can_delete ?? false,
+            can_execute: pick.can_execute ?? false,
+          };
+        } else {
+          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) ?? defaultPerm;
+        }
       });
       setPermissions(buildFullMap(map));
 
@@ -249,12 +266,15 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     loadPermissions();
   }, [loadPermissions]);
 
-  // Realtime
+  // Realtime: reage a mudanças em perfil OU overrides do usuário
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
       .channel(`permissoes-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => {
+        loadPermissions();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, () => {
         loadPermissions();
       })
       .subscribe();

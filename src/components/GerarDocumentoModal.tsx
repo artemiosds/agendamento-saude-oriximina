@@ -147,9 +147,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       .replace(/\{\{unidade\}\}/g, unidade || 'CER II Oriximiná')
       .replace(/\{\{data_hoje\}\}/g, hoje);
 
-    // Extended variables from campos
+    // Extended variables from campos (datas yyyy-mm-dd → dd/mm/yyyy)
+    const formatIfDate = (val: string) => {
+      if (val && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        const [y, m, d] = val.split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return val;
+    };
     Object.entries(campos).forEach(([k, v]) => {
-      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v || '—');
+      const out = v ? formatIfDate(v) : '—';
+      text = text.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), out);
     });
 
     // Medicamentos
@@ -183,7 +191,15 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       }
       if (tipo.includes('declaraç') || tipo.includes('comparecimento')) {
         const now = new Date();
-        defaults.hora_entrada = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        defaults.situacao = 'compareceu';
+        defaults.horario_entrada = `${hh}:${mm}`;
+        defaults.horario_saida = `${hh}:${mm}`;
+        defaults.finalidade = 'consulta';
+        defaults.motivo_falta = '';
+        defaults.data_falta = new Date().toISOString().split('T')[0];
+        defaults.profissional_agendado = profissional?.nome || '';
       }
       defaults.motivo = '';
       defaults.observacoes = '';
@@ -196,11 +212,21 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
     }
   };
 
+  // Templates dinâmicos para Declaração de Comparecimento
+  const DECL_COMPARECEU_HTML = `<p style='text-align: justify;'>Declaramos, para os devidos fins, que a paciente <strong>{{nome_paciente}}</strong>, CPF nº <strong>{{cpf}}</strong>, inscrita no CNS sob o nº <strong>{{cns}}</strong>, encontra-se em acompanhamento no Centro de Especialidades em Reabilitação — CER II. A referida paciente <strong>COMPARECEU</strong> a esta unidade na data de <strong>{{data_atendimento}}</strong>, no período das <strong>{{horario_entrada}}</strong> às <strong>{{horario_saida}}</strong>. O comparecimento deu-se para fins de: <strong>{{finalidade}}</strong>.</p><p style='text-align: justify;'>Expedimos a presente declaração para fins de justificativa junto às instituições que se fizerem necessárias.</p>`;
+  const DECL_FALTOU_HTML = `<p style='text-align: justify;'>Declaramos, para os devidos fins, que a paciente <strong>{{nome_paciente}}</strong>, CPF nº <strong>{{cpf}}</strong>, inscrita no CNS sob o nº <strong>{{cns}}</strong>, encontra-se em acompanhamento no Centro de Especialidades em Reabilitação — CER II.</p><p style='text-align: justify;'>A referida paciente esteve <strong>AUSENTE</strong> ao atendimento agendado para a data de <strong>{{data_falta}}</strong>, sob responsabilidade do(a) profissional <strong>{{profissional_agendado}}</strong>.</p><p style='text-align: justify;'>A ausência deveu-se a motivo justificado: <strong>{{motivo_falta}}</strong>, impossibilitando seu comparecimento na data supracitada. Expedimos a presente declaração para fins de justificativa junto às instituições que se fizerem necessárias.</p>`;
+
   // Update conteudo when campos change
   useEffect(() => {
     const m = modelos.find(x => x.id === selectedId);
-    if (m) setConteudoFinal(substituir(m.conteudo));
-  }, [campos, medicamentos, carimbo]);
+    if (!m) return;
+    const tLower = m.tipo.toLowerCase();
+    let base = m.conteudo;
+    if (tLower.includes('declaraç') || tLower.includes('comparecimento')) {
+      base = campos.situacao === 'faltou' ? DECL_FALTOU_HTML : DECL_COMPARECEU_HTML;
+    }
+    setConteudoFinal(substituir(base));
+  }, [campos, medicamentos, carimbo, selectedId]);
 
   const selected = modelos.find(x => x.id === selectedId);
   const isEncaminhamento = selected && ENCAMINHAMENTO_TIPOS.includes(selected.tipo.toLowerCase());
@@ -399,26 +425,70 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       );
     }
 
-    // DECLARAÇÃO DE COMPARECIMENTO
+    // DECLARAÇÃO DE COMPARECIMENTO / FALTA
     if (tipoLower.includes('declaraç') || tipoLower.includes('comparecimento')) {
+      const situacao = campos.situacao || 'compareceu';
       return (
         <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
           <h4 className="font-semibold text-xs uppercase text-primary">Campos da Declaração</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <Field label="Horário de entrada" value={campos.hora_entrada} onChange={v => updateCampo('hora_entrada', v)} type="time" />
-            <Field label="Horário de saída" value={campos.hora_saida} onChange={v => updateCampo('hora_saida', v)} type="time" />
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Finalidade</Label>
-              <Select value={campos.finalidade || 'consulta'} onValueChange={v => updateCampo('finalidade', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {['consulta', 'exame', 'procedimento', 'outro'].map(f => (
-                    <SelectItem key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+          {/* Situação da Agenda */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Situação da Agenda *</Label>
+            <RadioGroup
+              value={situacao}
+              onValueChange={v => updateCampo('situacao', v)}
+              className="flex gap-4"
+            >
+              <div className="flex items-center gap-1.5">
+                <RadioGroupItem value="compareceu" id="sit-compareceu" />
+                <Label htmlFor="sit-compareceu" className="text-xs">Compareceu</Label>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <RadioGroupItem value="faltou" id="sit-faltou" />
+                <Label htmlFor="sit-faltou" className="text-xs">Faltou</Label>
+              </div>
+            </RadioGroup>
           </div>
+
+          {situacao === 'compareceu' ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Field label="Horário de entrada" value={campos.horario_entrada} onChange={v => updateCampo('horario_entrada', v)} type="time" />
+              <Field label="Horário de saída" value={campos.horario_saida} onChange={v => updateCampo('horario_saida', v)} type="time" />
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Finalidade</Label>
+                <Select value={campos.finalidade || 'consulta'} onValueChange={v => updateCampo('finalidade', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['consulta', 'exame', 'procedimento', 'outro'].map(f => (
+                      <SelectItem key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field
+                  label="Data da Falta *"
+                  value={campos.data_falta}
+                  onChange={v => updateCampo('data_falta', v)}
+                  type="date"
+                />
+                <Field
+                  label="Profissional Agendado *"
+                  value={campos.profissional_agendado}
+                  onChange={v => updateCampo('profissional_agendado', v)}
+                />
+              </div>
+              <FieldArea
+                label="Motivo da Falta *"
+                value={campos.motivo_falta}
+                onChange={v => updateCampo('motivo_falta', v)}
+              />
+            </div>
+          )}
         </div>
       );
     }
@@ -536,15 +606,17 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
 
               <Separator />
 
-              {/* Editable content */}
-              <div className="space-y-1.5">
-                <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
-                <Textarea
-                  value={conteudoFinal}
-                  onChange={e => setConteudoFinal(e.target.value)}
-                  className="min-h-[180px] text-sm font-serif"
-                />
-              </div>
+              {/* Editable raw HTML — hidden for cleaner UX on Declaração/Relatório de Evolução */}
+              {!(tipoLower.includes('declaraç') || tipoLower.includes('comparecimento') || tipoLower.includes('evoluç') || tipoLower.includes('relatório')) && (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Conteúdo do documento (editável)</Label>
+                  <Textarea
+                    value={conteudoFinal}
+                    onChange={e => setConteudoFinal(e.target.value)}
+                    className="min-h-[180px] text-sm font-serif"
+                  />
+                </div>
+              )}
 
               {/* Preview */}
               <div className="space-y-1.5">

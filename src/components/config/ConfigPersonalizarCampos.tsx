@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,11 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   Plus, Pencil, Trash2, Eye, EyeOff, GripVertical, Settings2, Type,
-  Hash, Calendar, CheckSquare, List, AlignLeft, ArrowUp, ArrowDown,
+  Hash, Calendar, CheckSquare, List, AlignLeft, ArrowUp, ArrowDown, Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useData } from '@/contexts/DataContext';
@@ -22,120 +20,26 @@ import {
   ScreenKey,
   SCREEN_LABELS,
   ScreenConfig,
+  NATIVE_FIELDS,
 } from '@/hooks/useCustomFields';
-
-// Native fields per screen (cannot be deleted, only hidden/renamed)
-const NATIVE_FIELDS: Record<ScreenKey, { nome: string; rotulo: string }[]> = {
-  paciente: [
-    { nome: 'nome', rotulo: 'Nome' },
-    { nome: 'dataNascimento', rotulo: 'Data de Nascimento' },
-    { nome: 'cpf', rotulo: 'CPF' },
-    { nome: 'cns', rotulo: 'CNS' },
-    { nome: 'telefone', rotulo: 'Telefone' },
-    { nome: 'email', rotulo: 'E-mail' },
-    { nome: 'endereco', rotulo: 'Endereço' },
-    { nome: 'municipio', rotulo: 'Município' },
-    { nome: 'nomeMae', rotulo: 'Nome da Mãe' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-    { nome: 'isGestante', rotulo: 'Gestante' },
-    { nome: 'isPne', rotulo: 'PNE' },
-    { nome: 'isAutista', rotulo: 'Autista (TEA)' },
-  ],
-  agendamento: [
-    { nome: 'pacienteNome', rotulo: 'Paciente' },
-    { nome: 'profissionalNome', rotulo: 'Profissional' },
-    { nome: 'data', rotulo: 'Data' },
-    { nome: 'hora', rotulo: 'Hora' },
-    { nome: 'tipo', rotulo: 'Tipo' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-  ],
-  gestao_tratamento: [
-    { nome: 'specialty', rotulo: 'Especialidade' },
-    { nome: 'frequency', rotulo: 'Frequência' },
-    { nome: 'total_sessions', rotulo: 'Total de Sessões' },
-    { nome: 'clinical_notes', rotulo: 'Notas Clínicas' },
-  ],
-  pts: [
-    { nome: 'diagnostico_funcional', rotulo: 'Diagnóstico Funcional' },
-    { nome: 'objetivos_terapeuticos', rotulo: 'Objetivos Terapêuticos' },
-    { nome: 'metas_curto_prazo', rotulo: 'Metas Curto Prazo' },
-    { nome: 'metas_medio_prazo', rotulo: 'Metas Médio Prazo' },
-    { nome: 'metas_longo_prazo', rotulo: 'Metas Longo Prazo' },
-  ],
-  relatorio_multiprof: [
-    { nome: 'clinical_evaluation', rotulo: 'Avaliação Clínica' },
-    { nome: 'parecer', rotulo: 'Parecer' },
-    { nome: 'observations', rotulo: 'Observações' },
-  ],
-  relatorio_alta: [
-    { nome: 'reason', rotulo: 'Motivo da Alta' },
-    { nome: 'final_notes', rotulo: 'Notas Finais' },
-  ],
-  funcionario: [
-    { nome: 'nome', rotulo: 'Nome' },
-    { nome: 'email', rotulo: 'E-mail' },
-    { nome: 'cpf', rotulo: 'CPF' },
-    { nome: 'usuario', rotulo: 'Usuário' },
-    { nome: 'profissao', rotulo: 'Profissão' },
-    { nome: 'cargo', rotulo: 'Cargo' },
-    { nome: 'setor', rotulo: 'Setor' },
-    { nome: 'tipo_conselho', rotulo: 'Tipo de Conselho' },
-    { nome: 'numero_conselho', rotulo: 'Nº do Conselho' },
-    { nome: 'uf_conselho', rotulo: 'UF do Conselho' },
-    { nome: 'tempo_atendimento', rotulo: 'Tempo de Atendimento' },
-  ],
-  unidade: [
-    { nome: 'nome', rotulo: 'Nome' },
-    { nome: 'endereco', rotulo: 'Endereço' },
-    { nome: 'telefone', rotulo: 'Telefone' },
-    { nome: 'whatsapp', rotulo: 'WhatsApp' },
-  ],
-  triagem: [
-    { nome: 'peso', rotulo: 'Peso' },
-    { nome: 'altura', rotulo: 'Altura' },
-    { nome: 'pressaoArterial', rotulo: 'Pressão Arterial' },
-    { nome: 'temperatura', rotulo: 'Temperatura' },
-    { nome: 'frequenciaCardiaca', rotulo: 'Frequência Cardíaca' },
-    { nome: 'saturacaoOxigenio', rotulo: 'Saturação de Oxigênio' },
-    { nome: 'glicemia', rotulo: 'Glicemia' },
-    { nome: 'queixaPrincipal', rotulo: 'Queixa Principal' },
-    { nome: 'classificacaoRisco', rotulo: 'Classificação de Risco' },
-  ],
-  prontuario: [
-    { nome: 'soap_subjetivo', rotulo: 'Subjetivo (S)' },
-    { nome: 'soap_objetivo', rotulo: 'Objetivo (O)' },
-    { nome: 'soap_avaliacao', rotulo: 'Avaliação (A)' },
-    { nome: 'soap_plano', rotulo: 'Plano (P)' },
-    { nome: 'evolucao', rotulo: 'Evolução' },
-    { nome: 'queixa_principal', rotulo: 'Queixa Principal' },
-    { nome: 'anamnese', rotulo: 'Anamnese' },
-    { nome: 'exame_fisico', rotulo: 'Exame Físico' },
-    { nome: 'hipotese', rotulo: 'Hipótese' },
-    { nome: 'conduta', rotulo: 'Conduta' },
-    { nome: 'prescricao', rotulo: 'Prescrição' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-  ],
-  encaminhamento: [
-    { nome: 'profissionalDestino', rotulo: 'Profissional de Destino' },
-    { nome: 'especialidadeDestino', rotulo: 'Especialidade de Destino' },
-    { nome: 'motivo', rotulo: 'Motivo' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-  ],
-  fila_espera: [
-    { nome: 'pacienteNome', rotulo: 'Paciente' },
-    { nome: 'prioridade', rotulo: 'Prioridade' },
-    { nome: 'setor', rotulo: 'Setor' },
-    { nome: 'especialidadeDestino', rotulo: 'Especialidade' },
-    { nome: 'descricaoClinica', rotulo: 'Descrição Clínica' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-  ],
-  atendimento: [
-    { nome: 'pacienteNome', rotulo: 'Paciente' },
-    { nome: 'profissionalNome', rotulo: 'Profissional' },
-    { nome: 'procedimento', rotulo: 'Procedimento' },
-    { nome: 'observacoes', rotulo: 'Observações' },
-  ],
-};
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { cn } from '@/lib/utils';
 
 const FIELD_TYPE_LABELS: Record<CustomFieldType, { label: string; icon: React.ElementType }> = {
   text: { label: 'Texto', icon: Type },
@@ -148,30 +52,150 @@ const FIELD_TYPE_LABELS: Record<CustomFieldType, { label: string; icon: React.El
 
 const generateId = () => `cf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// -------- Unified row type --------
+type UnifiedRow =
+  | { kind: 'native'; key: string; nome: string; rotuloOriginal: string }
+  | { kind: 'custom'; key: string; field: CustomFieldDef };
+
+// -------- Sortable item --------
+interface SortableItemProps {
+  row: UnifiedRow;
+  hidden: boolean;
+  effectiveLabel: string;
+  isRenamed: boolean;
+  onRename?: () => void;
+  onToggleHidden?: () => void;
+  onEditCustom?: () => void;
+  onDeleteCustom?: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canUp: boolean;
+  canDown: boolean;
+}
+
+const SortableItem: React.FC<SortableItemProps> = ({
+  row, hidden, effectiveLabel, isRenamed, onRename, onToggleHidden,
+  onEditCustom, onDeleteCustom, onMoveUp, onMoveDown, canUp, canDown,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.key });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  const TypeIcon = row.kind === 'custom' ? (FIELD_TYPE_LABELS[row.field.tipo]?.icon || Type) : Lock;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center justify-between gap-2 py-2 px-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors',
+        hidden && 'opacity-60',
+      )}
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+          aria-label="Arrastar para reordenar"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+        <TypeIcon className={cn('w-4 h-4 shrink-0', row.kind === 'custom' ? 'text-primary' : 'text-muted-foreground')} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={cn(
+                'text-sm font-medium truncate',
+                hidden && 'line-through text-muted-foreground',
+              )}
+            >
+              {effectiveLabel}
+            </span>
+            {row.kind === 'native' && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">Nativo</Badge>
+            )}
+            {row.kind === 'custom' && (
+              <span className="text-[10px] text-muted-foreground">
+                {FIELD_TYPE_LABELS[row.field.tipo]?.label}
+              </span>
+            )}
+            {isRenamed && row.kind === 'native' && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Renomeado</Badge>
+            )}
+            {hidden && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">Oculto</Badge>
+            )}
+            {row.kind === 'custom' && row.field.obrigatorio && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">Obrigatório</Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0">
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveUp} disabled={!canUp} title="Mover para cima">
+          <ArrowUp className="w-3.5 h-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveDown} disabled={!canDown} title="Mover para baixo">
+          <ArrowDown className="w-3.5 h-3.5" />
+        </Button>
+        {row.kind === 'native' ? (
+          <>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRename} title="Renomear">
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggleHidden} title={hidden ? 'Mostrar' : 'Ocultar'}>
+              {hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEditCustom} title="Editar">
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onToggleHidden} title={hidden ? 'Ativar' : 'Desativar'}>
+              {hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDeleteCustom} title="Excluir">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// -------- Main component --------
 const ConfigPersonalizarCampos: React.FC = () => {
   const { unidades } = useData();
   const { getRawScreenConfig, updateScreenConfig, loading } = useCustomFields();
 
   const [selectedScreen, setSelectedScreen] = useState<ScreenKey>('paciente');
   const [selectedUnit, setSelectedUnit] = useState<string>('__global__');
-  const [screenConfig, setScreenConfig] = useState<ScreenConfig>({ fields: [], hiddenNative: [], labelOverrides: {} });
+  const [screenConfig, setScreenConfig] = useState<ScreenConfig>({
+    fields: [], hiddenNative: [], labelOverrides: {}, orderedNames: [],
+  });
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<CustomFieldDef | null>(null);
   const [renameModal, setRenameModal] = useState<{ nome: string; rotulo: string } | null>(null);
 
-  // Field form
   const [fieldForm, setFieldForm] = useState({
-    rotulo: '',
-    tipo: 'text' as CustomFieldType,
-    obrigatorio: false,
-    opcoes: '',
-    valorPadrao: '',
-    mostrarListagem: false,
+    rotulo: '', tipo: 'text' as CustomFieldType, obrigatorio: false,
+    opcoes: '', valorPadrao: '', mostrarListagem: false,
   });
 
-  // Load config when screen/unit changes
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   useEffect(() => {
     if (!loading) {
       setScreenConfig(getRawScreenConfig(selectedScreen, selectedUnit));
@@ -184,7 +208,78 @@ const ConfigPersonalizarCampos: React.FC = () => {
     toast.success('Configuração salva');
   }, [selectedScreen, selectedUnit, updateScreenConfig]);
 
-  // Add/Edit field
+  // Build unified ordered list — uses orderedNames if present, otherwise [natives..., customs by ordem]
+  const unifiedRows: UnifiedRow[] = useMemo(() => {
+    const natives = NATIVE_FIELDS[selectedScreen] || [];
+    const customs = screenConfig.fields;
+
+    const allByName = new Map<string, UnifiedRow>();
+    natives.forEach((n) => {
+      allByName.set(n.nome, { kind: 'native', key: `native:${n.nome}`, nome: n.nome, rotuloOriginal: n.rotulo });
+    });
+    customs.forEach((c) => {
+      allByName.set(c.nome, { kind: 'custom', key: `custom:${c.nome}`, field: c });
+    });
+
+    const order = screenConfig.orderedNames || [];
+    const result: UnifiedRow[] = [];
+    const consumed = new Set<string>();
+
+    order.forEach((n) => {
+      const r = allByName.get(n);
+      if (r && !consumed.has(n)) {
+        result.push(r);
+        consumed.add(n);
+      }
+    });
+    // Append any new fields (not yet ordered) at the end
+    natives.forEach((n) => {
+      if (!consumed.has(n.nome)) {
+        result.push(allByName.get(n.nome)!);
+        consumed.add(n.nome);
+      }
+    });
+    customs
+      .slice()
+      .sort((a, b) => a.ordem - b.ordem)
+      .forEach((c) => {
+        if (!consumed.has(c.nome)) {
+          result.push(allByName.get(c.nome)!);
+          consumed.add(c.nome);
+        }
+      });
+
+    return result;
+  }, [selectedScreen, screenConfig]);
+
+  const persistOrder = useCallback(async (rows: UnifiedRow[]) => {
+    const orderedNames = rows.map((r) => r.kind === 'native' ? r.nome : r.field.nome);
+    // Also recompute custom ordem so existing renderers sort consistently
+    const newCustoms = screenConfig.fields.map((f) => {
+      const idx = orderedNames.indexOf(f.nome);
+      return { ...f, ordem: (idx >= 0 ? idx : orderedNames.length) * 10 };
+    });
+    await save({ ...screenConfig, fields: newCustoms, orderedNames });
+  }, [screenConfig, save]);
+
+  const handleDragEnd = useCallback(async (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = unifiedRows.findIndex((r) => r.key === active.id);
+    const newIndex = unifiedRows.findIndex((r) => r.key === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const moved = arrayMove(unifiedRows, oldIndex, newIndex);
+    await persistOrder(moved);
+  }, [unifiedRows, persistOrder]);
+
+  const moveByArrow = useCallback(async (idx: number, dir: 'up' | 'down') => {
+    const swap = dir === 'up' ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= unifiedRows.length) return;
+    const moved = arrayMove(unifiedRows, idx, swap);
+    await persistOrder(moved);
+  }, [unifiedRows, persistOrder]);
+
+  // ---------- Custom field CRUD ----------
   const openAddModal = () => {
     setEditingField(null);
     setFieldForm({ rotulo: '', tipo: 'text', obrigatorio: false, opcoes: '', valorPadrao: '', mostrarListagem: false });
@@ -221,7 +316,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
       nome,
       rotulo: fieldForm.rotulo.trim(),
       tipo: fieldForm.tipo,
-      opcoes: fieldForm.tipo === 'select' ? fieldForm.opcoes.split(',').map(o => o.trim()).filter(Boolean) : [],
+      opcoes: fieldForm.tipo === 'select' ? fieldForm.opcoes.split(',').map((o) => o.trim()).filter(Boolean) : [],
       obrigatorio: fieldForm.obrigatorio,
       ativo: editingField?.ativo ?? true,
       ordem: editingField?.ordem ?? (screenConfig.fields.length + 1) * 10,
@@ -230,38 +325,36 @@ const ConfigPersonalizarCampos: React.FC = () => {
     };
 
     const newFields = editingField
-      ? screenConfig.fields.map(f => f.id === editingField.id ? field : f)
+      ? screenConfig.fields.map((f) => (f.id === editingField.id ? field : f))
       : [...screenConfig.fields, field];
 
-    await save({ ...screenConfig, fields: newFields });
+    // Append new field name to orderedNames if missing
+    const order = screenConfig.orderedNames || [];
+    const newOrder = order.includes(nome) ? order : [...order, nome];
+
+    await save({ ...screenConfig, fields: newFields, orderedNames: newOrder });
     setModalOpen(false);
   };
 
   const deleteField = async (fieldId: string) => {
-    if (!confirm('Excluir este campo personalizado? Os dados já preenchidos serão mantidos.')) return;
-    await save({ ...screenConfig, fields: screenConfig.fields.filter(f => f.id !== fieldId) });
+    if (!confirm('Excluir este campo personalizado? Os dados já preenchidos serão mantidos no banco.')) return;
+    const target = screenConfig.fields.find((f) => f.id === fieldId);
+    const newFields = screenConfig.fields.filter((f) => f.id !== fieldId);
+    const newOrder = (screenConfig.orderedNames || []).filter((n) => n !== target?.nome);
+    await save({ ...screenConfig, fields: newFields, orderedNames: newOrder });
   };
 
-  const toggleFieldActive = async (fieldId: string) => {
+  const toggleCustomActive = async (fieldId: string) => {
     await save({
       ...screenConfig,
-      fields: screenConfig.fields.map(f => f.id === fieldId ? { ...f, ativo: !f.ativo } : f),
+      fields: screenConfig.fields.map((f) => (f.id === fieldId ? { ...f, ativo: !f.ativo } : f)),
     });
   };
 
-  const moveField = async (idx: number, direction: 'up' | 'down') => {
-    const fields = [...screenConfig.fields];
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= fields.length) return;
-    [fields[idx], fields[swapIdx]] = [fields[swapIdx], fields[idx]];
-    fields.forEach((f, i) => f.ordem = (i + 1) * 10);
-    await save({ ...screenConfig, fields });
-  };
-
-  // Native field management
+  // ---------- Native field management ----------
   const toggleNativeHidden = async (fieldName: string) => {
     const hidden = screenConfig.hiddenNative.includes(fieldName)
-      ? screenConfig.hiddenNative.filter(n => n !== fieldName)
+      ? screenConfig.hiddenNative.filter((n) => n !== fieldName)
       : [...screenConfig.hiddenNative, fieldName];
     await save({ ...screenConfig, hiddenNative: hidden });
   };
@@ -272,34 +365,45 @@ const ConfigPersonalizarCampos: React.FC = () => {
 
   const saveRename = async () => {
     if (!renameModal) return;
-    const overrides = { ...screenConfig.labelOverrides, [renameModal.nome]: renameModal.rotulo };
+    const overrides = { ...screenConfig.labelOverrides, [renameModal.nome]: renameModal.rotulo.trim() };
+    // If user clears the rename, remove the override
+    if (!renameModal.rotulo.trim()) delete overrides[renameModal.nome];
     await save({ ...screenConfig, labelOverrides: overrides });
     setRenameModal(null);
   };
 
-  const nativeFields = NATIVE_FIELDS[selectedScreen] || [];
+  // ---------- Helpers for rendering ----------
+  const isHiddenForRow = (row: UnifiedRow): boolean => {
+    if (row.kind === 'native') return screenConfig.hiddenNative.includes(row.nome);
+    return !row.field.ativo;
+  };
+
+  const labelForRow = (row: UnifiedRow): string => {
+    if (row.kind === 'native') return screenConfig.labelOverrides[row.nome] || row.rotuloOriginal;
+    return row.field.rotulo;
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
           <Settings2 className="w-5 h-5 text-primary" />
         </div>
         <div>
           <h2 className="text-lg font-semibold font-display text-foreground">Personalizar Campos</h2>
-          <p className="text-sm text-muted-foreground">Adicione, oculte e renomeie campos em qualquer tela do sistema</p>
+          <p className="text-sm text-muted-foreground">
+            Renomeie, reordene (com arrastar ou setas), oculte ou adicione campos. Mudanças refletem em tempo real em todo o sistema.
+          </p>
         </div>
       </div>
 
-      {/* Selectors */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-medium">Tela</Label>
-          <Select value={selectedScreen} onValueChange={v => setSelectedScreen(v as ScreenKey)}>
+          <Select value={selectedScreen} onValueChange={(v) => setSelectedScreen(v as ScreenKey)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {(Object.keys(SCREEN_LABELS) as ScreenKey[]).map(k => (
+              {(Object.keys(SCREEN_LABELS) as ScreenKey[]).map((k) => (
                 <SelectItem key={k} value={k}>{SCREEN_LABELS[k]}</SelectItem>
               ))}
             </SelectContent>
@@ -311,7 +415,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__global__">Global (Todas as unidades)</SelectItem>
-              {unidades.filter(u => u.ativo).map(u => (
+              {unidades.filter((u) => u.ativo).map((u) => (
                 <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
               ))}
             </SelectContent>
@@ -319,97 +423,46 @@ const ConfigPersonalizarCampos: React.FC = () => {
         </div>
       </div>
 
-      {/* Native Fields */}
       <Card className="shadow-card border-0">
         <CardContent className="p-5">
-          <h3 className="font-semibold text-foreground mb-3">Campos Nativos</h3>
-          <p className="text-xs text-muted-foreground mb-3">Campos do sistema que não podem ser excluídos, mas podem ser ocultados ou renomeados.</p>
-          <div className="space-y-2">
-            {nativeFields.map(nf => {
-              const isHidden = screenConfig.hiddenNative.includes(nf.nome);
-              const overriddenLabel = screenConfig.labelOverrides[nf.nome];
-              return (
-                <div key={nf.nome} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-sm ${isHidden ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                      {overriddenLabel || nf.rotulo}
-                    </span>
-                    {overriddenLabel && overriddenLabel !== nf.rotulo && (
-                      <Badge variant="outline" className="text-xs">Renomeado</Badge>
-                    )}
-                    {isHidden && <Badge variant="secondary" className="text-xs">Oculto</Badge>}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openRenameNative(nf)} title="Renomear">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleNativeHidden(nf.nome)} title={isHidden ? 'Mostrar' : 'Ocultar'}>
-                      {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Custom Fields */}
-      <Card className="shadow-card border-0">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
             <div>
-              <h3 className="font-semibold text-foreground">Campos Personalizados</h3>
-              <p className="text-xs text-muted-foreground">Campos criados pelo Master para essa tela e unidade.</p>
+              <h3 className="font-semibold text-foreground">Campos da Tela</h3>
+              <p className="text-xs text-muted-foreground">
+                Lista unificada — nativos e personalizados podem ser misturados em qualquer ordem.
+              </p>
             </div>
             <Button size="sm" onClick={openAddModal}>
               <Plus className="w-4 h-4 mr-1" /> Adicionar Campo
             </Button>
           </div>
 
-          {screenConfig.fields.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Nenhum campo personalizado criado ainda.</p>
+          {unifiedRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">Nenhum campo nessa tela.</p>
           ) : (
-            <div className="space-y-2">
-              {screenConfig.fields.map((field, idx) => {
-                const TypeIcon = FIELD_TYPE_LABELS[field.tipo]?.icon || Type;
-                return (
-                  <div key={field.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                    <div className="flex items-center gap-3">
-                      <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
-                      <TypeIcon className="w-4 h-4 text-primary" />
-                      <div>
-                        <span className={`text-sm font-medium ${!field.ativo ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                          {field.rotulo}
-                        </span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {FIELD_TYPE_LABELS[field.tipo]?.label}
-                        </span>
-                      </div>
-                      {field.obrigatorio && <Badge variant="destructive" className="text-[10px] px-1.5">Obrigatório</Badge>}
-                      {!field.ativo && <Badge variant="secondary" className="text-[10px]">Inativo</Badge>}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveField(idx, 'up')} disabled={idx === 0}>
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveField(idx, 'down')} disabled={idx === screenConfig.fields.length - 1}>
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditModal(field)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleFieldActive(field.id)}>
-                        {field.ativo ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteField(field.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={unifiedRows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {unifiedRows.map((row, idx) => (
+                    <SortableItem
+                      key={row.key}
+                      row={row}
+                      hidden={isHiddenForRow(row)}
+                      effectiveLabel={labelForRow(row)}
+                      isRenamed={row.kind === 'native' && !!screenConfig.labelOverrides[row.nome] && screenConfig.labelOverrides[row.nome] !== row.rotuloOriginal}
+                      onRename={row.kind === 'native' ? () => openRenameNative({ nome: row.nome, rotulo: row.rotuloOriginal }) : undefined}
+                      onToggleHidden={() => row.kind === 'native' ? toggleNativeHidden(row.nome) : toggleCustomActive(row.field.id)}
+                      onEditCustom={row.kind === 'custom' ? () => openEditModal(row.field) : undefined}
+                      onDeleteCustom={row.kind === 'custom' ? () => deleteField(row.field.id) : undefined}
+                      onMoveUp={() => moveByArrow(idx, 'up')}
+                      onMoveDown={() => moveByArrow(idx, 'down')}
+                      canUp={idx > 0}
+                      canDown={idx < unifiedRows.length - 1}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </CardContent>
       </Card>
@@ -425,16 +478,16 @@ const ConfigPersonalizarCampos: React.FC = () => {
               <Label>Rótulo (nome exibido)</Label>
               <Input
                 value={fieldForm.rotulo}
-                onChange={e => setFieldForm(p => ({ ...p, rotulo: e.target.value }))}
+                onChange={(e) => setFieldForm((p) => ({ ...p, rotulo: e.target.value }))}
                 placeholder="Ex: Nome do acompanhante"
               />
             </div>
             <div>
               <Label>Tipo</Label>
-              <Select value={fieldForm.tipo} onValueChange={v => setFieldForm(p => ({ ...p, tipo: v as CustomFieldType }))}>
+              <Select value={fieldForm.tipo} onValueChange={(v) => setFieldForm((p) => ({ ...p, tipo: v as CustomFieldType }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(Object.keys(FIELD_TYPE_LABELS) as CustomFieldType[]).map(t => (
+                  {(Object.keys(FIELD_TYPE_LABELS) as CustomFieldType[]).map((t) => (
                     <SelectItem key={t} value={t}>{FIELD_TYPE_LABELS[t].label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -445,7 +498,7 @@ const ConfigPersonalizarCampos: React.FC = () => {
                 <Label>Opções (separadas por vírgula)</Label>
                 <Input
                   value={fieldForm.opcoes}
-                  onChange={e => setFieldForm(p => ({ ...p, opcoes: e.target.value }))}
+                  onChange={(e) => setFieldForm((p) => ({ ...p, opcoes: e.target.value }))}
                   placeholder="Opção 1, Opção 2, Opção 3"
                 />
               </div>
@@ -454,17 +507,17 @@ const ConfigPersonalizarCampos: React.FC = () => {
               <Label>Valor padrão</Label>
               <Input
                 value={fieldForm.valorPadrao}
-                onChange={e => setFieldForm(p => ({ ...p, valorPadrao: e.target.value }))}
+                onChange={(e) => setFieldForm((p) => ({ ...p, valorPadrao: e.target.value }))}
                 placeholder="Deixe vazio se não houver"
               />
             </div>
             <div className="flex items-center justify-between">
               <Label>Obrigatório?</Label>
-              <Switch checked={fieldForm.obrigatorio} onCheckedChange={v => setFieldForm(p => ({ ...p, obrigatorio: v }))} />
+              <Switch checked={fieldForm.obrigatorio} onCheckedChange={(v) => setFieldForm((p) => ({ ...p, obrigatorio: v }))} />
             </div>
             <div className="flex items-center justify-between">
               <Label>Mostrar na listagem?</Label>
-              <Switch checked={fieldForm.mostrarListagem} onCheckedChange={v => setFieldForm(p => ({ ...p, mostrarListagem: v }))} />
+              <Switch checked={fieldForm.mostrarListagem} onCheckedChange={(v) => setFieldForm((p) => ({ ...p, mostrarListagem: v }))} />
             </div>
           </div>
           <DialogFooter>
@@ -481,11 +534,14 @@ const ConfigPersonalizarCampos: React.FC = () => {
             <DialogTitle>Renomear Campo</DialogTitle>
           </DialogHeader>
           <div>
-            <Label>Novo rótulo</Label>
+            <Label>Novo rótulo (deixe vazio para restaurar o original)</Label>
             <Input
               value={renameModal?.rotulo || ''}
-              onChange={e => setRenameModal(prev => prev ? { ...prev, rotulo: e.target.value } : null)}
+              onChange={(e) => setRenameModal((prev) => (prev ? { ...prev, rotulo: e.target.value } : null))}
             />
+            <p className="text-xs text-muted-foreground mt-2">
+              O nome do campo no banco não muda — apenas o que aparece na tela.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameModal(null)}>Cancelar</Button>

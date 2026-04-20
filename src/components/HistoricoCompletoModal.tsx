@@ -12,8 +12,10 @@ import {
   X, Loader2, ChevronDown, ChevronUp, FileText, Activity,
   Calendar, Stethoscope, ListOrdered, UserCheck, Clock,
   AlertTriangle, RefreshCw, Filter, Pill, FlaskConical,
-  HeartPulse,
+  HeartPulse, Eye, FileDown,
 } from "lucide-react";
+import { downloadFullHistoryPdf } from "@/lib/prontuarioPdf";
+import { getSpecialtyColors } from "@/lib/specialtyColors";
 
 // ── Types ──────────────────────────────────────────────────
 type EventType = "avaliacao_inicial" | "retorno" | "sessao" | "urgencia" | "procedimento" | "alta" | "falta" | "consulta";
@@ -25,6 +27,7 @@ interface FullEvent {
   time?: string;
   professional: string;
   professionalId?: string;
+  specialty?: string;
   summary: string;
   soapSubjetivo?: string;
   soapObjetivo?: string;
@@ -40,6 +43,7 @@ interface FullEvent {
   sessionInfo?: string;
   procedimentos?: string;
   status?: string;
+  rawProntuario?: any;
 }
 
 interface Props {
@@ -49,6 +53,7 @@ interface Props {
   pacienteNome: string;
   unidades: { id: string; nome: string }[];
   currentProfissionalId?: string;
+  onViewProntuario?: (prontuario: any) => void;
 }
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string; border: string }> = {
@@ -88,15 +93,22 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
     try {
       const unidadeMap = new Map(unidades.map(u => [u.id, u.nome]));
 
-      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, triageRes] = await Promise.all([
+      const [prontuariosRes, faltasRes, sessionsRes, dischargesRes, triageRes, funcionariosRes] = await Promise.all([
         (supabase as any).from("prontuarios").select("*").eq("paciente_id", pacienteId).order("data_atendimento", { ascending: false }),
         supabase.from("agendamentos").select("id, data, hora, profissional_nome, profissional_id, tipo, status, unidade_id").eq("paciente_id", pacienteId).eq("status", "falta").order("data", { ascending: false }),
         (supabase as any).from("treatment_sessions").select("id, cycle_id, session_number, total_sessions, scheduled_date, status, clinical_notes, procedure_done, professional_id").eq("patient_id", pacienteId).neq("status", "agendada").order("scheduled_date", { ascending: false }),
         (supabase as any).from("patient_discharges").select("id, cycle_id, professional_id, discharge_date, reason, final_notes").eq("patient_id", pacienteId),
-        (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", pacienteId).limit(0), // placeholder to batch
+        (supabase as any).from("triage_records").select("agendamento_id, pressao_arterial, temperatura, frequencia_cardiaca, saturacao_oxigenio, glicemia, peso, altura, imc").eq("agendamento_id", pacienteId).limit(0),
+        (supabase as any).from("funcionarios").select("id, profissao"),
       ]);
 
       if (cancelRef.current) return;
+
+      // map professional → specialty
+      const specialtyMap = new Map<string, string>();
+      for (const f of (funcionariosRes.data || []) as any[]) {
+        if (f?.id && f?.profissao) specialtyMap.set(f.id, f.profissao);
+      }
 
       // Fetch triage for all agendamento_ids from prontuarios
       const prontuarios = (prontuariosRes.data || []) as any[];
@@ -144,6 +156,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           time: p.hora_atendimento || undefined,
           professional: p.profissional_nome || "",
           professionalId: p.profissional_id,
+          specialty: specialtyMap.get(p.profissional_id) || undefined,
           summary: p.queixa_principal || p.evolucao || "",
           soapSubjetivo: p.soap_subjetivo || undefined,
           soapObjetivo: p.soap_objetivo || undefined,
@@ -166,6 +179,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           } : undefined,
           unidade: unidadeMap.get(p.unidade_id),
           procedimentos: p.procedimentos_texto || undefined,
+          rawProntuario: p,
         });
       }
 
@@ -179,6 +193,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           time: a.hora || undefined,
           professional: a.profissional_nome || "",
           professionalId: a.profissional_id,
+          specialty: specialtyMap.get(a.profissional_id) || undefined,
           summary: "Paciente não compareceu",
           unidade: unidadeMap.get(a.unidade_id),
           status: "falta",
@@ -194,6 +209,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           date: s.scheduled_date,
           professional: "",
           professionalId: s.professional_id,
+          specialty: specialtyMap.get(s.professional_id) || cycle?.specialty || undefined,
           summary: s.clinical_notes || s.procedure_done || "",
           sessionInfo: `Sessão ${s.session_number}/${s.total_sessions}`,
           unidade: cycle?.unit_id ? unidadeMap.get(cycle.unit_id) : undefined,
@@ -210,6 +226,7 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
           date: d.discharge_date,
           professional: "",
           professionalId: d.professional_id,
+          specialty: specialtyMap.get(d.professional_id) || cycle?.specialty || undefined,
           summary: [d.reason, d.final_notes].filter(Boolean).join(" — "),
         });
       }
@@ -336,7 +353,7 @@ const EventDetail: React.FC<{ event: FullEvent }> = ({ event }) => {
 
 // ── Main Component ─────────────────────────────────────────
 export const HistoricoCompletoModal: React.FC<Props> = ({
-  open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId,
+  open, onOpenChange, pacienteId, pacienteNome, unidades, currentProfissionalId, onViewProntuario,
 }) => {
   const { events, professionals, loading, error, reload } = useFullHistory(pacienteId, unidades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -375,23 +392,67 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
 
   const typeOptions = ["avaliacao_inicial", "retorno", "sessao", "urgencia", "procedimento", "consulta", "alta", "falta"];
 
+  // Summary stats
+  const summaryStats = useMemo(() => {
+    if (events.length === 0) return null;
+    const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
+    return {
+      total: events.length,
+      first: sorted[0].date,
+      last: sorted[sorted.length - 1].date,
+    };
+  }, [events]);
+
+  const handleGenerateReport = () => {
+    downloadFullHistoryPdf(
+      pacienteNome,
+      filteredEvents.map((e) => ({
+        date: e.date,
+        type: TYPE_CONFIG[e.type]?.label || e.type,
+        professional: e.professional,
+        specialty: e.specialty,
+        summary: e.summary || e.queixaPrincipal || e.conduta || "",
+        unidade: e.unidade,
+        sessionInfo: e.sessionInfo,
+      })),
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-[95vh] p-0 gap-0 flex flex-col" aria-describedby={undefined}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-card shrink-0">
-          <div>
-            <h2 className="text-base sm:text-lg font-semibold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
-              Histórico Completo — {pacienteNome}
-            </h2>
-            <p className="text-xs text-muted-foreground">{filteredEvents.length} de {events.length} evento(s)</p>
+        <div className="px-4 sm:px-6 py-3 border-b bg-card shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-semibold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
+                Histórico Completo — {pacienteNome}
+              </h2>
+              <p className="text-xs text-muted-foreground">{filteredEvents.length} de {events.length} evento(s)</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="gap-1.5">
+                <Filter className="w-3.5 h-3.5" />
+                Filtros
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="gap-1.5">
-              <Filter className="w-3.5 h-3.5" />
-              Filtros
-            </Button>
-          </div>
+          {summaryStats && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-2">
+              <span className="inline-flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-primary" />
+                <strong className="text-foreground">{summaryStats.total}</strong> evento(s)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-primary" />
+                Primeiro: <strong className="text-foreground">{formatDateBR(summaryStats.first)}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                Último: <strong className="text-foreground">{formatDateBR(summaryStats.last)}</strong>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -468,13 +529,14 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
 
                 {!loading && !error && filteredEvents.map(event => {
                   const config = TYPE_CONFIG[event.type] || TYPE_CONFIG.consulta;
+                  const specColors = getSpecialtyColors(event.specialty);
                   const isExpanded = expandedId === event.id;
                   const isCurrent = currentProfissionalId && event.professionalId === currentProfissionalId;
 
                   return (
                     <div
                       key={event.id}
-                      className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-shadow hover:shadow-md cursor-pointer ${config.border} ${isCurrent ? 'ring-1 ring-primary/20' : ''}`}
+                      className={`border-l-4 rounded-lg bg-card shadow-sm p-3 sm:p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${specColors.border} ${isCurrent ? `ring-1 ${specColors.ring}` : ''}`}
                       onClick={() => setExpandedId(prev => prev === event.id ? null : event.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -486,6 +548,12 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                               {config.icon}
                               <span className="ml-1">{config.label}</span>
                             </Badge>
+                            {event.specialty && (
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${specColors.badge}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${specColors.dot}`} />
+                                {event.specialty}
+                              </span>
+                            )}
                             {event.sessionInfo && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-500/30 text-yellow-600" style={{ fontFamily: 'var(--font-clinical)' }}>
                                 {event.sessionInfo}
@@ -501,9 +569,22 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{event.summary.substring(0, 150)}{event.summary.length > 150 ? '…' : ''}</p>
                           )}
                         </div>
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {event.rawProntuario && onViewProntuario && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={(e) => { e.stopPropagation(); onViewProntuario(event.rawProntuario); }}
+                              title="Visualizar prontuário"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Visualizar
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={e => { e.stopPropagation(); setExpandedId(prev => prev === event.id ? null : event.id); }}>
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </Button>
+                        </div>
                       </div>
 
                       {isExpanded && <EventDetail event={event} />}
@@ -513,6 +594,23 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
               </div>
             </ScrollArea>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 sm:px-6 py-3 border-t bg-card flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleGenerateReport}
+            disabled={filteredEvents.length === 0 || loading}
+            className="gap-1.5"
+          >
+            <FileDown className="w-4 h-4" />
+            Gerar Relatório Completo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

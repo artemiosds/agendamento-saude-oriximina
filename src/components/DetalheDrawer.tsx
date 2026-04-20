@@ -51,12 +51,18 @@ export const Secao: React.FC<{ titulo: string; children: React.ReactNode }> = ({
 );
 
 export const Campo: React.FC<{ label: string; valor?: string | number | null; hide?: boolean }> = ({ label, valor, hide }) => {
-  const display = valor !== undefined && valor !== null && valor !== '' ? String(valor) : '—';
-  if (hide && display === '—') return null;
+  const hasValue = valor !== undefined && valor !== null && valor !== '';
+  const display = hasValue ? String(valor) : '—';
+  if (hide && !hasValue) return null;
   return (
-    <div className="flex justify-between items-start gap-2 py-1">
-      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      <span className="text-sm text-foreground text-right break-words max-w-[60%]">{display}</span>
+    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-0.5 sm:gap-2 py-1 min-w-0">
+      <span className="text-xs text-muted-foreground sm:shrink-0">{label}</span>
+      <span
+        className="text-sm text-foreground sm:text-right min-w-0 sm:max-w-[65%]"
+        style={{ overflow: 'visible', textOverflow: 'unset', whiteSpace: 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+      >
+        {display}
+      </span>
     </div>
   );
 };
@@ -77,13 +83,17 @@ interface DetalheDrawerProps {
 const DetalheDrawer: React.FC<DetalheDrawerProps> = ({ open, onOpenChange, titulo, children }) => {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col">
+      <SheetContent
+        side="right"
+        className="p-0 flex flex-col box-border [&_.modal-footer]:flex-wrap"
+        style={{ width: '95vw', maxWidth: '480px', boxSizing: 'border-box' }}
+      >
         <SheetHeader className="p-4 pb-2 border-b">
-          <SheetTitle className="font-display text-lg">{titulo}</SheetTitle>
+          <SheetTitle className="font-display text-lg break-words pr-8">{titulo}</SheetTitle>
           <SheetDescription className="sr-only">Detalhes de {titulo}</SheetDescription>
         </SheetHeader>
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-5 pb-6">
+        <ScrollArea className="flex-1">
+          <div className="space-y-5 p-4 pb-6 min-w-0 box-border">
             {children}
           </div>
         </ScrollArea>

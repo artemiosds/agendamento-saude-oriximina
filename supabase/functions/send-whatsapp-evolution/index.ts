@@ -140,6 +140,19 @@ async function sendEvolutionMessage(config: ClinicaConfig, phone: string, messag
 // ============================================================
 // VALIDAÇÕES ANTI-BAN
 // ============================================================
+function isAppointmentInPast(dataStr?: string, horaStr?: string): boolean {
+  if (!dataStr) return false;
+  let iso = dataStr;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr)) {
+    const [d, m, y] = dataStr.split("/");
+    iso = `${y}-${m}-${d}`;
+  }
+  const hh = (horaStr && /^\d{2}:\d{2}/.test(horaStr)) ? horaStr.slice(0, 5) : "23:59";
+  const target = new Date(`${iso}T${hh}:00-03:00`);
+  if (isNaN(target.getTime())) return false;
+  return target.getTime() < Date.now();
+}
+
 async function validateSend(
   supabase: any,
   cfg: UnitConfig,
@@ -305,7 +318,18 @@ serve(async (req) => {
           { status: 400, headers: corsHeaders },
         );
       }
-      const unidadeId = dados_direto?.unidade_id || "";
+      // Bloqueio retroativo: se o disparo manual referencia consulta passada, descarta
+      if (isAppointmentInPast(dados_direto?.data_consulta, dados_direto?.hora_consulta)) {
+        await supabase.from("notification_logs").insert({
+          evento: tipo || "direto", canal: "whatsapp_evolution",
+          destinatario_telefone: telefone_direto, status: "bloqueado",
+          erro: "agendamento_passado", payload: body,
+        });
+        return new Response(
+          JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
+          { status: 200, headers: corsHeaders },
+        );
+      }
       const cfg = await getUnitConfig(supabase, unidadeId);
       const validation = await validateSend(supabase, cfg, "", normalized);
       if (!validation.ok) {
@@ -357,6 +381,20 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: "Agendamento não encontrado" }),
         { status: 404, headers: corsHeaders },
+      );
+    }
+
+    // Bloqueio retroativo: lembretes de consultas passadas não são enviados
+    const tiposLembrete = ["lembrete_24h", "lembrete_2h", "lembrete_1h", "lembrete_manual", "confirmacao", "agendamento_criado", "remarcacao"];
+    if (tiposLembrete.includes(tipo) && isAppointmentInPast(ag.data, ag.hora)) {
+      await supabase.from("notification_logs").insert({
+        agendamento_id: ag.id, evento: tipo, canal: "whatsapp_evolution",
+        destinatario_telefone: "", status: "bloqueado",
+        erro: "agendamento_passado", payload: { tipo, agendamento_id },
+      });
+      return new Response(
+        JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
+        { status: 200, headers: corsHeaders },
       );
     }
 

@@ -848,16 +848,26 @@ const Agenda: React.FC = () => {
         // Update local arrival map immediately for correct sorting
         setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
 
-        // Check per-professional triage setting
-        let triagemHabilitada = true; // default: triage enabled
+        // Triage routing is OPT-IN. Default = direct to professional's queue.
+        // Only routes to triage when explicitly enabled (per professional or globally).
+        let triagemHabilitada = false;
         try {
+          // 1) Per-professional setting takes precedence
           const { data: profSetting } = await supabase
             .from('triage_settings')
             .select('enabled')
             .eq('profissional_id', ag.profissionalId)
             .maybeSingle();
           if (profSetting) {
-            triagemHabilitada = profSetting.enabled;
+            triagemHabilitada = !!profSetting.enabled;
+          } else {
+            // 2) Fallback to global setting (profissional_id IS NULL)
+            const { data: globalSetting } = await supabase
+              .from('triage_settings')
+              .select('enabled')
+              .is('profissional_id', null)
+              .maybeSingle();
+            if (globalSetting) triagemHabilitada = !!globalSetting.enabled;
           }
         } catch {}
 
