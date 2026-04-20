@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Lock, Plus, Trash2, GripVertical, Pencil, AlertTriangle, Loader2, ChevronDown, ChevronUp, FileText } from 'lucide-react';
+import { Lock, Plus, Trash2, GripVertical, Pencil, AlertTriangle, Loader2, ChevronDown, ChevronUp, FileText, X } from 'lucide-react';
 import { toast } from 'sonner';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import ConstrutorProntuarioModal from '@/components/ConstrutorProntuarioModal';
@@ -102,13 +102,15 @@ const DEFAULT_CONFIG: ProntuarioConfig = {
 };
 
 const FIELD_TYPES = [
-  { value: 'texto', label: 'Texto' },
+  { value: 'texto', label: 'Texto Curto' },
+  { value: 'textarea', label: 'Texto Longo (Textarea)' },
   { value: 'numero', label: 'Número' },
-  { value: 'textarea', label: 'Texto longo' },
-  { value: 'select', label: 'Seleção' },
+  { value: 'select', label: 'Seleção (Dropdown)' },
+  { value: 'checkbox', label: 'Checkbox (Múltipla escolha)' },
   { value: 'data', label: 'Data' },
-  { value: 'checkbox', label: 'Checkbox' },
 ];
+
+const TIPOS_COM_OPCOES = ['select', 'checkbox'];
 
 const ConfigProntuario: React.FC = () => {
   const [config, setConfig] = useState<ProntuarioConfig>(DEFAULT_CONFIG);
@@ -121,6 +123,53 @@ const ConfigProntuario: React.FC = () => {
   const [newAlert, setNewAlert] = useState({ campo: '', operador: '>=', valor: '', mensagem: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState<{ key: string; label: string } | null>(null);
+  const [editFieldDialog, setEditFieldDialog] = useState<CampoConfig | null>(null);
+  const [editDraft, setEditDraft] = useState<{ label: string; tipo: string; obrigatorio: boolean; opcoes: string[] }>({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: [] });
+  const [novaOpcao, setNovaOpcao] = useState('');
+
+  const openEditField = (campo: CampoConfig) => {
+    setEditDraft({
+      label: campo.label,
+      tipo: campo.tipo,
+      obrigatorio: campo.obrigatorio,
+      opcoes: campo.opcoes ?? [],
+    });
+    setNovaOpcao('');
+    setEditFieldDialog(campo);
+  };
+
+  const addOpcaoEdit = () => {
+    const v = novaOpcao.trim();
+    if (!v) return;
+    if (editDraft.opcoes.includes(v)) { toast.error('Opção já existe'); return; }
+    setEditDraft(p => ({ ...p, opcoes: [...p.opcoes, v] }));
+    setNovaOpcao('');
+  };
+
+  const removeOpcaoEdit = (idx: number) => {
+    setEditDraft(p => ({ ...p, opcoes: p.opcoes.filter((_, i) => i !== idx) }));
+  };
+
+  const saveEditField = () => {
+    if (!editFieldDialog) return;
+    if (!editDraft.label.trim()) { toast.error('Informe o label do campo'); return; }
+    if (TIPOS_COM_OPCOES.includes(editDraft.tipo) && editDraft.opcoes.length === 0) {
+      toast.error('Adicione ao menos uma opção'); return;
+    }
+    const updated = {
+      ...config,
+      campos: config.campos.map(c => c.id === editFieldDialog.id ? {
+        ...c,
+        label: editDraft.label.trim(),
+        tipo: isFixedField(c.key) ? c.tipo : editDraft.tipo,
+        obrigatorio: isFixedField(c.key) ? c.obrigatorio : editDraft.obrigatorio,
+        opcoes: TIPOS_COM_OPCOES.includes(editDraft.tipo) ? editDraft.opcoes : undefined,
+      } : c),
+    };
+    saveConfig(updated);
+    setEditFieldDialog(null);
+  };
+
   const loadConfig = useCallback(async () => {
     try {
       const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
@@ -359,6 +408,15 @@ const ConfigProntuario: React.FC = () => {
                     </TooltipProvider>
                   ) : (
                     <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-primary"
+                        onClick={() => openEditField(campo)}
+                        title="Editar propriedades do campo"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
                       <Switch checked={campo.habilitado} onCheckedChange={() => toggleCampo(campo.id)} />
                       {!campo.isBuiltin && (
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/70 hover:text-destructive" onClick={() => setDeleteConfirm(campo.id)}>
@@ -536,6 +594,109 @@ const ConfigProntuario: React.FC = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddAlertDialog(false)}>Cancelar</Button>
             <Button onClick={addAlerta} disabled={!newAlert.mensagem.trim()}>Adicionar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edição de Propriedades do Campo */}
+      <Dialog open={!!editFieldDialog} onOpenChange={(o) => { if (!o) setEditFieldDialog(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" />
+              Editar Campo
+            </DialogTitle>
+          </DialogHeader>
+          {editFieldDialog && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs">Label do Campo</Label>
+                <Input
+                  value={editDraft.label}
+                  onChange={e => setEditDraft(p => ({ ...p, label: e.target.value }))}
+                  placeholder="Ex: Anamnese Completa"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Tipo do Campo</Label>
+                <Select
+                  value={editDraft.tipo}
+                  onValueChange={v => setEditDraft(p => ({ ...p, tipo: v, opcoes: TIPOS_COM_OPCOES.includes(v) ? p.opcoes : [] }))}
+                  disabled={isFixedField(editFieldDialog.key)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FIELD_TYPES.map(ft => <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {isFixedField(editFieldDialog.key) && (
+                  <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Tipo bloqueado para campos fixos do sistema
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/30">
+                <div>
+                  <Label className="text-sm font-medium">Campo Obrigatório</Label>
+                  <p className="text-[10px] text-muted-foreground">Profissional não conseguirá salvar sem preencher</p>
+                </div>
+                <Switch
+                  checked={editDraft.obrigatorio}
+                  onCheckedChange={v => setEditDraft(p => ({ ...p, obrigatorio: v }))}
+                  disabled={isFixedField(editFieldDialog.key)}
+                />
+              </div>
+
+              {TIPOS_COM_OPCOES.includes(editDraft.tipo) && (
+                <div className="space-y-2 rounded-lg border border-border p-3 bg-background">
+                  <Label className="text-xs font-semibold">Opções de Resposta</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={novaOpcao}
+                      onChange={e => setNovaOpcao(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOpcaoEdit(); } }}
+                      placeholder="Ex: Sim, Não, Talvez..."
+                      className="flex-1 h-9"
+                    />
+                    <Button type="button" size="sm" onClick={addOpcaoEdit} disabled={!novaOpcao.trim()}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {editDraft.opcoes.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic py-2 text-center">
+                      Nenhuma opção adicionada ainda
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {editDraft.opcoes.map((op, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/50 border border-border/50">
+                          <span className="text-[10px] text-muted-foreground w-5">{idx + 1}.</span>
+                          <span className="flex-1 text-sm">{op}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive/70 hover:text-destructive"
+                            onClick={() => removeOpcaoEdit(idx)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditFieldDialog(null)}>Cancelar</Button>
+            <Button onClick={saveEditField} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar Campo
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
