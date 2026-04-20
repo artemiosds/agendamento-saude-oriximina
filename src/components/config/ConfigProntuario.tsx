@@ -598,7 +598,109 @@ const ConfigProntuario: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+      {/* Modal de Edição de Propriedades do Campo */}
+      <Dialog open={!!editFieldDialog} onOpenChange={(o) => { if (!o) setEditFieldDialog(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" />
+              Editar Campo
+            </DialogTitle>
+          </DialogHeader>
+          {editFieldDialog && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs">Label do Campo</Label>
+                <Input
+                  value={editDraft.label}
+                  onChange={e => setEditDraft(p => ({ ...p, label: e.target.value }))}
+                  placeholder="Ex: Anamnese Completa"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Tipo do Campo</Label>
+                <Select
+                  value={editDraft.tipo}
+                  onValueChange={v => setEditDraft(p => ({ ...p, tipo: v, opcoes: TIPOS_COM_OPCOES.includes(v) ? p.opcoes : [] }))}
+                  disabled={isFixedField(editFieldDialog.key)}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FIELD_TYPES.map(ft => <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {isFixedField(editFieldDialog.key) && (
+                  <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Tipo bloqueado para campos fixos do sistema
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/30">
+                <div>
+                  <Label className="text-sm font-medium">Campo Obrigatório</Label>
+                  <p className="text-[10px] text-muted-foreground">Profissional não conseguirá salvar sem preencher</p>
+                </div>
+                <Switch
+                  checked={editDraft.obrigatorio}
+                  onCheckedChange={v => setEditDraft(p => ({ ...p, obrigatorio: v }))}
+                  disabled={isFixedField(editFieldDialog.key)}
+                />
+              </div>
+
+              {TIPOS_COM_OPCOES.includes(editDraft.tipo) && (
+                <div className="space-y-2 rounded-lg border border-border p-3 bg-background">
+                  <Label className="text-xs font-semibold">Opções de Resposta</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={novaOpcao}
+                      onChange={e => setNovaOpcao(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addOpcaoEdit(); } }}
+                      placeholder="Ex: Sim, Não, Talvez..."
+                      className="flex-1 h-9"
+                    />
+                    <Button type="button" size="sm" onClick={addOpcaoEdit} disabled={!novaOpcao.trim()}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {editDraft.opcoes.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground italic py-2 text-center">
+                      Nenhuma opção adicionada ainda
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {editDraft.opcoes.map((op, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/50 border border-border/50">
+                          <span className="text-[10px] text-muted-foreground w-5">{idx + 1}.</span>
+                          <span className="flex-1 text-sm">{op}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive/70 hover:text-destructive"
+                            onClick={() => removeOpcaoEdit(idx)}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditFieldDialog(null)}>Cancelar</Button>
+            <Button onClick={saveEditField} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar Campo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir campo personalizado?</AlertDialogTitle>
