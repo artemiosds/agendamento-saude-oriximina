@@ -502,6 +502,58 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Pendências de Cadastro: pacientes agendados sem telefone válido */}
+      <Card className="border-0 shadow-card">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-warning" />
+                Pendências de Cadastro
+              </h3>
+              <Badge className="bg-warning/10 text-warning border-0">
+                {pendenciasCadastro.length} paciente{pendenciasCadastro.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadPendenciasCadastro} disabled={pendenciasLoading}>
+              <RefreshCw className={`w-4 h-4 ${pendenciasLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Pacientes agendados (hoje em diante) sem telefone ou com número inválido (&lt;10 dígitos).
+            O sistema ignora automaticamente esses registros e marca o log como <strong>"Falha: Sem Telefone"</strong>.
+          </p>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Paciente</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead>Próximo agendamento</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendenciasCadastro.length === 0 ? (
+                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                    {pendenciasLoading ? 'Carregando...' : '✅ Nenhuma pendência — todos os pacientes têm telefone válido'}
+                  </TableCell></TableRow>
+                ) : pendenciasCadastro.map(p => (
+                  <TableRow key={p.paciente_id}>
+                    <TableCell className="text-sm">{p.paciente_nome}</TableCell>
+                    <TableCell className="text-xs font-mono">{p.telefone || '—'}</TableCell>
+                    <TableCell className="text-xs">
+                      <Badge className="bg-destructive/10 text-destructive border-0 text-xs">{p.motivo}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.data} {p.hora}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Fila */}
       <Card className="border-0 shadow-card">
         <CardContent className="p-5">
