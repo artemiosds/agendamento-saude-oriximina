@@ -701,6 +701,7 @@ const ConfigProntuario: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir campo personalizado?</AlertDialogTitle>
