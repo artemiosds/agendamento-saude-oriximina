@@ -90,6 +90,19 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
 
+  // Contador soberano da fila pendente (independente do filtro da tabela)
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  // Pacientes agendados sem telefone ou com telefone inválido (<10 dígitos)
+  const [pendenciasCadastro, setPendenciasCadastro] = useState<Array<{
+    paciente_id: string;
+    paciente_nome: string;
+    telefone: string;
+    motivo: string;
+    data: string;
+    hora: string;
+  }>>([]);
+  const [pendenciasLoading, setPendenciasLoading] = useState(false);
+
   const load = useCallback(async () => {
     if (!selectedUnit) return;
     setLoading(true);
@@ -113,10 +126,71 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
     if (!isGlobalAdmin && userUnitId) q = q.eq('unidade_id', userUnitId);
     const { data } = await q;
     setQueue((data as any) || []);
+
+    // Contador soberano da fila pendente da unidade
+    let countQ = supabase.from('whatsapp_queue').select('id', { count: 'exact', head: true }).eq('status', 'pendente');
+    if (!isGlobalAdmin && userUnitId) countQ = countQ.eq('unidade_id', userUnitId);
+    const { count } = await countQ;
+    setPendingCount(count ?? 0);
+
     setQueueLoading(false);
   }, [queueFilter, isGlobalAdmin, userUnitId]);
 
   useEffect(() => { loadQueue(); }, [loadQueue]);
+
+  // Auditoria: pacientes agendados (futuro) sem telefone ou com nº inválido
+  const loadPendenciasCadastro = useCallback(async () => {
+    setPendenciasLoading(true);
+    try {
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      let agQuery = supabase
+        .from('agendamentos')
+        .select('id, paciente_id, paciente_nome, data, hora, unidade_id, status')
+        .gte('data', hojeISO)
+        .not('status', 'in', '(cancelado,falta,concluido)')
+        .order('data', { ascending: true })
+        .limit(500);
+      if (!isGlobalAdmin && userUnitId) agQuery = agQuery.eq('unidade_id', userUnitId);
+      const { data: ags } = await agQuery;
+      const ids = Array.from(new Set((ags || []).map((a: any) => a.paciente_id).filter(Boolean)));
+      if (ids.length === 0) { setPendenciasCadastro([]); setPendenciasLoading(false); return; }
+
+      const { data: pacs } = await supabase
+        .from('pacientes')
+        .select('id, telefone')
+        .in('id', ids);
+      const phoneMap = new Map<string, string>();
+      (pacs || []).forEach((p: any) => phoneMap.set(p.id, (p.telefone || '').trim()));
+
+      const seen = new Set<string>();
+      const pend = (ags || []).reduce((acc: any[], a: any) => {
+        if (seen.has(a.paciente_id)) return acc;
+        const tel = phoneMap.get(a.paciente_id) || '';
+        const digits = tel.replace(/\D/g, '');
+        let motivo = '';
+        if (!digits) motivo = 'Sem telefone cadastrado';
+        else if (digits.length < 10) motivo = `Telefone inválido (${digits.length} dígitos)`;
+        if (motivo) {
+          seen.add(a.paciente_id);
+          acc.push({
+            paciente_id: a.paciente_id,
+            paciente_nome: a.paciente_nome,
+            telefone: tel,
+            motivo,
+            data: a.data,
+            hora: a.hora,
+          });
+        }
+        return acc;
+      }, []);
+      setPendenciasCadastro(pend);
+    } catch (err) {
+      console.error('[Pendências cadastro]', err);
+    }
+    setPendenciasLoading(false);
+  }, [isGlobalAdmin, userUnitId]);
+
+  useEffect(() => { loadPendenciasCadastro(); }, [loadPendenciasCadastro]);
 
   // Realtime: assina mudanças na config da unidade selecionada para
   // sincronizar o estado entre múltiplas estações instantaneamente.
@@ -428,11 +502,68 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Pendências de Cadastro: pacientes agendados sem telefone válido */}
+      <Card className="border-0 shadow-card">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-warning" />
+                Pendências de Cadastro
+              </h3>
+              <Badge className="bg-warning/10 text-warning border-0">
+                {pendenciasCadastro.length} paciente{pendenciasCadastro.length === 1 ? '' : 's'}
+              </Badge>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadPendenciasCadastro} disabled={pendenciasLoading}>
+              <RefreshCw className={`w-4 h-4 ${pendenciasLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Pacientes agendados (hoje em diante) sem telefone ou com número inválido (&lt;10 dígitos).
+            O sistema ignora automaticamente esses registros e marca o log como <strong>"Falha: Sem Telefone"</strong>.
+          </p>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Paciente</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead>Próximo agendamento</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendenciasCadastro.length === 0 ? (
+                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                    {pendenciasLoading ? 'Carregando...' : '✅ Nenhuma pendência — todos os pacientes têm telefone válido'}
+                  </TableCell></TableRow>
+                ) : pendenciasCadastro.map(p => (
+                  <TableRow key={p.paciente_id}>
+                    <TableCell className="text-sm">{p.paciente_nome}</TableCell>
+                    <TableCell className="text-xs font-mono">{p.telefone || '—'}</TableCell>
+                    <TableCell className="text-xs">
+                      <Badge className="bg-destructive/10 text-destructive border-0 text-xs">{p.motivo}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{p.data} {p.hora}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Fila */}
       <Card className="border-0 shadow-card">
         <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">Fila de envios</h3>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-foreground">Fila de envios</h3>
+              <Badge className="bg-primary/10 text-primary border-0">
+                Fila atual: {pendingCount} pendente{pendingCount === 1 ? '' : 's'}
+              </Badge>
+            </div>
             <div className="flex items-center gap-2">
               <Select value={queueFilter} onValueChange={setQueueFilter}>
                 <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
