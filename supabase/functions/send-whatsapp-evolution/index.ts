@@ -140,6 +140,19 @@ async function sendEvolutionMessage(config: ClinicaConfig, phone: string, messag
 // ============================================================
 // VALIDAÇÕES ANTI-BAN
 // ============================================================
+function isAppointmentInPast(dataStr?: string, horaStr?: string): boolean {
+  if (!dataStr) return false;
+  let iso = dataStr;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr)) {
+    const [d, m, y] = dataStr.split("/");
+    iso = `${y}-${m}-${d}`;
+  }
+  const hh = (horaStr && /^\d{2}:\d{2}/.test(horaStr)) ? horaStr.slice(0, 5) : "23:59";
+  const target = new Date(`${iso}T${hh}:00-03:00`);
+  if (isNaN(target.getTime())) return false;
+  return target.getTime() < Date.now();
+}
+
 async function validateSend(
   supabase: any,
   cfg: UnitConfig,
