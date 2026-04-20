@@ -270,6 +270,7 @@ const ProntuarioPage: React.FC = () => {
   const soapCustom = useSoapCustomOptions(user?.id);
   const showSoapDropdown = hasDropdownSoap(user?.profissao);
   const [docModalOpen, setDocModalOpen] = useState(false);
+  const [encInternoOpen, setEncInternoOpen] = useState(false);
   const [historicoCompletoOpen, setHistoricoCompletoOpen] = useState(false);
   const [viewerProntuario, setViewerProntuario] = useState<any | null>(null);
   const [historicoPacienteId, setHistoricoPacienteId] = useState<{ id: string; nome: string } | null>(null);
@@ -2940,6 +2941,27 @@ const ProntuarioPage: React.FC = () => {
           dataAtendimento={new Date().toLocaleDateString('pt-BR')}
         />
       )}
+
+      {/* Modal Encaminhamento Interno */}
+      {encInternoOpen && queryPacienteId && (() => {
+        const p = pacientes.find(x => x.id === queryPacienteId);
+        if (!p) return null;
+        return (
+          <EncaminhamentoInternoModal
+            open={encInternoOpen}
+            onOpenChange={setEncInternoOpen}
+            paciente={{
+              id: p.id,
+              nome: p.nome,
+              cpf: p.cpf,
+              cns: p.cns,
+              data_nascimento: p.dataNascimento,
+              cid: p.cid,
+              unidadeId: p.unidadeId,
+            }}
+          />
+        );
+      })()}
 
       {/* Histórico Completo Modal */}
       {(historicoPacienteId || queryPacienteId || form.paciente_id) && (
