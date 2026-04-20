@@ -84,6 +84,7 @@ export const AgendaNotificacaoIndividual: React.FC<IndividualProps> = ({ ag, pac
             paciente_nome: ag.pacienteNome,
             profissional: ag.profissionalNome,
             unidade: unidade?.nome || "",
+            unidade_id: ag.unidadeId,
             data_consulta: ag.data,
             hora_consulta: ag.hora,
           })
@@ -111,7 +112,7 @@ export const AgendaNotificacaoIndividual: React.FC<IndividualProps> = ({ ag, pac
       }
 
       await Promise.allSettled(promises);
-      toast.success(`✔️ Aviso enviado para ${ag.pacienteNome}`);
+      toast.success(`📨 Aviso enfileirado para ${ag.pacienteNome} (respeitando delays anti-ban)`);
     } catch (err) {
       console.error("Erro ao enviar aviso:", err);
       toast.error(`❌ Falha ao enviar aviso para ${ag.pacienteNome}`);
