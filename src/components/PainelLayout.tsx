@@ -14,6 +14,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
+import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
 const menuItems: {
@@ -196,6 +197,8 @@ const PainelLayout: React.FC = () => {
             {user?.setor && `${user.setor} • `}{user?.cargo}
           </span>
         </header>
+
+        <WhatsappPausedBanner />
 
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
           <Suspense fallback={

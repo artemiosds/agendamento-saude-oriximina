@@ -84,10 +84,10 @@ serve(async (req) => {
       if (unitConfigs.has(unidadeId)) return unitConfigs.get(unidadeId);
       const { data } = await supabase
         .from("whatsapp_config")
-        .select("delay_aleatorio_min_seg, delay_aleatorio_max_seg, limite_global_por_minuto")
+        .select("whatsapp_ativo, delay_aleatorio_min_seg, delay_aleatorio_max_seg, limite_global_por_minuto")
         .eq("unidade_id", unidadeId)
         .maybeSingle();
-      const cfg = data || { delay_aleatorio_min_seg: 5, delay_aleatorio_max_seg: 30, limite_global_por_minuto: 20 };
+      const cfg = data || { whatsapp_ativo: true, delay_aleatorio_min_seg: 5, delay_aleatorio_max_seg: 30, limite_global_por_minuto: 20 };
       unitConfigs.set(unidadeId, cfg);
       return cfg;
     }
@@ -109,12 +109,22 @@ serve(async (req) => {
     for (const msg of pending) {
       if (remainingThisMinute <= 0) break;
 
+      const cfg = await getUnitCfg(msg.unidade_id);
+
+      // 🔕 Modo silencioso: WhatsApp da unidade desativado → bloqueia envio
+      if (cfg.whatsapp_ativo === false) {
+        await supabase.from("whatsapp_queue").update({
+          status: "bloqueado",
+          motivo_erro: "whatsapp_inativo_unidade",
+        }).eq("id", msg.id);
+        blocked++;
+        continue;
+      }
+
       // Marca como processando
       await supabase.from("whatsapp_queue")
         .update({ status: "processando" })
         .eq("id", msg.id);
-
-      const cfg = await getUnitCfg(msg.unidade_id);
 
       // Delay aleatório anti-ban
       await new Promise((r) =>
