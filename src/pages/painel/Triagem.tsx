@@ -220,8 +220,10 @@ const Triagem: React.FC = () => {
     dor: 0,
     classificacaoRisco: "",
     queixaPrincipal: "",
+    historicoQueixa: "",
     alergias: [],
     medicamentos: [],
+    comorbidades: [],
     observacoes: "",
   });
   const [newAlergia, setNewAlergia] = useState("");
@@ -322,8 +324,10 @@ const Triagem: React.FC = () => {
         dor: 0,
         classificacaoRisco: "",
         queixaPrincipal: pac?.descricaoClinica || itemSelecionado.observacoes || "",
+        historicoQueixa: "",
         alergias: [],
         medicamentos: [],
+        comorbidades: [],
         observacoes: "",
       });
       setCustomData({});
