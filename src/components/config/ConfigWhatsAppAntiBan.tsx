@@ -118,6 +118,83 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
 
   useEffect(() => { loadQueue(); }, [loadQueue]);
 
+  // Realtime: assina mudanças na config da unidade selecionada para
+  // sincronizar o estado entre múltiplas estações instantaneamente.
+  useEffect(() => {
+    if (!selectedUnit) return;
+    const channel = supabase
+      .channel(`anti_ban_cfg_${selectedUnit}`)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'whatsapp_config', filter: `unidade_id=eq.${selectedUnit}` },
+        (payload: any) => {
+          const next = payload.new;
+          if (next) setCfg(prev => ({ ...prev, ...next }));
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedUnit]);
+
+  /** Persiste APENAS o campo whatsapp_ativo (toggle imediato, sem clicar Salvar). */
+  const persistAtivo = async (novoValor: boolean) => {
+    setTogglingActive(true);
+    try {
+      const payload = { ...cfg, unidade_id: selectedUnit, whatsapp_ativo: novoValor };
+      delete (payload as any).id;
+      delete (payload as any).created_at;
+      delete (payload as any).updated_at;
+      const { error } = await supabase
+        .from('whatsapp_config')
+        .upsert(payload, { onConflict: 'unidade_id' });
+      if (error) throw error;
+      setCfg(p => ({ ...p, whatsapp_ativo: novoValor }));
+      toast.success(novoValor
+        ? '✅ WhatsApp reativado — automações voltarão a funcionar'
+        : '🔕 WhatsApp pausado — nenhum envio será processado');
+    } catch (e: any) {
+      toast.error(`Erro ao alterar status: ${e.message}`);
+    } finally {
+      setTogglingActive(false);
+    }
+  };
+
+  const handleToggleAtivo = (novoValor: boolean) => {
+    if (!selectedUnit) { toast.error('Selecione uma unidade'); return; }
+    if (!novoValor) {
+      // Desativando → abre confirmação para escolher pausar ou limpar fila
+      setConfirmDeactivate(true);
+    } else {
+      persistAtivo(true);
+    }
+  };
+
+  /** Apenas pausa: muda flag para false, fila pendente permanece (mas será bloqueada no envio). */
+  const pausarEnvios = async () => {
+    setConfirmDeactivate(false);
+    await persistAtivo(false);
+    loadQueue();
+  };
+
+  /** Pausa + limpa toda a fila pendente da unidade. */
+  const limparFila = async () => {
+    setConfirmDeactivate(false);
+    await persistAtivo(false);
+    try {
+      const { error, count } = await supabase
+        .from('whatsapp_queue')
+        .update({ status: 'cancelado', motivo_erro: 'Cancelado ao desativar WhatsApp da unidade' }, { count: 'exact' })
+        .eq('unidade_id', selectedUnit)
+        .eq('status', 'pendente');
+      if (error) throw error;
+      toast.success(`🧹 ${count || 0} mensagem(ns) pendente(s) canceladas`);
+      loadQueue();
+    } catch (e: any) {
+      toast.error(`Erro ao limpar fila: ${e.message}`);
+    }
+  };
+
+
   const save = async () => {
     if (!selectedUnit) { toast.error('Selecione uma unidade'); return; }
     setSaving(true);
