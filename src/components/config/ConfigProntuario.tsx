@@ -184,19 +184,45 @@ const ConfigProntuario: React.FC = () => {
   useEffect(() => { loadConfig(); }, [loadConfig]);
 
   const saveConfig = async (updated: ProntuarioConfig) => {
+    // 🛡️ Retrocompatibilidade: garante que campos fixos / slugs imutáveis nunca sejam alterados
+    // O `key` de cada campo funciona como form_slug interno e é espelhado nas colunas estáticas
+    // do Supabase (prontuarios.queixa_principal, evolucao.*, etc.). Renomear o label NÃO altera o slug.
+    const safeUpdated: ProntuarioConfig = {
+      ...updated,
+      campos: updated.campos.map((c) => {
+        const original = config.campos.find((o) => o.id === c.id);
+        if (!original) return c; // novo campo personalizado — mantém key gerada
+        return {
+          ...c,
+          // slug imutável — preserva integridade com payload JSONB e colunas estáticas
+          key: original.key,
+          isBuiltin: original.isBuiltin,
+          // tipo/obrigatoriedade de campos fixos (SOAP, queixa, sinais vitais) não podem mudar
+          tipo: isFixedField(original.key) ? original.tipo : c.tipo,
+          obrigatorio: isFixedField(original.key) ? original.obrigatorio : c.obrigatorio,
+        };
+      }),
+    };
+
+    // ⚡ Atualização otimista — UI reflete imediatamente, sem esperar o round-trip
+    const previous = config;
+    setConfig(safeUpdated);
     setSaving(true);
+
     try {
       const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
       const existingConfig = (existing?.configuracoes as any) || {};
-      await supabase.from('system_config').upsert({
+      const { error } = await supabase.from('system_config').upsert({
         id: 'default',
-        configuracoes: { ...existingConfig, [CONFIG_KEY]: updated },
+        configuracoes: { ...existingConfig, [CONFIG_KEY]: safeUpdated },
         updated_at: new Date().toISOString(),
       });
-      setConfig(updated);
+      if (error) throw error;
       toast.success('Configuração salva');
     } catch {
-      toast.error('Erro ao salvar');
+      // 🔄 Rollback em caso de falha de rede
+      setConfig(previous);
+      toast.error('Erro ao salvar — alterações revertidas');
     }
     setSaving(false);
   };
