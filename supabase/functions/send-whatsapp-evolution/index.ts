@@ -384,6 +384,20 @@ serve(async (req) => {
       );
     }
 
+    // Bloqueio retroativo: lembretes de consultas passadas não são enviados
+    const tiposLembrete = ["lembrete_24h", "lembrete_2h", "lembrete_1h", "lembrete_manual", "confirmacao", "agendamento_criado", "remarcacao"];
+    if (tiposLembrete.includes(tipo) && isAppointmentInPast(ag.data, ag.hora)) {
+      await supabase.from("notification_logs").insert({
+        agendamento_id: ag.id, evento: tipo, canal: "whatsapp_evolution",
+        destinatario_telefone: "", status: "bloqueado",
+        erro: "agendamento_passado", payload: { tipo, agendamento_id },
+      });
+      return new Response(
+        JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
     const { data: paciente } = await supabase
       .from("pacientes").select("id, nome, telefone, email").eq("id", ag.paciente_id).maybeSingle();
     if (!paciente?.telefone) {
