@@ -495,6 +495,36 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo: confirmar desativação do WhatsApp */}
+      <AlertDialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <PowerOff className="w-5 h-5 text-destructive" />
+              Pausar automações de WhatsApp?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 pt-2">
+              <span className="block">
+                O sistema entrará em <strong>modo silencioso</strong>: nenhum lembrete, confirmação ou
+                notificação será enviado para os pacientes desta unidade.
+              </span>
+              <span className="block">
+                Você ainda tem mensagens pendentes na fila. O que deseja fazer com elas?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <Button variant="outline" onClick={pausarEnvios} className="gap-2">
+              <PowerOff className="w-4 h-4" /> Apenas pausar (mantém fila)
+            </Button>
+            <AlertDialogAction onClick={limparFila} className="gap-2 bg-destructive hover:bg-destructive/90">
+              <Trash2 className="w-4 h-4" /> Pausar e limpar fila
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
