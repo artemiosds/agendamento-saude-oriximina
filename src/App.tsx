@@ -62,7 +62,6 @@ const RelatorioAlta               = lazyRetry(() => import("./pages/painel/Relat
 const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encaminhamentos"));
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
-const Formularios                 = lazyRetry(() => import("./pages/painel/Formularios"));
 
 const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
 const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
@@ -198,7 +197,6 @@ const App = () => (
                     <Route path="alta" element={<ModuleRoute modulo="prontuario"><RelatorioAlta /></ModuleRoute>} />
                     <Route path="encaminhamentos" element={<ModuleRoute modulo="encaminhamento"><Encaminhamentos /></ModuleRoute>} />
                     <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
-                    <Route path="formularios" element={<ModuleRoute modulo="prontuario"><Formularios /></ModuleRoute>} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />

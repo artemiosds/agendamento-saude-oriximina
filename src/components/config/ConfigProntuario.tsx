@@ -11,9 +11,10 @@ import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Lock, Plus, Trash2, GripVertical, Pencil, AlertTriangle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Lock, Plus, Trash2, GripVertical, Pencil, AlertTriangle, Loader2, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
+import ConstrutorProntuarioModal from '@/components/ConstrutorProntuarioModal';
 
 const CONFIG_KEY = 'config_prontuario_tipos';
 
@@ -119,7 +120,7 @@ const ConfigProntuario: React.FC = () => {
   const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '', tiposProntuario: ['primeira_consulta'] as string[] });
   const [newAlert, setNewAlert] = useState({ campo: '', operador: '>=', valor: '', mensagem: '' });
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
+  const [builderOpen, setBuilderOpen] = useState<{ key: string; label: string } | null>(null);
   const loadConfig = useCallback(async () => {
     try {
       const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
@@ -258,6 +259,43 @@ const ConfigProntuario: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Modelos de Prontuário — abre o construtor visual em modal */}
+      <Card className="shadow-card border-0">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold font-display text-foreground">Modelos de Prontuário</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Edite o formulário de cada tipo. As alterações ficam ativas imediatamente para todos os profissionais.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {TIPOS_PRONTUARIO.map(t => (
+              <div
+                key={t.key}
+                className="border border-border rounded-lg p-4 bg-background hover:shadow-sm transition-shadow flex items-center gap-3"
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${t.color}`}>
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-foreground truncate">{t.label}</p>
+                  <p className="text-[10px] text-muted-foreground">slug: {t.key}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBuilderOpen({ key: t.key, label: t.label })}
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <EditorProntuarioConfig />
 
       <Separator />
@@ -514,6 +552,15 @@ const ConfigProntuario: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {builderOpen && (
+        <ConstrutorProntuarioModal
+          open={!!builderOpen}
+          onOpenChange={(o) => { if (!o) setBuilderOpen(null); }}
+          tipoKey={builderOpen.key}
+          tipoLabel={builderOpen.label}
+        />
+      )}
     </div>
   );
 };
