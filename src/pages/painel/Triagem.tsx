@@ -67,10 +67,31 @@ interface TriagemForm {
   dor: number;
   classificacaoRisco: string;
   queixaPrincipal: string;
+  historicoQueixa: string;
   alergias: string[];
   medicamentos: string[];
+  comorbidades: string[];
   observacoes: string;
 }
+
+const COMORBIDADES_COMUNS = [
+  "Hipertensão",
+  "Diabetes",
+  "Cardiopatia",
+  "Asma",
+  "DPOC",
+  "Obesidade",
+  "Dislipidemia",
+  "Hipotireoidismo",
+  "Hipertireoidismo",
+  "Insuficiência Renal",
+  "Hepatopatia",
+  "Câncer",
+  "Depressão",
+  "Ansiedade",
+  "AVC prévio",
+  "IAM prévio",
+];
 
 const ESPECIALIDADE_LABELS: Record<string, string> = {
   // ... suas labels de especialidade
