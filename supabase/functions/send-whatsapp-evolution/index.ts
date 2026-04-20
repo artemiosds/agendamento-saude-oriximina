@@ -318,7 +318,18 @@ serve(async (req) => {
           { status: 400, headers: corsHeaders },
         );
       }
-      const unidadeId = dados_direto?.unidade_id || "";
+      // Bloqueio retroativo: se o disparo manual referencia consulta passada, descarta
+      if (isAppointmentInPast(dados_direto?.data_consulta, dados_direto?.hora_consulta)) {
+        await supabase.from("notification_logs").insert({
+          evento: tipo || "direto", canal: "whatsapp_evolution",
+          destinatario_telefone: telefone_direto, status: "bloqueado",
+          erro: "agendamento_passado", payload: body,
+        });
+        return new Response(
+          JSON.stringify({ success: false, blocked: true, reason: "agendamento_passado" }),
+          { status: 200, headers: corsHeaders },
+        );
+      }
       const cfg = await getUnitConfig(supabase, unidadeId);
       const validation = await validateSend(supabase, cfg, "", normalized);
       if (!validation.ok) {
