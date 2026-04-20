@@ -11,7 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Shield, Loader2, Save, Trash2, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Shield, Loader2, Save, Trash2, RefreshCw, AlertTriangle, Clock, PowerOff, Power } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DAYS = [
@@ -83,6 +87,8 @@ const ConfigWhatsAppAntiBan: React.FC = () => {
   const [queue, setQueue] = useState<QueueRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueFilter, setQueueFilter] = useState<string>('pendente');
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
 
   const load = useCallback(async () => {
     if (!selectedUnit) return;
