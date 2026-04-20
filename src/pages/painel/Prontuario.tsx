@@ -195,6 +195,16 @@ const ProntuarioPage: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
+  // Autosave state
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autosaveAt, setAutosaveAt] = useState<Date | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutosaveHashRef = useRef<string>('');
+  const editIdRef = useRef<string | null>(null);
+  const formRef = useRef(emptyForm);
+  const autosaveInFlightRef = useRef(false);
+  useEffect(() => { editIdRef.current = editId; }, [editId]);
+  useEffect(() => { formRef.current = form; }, [form]);
   const [search, setSearch] = useState("");
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
