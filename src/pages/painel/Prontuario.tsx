@@ -195,6 +195,16 @@ const ProntuarioPage: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [previousForm, setPreviousForm] = useState<typeof emptyForm | null>(null);
+  // Autosave state
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autosaveAt, setAutosaveAt] = useState<Date | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutosaveHashRef = useRef<string>('');
+  const editIdRef = useRef<string | null>(null);
+  const formRef = useRef(emptyForm);
+  const autosaveInFlightRef = useRef(false);
+  useEffect(() => { editIdRef.current = editId; }, [editId]);
+  useEffect(() => { formRef.current = form; }, [form]);
   const [search, setSearch] = useState("");
   const [activeAtendimento, setActiveAtendimento] = useState<{ agendamentoId: string; horaInicio: string } | null>(
     null,
@@ -1060,6 +1070,128 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
+  // ============== AUTOSAVE ==============
+  // Silent autosave: persists draft without validations/toasts/logs/navigation.
+  // Does NOT change agendamento status. Finalize button continues to set "concluido".
+  const performAutosave = useCallback(async () => {
+    if (autosaveInFlightRef.current) return;
+    const f = formRef.current;
+    // Skip when no patient selected, no date, future date (new), or in session-registration flow
+    if (!f.paciente_nome || !f.paciente_id || !f.data_atendimento) return;
+    if (f.tipo_registro === 'sessao' && !editIdRef.current) return; // require explicit "Registrar Sessão"
+    const today = new Date().toISOString().split('T')[0];
+    if (!editIdRef.current && f.data_atendimento > today) return;
+
+    autosaveInFlightRef.current = true;
+    setAutosaveStatus('saving');
+    try {
+      const procTexto = selectedProcIds
+        .map((id) => procedimentos.find((pr) => pr.id === id)?.nome || '')
+        .filter(Boolean)
+        .join(', ');
+      const record: any = {
+        paciente_id: f.paciente_id,
+        paciente_nome: f.paciente_nome,
+        profissional_id: user?.id || '',
+        profissional_nome: user?.nome || '',
+        unidade_id: user?.unidadeId || '',
+        setor: user?.setor || '',
+        agendamento_id: f.agendamento_id,
+        data_atendimento: f.data_atendimento,
+        hora_atendimento: f.hora_atendimento,
+        queixa_principal: f.queixa_principal,
+        anamnese: f.anamnese,
+        sinais_sintomas: f.sinais_sintomas,
+        exame_fisico: f.exame_fisico,
+        hipotese: f.hipotese,
+        conduta: f.conduta,
+        prescricao: f.prescricao,
+        solicitacao_exames: f.solicitacao_exames,
+        evolucao: f.evolucao,
+        observacoes: f.observacoes,
+        indicacao_retorno: f.indicacao_retorno === 'no_indication' ? '' : (f.indicacao_retorno || ''),
+        motivo_alteracao: editIdRef.current ? (f.motivo_alteracao || 'Edição automática (autosave)') : '',
+        procedimentos_texto: procTexto || f.procedimentos_texto || '',
+        outro_procedimento: f.outro_procedimento || '',
+        tipo_registro: f.tipo_registro || 'consulta',
+      };
+      if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
+
+      if (editIdRef.current) {
+        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', editIdRef.current);
+        if (error) throw error;
+      } else {
+        const { data: inserted, error } = await (supabase as any)
+          .from('prontuarios')
+          .insert(record)
+          .select('id')
+          .single();
+        if (error) throw error;
+        if (inserted?.id) {
+          setEditId(inserted.id);
+          editIdRef.current = inserted.id;
+        }
+      }
+      setAutosaveStatus('saved');
+      setAutosaveAt(new Date());
+    } catch (err) {
+      console.error('[autosave] erro:', err);
+      setAutosaveStatus('error');
+    } finally {
+      autosaveInFlightRef.current = false;
+    }
+  }, [user, selectedProcIds, procedimentos]);
+
+  // Debounced trigger watching form changes while dialog is open
+  useEffect(() => {
+    if (!dialogOpen) return;
+    if (!form.paciente_id || !form.paciente_nome) return;
+    // Build a hash of editable text fields to detect real changes
+    const hash = JSON.stringify({
+      qp: form.queixa_principal, an: form.anamnese, ss: form.sinais_sintomas,
+      ef: form.exame_fisico, hp: form.hipotese, cd: form.conduta,
+      pr: form.prescricao, se: form.solicitacao_exames, ev: form.evolucao,
+      ob: form.observacoes, ir: form.indicacao_retorno, op: form.outro_procedimento,
+      pt: form.procedimentos_texto, ep: form.episodio_id, tr: form.tipo_registro,
+      da: form.data_atendimento, ho: form.hora_atendimento,
+    });
+    if (hash === lastAutosaveHashRef.current) return;
+    lastAutosaveHashRef.current = hash;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2500);
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+  }, [dialogOpen, form, performAutosave]);
+
+  // Flush on tab hide / before unload
+  useEffect(() => {
+    if (!dialogOpen) return;
+    const flush = () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      void performAutosave();
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [dialogOpen, performAutosave]);
+
+  // Reset autosave indicator when dialog closes/opens
+  useEffect(() => {
+    if (!dialogOpen) {
+      setAutosaveStatus('idle');
+      setAutosaveAt(null);
+      lastAutosaveHashRef.current = '';
+      if (autosaveTimerRef.current) { clearTimeout(autosaveTimerRef.current); autosaveTimerRef.current = null; }
+    }
+  }, [dialogOpen]);
+  // ============ END AUTOSAVE ============
+
   const handleFinalizarAtendimento = async () => {
     const saved = await handleSave();
     if (!saved) return;
@@ -1647,7 +1779,26 @@ const ProntuarioPage: React.FC = () => {
       >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
+              <div className="text-xs flex items-center gap-1.5" aria-live="polite">
+                {autosaveStatus === 'saving' && (
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Salvando…
+                  </span>
+                )}
+                {autosaveStatus === 'saved' && autosaveAt && (
+                  <span className="text-success flex items-center gap-1.5">
+                    <CheckCircle className="w-3 h-3" /> Salvo automaticamente às {autosaveAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                {autosaveStatus === 'error' && (
+                  <span className="text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3" /> Falha ao salvar — tentaremos novamente
+                  </span>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
           {activeAtendimento && (
