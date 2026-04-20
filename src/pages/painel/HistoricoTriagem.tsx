@@ -138,7 +138,12 @@ const HistoricoTriagem: React.FC = () => {
         .filter((r: any) => user?.usuario === 'admin.sms' || !user?.unidadeId || unitAgIds.has(r.agendamento_id))
         .map((r: any) => {
           const ag = agMap.get(r.agendamento_id);
-          const nomeReal = (ag && pacMap.get(ag.pacienteId)) || ag?.nome || "Paciente não encontrado";
+          // Fallback chain: live patient name -> denormalized appointment name -> custom_data -> truncated ID
+          const nomeReal =
+            (ag && pacMap.get(ag.pacienteId)) ||
+            ag?.nome ||
+            r?.custom_data?.paciente_nome ||
+            (r.agendamento_id ? `Agendamento ${String(r.agendamento_id).slice(0, 8)}` : "Paciente não encontrado");
           return {
             ...r,
             pacienteNome: nomeReal,
