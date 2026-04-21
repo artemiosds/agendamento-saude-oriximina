@@ -64,7 +64,7 @@ const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { unidades } = useData();
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
-  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; raca_cor: string; nacionalidade: string }>>({});
+  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; nome: string; data_nascimento: string; raca_cor: string; nacionalidade: string }>>({});
   const [profMap, setProfMap] = useState<Record<string, { cbo: string }>>({});
   const [loading, setLoading] = useState(false);
   const [competencia, setCompetencia] = useState<string>(currentCompetencia());
@@ -167,13 +167,15 @@ const BpaProducao: React.FC = () => {
 
       if (pacIds.length) {
         const { data: pacs } = await (supabase as any)
-          .from('pacientes').select('id, cpf, cns, custom_data').in('id', pacIds);
+          .from('pacientes').select('id, nome, cpf, cns, data_nascimento, custom_data').in('id', pacIds);
         const pm: typeof pacMap = {};
         (pacs || []).forEach((p: any) => {
           const cd = p.custom_data || {};
           pm[p.id] = {
             cns: p.cns || '',
             cpf: p.cpf || '',
+            nome: p.nome || '',
+            data_nascimento: p.data_nascimento || '',
             raca_cor: cd.raca_cor || cd.racaCor || '',
             nacionalidade: cd.nacionalidade || '',
           };
@@ -204,14 +206,16 @@ const BpaProducao: React.FC = () => {
     const pac = pacMap[l.paciente_id];
     const prof = profMap[l.profissional_id];
     const cns = (pac?.cns || '').replace(/\D/g, '');
+    const cpf = (pac?.cpf || '').replace(/\D/g, '');
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
     const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
+    const exigeSigtap = !isCboMedico(cbo);
     return {
-      cns: cns.length === 15,
+      identificacao: cns.length === 15 || cpf.length === 11,
       cbo: cbo.length > 0,
-      sigtap: sigtap.length === 10,
-      raca: !!(pac?.raca_cor && pac.raca_cor.length > 0),
-      nacionalidade: !!(pac?.nacionalidade && pac.nacionalidade.length > 0),
+      sigtap: !exigeSigtap || sigtap.length === 10,
+      nome: !!(pac?.nome && pac.nome.trim().length > 0),
+      dataNasc: !!(pac?.data_nascimento && pac.data_nascimento.trim().length > 0),
     };
   };
 
@@ -219,7 +223,7 @@ const BpaProducao: React.FC = () => {
     let validos = 0, pendentes = 0;
     linhas.forEach((l) => {
       const v = validateRow(l);
-      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
+      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
     });
     return { total: linhas.length, validos, pendentes };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,7 +264,7 @@ const BpaProducao: React.FC = () => {
       // unidade não está em LinhaBPA — usamos prontuario filter via mapa
       total += 1;
       const v = validateRow(l);
-      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
+      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
     });
     return { validos, pendentes, total };
     // eslint-disable-next-line react-hooks/exhaustive-deps
