@@ -117,7 +117,14 @@ const Funcionarios: React.FC = () => {
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
     });
-    setCustomData({});
+    const cd = (f.custom_data as any) || {};
+    if (cd.cbo_codigo && cd.cbo_descricao) {
+      setCbo({ codigo: cd.cbo_codigo, descricao: cd.cbo_descricao });
+    } else {
+      setCbo(null);
+    }
+    setShowCboError(false);
+    setCustomData(cd);
     setDialogOpen(true);
   };
 
