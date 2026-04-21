@@ -180,12 +180,14 @@ export function generateSessionDatesWithInfo(
       const d = new Date(start);
       d.setDate(d.getDate() + i * 7);
       const dateStr = d.toISOString().split('T')[0];
-      if (isDateBlocked(dateStr, blockedRanges)) {
-        // Find next valid weekday
-        const valid = findNextValidDate(d, [d.getDay() === 0 ? 7 : d.getDay()], blockedRanges);
+      if (isInvalidSessionDate(dateStr, blockedRanges)) {
+        // Find next valid weekday (Mon-Fri only)
+        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+        const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
+        const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped;
+          totalSkipped += valid.skipped + 1;
         } else {
           dates.push(dateStr); // fallback
         }
@@ -201,12 +203,13 @@ export function generateSessionDatesWithInfo(
       const d = new Date(start);
       d.setMonth(d.getMonth() + i);
       const dateStr = d.toISOString().split('T')[0];
-      if (isDateBlocked(dateStr, blockedRanges)) {
-        const dow = d.getDay() === 0 ? 7 : d.getDay();
-        const valid = findNextValidDate(d, [dow], blockedRanges);
+      if (isInvalidSessionDate(dateStr, blockedRanges)) {
+        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+        const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
+        const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped;
+          totalSkipped += valid.skipped + 1;
         } else {
           dates.push(dateStr);
         }
@@ -222,7 +225,10 @@ export function generateSessionDatesWithInfo(
     weekdays = [start.getDay() === 0 ? 1 : start.getDay()];
   }
 
-  const sortedDays = [...weekdays].sort((a, b) => a - b);
+  // Filter out weekends from requested weekdays (Sat=6, Sun=7)
+  const sortedDays = [...weekdays].filter((d) => d >= 1 && d <= 5).sort((a, b) => a - b);
+  if (sortedDays.length === 0) sortedDays.push(1, 2, 3, 4, 5);
+
   const current = new Date(start);
   let count = 0;
   const maxIterations = totalSessions * 60; // increased safety margin for skips
@@ -231,7 +237,7 @@ export function generateSessionDatesWithInfo(
   while (count < totalSessions && iter < maxIterations) {
     const dow = current.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
       const dateStr = current.toISOString().split('T')[0];
       if (!isDateBlocked(dateStr, blockedRanges)) {
         dates.push(dateStr);
