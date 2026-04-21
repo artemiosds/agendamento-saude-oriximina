@@ -1751,17 +1751,21 @@ const Agenda: React.FC = () => {
                         {newAgTurnoInfo.map((t) => {
                           const isSelected = newAg.hora === t.horaInicio;
                           const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+                          const lotadoBlocked = t.lotado && !isMaster;
+                          const lotadoOverride = t.lotado && isMaster;
                           return (
                             <button
                               key={t.turnoId}
                               type="button"
-                              disabled={t.lotado}
+                              disabled={lotadoBlocked}
                               onClick={() => setNewAg((p) => ({ ...p, hora: t.horaInicio }))}
                               className={cn(
                                 'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all',
                                 isSelected && !t.lotado && 'border-primary bg-primary/5 shadow-sm',
+                                isSelected && lotadoOverride && 'border-warning bg-warning/10 shadow-sm',
                                 !isSelected && !t.lotado && 'border-border hover:border-primary/40 hover:bg-muted/30',
-                                t.lotado && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
+                                !isSelected && lotadoOverride && 'border-warning/40 bg-warning/5 hover:border-warning hover:bg-warning/10 cursor-pointer',
+                                lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
                               )}
                             >
                               <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
@@ -1782,8 +1786,11 @@ const Agenda: React.FC = () => {
                               </div>
                               <div className="text-right shrink-0">
                                 {t.lotado ? (
-                                  <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-1 rounded-full">
-                                    Lotado
+                                  <span className={cn(
+                                    "text-xs font-bold px-2 py-1 rounded-full",
+                                    isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
+                                  )}>
+                                    {isMaster ? 'Lotado (forçar)' : 'Lotado'}
                                   </span>
                                 ) : (
                                   <span className={cn(
@@ -1797,7 +1804,12 @@ const Agenda: React.FC = () => {
                             </button>
                           );
                         })}
-                        {newAgTurnoInfo.every(t => t.lotado) && (
+                        {newAg.hora && newAgTurnoInfo.find(t => t.horaInicio === newAg.hora)?.lotado && isMaster && (
+                          <div className="mt-2 px-3 py-2 rounded-lg border border-warning/40 bg-warning/10 text-xs text-warning">
+                            ⚠️ Atenção: Turno lotado. Você está agendando como MASTER (encaixe forçado).
+                          </div>
+                        )}
+                        {newAgTurnoInfo.every(t => t.lotado) && !isMaster && (
                           <p className="text-sm text-destructive mt-1">
                             Todos os turnos estão lotados para esta data. Selecione outro dia.
                           </p>
