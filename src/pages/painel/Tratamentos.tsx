@@ -200,6 +200,13 @@ const Tratamentos: React.FC = () => {
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
+  // Debounce search input — evita recarregar a página/spinner a cada tecla
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
 
   // Pagination
   const PAGE_SIZE = 20;
