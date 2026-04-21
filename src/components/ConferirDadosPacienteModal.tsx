@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import { applyPhoneMask } from "@/lib/phoneUtils";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 
 export interface ConferirDadosPacienteModalProps {
   open: boolean;
@@ -123,6 +125,7 @@ export function ConferirDadosPacienteModal({
   const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open || !pacienteId) return;
@@ -235,6 +238,11 @@ export function ConferirDadosPacienteModal({
       if (error) throw error;
       setPaciente({ ...paciente, ...form, custom_data: customData });
       setDirty(false);
+      // CRÍTICO: invalidar caches para refletir em prontuário, agendamento, BPA, etc.
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
       toast.success("Dados atualizados!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
