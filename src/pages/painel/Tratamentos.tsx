@@ -386,8 +386,12 @@ const Tratamentos: React.FC = () => {
     }
   }, [user]);
 
+  // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
+  const firstLoadRef = React.useRef(true);
   useEffect(() => {
-    loadData();
+    const isFirst = firstLoadRef.current;
+    firstLoadRef.current = false;
+    loadData(!isFirst);
   }, [loadData]);
 
   // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
