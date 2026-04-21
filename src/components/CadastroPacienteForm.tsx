@@ -571,34 +571,92 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
 
           {/* ═══ ABA 4 — DADOS COMPLEMENTARES E CLÍNICOS ═══ */}
           <TabsContent value="complementares" className="space-y-4 mt-2">
-            {/* Dados SUS adicionais */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <Label>Nacionalidade</Label>
-                <Select
-                  value={cd.nacionalidade || "brasileiro"}
-                  onValueChange={(v) => setCustom("nacionalidade", v)}
-                >
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="brasileiro">Brasileiro(a)</SelectItem>
-                    <SelectItem value="naturalizado">Naturalizado(a)</SelectItem>
-                    <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
-                  </SelectContent>
-                </Select>
+            {/* ── Bloco SUS / BPA-I ── */}
+            <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-3 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                <FileHeart className="w-4 h-4" /> Dados SUS (obrigatórios para BPA)
               </div>
 
-              <div>
-                <Label>Raça/Cor (IBGE)</Label>
-                <Select value={cd.racaCor || ""} onValueChange={(v) => setCustom("racaCor", v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {RACA_COR_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>Nacionalidade *</Label>
+                  <Select
+                    value={cd.nacionalidade || "brasileiro"}
+                    onValueChange={(v) => setCustom("nacionalidade", v)}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="brasileiro">Brasileiro(a)</SelectItem>
+                      <SelectItem value="naturalizado">Naturalizado(a)</SelectItem>
+                      <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Raça/Cor (IBGE) *</Label>
+                  <Select
+                    value={cd.racaCor || cd.raca_cor || ""}
+                    onValueChange={(v) => {
+                      // Persistir em ambas as chaves para compat com BPA
+                      onChange({
+                        ...form,
+                        customData: { ...(form.customData || {}), racaCor: v, raca_cor: v },
+                      });
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {RACA_COR_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Etnia: obrigatória apenas se Raça/Cor = Indígena */}
+                {(cd.racaCor === "indigena" || cd.raca_cor === "indigena") && (
+                  <div className="md:col-span-2">
+                    <Label>Etnia (povo indígena) *</Label>
+                    <Select value={cd.etnia || ""} onValueChange={(v) => setCustom("etnia", v)}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a etnia" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="X101">X101 — Apalai</SelectItem>
+                        <SelectItem value="X117">X117 — Arara do Pará</SelectItem>
+                        <SelectItem value="X238">X238 — Mundurukú</SelectItem>
+                        <SelectItem value="X298">X298 — Wai-Wai</SelectItem>
+                        <SelectItem value="X305">X305 — Tiriyó</SelectItem>
+                        <SelectItem value="X313">X313 — Yanomami</SelectItem>
+                        <SelectItem value="X999">X999 — Outra (especificar)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {cd.etnia === "X999" && (
+                      <Input
+                        className="mt-2"
+                        placeholder="Especifique a etnia"
+                        value={cd.etniaOutra || ""}
+                        onChange={(e) => setCustom("etniaOutra", sanitizeUpper(e.target.value))}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* País de nascimento: obrigatório se estrangeiro */}
+                {cd.nacionalidade === "estrangeiro" && (
+                  <div className="md:col-span-2">
+                    <Label>País de nascimento *</Label>
+                    <Input
+                      value={cd.paisNascimento || ""}
+                      onChange={(e) => setCustom("paisNascimento", sanitizeUpper(e.target.value))}
+                      placeholder="EX: VENEZUELA"
+                    />
+                  </div>
+                )}
               </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Esses campos são exigidos pelo SIA/SUS na geração do arquivo BPA-I mensal.
+              </p>
             </div>
 
             {/* Encaminhamento (preservado) */}
