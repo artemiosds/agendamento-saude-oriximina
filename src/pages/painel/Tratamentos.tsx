@@ -200,6 +200,13 @@ const Tratamentos: React.FC = () => {
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
+  // Debounce search input — evita recarregar a página/spinner a cada tecla
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
 
   // Pagination
   const PAGE_SIZE = 20;
@@ -303,7 +310,7 @@ const Tratamentos: React.FC = () => {
         p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
-        p_search: searchTerm.trim() || null,
+        p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
       });
 
@@ -329,7 +336,7 @@ const Tratamentos: React.FC = () => {
       if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
     if (!silent) setLoading(false);
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
@@ -379,8 +386,12 @@ const Tratamentos: React.FC = () => {
     }
   }, [user]);
 
+  // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
+  const firstLoadRef = React.useRef(true);
   useEffect(() => {
-    loadData();
+    const isFirst = firstLoadRef.current;
+    firstLoadRef.current = false;
+    loadData(!isFirst);
   }, [loadData]);
 
   // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
@@ -472,7 +483,7 @@ const Tratamentos: React.FC = () => {
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
