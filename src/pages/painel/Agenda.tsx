@@ -617,28 +617,41 @@ const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    // Validações rápidas antes de abrir modal de conferência
+    // Validações rápidas
     if (!newAg.pacienteId || !newAg.profissionalId || !newAg.hora) {
       toast.error("Preencha paciente, profissional e horário.");
       return;
     }
-    const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
-    const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
-    setConferenciaModal({
-      open: true,
-      pacienteId: newAg.pacienteId,
-      modo: "agendamento",
-      agendamentoInfo: {
-        data: selectedDate,
-        hora: newAg.hora,
-        tipo: newAg.tipo,
-        profissionalNome: profSel?.nome || "",
-        profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
-        profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
-        unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
-      },
-      onConfirm: () => { void executarCreate(); },
-    });
+    // Conferência obrigatória do paciente antes do agendamento
+    if (!pacientesConferidos.has(newAg.pacienteId)) {
+      toast.error("Confira os dados do paciente antes de agendar.");
+      const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
+      const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
+      setConferenciaModal({
+        open: true,
+        pacienteId: newAg.pacienteId,
+        modo: "agendamento",
+        agendamentoInfo: {
+          data: selectedDate,
+          hora: newAg.hora,
+          tipo: newAg.tipo,
+          profissionalNome: profSel?.nome || "",
+          profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+          profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+          unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+        },
+        onConfirm: () => {
+          setPacientesConferidos((prev) => {
+            const next = new Set(prev);
+            next.add(newAg.pacienteId);
+            return next;
+          });
+          void executarCreate();
+        },
+      });
+      return;
+    }
+    void executarCreate();
   };
 
   const executarCreate = async () => {
