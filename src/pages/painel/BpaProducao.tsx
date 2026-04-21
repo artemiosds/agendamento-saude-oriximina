@@ -45,12 +45,15 @@ interface LinhaBPA {
 }
 
 interface ValidationFlags {
-  cns: boolean;
-  cbo: boolean;
-  sigtap: boolean;
-  raca: boolean;
-  nacionalidade: boolean;
+  identificacao: boolean;  // CNS (15) OU CPF (11)
+  cbo: boolean;            // CBO obrigatório
+  sigtap: boolean;         // SIGTAP só obrigatório p/ não-médicos
+  nome: boolean;           // Nome paciente
+  dataNasc: boolean;       // Data nascimento
 }
+
+// CBOs de médicos (família 225*) — médicos podem registrar atendimento sem SIGTAP
+const isCboMedico = (cbo: string) => (cbo || '').replace(/\D/g, '').startsWith('225');
 
 const currentCompetencia = (): string => {
   const d = new Date();
@@ -61,7 +64,7 @@ const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { unidades } = useData();
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
-  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; raca_cor: string; nacionalidade: string }>>({});
+  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; nome: string; data_nascimento: string; raca_cor: string; nacionalidade: string }>>({});
   const [profMap, setProfMap] = useState<Record<string, { cbo: string }>>({});
   const [loading, setLoading] = useState(false);
   const [competencia, setCompetencia] = useState<string>(currentCompetencia());
@@ -164,13 +167,15 @@ const BpaProducao: React.FC = () => {
 
       if (pacIds.length) {
         const { data: pacs } = await (supabase as any)
-          .from('pacientes').select('id, cpf, cns, custom_data').in('id', pacIds);
+          .from('pacientes').select('id, nome, cpf, cns, data_nascimento, custom_data').in('id', pacIds);
         const pm: typeof pacMap = {};
         (pacs || []).forEach((p: any) => {
           const cd = p.custom_data || {};
           pm[p.id] = {
             cns: p.cns || '',
             cpf: p.cpf || '',
+            nome: p.nome || '',
+            data_nascimento: p.data_nascimento || '',
             raca_cor: cd.raca_cor || cd.racaCor || '',
             nacionalidade: cd.nacionalidade || '',
           };
@@ -201,14 +206,16 @@ const BpaProducao: React.FC = () => {
     const pac = pacMap[l.paciente_id];
     const prof = profMap[l.profissional_id];
     const cns = (pac?.cns || '').replace(/\D/g, '');
+    const cpf = (pac?.cpf || '').replace(/\D/g, '');
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
     const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
+    const exigeSigtap = !isCboMedico(cbo);
     return {
-      cns: cns.length === 15,
+      identificacao: cns.length === 15 || cpf.length === 11,
       cbo: cbo.length > 0,
-      sigtap: sigtap.length === 10,
-      raca: !!(pac?.raca_cor && pac.raca_cor.length > 0),
-      nacionalidade: !!(pac?.nacionalidade && pac.nacionalidade.length > 0),
+      sigtap: !exigeSigtap || sigtap.length === 10,
+      nome: !!(pac?.nome && pac.nome.trim().length > 0),
+      dataNasc: !!(pac?.data_nascimento && pac.data_nascimento.trim().length > 0),
     };
   };
 
@@ -216,22 +223,64 @@ const BpaProducao: React.FC = () => {
     let validos = 0, pendentes = 0;
     linhas.forEach((l) => {
       const v = validateRow(l);
-      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
+      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
     });
     return { total: linhas.length, validos, pendentes };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, pacMap, profMap]);
 
+  const getCnesFromUnidade = (uniId: string): string => {
+    if (!uniId) return '';
+    const uni = unidades.find((u: any) => u.id === uniId);
+    const cd = (uni as any)?.custom_data || {};
+    return String(cd.cnes || '').replace(/\D/g, '').slice(0, 7);
+  };
+
   const openGenerateModal = () => {
+    const uniSelecionada = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
     setModalCompetencia(competencia);
-    setModalUnidade(unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || ''));
-    setModalCnes('');
+    setModalUnidade(uniSelecionada);
+    setModalCnes(getCnesFromUnidade(uniSelecionada));
     setModalOpen(true);
   };
 
+  // Atualiza CNES sugerido sempre que a unidade do modal muda
+  useEffect(() => {
+    if (!modalOpen) return;
+    const sugerido = getCnesFromUnidade(modalUnidade);
+    if (sugerido) setModalCnes(sugerido);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalUnidade, modalOpen]);
+
+  // Pendências previstas para a competência/unidade do modal (preview)
+  const modalPreview = useMemo(() => {
+    if (!modalOpen) return { validos: 0, pendentes: 0, total: 0 };
+    const filtroUni = modalUnidade || '';
+    const filtroComp = modalCompetencia;
+    let validos = 0, pendentes = 0, total = 0;
+    linhas.forEach((l) => {
+      const lComp = (l.data || '').replace(/-/g, '').slice(0, 6);
+      if (filtroComp && lComp !== filtroComp) return;
+      // unidade não está em LinhaBPA — usamos prontuario filter via mapa
+      total += 1;
+      const v = validateRow(l);
+      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
+    });
+    return { validos, pendentes, total };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, modalUnidade, modalCompetencia, linhas, pacMap, profMap]);
+
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) {
-      toast.error('Competência inválida (use AAAAMM)');
+      toast.error('Competência inválida (use AAAAMM, ex: 202504)');
+      return;
+    }
+    if (!modalCnes || modalCnes.length !== 7) {
+      toast.error('CNES obrigatório (7 dígitos). Cadastre o CNES da unidade ou informe manualmente.');
+      return;
+    }
+    if (modalPreview.total > 0 && modalPreview.validos === 0) {
+      toast.error('Nenhum atendimento válido neste período. Corrija as pendências antes de gerar.');
       return;
     }
     setGenerating(true);
@@ -370,9 +419,8 @@ const BpaProducao: React.FC = () => {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Paciente</TableHead>
-                    <TableHead>CNS</TableHead>
-                    <TableHead>Raça/Cor</TableHead>
-                    <TableHead>Nacionalid.</TableHead>
+                    <TableHead>CNS / CPF</TableHead>
+                    <TableHead>Nasc.</TableHead>
                     <TableHead>Profissional</TableHead>
                     <TableHead>CBO</TableHead>
                     <TableHead>Procedimento</TableHead>
@@ -385,7 +433,8 @@ const BpaProducao: React.FC = () => {
                     const pac = pacMap[l.paciente_id];
                     const prof = profMap[l.profissional_id];
                     const v = validateRow(l);
-                    const ok = v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade;
+                    const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+                    const isMed = isCboMedico(prof?.cbo || '');
                     return (
                       <TableRow key={l.key} className={cn(!ok && "bg-destructive/5")}>
                         <TableCell>
@@ -394,23 +443,27 @@ const BpaProducao: React.FC = () => {
                             : <AlertCircle className="w-4 h-4 text-destructive" />}
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
-                        <TableCell className="font-medium">{l.paciente_nome}</TableCell>
-                        <TableCell className={cn("text-xs font-mono", !v.cns && "text-destructive")}>
-                          {pac?.cns || <span className="italic">faltando</span>}
+                        <TableCell className={cn("font-medium", !v.nome && "text-destructive")}>
+                          {l.paciente_nome || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className={cn("text-xs capitalize", !v.raca && "text-destructive italic")}>
-                          {pac?.raca_cor || 'faltando'}
+                        <TableCell className={cn("text-xs font-mono", !v.identificacao && "text-destructive")}>
+                          {pac?.cns || pac?.cpf || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className={cn("text-xs capitalize", !v.nacionalidade && "text-destructive italic")}>
-                          {pac?.nacionalidade || 'faltando'}
+                        <TableCell className={cn("text-xs", !v.dataNasc && "text-destructive italic")}>
+                          {pac?.data_nascimento || 'faltando'}
                         </TableCell>
                         <TableCell className="text-xs">{l.profissional_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.cbo && "text-destructive")}>
                           {prof?.cbo || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
+                        <TableCell className="text-xs">
+                          {l.procedimento_nome}
+                          {isMed && !l.codigo_sigtap && (
+                            <Badge className="ml-1 bg-primary/10 text-primary border-0 text-[9px]">consulta</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
-                          {l.codigo_sigtap || <span className="italic">faltando</span>}
+                          {l.codigo_sigtap || (isMed ? <span className="text-muted-foreground italic">opcional</span> : <span className="italic">faltando</span>)}
                         </TableCell>
                         <TableCell>
                           {ok
@@ -433,7 +486,7 @@ const BpaProducao: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Gerar arquivo BPA-I</DialogTitle>
             <DialogDescription>
-              Linhas com dados pendentes (CNS, CBO, SIGTAP, Raça ou Nacionalidade) serão puladas.
+              Layout oficial SIA/SUS. Linhas com Nome, CNS/CPF, CBO, CNES ou Data Nasc. ausentes serão puladas. Médicos (CBO 225*) podem gerar sem SIGTAP. Raça/Cor e Nacionalidade são auto-preenchidas (99/010) quando vazias.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -459,13 +512,44 @@ const BpaProducao: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>CNES (opcional — se a unidade não tiver cadastrado)</Label>
+              <Label>CNES da Unidade (7 dígitos) <span className="text-destructive">*</span></Label>
               <Input
                 value={modalCnes}
                 onChange={(e) => setModalCnes(e.target.value.replace(/\D/g, '').slice(0, 7))}
                 maxLength={7}
                 placeholder="0000000"
+                className={cn(modalCnes.length !== 7 && "border-destructive/50")}
               />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {getCnesFromUnidade(modalUnidade)
+                  ? '✓ CNES preenchido automaticamente da unidade'
+                  : 'Informe manualmente — a unidade não possui CNES cadastrado'}
+              </p>
+            </div>
+
+            {/* Preview de validação */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-medium text-foreground mb-2">Resumo da exportação</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold">{modalPreview.total}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-success">Serão exportados</p>
+                  <p className="text-lg font-bold text-success">{modalPreview.validos}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-destructive">Pendentes (pulados)</p>
+                  <p className="text-lg font-bold text-destructive">{modalPreview.pendentes}</p>
+                </div>
+              </div>
+              {modalPreview.pendentes > 0 && (
+                <p className="text-[11px] text-destructive flex items-start gap-1 pt-1">
+                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {modalPreview.pendentes} registro(s) com Nome, CNS/CPF, CBO, CNES ou Data de Nascimento ausentes serão ignorados.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

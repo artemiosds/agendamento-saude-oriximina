@@ -16,6 +16,7 @@ import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import { useAuth } from "@/contexts/AuthContext";
+import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -40,10 +41,7 @@ const UBS_LIST = [
 
 const EQUIPAMENTOS_OPTIONS = ["Cadeira de rodas", "Andador", "Muleta", "Órtese", "Prótese", "Sonda", "Outro"];
 
-const TIPOS_LOGRADOURO = [
-  "Rua", "Avenida", "Travessa", "Alameda", "Praça", "Rodovia", "Estrada",
-  "Beco", "Largo", "Passagem", "Quadra", "Vila", "Conjunto", "Outro",
-];
+// Tipos de logradouro agora vêm da tabela DNE (logradouros_dne) via LogradouroDneAutocomplete
 
 const UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
@@ -445,13 +443,24 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
 
               <div>
-                <Label>Tipo de Logradouro</Label>
-                <Select value={cd.tipoLogradouro || ""} onValueChange={(v) => setCustom("tipoLogradouro", v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_LOGRADOURO.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>
+                  Tipo de Logradouro (DNE) <span className="text-destructive">*</span>
+                </Label>
+                <LogradouroDneAutocomplete
+                  value={cd.tipoLogradouro || ""}
+                  codigo={cd.tipoLogradouroCodigo || ""}
+                  onChange={(descricao, codigo) => {
+                    onChange({
+                      ...form,
+                      customData: {
+                        ...(form.customData || {}),
+                        tipoLogradouro: descricao,
+                        tipoLogradouroCodigo: codigo,
+                      },
+                    });
+                  }}
+                  required
+                />
               </div>
 
               <div className="md:col-span-2">

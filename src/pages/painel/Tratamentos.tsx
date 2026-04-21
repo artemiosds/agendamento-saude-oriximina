@@ -45,6 +45,7 @@ import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FREQUENCY_OPTIONS_NEW, WEEKDAY_LABELS, getMaxWeekdays, isWeekdayFrequency, calculateTotalSessions, generateSessionDatesWithInfo, calcEndDateFromSessions, buildBlockedRanges, generateSessionDates } from "@/lib/treatmentSessionGenerator";
+import { autoFixInvalidTreatmentSessions } from "@/lib/treatmentSessionAutoFix";
 import { ModalAgendarSessao } from "@/components/ModalAgendarSessao";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { ResumoAgendamentoCiclo, type ResumoSessaoItem } from "@/components/ResumoAgendamentoCiclo";
@@ -199,6 +200,13 @@ const Tratamentos: React.FC = () => {
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+
+  // Debounce search input — evita recarregar a página/spinner a cada tecla
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [searchTerm]);
 
   // Pagination
   const PAGE_SIZE = 20;
@@ -302,7 +310,7 @@ const Tratamentos: React.FC = () => {
         p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
-        p_search: searchTerm.trim() || null,
+        p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
       });
 
@@ -328,7 +336,7 @@ const Tratamentos: React.FC = () => {
       if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
     if (!silent) setLoading(false);
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
@@ -378,9 +386,35 @@ const Tratamentos: React.FC = () => {
     }
   }, [user]);
 
+  // Primeiro load: com spinner. Re-loads (filtros/busca/paginação): silencioso, sem spinner.
+  const firstLoadRef = React.useRef(true);
   useEffect(() => {
-    loadData();
+    const isFirst = firstLoadRef.current;
+    firstLoadRef.current = false;
+    loadData(!isFirst);
   }, [loadData]);
+
+  // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
+  // (sábado, domingo, feriado, bloqueio manual) e devolve para "pendente_agendamento".
+  // Roda uma vez quando bloqueios + user estão prontos.
+  const autoFixRanRef = React.useRef(false);
+  useEffect(() => {
+    if (autoFixRanRef.current) return;
+    if (!user || !bloqueios) return;
+    autoFixRanRef.current = true;
+    const isProf = user.role === "profissional";
+    const restrictUnit = !!(user.unidadeId && user.usuario !== 'admin.sms');
+    autoFixInvalidTreatmentSessions({
+      bloqueios,
+      professionalId: isProf ? user.id : undefined,
+      unitId: restrictUnit ? user.unidadeId : undefined,
+    }).then((res) => {
+      if (res.fixed > 0) {
+        toast.info(`${res.fixed} sessão(ões) em datas inválidas foram devolvidas para "Aguardando agendamento".`);
+        loadData(true);
+      }
+    }).catch(() => { /* silent */ });
+  }, [user, bloqueios, loadData]);
 
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
@@ -449,7 +483,7 @@ const Tratamentos: React.FC = () => {
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
