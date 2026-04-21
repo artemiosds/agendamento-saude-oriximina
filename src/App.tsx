@@ -9,24 +9,44 @@ import { PermissionsProvider, usePermissions, ModuleName } from "@/contexts/Perm
 import { ThemeProvider } from "@/components/ThemeProvider";
 import React, { Suspense } from "react";
 
-// Helper: retry dynamic import once, then force full reload to bust stale chunks
+// Helper: retry dynamic import with exponential backoff, then force full reload to bust stale chunks
 function lazyRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
 ): React.LazyExoticComponent<T> {
-  return React.lazy(() =>
-    factory().catch(() => {
-      // If the chunk 404'd, the deploy changed — reload from server once
-      const key = 'chunk_reload';
-      const last = sessionStorage.getItem(key);
-      const now = String(Date.now());
-      if (!last || Number(now) - Number(last) > 10_000) {
-        sessionStorage.setItem(key, now);
-        window.location.reload();
+  return React.lazy(async () => {
+    try {
+      return await factory();
+    } catch (err: any) {
+      const message = String(err?.message || err || '');
+      const isChunkError =
+        message.includes('dynamically imported module') ||
+        message.includes('Failed to fetch') ||
+        message.includes('Loading chunk') ||
+        message.includes('Loading CSS chunk') ||
+        message.includes('Importing a module script failed');
+
+      if (isChunkError) {
+        // Try once more after a short delay (transient network issue)
+        try {
+          await new Promise((r) => setTimeout(r, 800));
+          return await factory();
+        } catch {
+          // Still failing → stale deploy. Hard reload once to fetch new chunks.
+          const key = 'chunk_reload_ts';
+          const last = sessionStorage.getItem(key);
+          const now = Date.now();
+          if (!last || now - Number(last) > 15_000) {
+            sessionStorage.setItem(key, String(now));
+            // Hard reload bypassing cache
+            window.location.reload();
+            // Return a never-resolving promise to keep Suspense pending until reload kicks in
+            return new Promise(() => {}) as never;
+          }
+        }
       }
-      // fallback: re-throw so ErrorBoundary catches it
-      return factory();
-    }),
-  );
+      throw err;
+    }
+  });
 }
 
 // Eagerly loaded
