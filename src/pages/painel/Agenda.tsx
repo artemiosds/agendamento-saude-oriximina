@@ -680,8 +680,14 @@ const Agenda: React.FC = () => {
 
     if (!pac || !prof || !newAg.hora) return;
     if (selectedDate < todayLocalStr()) {
-      toast.error("Não é possível agendar em data passada.");
-      return;
+      if (!isMaster) {
+        toast.error("Não é possível agendar em data passada.");
+        return;
+      }
+      const confirmouPassado = window.confirm(
+        "⚠️ Atenção: Você está agendando em DATA PASSADA como MASTER. Deseja continuar com o registro retroativo?",
+      );
+      if (!confirmouPassado) return;
     }
     if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
       if (user?.role === "recepcao") {
@@ -2672,7 +2678,7 @@ const Agenda: React.FC = () => {
                 <Input
                   type="date"
                   value={editAg.data}
-                  min={todayLocalStr()}
+                  min={isMaster ? undefined : todayLocalStr()}
                   onChange={(e) => setEditAg((p) => p ? { ...p, data: e.target.value, hora: "" } : p)}
                 />
               </div>
