@@ -265,7 +265,15 @@ const BpaProducao: React.FC = () => {
 
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) {
-      toast.error('Competência inválida (use AAAAMM)');
+      toast.error('Competência inválida (use AAAAMM, ex: 202504)');
+      return;
+    }
+    if (!modalCnes || modalCnes.length !== 7) {
+      toast.error('CNES obrigatório (7 dígitos). Cadastre o CNES da unidade ou informe manualmente.');
+      return;
+    }
+    if (modalPreview.total > 0 && modalPreview.validos === 0) {
+      toast.error('Nenhum atendimento válido neste período. Corrija as pendências antes de gerar.');
       return;
     }
     setGenerating(true);
