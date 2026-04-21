@@ -263,6 +263,36 @@ export type Database = {
         }
         Relationships: []
       }
+      cbo_codigos: {
+        Row: {
+          ativo: boolean
+          codigo: string
+          created_at: string
+          descricao: string
+          id: string
+          profissoes_relacionadas: string[]
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo: string
+          created_at?: string
+          descricao: string
+          id?: string
+          profissoes_relacionadas?: string[]
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string
+          created_at?: string
+          descricao?: string
+          id?: string
+          profissoes_relacionadas?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cid10_codigos: {
         Row: {
           codigo: string
