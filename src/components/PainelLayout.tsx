@@ -41,6 +41,7 @@ const menuItems: {
   { to: '/painel/alta',              label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
   { to: '/painel/encaminhamentos',  label: 'Encaminhamentos',        icon: Send,               modulo: 'encaminhamento' },
   { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
+  { to: '/painel/bpa-producao',     label: 'BPA-Produção',           icon: FileText,           modulo: 'relatorios' },
   { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
   
   { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
