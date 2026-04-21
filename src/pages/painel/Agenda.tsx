@@ -589,6 +589,31 @@ const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
+    // Validações rápidas antes de abrir modal de conferência
+    if (!newAg.pacienteId || !newAg.profissionalId || !newAg.hora) {
+      toast.error("Preencha paciente, profissional e horário.");
+      return;
+    }
+    const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
+    const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
+    setConferenciaModal({
+      open: true,
+      pacienteId: newAg.pacienteId,
+      modo: "agendamento",
+      agendamentoInfo: {
+        data: selectedDate,
+        hora: newAg.hora,
+        tipo: newAg.tipo,
+        profissionalNome: profSel?.nome || "",
+        profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+        profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+        unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+      },
+      onConfirm: () => { void executarCreate(); },
+    });
+  };
+
+  const executarCreate = async () => {
     let pac = pacientes.find((p) => p.id === newAg.pacienteId);
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
 
