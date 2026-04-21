@@ -887,6 +887,21 @@ export type Database = {
         }
         Relationships: []
       }
+      logradouros_dne: {
+        Row: {
+          codigo: string
+          descricao: string
+        }
+        Insert: {
+          codigo: string
+          descricao: string
+        }
+        Update: {
+          codigo?: string
+          descricao?: string
+        }
+        Relationships: []
+      }
       medications: {
         Row: {
           apresentacao: string
