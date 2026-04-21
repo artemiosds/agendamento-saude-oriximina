@@ -2831,6 +2831,14 @@ const Agenda: React.FC = () => {
         } : null}
         onConfirm={handleRegistrarFalta}
       />
+      <ConferirDadosPacienteModal
+        open={conferenciaModal.open}
+        onOpenChange={(o) => setConferenciaModal((p) => ({ ...p, open: o }))}
+        pacienteId={conferenciaModal.pacienteId}
+        modo={conferenciaModal.modo}
+        agendamento={conferenciaModal.agendamentoInfo}
+        onConfirm={conferenciaModal.onConfirm}
+      />
     </div>
   );
 };
