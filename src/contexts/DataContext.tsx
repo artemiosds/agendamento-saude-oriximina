@@ -460,29 +460,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      const PAGE = 1000;
-      let from = 0;
-      let allData: any[] = [];
-      while (true) {
-        let query = supabase
-          .from("pacientes" as any)
-          .select(
-            "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
-          )
-          .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && userUnidadeId) {
-          query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
-        }
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error loading pacientes page:", error);
-          break;
-        }
-        if (!data || data.length === 0) break;
-        allData.push(...data);
-        if (data.length < PAGE) break;
-        from += PAGE;
+      // PERF: load only the 1000 most recent patients on startup. Search/lookup by CPF/CNS
+      // continues to work via patientService.search() which queries the DB directly.
+      // This avoids loading 10k+ rows up-front and blocking UI for several seconds.
+      const INITIAL_LIMIT = 1000;
+      let query = supabase
+        .from("pacientes" as any)
+        .select(
+          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
+        )
+        .order("criado_em", { ascending: false })
+        .limit(INITIAL_LIMIT);
+      if (!isGlobalAdmin && userUnidadeId) {
+        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
       }
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error loading pacientes:", error);
+        return;
+      }
+      const allData = data || [];
       {
         setPacientes(
           allData.map((p: any) => ({
