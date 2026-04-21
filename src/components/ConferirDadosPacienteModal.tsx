@@ -6,9 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
+import { applyPhoneMask } from "@/lib/phoneUtils";
 
 export interface ConferirDadosPacienteModalProps {
   open: boolean;
@@ -30,6 +33,49 @@ export interface ConferirDadosPacienteModalProps {
   confirmLabel?: string;
 }
 
+// ───────── Listas oficiais (mesmas do CadastroPacienteForm) ─────────
+const SEXO_OPTIONS = [
+  { value: "M", label: "Masculino" },
+  { value: "F", label: "Feminino" },
+  { value: "I", label: "Ignorado" },
+];
+
+const RACA_COR_OPTIONS = [
+  { value: "branca", label: "Branca" },
+  { value: "preta", label: "Preta" },
+  { value: "parda", label: "Parda" },
+  { value: "amarela", label: "Amarela" },
+  { value: "indigena", label: "Indígena" },
+  { value: "nao_declarado", label: "Não declarado" },
+];
+
+const NACIONALIDADE_OPTIONS = [
+  { value: "brasileiro", label: "Brasileiro(a)" },
+  { value: "naturalizado", label: "Naturalizado(a)" },
+  { value: "estrangeiro", label: "Estrangeiro(a)" },
+];
+
+const ETNIA_OPTIONS = [
+  { value: "X101", label: "X101 — Apalai" },
+  { value: "X117", label: "X117 — Arara do Pará" },
+  { value: "X238", label: "X238 — Mundurukú" },
+  { value: "X298", label: "X298 — Wai-Wai" },
+  { value: "X305", label: "X305 — Tiriyó" },
+  { value: "X313", label: "X313 — Yanomami" },
+  { value: "X999", label: "X999 — Outra (especificar)" },
+];
+
+const MUNICIPIOS = [
+  "Oriximiná", "Óbidos", "Terra Santa", "Faro", "Juruti", "Nhamundá",
+  "Parintins", "Santarém", "Alenquer", "Monte Alegre", "Outro",
+];
+
+const UFS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+  "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+  "SP", "SE", "TO",
+];
+
 function isCadastroIncompleto(p: any): { incompleto: boolean; faltando: string[] } {
   const faltando: string[] = [];
   const cpf = (p?.cpf || "").replace(/\D/g, "");
@@ -43,24 +89,22 @@ function isCadastroIncompleto(p: any): { incompleto: boolean; faltando: string[]
   return { incompleto: faltando.length > 0, faltando };
 }
 
-// Máscaras simples
+// Máscaras
 const maskCpf = (v: string) =>
   v.replace(/\D/g, "").slice(0, 11)
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d)/, "$1.$2")
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-const maskTel = (v: string) => {
-  const d = v.replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 10) return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
-  return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
-};
+const maskCns = (v: string) =>
+  v.replace(/\D/g, "").slice(0, 15).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 const maskCep = (v: string) =>
   v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
 
 const MASKS: Record<string, (v: string) => string> = {
   cpf: maskCpf,
-  telefone: maskTel,
-  telefone_secundario: maskTel,
+  cns: maskCns,
+  telefone: applyPhoneMask,
+  telefone_secundario: applyPhoneMask,
   cep: maskCep,
 };
 
@@ -86,6 +130,7 @@ export function ConferirDadosPacienteModal({
     setDirty(false);
     setLoading(true);
     (async () => {
+      // Carrega SEMPRE do cadastro do paciente (fonte única)
       const { data, error } = await (supabase as any)
         .from("pacientes")
         .select("*")
@@ -96,6 +141,7 @@ export function ConferirDadosPacienteModal({
         onOpenChange(false);
         return;
       }
+      const cd = data.custom_data || {};
       setPaciente(data);
       setForm({
         nome: data.nome || "",
@@ -107,21 +153,25 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
-        sexo: data?.custom_data?.sexo || "",
-        raca_cor: data?.custom_data?.raca_cor || "",
-        etnia: data?.custom_data?.etnia || "",
-        nacionalidade: data?.custom_data?.nacionalidade || "",
-        tipo_logradouro_dne: data?.custom_data?.tipo_logradouro_dne || "",
-        numero: data?.custom_data?.numero || "",
-        complemento: data?.custom_data?.complemento || "",
-        bairro: data?.custom_data?.bairro || "",
-        uf: data?.custom_data?.uf || "",
-        cep: data?.custom_data?.cep || "",
-        telefone_secundario: data?.custom_data?.telefone_secundario || "",
+        sexo: cd.sexo || "",
+        // racaCor é a chave canônica usada no cadastro; mantemos compat com raca_cor
+        raca_cor: cd.racaCor || cd.raca_cor || "",
+        etnia: cd.etnia || "",
+        etnia_outra: cd.etniaOutra || "",
+        nacionalidade: cd.nacionalidade || "brasileiro",
+        pais_nascimento: cd.paisNascimento || "",
+        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || "",
+        tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
+        numero: cd.numero || "",
+        complemento: cd.complemento || "",
+        bairro: cd.bairro || "",
+        uf: cd.uf || "PA",
+        cep: cd.cep || "",
+        telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
       });
       setLoading(false);
     })();
-  }, [open, pacienteId]);
+  }, [open, pacienteId, onOpenChange]);
 
   const validacao = useMemo(() => {
     if (!paciente) return { incompleto: false, faltando: [] as string[] };
@@ -149,16 +199,22 @@ export function ConferirDadosPacienteModal({
       const customData = {
         ...(paciente.custom_data || {}),
         sexo: form.sexo,
+        // Persistir Raça/Cor em ambas as chaves (compat com BPA)
+        racaCor: form.raca_cor,
         raca_cor: form.raca_cor,
         etnia: form.etnia,
+        etniaOutra: form.etnia_outra,
         nacionalidade: form.nacionalidade,
-        tipo_logradouro_dne: form.tipo_logradouro_dne,
+        paisNascimento: form.pais_nascimento,
+        // Tipo de logradouro DNE: salvar código + descrição
+        tipoLogradouroDne: form.tipo_logradouro_dne,
+        tipoLogradouroCodigo: form.tipo_logradouro_codigo,
         numero: form.numero,
         complemento: form.complemento,
         bairro: form.bairro,
         uf: form.uf,
         cep: form.cep,
-        telefone_secundario: form.telefone_secundario,
+        telefoneSecundario: form.telefone_secundario,
         data_ultima_validacao_cadastro: new Date().toISOString(),
       };
       const { error } = await (supabase as any)
@@ -187,23 +243,15 @@ export function ConferirDadosPacienteModal({
     }
   };
 
-  const Field = ({
-    label,
-    name,
-    type = "text",
-    placeholder,
-    inputMode,
+  // ───────── Componentes inline ─────────
+  const FieldText = ({
+    label, name, type = "text", placeholder, inputMode,
   }: {
-    label: string;
-    name: string;
-    type?: string;
-    placeholder?: string;
-    inputMode?: "text" | "tel" | "email" | "numeric";
+    label: string; name: string; type?: string;
+    placeholder?: string; inputMode?: "text" | "tel" | "email" | "numeric";
   }) => (
     <div className="space-y-1.5">
-      <Label htmlFor={`fld-${name}`} className="text-xs text-muted-foreground">
-        {label}
-      </Label>
+      <Label htmlFor={`fld-${name}`} className="text-xs text-muted-foreground">{label}</Label>
       <Input
         id={`fld-${name}`}
         type={type}
@@ -216,12 +264,36 @@ export function ConferirDadosPacienteModal({
     </div>
   );
 
+  const FieldSelect = ({
+    label, name, options, placeholder = "Selecione",
+  }: {
+    label: string; name: string;
+    options: { value: string; label: string }[]; placeholder?: string;
+  }) => (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={form[name] || ""} onValueChange={(v) => updateField(name, v)}>
+        <SelectTrigger className="h-11 sm:h-10 text-base sm:text-sm">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   const SectionTitle = ({ icon: Icon, children }: { icon: any; children: React.ReactNode }) => (
     <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
       <Icon className="w-4 h-4 text-primary" />
       {children}
     </div>
   );
+
+  const isIndigena = form.raca_cor === "indigena";
+  const isEstrangeiro = form.nacionalidade === "estrangeiro";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -253,9 +325,7 @@ export function ConferirDadosPacienteModal({
                     Atualize os dados para evitar problemas na produção (BPA/e-SUS). A confirmação não está bloqueada.
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {validacao.faltando.map((f) => (
-                        <Badge key={f} variant="outline" className="border-warning text-warning">
-                          {f}
-                        </Badge>
+                        <Badge key={f} variant="outline" className="border-warning text-warning">{f}</Badge>
                       ))}
                     </div>
                   </AlertDescription>
@@ -303,22 +373,30 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={User}>Identificação</SectionTitle>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <Field label="Nome completo" name="nome" />
-                  <Field label="Nome da mãe" name="nome_mae" />
-                  <Field label="Data de nascimento" name="data_nascimento" type="date" />
-                  <Field label="Sexo (M/F)" name="sexo" placeholder="M ou F" />
-                  <Field label="CPF" name="cpf" inputMode="numeric" placeholder="000.000.000-00" />
-                  <Field label="CNS" name="cns" inputMode="numeric" placeholder="15 dígitos" />
+                  <FieldText label="Nome completo" name="nome" />
+                  <FieldText label="Nome da mãe" name="nome_mae" />
+                  <FieldText label="Data de nascimento" name="data_nascimento" type="date" />
+                  <FieldSelect label="Sexo" name="sexo" options={SEXO_OPTIONS} />
+                  <FieldText label="CPF" name="cpf" inputMode="numeric" placeholder="000.000.000-00" />
+                  <FieldText label="CNS" name="cns" inputMode="numeric" placeholder="000 0000 0000 0000" />
                 </div>
               </div>
 
-              {/* Sociais */}
+              {/* Sociais (padrão SUS / IBGE) */}
               <div>
-                <SectionTitle icon={Globe}>Dados Sociais</SectionTitle>
+                <SectionTitle icon={Globe}>Dados Sociais (SUS/IBGE)</SectionTitle>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <Field label="Raça/Cor" name="raca_cor" />
-                  <Field label="Etnia" name="etnia" />
-                  <Field label="Nacionalidade" name="nacionalidade" />
+                  <FieldSelect label="Nacionalidade" name="nacionalidade" options={NACIONALIDADE_OPTIONS} />
+                  <FieldSelect label="Raça/Cor (IBGE)" name="raca_cor" options={RACA_COR_OPTIONS} />
+                  {isIndigena && (
+                    <FieldSelect label="Etnia (povo indígena)" name="etnia" options={ETNIA_OPTIONS} />
+                  )}
+                  {isIndigena && form.etnia === "X999" && (
+                    <FieldText label="Especificar etnia" name="etnia_outra" />
+                  )}
+                  {isEstrangeiro && (
+                    <FieldText label="País de nascimento" name="pais_nascimento" placeholder="Ex: VENEZUELA" />
+                  )}
                 </div>
               </div>
 
@@ -326,14 +404,37 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={MapPin}>Endereço</SectionTitle>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <Field label="Tipo de logradouro (DNE)" name="tipo_logradouro_dne" />
-                  <Field label="Logradouro" name="endereco" />
-                  <Field label="Número" name="numero" inputMode="numeric" />
-                  <Field label="Complemento" name="complemento" />
-                  <Field label="Bairro" name="bairro" />
-                  <Field label="Município" name="municipio" />
-                  <Field label="UF" name="uf" placeholder="PA" />
-                  <Field label="CEP" name="cep" inputMode="numeric" placeholder="00000-000" />
+                  {/* Tipo de Logradouro: SELECT DNE oficial (código + descrição) */}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">Tipo de logradouro (DNE)</Label>
+                    <LogradouroDneAutocomplete
+                      value={form.tipo_logradouro_dne}
+                      codigo={form.tipo_logradouro_codigo}
+                      onChange={(descricao, codigo) => {
+                        setForm((p: any) => ({
+                          ...p,
+                          tipo_logradouro_dne: descricao,
+                          tipo_logradouro_codigo: codigo,
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                  </div>
+                  <FieldText label="Logradouro" name="endereco" />
+                  <FieldText label="Número" name="numero" inputMode="numeric" />
+                  <FieldText label="Complemento" name="complemento" />
+                  <FieldText label="Bairro" name="bairro" />
+                  <FieldSelect
+                    label="Município"
+                    name="municipio"
+                    options={MUNICIPIOS.map((m) => ({ value: m, label: m }))}
+                  />
+                  <FieldSelect
+                    label="UF"
+                    name="uf"
+                    options={UFS.map((u) => ({ value: u, label: u }))}
+                  />
+                  <FieldText label="CEP" name="cep" inputMode="numeric" placeholder="00000-000" />
                 </div>
               </div>
 
@@ -341,9 +442,9 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={Phone}>Contato</SectionTitle>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <Field label="Telefone principal" name="telefone" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
-                  <Field label="Telefone secundário" name="telefone_secundario" type="tel" inputMode="tel" />
-                  <Field label="E-mail" name="email" type="email" inputMode="email" />
+                  <FieldText label="Telefone principal" name="telefone" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
+                  <FieldText label="Telefone secundário" name="telefone_secundario" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
+                  <FieldText label="E-mail" name="email" type="email" inputMode="email" placeholder="email@exemplo.com" />
                 </div>
               </div>
 
