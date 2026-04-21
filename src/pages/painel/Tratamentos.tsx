@@ -479,7 +479,7 @@ const Tratamentos: React.FC = () => {
   // Reset pagination when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   useEffect(() => {
     if (selectedCycle?.pts_id) {
