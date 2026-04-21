@@ -1485,6 +1485,7 @@ export type Database = {
         Row: {
           ativo: boolean
           atualizado_em: string
+          codigo_sigtap: string
           criado_em: string
           descricao: string
           especialidade: string
@@ -1496,6 +1497,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           atualizado_em?: string
+          codigo_sigtap?: string
           criado_em?: string
           descricao?: string
           especialidade?: string
@@ -1507,6 +1509,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           atualizado_em?: string
+          codigo_sigtap?: string
           criado_em?: string
           descricao?: string
           especialidade?: string
