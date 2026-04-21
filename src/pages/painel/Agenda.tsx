@@ -1620,7 +1620,13 @@ const Agenda: React.FC = () => {
                 </span>
               </Button>
             )}
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) setPacientesConferidos(new Set());
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="gradient-primary text-primary-foreground">
                   <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
@@ -1636,14 +1642,14 @@ const Agenda: React.FC = () => {
                     <BuscaPaciente
                       pacientes={pacientes}
                       value={newAg.pacienteId}
-                      onChange={(id) => setNewAg((p) => ({ ...p, pacienteId: id }))}
+                      onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
                     />
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />
                       <span>ou selecione pela lista</span>
                       <div className="flex-1 h-px bg-border" />
                     </div>
-                    <Select value={newAg.pacienteId} onValueChange={(v) => setNewAg((p) => ({ ...p, pacienteId: v }))}>
+                    <Select value={newAg.pacienteId} onValueChange={(v) => handlePacienteSelecionadoNovoAg(v)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um paciente..." />
                       </SelectTrigger>
@@ -1657,6 +1663,14 @@ const Agenda: React.FC = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {newAg.pacienteId && !pacientesConferidos.has(newAg.pacienteId) && (
+                      <p className="text-xs text-warning">
+                        ⚠ Conferência de dados pendente — selecione novamente o paciente para abrir o modal.
+                      </p>
+                    )}
+                    {newAg.pacienteId && pacientesConferidos.has(newAg.pacienteId) && (
+                      <p className="text-xs text-success">✓ Dados conferidos</p>
+                    )}
                   </div>
                   <div>
                     <Label>Profissional</Label>
