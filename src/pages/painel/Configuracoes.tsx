@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useData } from '@/contexts/DataContext';
 import GerenciarProcedimentos from '@/components/GerenciarProcedimentos';
+import VincularSigtapProcedimentos from '@/components/VincularSigtapProcedimentos';
 import SigtapSyncPanel from '@/components/SigtapSyncPanel';
 import ConfiguracaoTriagem from '@/components/ConfiguracaoTriagem';
 import { useAuth } from '@/contexts/AuthContext';
@@ -973,6 +974,7 @@ const Configuracoes: React.FC = () => {
           <div className="space-y-6">
             <SigtapSyncPanel />
             <GerenciarProcedimentos />
+            <VincularSigtapProcedimentos />
             <Separator />
             <h2 className="text-lg font-semibold font-display text-foreground">Integrações</h2>
             <Card className="shadow-card border-0">
