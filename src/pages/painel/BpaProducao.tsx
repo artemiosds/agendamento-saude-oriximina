@@ -419,9 +419,8 @@ const BpaProducao: React.FC = () => {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Paciente</TableHead>
-                    <TableHead>CNS</TableHead>
-                    <TableHead>Raça/Cor</TableHead>
-                    <TableHead>Nacionalid.</TableHead>
+                    <TableHead>CNS / CPF</TableHead>
+                    <TableHead>Nasc.</TableHead>
                     <TableHead>Profissional</TableHead>
                     <TableHead>CBO</TableHead>
                     <TableHead>Procedimento</TableHead>
@@ -434,7 +433,8 @@ const BpaProducao: React.FC = () => {
                     const pac = pacMap[l.paciente_id];
                     const prof = profMap[l.profissional_id];
                     const v = validateRow(l);
-                    const ok = v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade;
+                    const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+                    const isMed = isCboMedico(prof?.cbo || '');
                     return (
                       <TableRow key={l.key} className={cn(!ok && "bg-destructive/5")}>
                         <TableCell>
@@ -443,23 +443,27 @@ const BpaProducao: React.FC = () => {
                             : <AlertCircle className="w-4 h-4 text-destructive" />}
                         </TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
-                        <TableCell className="font-medium">{l.paciente_nome}</TableCell>
-                        <TableCell className={cn("text-xs font-mono", !v.cns && "text-destructive")}>
-                          {pac?.cns || <span className="italic">faltando</span>}
+                        <TableCell className={cn("font-medium", !v.nome && "text-destructive")}>
+                          {l.paciente_nome || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className={cn("text-xs capitalize", !v.raca && "text-destructive italic")}>
-                          {pac?.raca_cor || 'faltando'}
+                        <TableCell className={cn("text-xs font-mono", !v.identificacao && "text-destructive")}>
+                          {pac?.cns || pac?.cpf || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className={cn("text-xs capitalize", !v.nacionalidade && "text-destructive italic")}>
-                          {pac?.nacionalidade || 'faltando'}
+                        <TableCell className={cn("text-xs", !v.dataNasc && "text-destructive italic")}>
+                          {pac?.data_nascimento || 'faltando'}
                         </TableCell>
                         <TableCell className="text-xs">{l.profissional_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.cbo && "text-destructive")}>
                           {prof?.cbo || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
+                        <TableCell className="text-xs">
+                          {l.procedimento_nome}
+                          {isMed && !l.codigo_sigtap && (
+                            <Badge className="ml-1 bg-primary/10 text-primary border-0 text-[9px]">consulta</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
-                          {l.codigo_sigtap || <span className="italic">faltando</span>}
+                          {l.codigo_sigtap || (isMed ? <span className="text-muted-foreground italic">opcional</span> : <span className="italic">faltando</span>)}
                         </TableCell>
                         <TableCell>
                           {ok
@@ -482,7 +486,7 @@ const BpaProducao: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Gerar arquivo BPA-I</DialogTitle>
             <DialogDescription>
-              Linhas com dados pendentes (CNS, CBO, SIGTAP, Raça ou Nacionalidade) serão puladas.
+              Layout oficial SIA/SUS. Linhas com Nome, CNS/CPF, CBO, CNES ou Data Nasc. ausentes serão puladas. Médicos (CBO 225*) podem gerar sem SIGTAP. Raça/Cor e Nacionalidade são auto-preenchidas (99/010) quando vazias.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -543,7 +547,7 @@ const BpaProducao: React.FC = () => {
               {modalPreview.pendentes > 0 && (
                 <p className="text-[11px] text-destructive flex items-start gap-1 pt-1">
                   <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
-                  {modalPreview.pendentes} registro(s) com CNS, CBO, SIGTAP, Raça/Cor ou Nacionalidade ausentes serão ignorados.
+                  {modalPreview.pendentes} registro(s) com Nome, CNS/CPF, CBO, CNES ou Data de Nascimento ausentes serão ignorados.
                 </p>
               )}
             </div>
