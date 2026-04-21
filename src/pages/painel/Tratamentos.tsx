@@ -72,6 +72,8 @@ interface TreatmentCycle {
   // Lightweight stats from server-side RPC
   pending_ag?: number;
   faltas?: number;
+  // Snapshot do nome do paciente vindo do RPC (fallback)
+  paciente_nome?: string;
 }
 
 interface TreatmentSession {
@@ -1890,7 +1892,7 @@ const Tratamentos: React.FC = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
               <div>
                 <span className="text-muted-foreground text-xs">Paciente</span>
-                <p className="font-medium">{pac?.nome || "—"}</p>
+                <p className="font-medium">{pac?.nome || selectedCycle.paciente_nome || "Paciente não encontrado"}</p>
               </div>
               <div>
                 <span className="text-muted-foreground text-xs">Profissional</span>
@@ -3000,7 +3002,7 @@ const Tratamentos: React.FC = () => {
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Selecione um PTS ativo do paciente <strong>{pac?.nome}</strong> para vincular a este ciclo de
+                Selecione um PTS ativo do paciente <strong>{pac?.nome || selectedCycle?.paciente_nome || "Paciente não encontrado"}</strong> para vincular a este ciclo de
                 tratamento.
               </p>
               {ptsDosPacienteCiclo.length === 0 ? (
@@ -3205,7 +3207,7 @@ const Tratamentos: React.FC = () => {
                 >
                   <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground">{pac?.nome || "—"}</p>
+                      <p className="font-semibold text-foreground">{pac?.nome || cycle.paciente_nome || "Paciente não encontrado"}</p>
                       <p className="text-sm text-muted-foreground">
                         {prof?.nome || "—"} • {cycle.treatment_type}
                       </p>
