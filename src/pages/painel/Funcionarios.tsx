@@ -146,6 +146,12 @@ const Funcionarios: React.FC = () => {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
       return;
     }
+    // CBO is mandatory for clinical roles (used for BPA-I production export)
+    if (requiresCbo(form.role) && !cbo?.codigo) {
+      setShowCboError(true);
+      toast.error('CBO é obrigatório para profissionais clínicos. Selecione no autocomplete.');
+      return;
+    }
     // Unit master: force unit to their own and block editing global master
     if (isUnitMaster) {
       if (editId) {
