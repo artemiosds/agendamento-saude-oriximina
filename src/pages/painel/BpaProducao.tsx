@@ -22,15 +22,26 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-interface AtendimentoRow {
+interface ProntuarioRow {
   id: string;
   paciente_id: string;
   paciente_nome: string;
   profissional_id: string;
   profissional_nome: string;
-  procedimento: string;
-  data: string;
+  data_atendimento: string;
   unidade_id: string;
+}
+
+interface LinhaBPA {
+  key: string;                // prontuario_id + proc_id
+  prontuario_id: string;
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
+  data: string;
+  procedimento_nome: string;
+  codigo_sigtap: string;
 }
 
 interface ValidationFlags {
@@ -49,14 +60,13 @@ const currentCompetencia = (): string => {
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { unidades } = useData();
-  const [atendimentos, setAtendimentos] = useState<AtendimentoRow[]>([]);
-  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; data_nascimento: string; sexo: string; municipio: string; raca_cor: string; nacionalidade: string }>>({});
+  const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
+  const [pacMap, setPacMap] = useState<Record<string, { cns: string; cpf: string; raca_cor: string; nacionalidade: string }>>({});
   const [profMap, setProfMap] = useState<Record<string, { cbo: string }>>({});
   const [loading, setLoading] = useState(false);
   const [competencia, setCompetencia] = useState<string>(currentCompetencia());
   const [unidadeFiltro, setUnidadeFiltro] = useState<string>(user?.unidadeId || 'all');
 
-  // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCompetencia, setModalCompetencia] = useState<string>(currentCompetencia());
   const [modalUnidade, setModalUnidade] = useState<string>(user?.unidadeId || '');
@@ -74,38 +84,95 @@ const BpaProducao: React.FC = () => {
       const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
       const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
 
+      // 1. Prontuários do período
       let q = (supabase as any)
-        .from('atendimentos')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, procedimento, data, unidade_id')
-        .gte('data', dataInicio)
-        .lte('data', dataFim)
-        .order('data', { ascending: false });
+        .from('prontuarios')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
+        .gte('data_atendimento', dataInicio)
+        .lte('data_atendimento', dataFim)
+        .order('data_atendimento', { ascending: false });
       if (unidadeFiltro && unidadeFiltro !== 'all') q = q.eq('unidade_id', unidadeFiltro);
 
-      const { data: ats, error } = await q;
+      const { data: prontuarios, error } = await q;
       if (error) throw error;
-      const list = (ats || []) as AtendimentoRow[];
-      setAtendimentos(list);
+      const prots = (prontuarios || []) as ProntuarioRow[];
 
-      const pacIds = [...new Set(list.map(a => a.paciente_id).filter(Boolean))];
-      const profIds = [...new Set(list.map(a => a.profissional_id).filter(Boolean))];
+      if (prots.length === 0) {
+        setLinhas([]);
+        setPacMap({});
+        setProfMap({});
+        setLoading(false);
+        return;
+      }
+
+      // 2. Vinculos
+      const prontIds = prots.map((p) => p.id);
+      const { data: vincs } = await (supabase as any)
+        .from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id')
+        .in('prontuario_id', prontIds);
+
+      const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
+      const { data: procsData } = procIds.length
+        ? await (supabase as any).from('procedimentos').select('id, nome, codigo_sigtap').in('id', procIds)
+        : { data: [] };
+      const procsMap = new Map<string, any>((procsData || []).map((p: any) => [p.id, p]));
+
+      const prontMap = new Map<string, ProntuarioRow>(prots.map((p) => [p.id, p]));
+
+      // 3. Monta linhas BPA (1 linha por procedimento)
+      const result: LinhaBPA[] = [];
+      (vincs || []).forEach((v: any) => {
+        const pront = prontMap.get(v.prontuario_id);
+        if (!pront) return;
+        const proc = procsMap.get(v.procedimento_id);
+        result.push({
+          key: `${pront.id}_${v.procedimento_id}`,
+          prontuario_id: pront.id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id,
+          profissional_nome: pront.profissional_nome,
+          data: pront.data_atendimento,
+          procedimento_nome: proc?.nome || '—',
+          codigo_sigtap: proc?.codigo_sigtap || '',
+        });
+      });
+
+      // Prontuários SEM procedimento — listamos como pendente (linha "sem procedimento")
+      prots.forEach((pront) => {
+        if (!(vincs || []).some((v: any) => v.prontuario_id === pront.id)) {
+          result.push({
+            key: `${pront.id}_none`,
+            prontuario_id: pront.id,
+            paciente_id: pront.paciente_id,
+            paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id,
+            profissional_nome: pront.profissional_nome,
+            data: pront.data_atendimento,
+            procedimento_nome: '— sem procedimento —',
+            codigo_sigtap: '',
+          });
+        }
+      });
+
+      setLinhas(result);
+
+      // 4. Auxiliares
+      const pacIds = [...new Set(prots.map((p) => p.paciente_id).filter(Boolean))];
+      const profIds = [...new Set(prots.map((p) => p.profissional_id).filter(Boolean))];
 
       if (pacIds.length) {
         const { data: pacs } = await (supabase as any)
-          .from('pacientes')
-          .select('id, cpf, cns, data_nascimento, custom_data')
-          .in('id', pacIds);
+          .from('pacientes').select('id, cpf, cns, custom_data').in('id', pacIds);
         const pm: typeof pacMap = {};
         (pacs || []).forEach((p: any) => {
           const cd = p.custom_data || {};
           pm[p.id] = {
             cns: p.cns || '',
             cpf: p.cpf || '',
-            data_nascimento: p.data_nascimento || '',
-            sexo: cd.sexo || '',
-            municipio: cd.municipio || '',
             raca_cor: cd.raca_cor || cd.racaCor || '',
-            nacionalidade: cd.nacionalidade || 'Brasileiro',
+            nacionalidade: cd.nacionalidade || '',
           };
         });
         setPacMap(pm);
@@ -113,9 +180,7 @@ const BpaProducao: React.FC = () => {
 
       if (profIds.length) {
         const { data: profs } = await (supabase as any)
-          .from('funcionarios')
-          .select('id, custom_data')
-          .in('id', profIds);
+          .from('funcionarios').select('id, custom_data').in('id', profIds);
         const pm: typeof profMap = {};
         (profs || []).forEach((f: any) => {
           pm[f.id] = { cbo: (f.custom_data || {}).cbo_codigo || '' };
@@ -124,7 +189,7 @@ const BpaProducao: React.FC = () => {
       } else setProfMap({});
     } catch (err) {
       console.error('load bpa error', err);
-      toast.error('Erro ao carregar atendimentos');
+      toast.error('Erro ao carregar prontuários');
     } finally {
       setLoading(false);
     }
@@ -132,16 +197,16 @@ const BpaProducao: React.FC = () => {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [competencia, unidadeFiltro]);
 
-  const validateRow = (at: AtendimentoRow): ValidationFlags => {
-    const pac = pacMap[at.paciente_id];
-    const prof = profMap[at.profissional_id];
+  const validateRow = (l: LinhaBPA): ValidationFlags => {
+    const pac = pacMap[l.paciente_id];
+    const prof = profMap[l.profissional_id];
     const cns = (pac?.cns || '').replace(/\D/g, '');
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
-    const sigtap = (at.procedimento || '').replace(/\D/g, '');
+    const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
     return {
       cns: cns.length === 15,
       cbo: cbo.length > 0,
-      sigtap: sigtap.length > 0,
+      sigtap: sigtap.length === 10,
       raca: !!(pac?.raca_cor && pac.raca_cor.length > 0),
       nacionalidade: !!(pac?.nacionalidade && pac.nacionalidade.length > 0),
     };
@@ -149,13 +214,13 @@ const BpaProducao: React.FC = () => {
 
   const stats = useMemo(() => {
     let validos = 0, pendentes = 0;
-    atendimentos.forEach(a => {
-      const v = validateRow(a);
+    linhas.forEach((l) => {
+      const v = validateRow(l);
       if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
     });
-    return { total: atendimentos.length, validos, pendentes };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [atendimentos, pacMap, profMap]);
+    return { total: linhas.length, validos, pendentes };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linhas, pacMap, profMap]);
 
   const openGenerateModal = () => {
     setModalCompetencia(competencia);
@@ -181,7 +246,6 @@ const BpaProducao: React.FC = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Download
       const blob = new Blob([data.conteudo], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -193,10 +257,10 @@ const BpaProducao: React.FC = () => {
       URL.revokeObjectURL(url);
 
       toast.success(
-        `BPA gerado com sucesso. ${data.total_exportados} atendimento(s) exportado(s).`,
+        `BPA gerado com sucesso. ${data.total_exportados} procedimento(s) exportado(s).`,
         {
           description: data.total_pendentes > 0
-            ? `${data.total_pendentes} atendimento(s) pendente(s) foram pulados.`
+            ? `${data.total_pendentes} registro(s) pendente(s) foram pulados.`
             : undefined,
           duration: 6000,
         },
@@ -222,7 +286,7 @@ const BpaProducao: React.FC = () => {
             BPA-Produção
           </h1>
           <p className="text-muted-foreground text-sm">
-            Boletim de Produção Ambulatorial Individualizado (SIA/SUS)
+            Gerado a partir dos prontuários finalizados (1 procedimento = 1 linha BPA-I)
           </p>
         </div>
         <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2">
@@ -283,7 +347,7 @@ const BpaProducao: React.FC = () => {
       {/* Grade */}
       <Card className="shadow-card border-0">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-base">Atendimentos do período</CardTitle>
+          <CardTitle className="text-base">Linhas BPA-I do período</CardTitle>
           <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
             Atualizar
@@ -294,9 +358,9 @@ const BpaProducao: React.FC = () => {
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : atendimentos.length === 0 ? (
+          ) : linhas.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
-              Nenhum atendimento neste período.
+              Nenhum prontuário neste período.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -307,46 +371,46 @@ const BpaProducao: React.FC = () => {
                     <TableHead>Data</TableHead>
                     <TableHead>Paciente</TableHead>
                     <TableHead>CNS</TableHead>
-                    <TableHead>CPF</TableHead>
                     <TableHead>Raça/Cor</TableHead>
                     <TableHead>Nacionalid.</TableHead>
                     <TableHead>Profissional</TableHead>
                     <TableHead>CBO</TableHead>
+                    <TableHead>Procedimento</TableHead>
                     <TableHead>SIGTAP</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {atendimentos.map(at => {
-                    const pac = pacMap[at.paciente_id];
-                    const prof = profMap[at.profissional_id];
-                    const v = validateRow(at);
+                  {linhas.map((l) => {
+                    const pac = pacMap[l.paciente_id];
+                    const prof = profMap[l.profissional_id];
+                    const v = validateRow(l);
                     const ok = v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade;
                     return (
-                      <TableRow key={at.id} className={cn(!ok && "bg-destructive/5")}>
+                      <TableRow key={l.key} className={cn(!ok && "bg-destructive/5")}>
                         <TableCell>
                           {ok
                             ? <CheckCircle2 className="w-4 h-4 text-success" />
                             : <AlertCircle className="w-4 h-4 text-destructive" />}
                         </TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{at.data}</TableCell>
-                        <TableCell className="font-medium">{at.paciente_nome}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
+                        <TableCell className="font-medium">{l.paciente_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.cns && "text-destructive")}>
                           {pac?.cns || <span className="italic">faltando</span>}
                         </TableCell>
-                        <TableCell className="text-xs font-mono">{pac?.cpf || '—'}</TableCell>
                         <TableCell className={cn("text-xs capitalize", !v.raca && "text-destructive italic")}>
                           {pac?.raca_cor || 'faltando'}
                         </TableCell>
                         <TableCell className={cn("text-xs capitalize", !v.nacionalidade && "text-destructive italic")}>
                           {pac?.nacionalidade || 'faltando'}
                         </TableCell>
-                        <TableCell className="text-xs">{at.profissional_nome}</TableCell>
+                        <TableCell className="text-xs">{l.profissional_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.cbo && "text-destructive")}>
                           {prof?.cbo || <span className="italic">faltando</span>}
                         </TableCell>
+                        <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
-                          {at.procedimento || <span className="italic">faltando</span>}
+                          {l.codigo_sigtap || <span className="italic">faltando</span>}
                         </TableCell>
                         <TableCell>
                           {ok
@@ -369,7 +433,7 @@ const BpaProducao: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Gerar arquivo BPA-I</DialogTitle>
             <DialogDescription>
-              Atendimentos com dados pendentes (CNS, CBO ou SIGTAP) serão pulados e listados no relatório.
+              Linhas com dados pendentes (CNS, CBO, SIGTAP, Raça ou Nacionalidade) serão puladas.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
