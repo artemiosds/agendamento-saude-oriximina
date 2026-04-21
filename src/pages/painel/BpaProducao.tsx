@@ -222,12 +222,46 @@ const BpaProducao: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, pacMap, profMap]);
 
+  const getCnesFromUnidade = (uniId: string): string => {
+    if (!uniId) return '';
+    const uni = unidades.find((u: any) => u.id === uniId);
+    const cd = (uni as any)?.custom_data || {};
+    return String(cd.cnes || '').replace(/\D/g, '').slice(0, 7);
+  };
+
   const openGenerateModal = () => {
+    const uniSelecionada = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
     setModalCompetencia(competencia);
-    setModalUnidade(unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || ''));
-    setModalCnes('');
+    setModalUnidade(uniSelecionada);
+    setModalCnes(getCnesFromUnidade(uniSelecionada));
     setModalOpen(true);
   };
+
+  // Atualiza CNES sugerido sempre que a unidade do modal muda
+  useEffect(() => {
+    if (!modalOpen) return;
+    const sugerido = getCnesFromUnidade(modalUnidade);
+    if (sugerido) setModalCnes(sugerido);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalUnidade, modalOpen]);
+
+  // Pendências previstas para a competência/unidade do modal (preview)
+  const modalPreview = useMemo(() => {
+    if (!modalOpen) return { validos: 0, pendentes: 0, total: 0 };
+    const filtroUni = modalUnidade || '';
+    const filtroComp = modalCompetencia;
+    let validos = 0, pendentes = 0, total = 0;
+    linhas.forEach((l) => {
+      const lComp = (l.data || '').replace(/-/g, '').slice(0, 6);
+      if (filtroComp && lComp !== filtroComp) return;
+      // unidade não está em LinhaBPA — usamos prontuario filter via mapa
+      total += 1;
+      const v = validateRow(l);
+      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
+    });
+    return { validos, pendentes, total };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, modalUnidade, modalCompetencia, linhas, pacMap, profMap]);
 
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) {
