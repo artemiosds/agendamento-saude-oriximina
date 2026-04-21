@@ -222,16 +222,58 @@ const BpaProducao: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, pacMap, profMap]);
 
+  const getCnesFromUnidade = (uniId: string): string => {
+    if (!uniId) return '';
+    const uni = unidades.find((u: any) => u.id === uniId);
+    const cd = (uni as any)?.custom_data || {};
+    return String(cd.cnes || '').replace(/\D/g, '').slice(0, 7);
+  };
+
   const openGenerateModal = () => {
+    const uniSelecionada = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
     setModalCompetencia(competencia);
-    setModalUnidade(unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || ''));
-    setModalCnes('');
+    setModalUnidade(uniSelecionada);
+    setModalCnes(getCnesFromUnidade(uniSelecionada));
     setModalOpen(true);
   };
 
+  // Atualiza CNES sugerido sempre que a unidade do modal muda
+  useEffect(() => {
+    if (!modalOpen) return;
+    const sugerido = getCnesFromUnidade(modalUnidade);
+    if (sugerido) setModalCnes(sugerido);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalUnidade, modalOpen]);
+
+  // Pendências previstas para a competência/unidade do modal (preview)
+  const modalPreview = useMemo(() => {
+    if (!modalOpen) return { validos: 0, pendentes: 0, total: 0 };
+    const filtroUni = modalUnidade || '';
+    const filtroComp = modalCompetencia;
+    let validos = 0, pendentes = 0, total = 0;
+    linhas.forEach((l) => {
+      const lComp = (l.data || '').replace(/-/g, '').slice(0, 6);
+      if (filtroComp && lComp !== filtroComp) return;
+      // unidade não está em LinhaBPA — usamos prontuario filter via mapa
+      total += 1;
+      const v = validateRow(l);
+      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
+    });
+    return { validos, pendentes, total };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modalOpen, modalUnidade, modalCompetencia, linhas, pacMap, profMap]);
+
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) {
-      toast.error('Competência inválida (use AAAAMM)');
+      toast.error('Competência inválida (use AAAAMM, ex: 202504)');
+      return;
+    }
+    if (!modalCnes || modalCnes.length !== 7) {
+      toast.error('CNES obrigatório (7 dígitos). Cadastre o CNES da unidade ou informe manualmente.');
+      return;
+    }
+    if (modalPreview.total > 0 && modalPreview.validos === 0) {
+      toast.error('Nenhum atendimento válido neste período. Corrija as pendências antes de gerar.');
       return;
     }
     setGenerating(true);
@@ -459,13 +501,44 @@ const BpaProducao: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>CNES (opcional — se a unidade não tiver cadastrado)</Label>
+              <Label>CNES da Unidade (7 dígitos) <span className="text-destructive">*</span></Label>
               <Input
                 value={modalCnes}
                 onChange={(e) => setModalCnes(e.target.value.replace(/\D/g, '').slice(0, 7))}
                 maxLength={7}
                 placeholder="0000000"
+                className={cn(modalCnes.length !== 7 && "border-destructive/50")}
               />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {getCnesFromUnidade(modalUnidade)
+                  ? '✓ CNES preenchido automaticamente da unidade'
+                  : 'Informe manualmente — a unidade não possui CNES cadastrado'}
+              </p>
+            </div>
+
+            {/* Preview de validação */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-medium text-foreground mb-2">Resumo da exportação</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold">{modalPreview.total}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-success">Serão exportados</p>
+                  <p className="text-lg font-bold text-success">{modalPreview.validos}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-destructive">Pendentes (pulados)</p>
+                  <p className="text-lg font-bold text-destructive">{modalPreview.pendentes}</p>
+                </div>
+              </div>
+              {modalPreview.pendentes > 0 && (
+                <p className="text-[11px] text-destructive flex items-start gap-1 pt-1">
+                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {modalPreview.pendentes} registro(s) com CNS, CBO, SIGTAP, Raça/Cor ou Nacionalidade ausentes serão ignorados.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
