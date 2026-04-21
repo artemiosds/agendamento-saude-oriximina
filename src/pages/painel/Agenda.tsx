@@ -284,6 +284,23 @@ const Agenda: React.FC = () => {
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
 
+  // ── Modal de conferência de dados (Novo Agendamento + Confirmar Chegada) ──
+  const [conferenciaModal, setConferenciaModal] = useState<{
+    open: boolean;
+    pacienteId: string;
+    modo: "agendamento" | "chegada";
+    agendamentoInfo?: {
+      data: string;
+      hora: string;
+      tipo: string;
+      profissionalNome: string;
+      profissionalEspecialidade?: string;
+      profissionalCbo?: string;
+      unidadeNome?: string;
+    };
+    onConfirm: () => void;
+  }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
+
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
