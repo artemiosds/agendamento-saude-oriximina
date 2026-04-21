@@ -638,21 +638,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loadAll = useCallback(async () => {
-    // Critical data first (needed for navigation/permissions)
+    // PERF: critical data first (needed for navigation/permissions/unit isolation)
     await Promise.all([
       loadConfiguracoes(),
       loadUnidades(),
       loadSalas(),
       loadFuncionarios(),
     ]);
-    // Secondary data (can load after UI is interactive)
-    await Promise.all([
+    // PERF: secondary data is fire-and-forget — UI becomes interactive immediately
+    // while patient/agenda lists hydrate in background. Each loader handles its own
+    // errors and updates state independently, so partial failures don't block the app.
+    void Promise.all([
       loadDisponibilidades(),
       loadPacientes(),
       loadAgendamentos(),
       loadFila(),
       loadBloqueios(),
-    ]);
+    ]).catch((err) => console.error("Background data load failed:", err));
   }, [
     loadConfiguracoes,
     loadUnidades,
