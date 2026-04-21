@@ -403,6 +403,19 @@ const Funcionarios: React.FC = () => {
                     <div className="border-t pt-3 mt-2">
                       <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
                     </div>
+                    <div>
+                      <Label>CBO (Classificação Brasileira de Ocupações) *</Label>
+                      <CboAutocomplete
+                        value={cbo}
+                        onChange={(v) => { setCbo(v); if (v) setShowCboError(false); }}
+                        profissaoSugestao={form.profissao || form.cargo}
+                        required
+                        showError={showCboError}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Obrigatório para geração do BPA-I (SIA/SUS).
+                      </p>
+                    </div>
                     {(form.role === 'tecnico' || form.role === 'enfermagem') && (
                       <div>
                         <Label>COREN</Label>
