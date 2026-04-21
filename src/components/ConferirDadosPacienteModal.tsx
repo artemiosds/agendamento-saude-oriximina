@@ -6,8 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, CheckCircle2, Pencil, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -31,20 +30,39 @@ export interface ConferirDadosPacienteModalProps {
   confirmLabel?: string;
 }
 
-const REQUIRED_FIELDS = ["cpfOuCns", "data_nascimento", "sexo", "municipio", "telefone", "endereco"] as const;
-
 function isCadastroIncompleto(p: any): { incompleto: boolean; faltando: string[] } {
   const faltando: string[] = [];
   const cpf = (p?.cpf || "").replace(/\D/g, "");
   const cns = (p?.cns || "").replace(/\D/g, "");
   if (cpf.length !== 11 && cns.length !== 15) faltando.push("CPF ou CNS");
   if (!p?.data_nascimento) faltando.push("Data de nascimento");
-  if (!p?.custom_data?.sexo) faltando.push("Sexo");
+  if (!p?.sexo) faltando.push("Sexo");
   if (!p?.municipio) faltando.push("Município");
   if (!p?.telefone) faltando.push("Telefone");
   if (!p?.endereco) faltando.push("Endereço");
   return { incompleto: faltando.length > 0, faltando };
 }
+
+// Máscaras simples
+const maskCpf = (v: string) =>
+  v.replace(/\D/g, "").slice(0, 11)
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+const maskTel = (v: string) => {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 10) return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
+  return d.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+};
+const maskCep = (v: string) =>
+  v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
+
+const MASKS: Record<string, (v: string) => string> = {
+  cpf: maskCpf,
+  telefone: maskTel,
+  telefone_secundario: maskTel,
+  cep: maskCep,
+};
 
 export function ConferirDadosPacienteModal({
   open,
@@ -57,15 +75,15 @@ export function ConferirDadosPacienteModal({
 }: ConferirDadosPacienteModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
 
   useEffect(() => {
     if (!open || !pacienteId) return;
     setConfirmou(false);
-    setEditing(false);
+    setDirty(false);
     setLoading(true);
     (async () => {
       const { data, error } = await (supabase as any)
@@ -108,11 +126,7 @@ export function ConferirDadosPacienteModal({
   const validacao = useMemo(() => {
     if (!paciente) return { incompleto: false, faltando: [] as string[] };
     return isCadastroIncompleto({
-      ...paciente,
-      custom_data: {
-        ...(paciente.custom_data || {}),
-        sexo: form.sexo,
-      },
+      sexo: form.sexo,
       telefone: form.telefone,
       endereco: form.endereco,
       municipio: form.municipio,
@@ -121,6 +135,12 @@ export function ConferirDadosPacienteModal({
       data_nascimento: form.data_nascimento,
     });
   }, [paciente, form]);
+
+  const updateField = (name: string, value: string) => {
+    const masked = MASKS[name] ? MASKS[name](value) : value;
+    setForm((p: any) => ({ ...p, [name]: masked }));
+    setDirty(true);
+  };
 
   const handleSave = async () => {
     if (!paciente) return;
@@ -146,7 +166,7 @@ export function ConferirDadosPacienteModal({
         .update({
           nome: form.nome,
           nome_mae: form.nome_mae,
-          data_nascimento: form.data_nascimento,
+          data_nascimento: form.data_nascimento || null,
           cpf: form.cpf,
           cns: form.cns,
           telefone: form.telefone,
@@ -158,7 +178,7 @@ export function ConferirDadosPacienteModal({
         .eq("id", paciente.id);
       if (error) throw error;
       setPaciente({ ...paciente, ...form, custom_data: customData });
-      setEditing(false);
+      setDirty(false);
       toast.success("Dados atualizados!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
@@ -167,21 +187,32 @@ export function ConferirDadosPacienteModal({
     }
   };
 
-  const Field = ({ label, value, name, type = "text" }: { label: string; value: string; name: string; type?: string }) => (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {editing ? (
-        <Input
-          type={type}
-          value={form[name] ?? ""}
-          onChange={(e) => setForm((p: any) => ({ ...p, [name]: e.target.value }))}
-          className="h-8 text-sm"
-        />
-      ) : (
-        <div className="text-sm font-medium text-foreground min-h-[2rem] py-1">
-          {value || <span className="text-muted-foreground italic">Não informado</span>}
-        </div>
-      )}
+  const Field = ({
+    label,
+    name,
+    type = "text",
+    placeholder,
+    inputMode,
+  }: {
+    label: string;
+    name: string;
+    type?: string;
+    placeholder?: string;
+    inputMode?: "text" | "tel" | "email" | "numeric";
+  }) => (
+    <div className="space-y-1.5">
+      <Label htmlFor={`fld-${name}`} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <Input
+        id={`fld-${name}`}
+        type={type}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        value={form[name] ?? ""}
+        onChange={(e) => updateField(name, e.target.value)}
+        className="h-11 sm:h-10 text-base sm:text-sm"
+      />
     </div>
   );
 
@@ -194,9 +225,11 @@ export function ConferirDadosPacienteModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-display">
+      <DialogContent
+        className="p-0 gap-0 max-w-3xl w-[calc(100vw-1rem)] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
+      >
+        <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 font-display text-base sm:text-lg pr-6">
             {modo === "chegada" ? "Confirmar Chegada — Conferência" : "Conferir Dados do Paciente"}
           </DialogTitle>
         </DialogHeader>
@@ -206,15 +239,18 @@ export function ConferirDadosPacienteModal({
             Carregando dados do paciente…
           </div>
         ) : (
-          <ScrollArea className="flex-1 pr-3 -mr-3">
-            <div className="space-y-5 pb-2">
-              {/* Alerta cadastro incompleto */}
-              {validacao.incompleto && (
-                <Alert variant="destructive" className="border-warning bg-warning/10 text-warning-foreground">
+          <div
+            className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            <div className="space-y-5 pb-4">
+              {/* Alerta cadastro incompleto / completo */}
+              {validacao.incompleto ? (
+                <Alert variant="destructive" className="border-warning bg-warning/10">
                   <AlertTriangle className="h-4 w-4 text-warning" />
                   <AlertTitle className="text-warning">Cadastro incompleto</AlertTitle>
                   <AlertDescription className="text-foreground/80">
-                    Atualize os dados para evitar problemas na produção (BPA/e-SUS).
+                    Atualize os dados para evitar problemas na produção (BPA/e-SUS). A confirmação não está bloqueada.
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {validacao.faltando.map((f) => (
                         <Badge key={f} variant="outline" className="border-warning text-warning">
@@ -224,9 +260,7 @@ export function ConferirDadosPacienteModal({
                     </div>
                   </AlertDescription>
                 </Alert>
-              )}
-
-              {!validacao.incompleto && (
+              ) : (
                 <Alert className="border-success bg-success/10">
                   <CheckCircle2 className="h-4 w-4 text-success" />
                   <AlertTitle className="text-success">Cadastro completo</AlertTitle>
@@ -265,34 +299,16 @@ export function ConferirDadosPacienteModal({
                 </div>
               )}
 
-              {/* Botão editar */}
-              <div className="flex justify-end">
-                {!editing ? (
-                  <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1.5" /> Atualizar dados do paciente
-                  </Button>
-                ) : (
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
-                      Cancelar
-                    </Button>
-                    <Button size="sm" onClick={handleSave} disabled={saving}>
-                      <Save className="w-3.5 h-3.5 mr-1.5" /> {saving ? "Salvando…" : "Salvar atualização"}
-                    </Button>
-                  </div>
-                )}
-              </div>
-
               {/* Identificação */}
               <div>
                 <SectionTitle icon={User}>Identificação</SectionTitle>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <Field label="Nome completo" name="nome" value={form.nome} />
-                  <Field label="Nome da mãe" name="nome_mae" value={form.nome_mae} />
-                  <Field label="Data de nascimento" name="data_nascimento" type="date" value={form.data_nascimento} />
-                  <Field label="Sexo" name="sexo" value={form.sexo} />
-                  <Field label="CPF" name="cpf" value={form.cpf} />
-                  <Field label="CNS" name="cns" value={form.cns} />
+                  <Field label="Nome completo" name="nome" />
+                  <Field label="Nome da mãe" name="nome_mae" />
+                  <Field label="Data de nascimento" name="data_nascimento" type="date" />
+                  <Field label="Sexo (M/F)" name="sexo" placeholder="M ou F" />
+                  <Field label="CPF" name="cpf" inputMode="numeric" placeholder="000.000.000-00" />
+                  <Field label="CNS" name="cns" inputMode="numeric" placeholder="15 dígitos" />
                 </div>
               </div>
 
@@ -300,9 +316,9 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={Globe}>Dados Sociais</SectionTitle>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <Field label="Raça/Cor" name="raca_cor" value={form.raca_cor} />
-                  <Field label="Etnia" name="etnia" value={form.etnia} />
-                  <Field label="Nacionalidade" name="nacionalidade" value={form.nacionalidade} />
+                  <Field label="Raça/Cor" name="raca_cor" />
+                  <Field label="Etnia" name="etnia" />
+                  <Field label="Nacionalidade" name="nacionalidade" />
                 </div>
               </div>
 
@@ -310,14 +326,14 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={MapPin}>Endereço</SectionTitle>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <Field label="Tipo de logradouro (DNE)" name="tipo_logradouro_dne" value={form.tipo_logradouro_dne} />
-                  <Field label="Logradouro" name="endereco" value={form.endereco} />
-                  <Field label="Número" name="numero" value={form.numero} />
-                  <Field label="Complemento" name="complemento" value={form.complemento} />
-                  <Field label="Bairro" name="bairro" value={form.bairro} />
-                  <Field label="Município" name="municipio" value={form.municipio} />
-                  <Field label="UF" name="uf" value={form.uf} />
-                  <Field label="CEP" name="cep" value={form.cep} />
+                  <Field label="Tipo de logradouro (DNE)" name="tipo_logradouro_dne" />
+                  <Field label="Logradouro" name="endereco" />
+                  <Field label="Número" name="numero" inputMode="numeric" />
+                  <Field label="Complemento" name="complemento" />
+                  <Field label="Bairro" name="bairro" />
+                  <Field label="Município" name="municipio" />
+                  <Field label="UF" name="uf" placeholder="PA" />
+                  <Field label="CEP" name="cep" inputMode="numeric" placeholder="00000-000" />
                 </div>
               </div>
 
@@ -325,36 +341,48 @@ export function ConferirDadosPacienteModal({
               <div>
                 <SectionTitle icon={Phone}>Contato</SectionTitle>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <Field label="Telefone principal" name="telefone" value={form.telefone} />
-                  <Field label="Telefone secundário" name="telefone_secundario" value={form.telefone_secundario} />
-                  <Field label="E-mail" name="email" type="email" value={form.email} />
+                  <Field label="Telefone principal" name="telefone" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
+                  <Field label="Telefone secundário" name="telefone_secundario" type="tel" inputMode="tel" />
+                  <Field label="E-mail" name="email" type="email" inputMode="email" />
                 </div>
               </div>
+
+              {/* Botão salvar (quando houver alterações) */}
+              {dirty && (
+                <div className="flex justify-end pt-1">
+                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {saving ? "Salvando…" : "Salvar alterações"}
+                  </Button>
+                </div>
+              )}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
-        <DialogFooter className="flex-col sm:flex-row gap-3 border-t pt-4">
-          <label className="flex items-center gap-2 text-sm cursor-pointer flex-1">
+        <DialogFooter className="flex-col sm:flex-row gap-3 border-t px-4 sm:px-6 py-3 shrink-0 bg-background">
+          <label className="flex items-center gap-2 text-sm cursor-pointer flex-1 min-w-0">
             <Checkbox
               checked={confirmou}
               onCheckedChange={(c) => setConfirmou(c === true)}
+              className="h-5 w-5"
             />
             <span className="font-medium">
               {modo === "chegada" ? "Dados conferidos" : "Confirmo que os dados foram conferidos"}
             </span>
           </label>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 sm:flex-none">
               Cancelar
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
+                if (dirty) await handleSave();
                 onConfirm();
                 onOpenChange(false);
               }}
-              disabled={!confirmou || editing || loading}
-              className="gradient-primary text-primary-foreground"
+              disabled={!confirmou || loading || saving}
+              className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
             >
               {confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
             </Button>
