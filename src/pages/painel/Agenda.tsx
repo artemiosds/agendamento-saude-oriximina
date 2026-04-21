@@ -1751,17 +1751,21 @@ const Agenda: React.FC = () => {
                         {newAgTurnoInfo.map((t) => {
                           const isSelected = newAg.hora === t.horaInicio;
                           const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+                          const lotadoBlocked = t.lotado && !isMaster;
+                          const lotadoOverride = t.lotado && isMaster;
                           return (
                             <button
                               key={t.turnoId}
                               type="button"
-                              disabled={t.lotado}
+                              disabled={lotadoBlocked}
                               onClick={() => setNewAg((p) => ({ ...p, hora: t.horaInicio }))}
                               className={cn(
                                 'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all',
                                 isSelected && !t.lotado && 'border-primary bg-primary/5 shadow-sm',
+                                isSelected && lotadoOverride && 'border-warning bg-warning/10 shadow-sm',
                                 !isSelected && !t.lotado && 'border-border hover:border-primary/40 hover:bg-muted/30',
-                                t.lotado && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
+                                !isSelected && lotadoOverride && 'border-warning/40 bg-warning/5 hover:border-warning hover:bg-warning/10 cursor-pointer',
+                                lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
                               )}
                             >
                               <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
