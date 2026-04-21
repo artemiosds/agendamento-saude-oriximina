@@ -187,6 +187,8 @@ const Funcionarios: React.FC = () => {
           uf_conselho: form.uf_conselho,
           pode_agendar_retorno: form.pode_agendar_retorno,
           coren: form.coren,
+          cbo_codigo: cbo?.codigo || '',
+          cbo_descricao: cbo?.descricao || '',
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -227,6 +229,8 @@ const Funcionarios: React.FC = () => {
             uf_conselho: form.uf_conselho,
             pode_agendar_retorno: form.pode_agendar_retorno,
             coren: form.coren,
+            cbo_codigo: cbo?.codigo || '',
+            cbo_descricao: cbo?.descricao || '',
             criado_por: user?.id || '',
           },
         });
