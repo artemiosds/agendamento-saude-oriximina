@@ -238,6 +238,11 @@ export function ConferirDadosPacienteModal({
       if (error) throw error;
       setPaciente({ ...paciente, ...form, custom_data: customData });
       setDirty(false);
+      // CRÍTICO: invalidar caches para refletir em prontuário, agendamento, BPA, etc.
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
       toast.success("Dados atualizados!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
