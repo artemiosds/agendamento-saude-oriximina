@@ -67,6 +67,25 @@ function isDateBlocked(dateStr: string, blockedRanges: BlockedRange[]): boolean 
   return false;
 }
 
+/**
+ * Check if a date string (YYYY-MM-DD) is a weekend (Saturday or Sunday).
+ * Uses local timezone (date-only) to avoid UTC drift.
+ */
+export function isWeekend(dateStr: string): boolean {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+
+/**
+ * Centralized rule: a date is INVALID for a treatment session if it is
+ * a weekend OR falls in any blocked range (holiday/professional/unit block).
+ */
+export function isInvalidSessionDate(dateStr: string, blockedRanges: BlockedRange[]): boolean {
+  if (!dateStr) return false;
+  return isWeekend(dateStr) || isDateBlocked(dateStr, blockedRanges);
+}
+
 export interface BlockedRange {
   start: string; // YYYY-MM-DD
   end: string;   // YYYY-MM-DD
