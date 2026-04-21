@@ -63,6 +63,7 @@ import { CalendarioAgenda } from "./CalendarioAgenda";
 import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
+import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -282,6 +283,23 @@ const Agenda: React.FC = () => {
     observacoes: string;
   } | null>(null);
   const canEdit = can('agenda', 'can_edit');
+
+  // ── Modal de conferência de dados (Novo Agendamento + Confirmar Chegada) ──
+  const [conferenciaModal, setConferenciaModal] = useState<{
+    open: boolean;
+    pacienteId: string;
+    modo: "agendamento" | "chegada";
+    agendamentoInfo?: {
+      data: string;
+      hora: string;
+      tipo: string;
+      profissionalNome: string;
+      profissionalEspecialidade?: string;
+      profissionalCbo?: string;
+      unidadeNome?: string;
+    };
+    onConfirm: () => void;
+  }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
@@ -571,6 +589,31 @@ const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
+    // Validações rápidas antes de abrir modal de conferência
+    if (!newAg.pacienteId || !newAg.profissionalId || !newAg.hora) {
+      toast.error("Preencha paciente, profissional e horário.");
+      return;
+    }
+    const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
+    const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
+    setConferenciaModal({
+      open: true,
+      pacienteId: newAg.pacienteId,
+      modo: "agendamento",
+      agendamentoInfo: {
+        data: selectedDate,
+        hora: newAg.hora,
+        tipo: newAg.tipo,
+        profissionalNome: profSel?.nome || "",
+        profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+        profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+        unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+      },
+      onConfirm: () => { void executarCreate(); },
+    });
+  };
+
+  const executarCreate = async () => {
     let pac = pacientes.find((p) => p.id === newAg.pacienteId);
     const prof = profissionais.find((p) => p.id === newAg.profissionalId);
 
@@ -819,6 +862,35 @@ const Agenda: React.FC = () => {
       setFaltaTarget(ag);
       return;
     }
+
+    // Intercept "confirmado_chegada" — open conferência de dados modal first
+    if (newStatus === "confirmado_chegada") {
+      const profSel = profissionais.find((p) => p.id === ag.profissionalId);
+      const unidSel = unidades.find((u) => u.id === ag.unidadeId);
+      setConferenciaModal({
+        open: true,
+        pacienteId: ag.pacienteId,
+        modo: "chegada",
+        agendamentoInfo: {
+          data: ag.data,
+          hora: ag.hora,
+          tipo: ag.tipo,
+          profissionalNome: ag.profissionalNome || profSel?.nome || "",
+          profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+          profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+          unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+        },
+        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+      });
+      return;
+    }
+
+    return executarStatusChange(agId, newStatus);
+  };
+
+  const executarStatusChange = async (agId: string, newStatus: string) => {
+    const ag = agendamentos.find((a) => a.id === agId);
+    if (!ag) return;
 
     if (newStatus === "concluido") {
       // Block concluding appointments for future dates
@@ -2758,6 +2830,14 @@ const Agenda: React.FC = () => {
           tipo: faltaTarget.tipo,
         } : null}
         onConfirm={handleRegistrarFalta}
+      />
+      <ConferirDadosPacienteModal
+        open={conferenciaModal.open}
+        onOpenChange={(o) => setConferenciaModal((p) => ({ ...p, open: o }))}
+        pacienteId={conferenciaModal.pacienteId}
+        modo={conferenciaModal.modo}
+        agendamento={conferenciaModal.agendamentoInfo}
+        onConfirm={conferenciaModal.onConfirm}
       />
     </div>
   );
