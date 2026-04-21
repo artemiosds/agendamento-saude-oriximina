@@ -21,6 +21,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import ProfissionaisExternos from './ProfissionaisExternos';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
+import CboAutocomplete, { CboValue } from '@/components/CboAutocomplete';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
