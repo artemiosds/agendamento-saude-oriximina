@@ -301,6 +301,34 @@ const Agenda: React.FC = () => {
     onConfirm: () => void;
   }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
+  // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
+  const [pacientesConferidos, setPacientesConferidos] = useState<Set<string>>(new Set());
+
+  // Dispara o modal de conferência ASSIM que o paciente é selecionado.
+  // Se o usuário cancelar a conferência ou desmarcar o checkbox, o paciente é removido da seleção.
+  const handlePacienteSelecionadoNovoAg = (pacienteId: string) => {
+    if (!pacienteId) {
+      setNewAg((p) => ({ ...p, pacienteId: "" }));
+      return;
+    }
+    // Atualiza imediatamente o paciente selecionado
+    setNewAg((p) => ({ ...p, pacienteId }));
+    // Se já foi conferido nesta sessão, não reabre o modal
+    if (pacientesConferidos.has(pacienteId)) return;
+    setConferenciaModal({
+      open: true,
+      pacienteId,
+      modo: "agendamento",
+      onConfirm: () => {
+        setPacientesConferidos((prev) => {
+          const next = new Set(prev);
+          next.add(pacienteId);
+          return next;
+        });
+      },
+    });
+  };
+
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
