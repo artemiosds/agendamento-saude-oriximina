@@ -446,13 +446,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
               </div>
 
               <div>
-                <Label>Tipo de Logradouro</Label>
-                <Select value={cd.tipoLogradouro || ""} onValueChange={(v) => setCustom("tipoLogradouro", v)}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_LOGRADOURO.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>
+                  Tipo de Logradouro (DNE) <span className="text-destructive">*</span>
+                </Label>
+                <LogradouroDneAutocomplete
+                  value={cd.tipoLogradouro || ""}
+                  codigo={cd.tipoLogradouroCodigo || ""}
+                  onChange={(descricao, codigo) => {
+                    setCustom("tipoLogradouro", descricao);
+                    setCustom("tipoLogradouroCodigo", codigo);
+                  }}
+                  required
+                />
               </div>
 
               <div className="md:col-span-2">
