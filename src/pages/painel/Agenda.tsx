@@ -301,6 +301,34 @@ const Agenda: React.FC = () => {
     onConfirm: () => void;
   }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
+  // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
+  const [pacientesConferidos, setPacientesConferidos] = useState<Set<string>>(new Set());
+
+  // Dispara o modal de conferência ASSIM que o paciente é selecionado.
+  // Se o usuário cancelar a conferência ou desmarcar o checkbox, o paciente é removido da seleção.
+  const handlePacienteSelecionadoNovoAg = (pacienteId: string) => {
+    if (!pacienteId) {
+      setNewAg((p) => ({ ...p, pacienteId: "" }));
+      return;
+    }
+    // Atualiza imediatamente o paciente selecionado
+    setNewAg((p) => ({ ...p, pacienteId }));
+    // Se já foi conferido nesta sessão, não reabre o modal
+    if (pacientesConferidos.has(pacienteId)) return;
+    setConferenciaModal({
+      open: true,
+      pacienteId,
+      modo: "agendamento",
+      onConfirm: () => {
+        setPacientesConferidos((prev) => {
+          const next = new Set(prev);
+          next.add(pacienteId);
+          return next;
+        });
+      },
+    });
+  };
+
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
@@ -589,28 +617,41 @@ const Agenda: React.FC = () => {
   };
 
   const handleCreate = async () => {
-    // Validações rápidas antes de abrir modal de conferência
+    // Validações rápidas
     if (!newAg.pacienteId || !newAg.profissionalId || !newAg.hora) {
       toast.error("Preencha paciente, profissional e horário.");
       return;
     }
-    const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
-    const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
-    setConferenciaModal({
-      open: true,
-      pacienteId: newAg.pacienteId,
-      modo: "agendamento",
-      agendamentoInfo: {
-        data: selectedDate,
-        hora: newAg.hora,
-        tipo: newAg.tipo,
-        profissionalNome: profSel?.nome || "",
-        profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
-        profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
-        unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
-      },
-      onConfirm: () => { void executarCreate(); },
-    });
+    // Conferência obrigatória do paciente antes do agendamento
+    if (!pacientesConferidos.has(newAg.pacienteId)) {
+      toast.error("Confira os dados do paciente antes de agendar.");
+      const profSel = profissionais.find((p) => p.id === newAg.profissionalId);
+      const unidSel = unidades.find((u) => u.id === profSel?.unidadeId);
+      setConferenciaModal({
+        open: true,
+        pacienteId: newAg.pacienteId,
+        modo: "agendamento",
+        agendamentoInfo: {
+          data: selectedDate,
+          hora: newAg.hora,
+          tipo: newAg.tipo,
+          profissionalNome: profSel?.nome || "",
+          profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+          profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+          unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+        },
+        onConfirm: () => {
+          setPacientesConferidos((prev) => {
+            const next = new Set(prev);
+            next.add(newAg.pacienteId);
+            return next;
+          });
+          void executarCreate();
+        },
+      });
+      return;
+    }
+    void executarCreate();
   };
 
   const executarCreate = async () => {
@@ -1592,7 +1633,13 @@ const Agenda: React.FC = () => {
                 </span>
               </Button>
             )}
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) setPacientesConferidos(new Set());
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="gradient-primary text-primary-foreground">
                   <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
@@ -1608,14 +1655,14 @@ const Agenda: React.FC = () => {
                     <BuscaPaciente
                       pacientes={pacientes}
                       value={newAg.pacienteId}
-                      onChange={(id) => setNewAg((p) => ({ ...p, pacienteId: id }))}
+                      onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
                     />
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />
                       <span>ou selecione pela lista</span>
                       <div className="flex-1 h-px bg-border" />
                     </div>
-                    <Select value={newAg.pacienteId} onValueChange={(v) => setNewAg((p) => ({ ...p, pacienteId: v }))}>
+                    <Select value={newAg.pacienteId} onValueChange={(v) => handlePacienteSelecionadoNovoAg(v)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um paciente..." />
                       </SelectTrigger>
@@ -1629,6 +1676,14 @@ const Agenda: React.FC = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {newAg.pacienteId && !pacientesConferidos.has(newAg.pacienteId) && (
+                      <p className="text-xs text-warning">
+                        ⚠ Conferência de dados pendente — selecione novamente o paciente para abrir o modal.
+                      </p>
+                    )}
+                    {newAg.pacienteId && pacientesConferidos.has(newAg.pacienteId) && (
+                      <p className="text-xs text-success">✓ Dados conferidos</p>
+                    )}
                   </div>
                   <div>
                     <Label>Profissional</Label>
