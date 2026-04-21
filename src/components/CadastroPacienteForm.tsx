@@ -450,8 +450,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                   value={cd.tipoLogradouro || ""}
                   codigo={cd.tipoLogradouroCodigo || ""}
                   onChange={(descricao, codigo) => {
-                    setCustom("tipoLogradouro", descricao);
-                    setCustom("tipoLogradouroCodigo", codigo);
+                    onChange({
+                      ...form,
+                      customData: {
+                        ...(form.customData || {}),
+                        tipoLogradouro: descricao,
+                        tipoLogradouroCodigo: codigo,
+                      },
+                    });
                   }}
                   required
                 />
