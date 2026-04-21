@@ -310,7 +310,7 @@ const Tratamentos: React.FC = () => {
         p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
         p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
-        p_search: searchTerm.trim() || null,
+        p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
       });
 
