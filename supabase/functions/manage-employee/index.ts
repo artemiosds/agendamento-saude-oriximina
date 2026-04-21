@@ -23,7 +23,7 @@ serve(async (req) => {
     const { action } = body;
 
     if (action === "create") {
-      const { nome, usuario, email, cpf, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho, pode_agendar_retorno, coren } = body;
+      const { nome, usuario, email, cpf, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho, pode_agendar_retorno, coren, cbo_codigo, cbo_descricao } = body;
 
       if (!nome || !usuario || !email || !senha) {
         return new Response(
@@ -110,6 +110,9 @@ serve(async (req) => {
           pode_agendar_retorno: pode_agendar_retorno ?? false,
           cpf: cpf || "",
           coren: coren || "",
+          custom_data: {
+            ...(cbo_codigo ? { cbo_codigo: String(cbo_codigo), cbo_descricao: String(cbo_descricao || '') } : {}),
+          },
         })
         .select()
         .single();
@@ -141,7 +144,7 @@ serve(async (req) => {
       // Get current record
       const { data: current, error: fetchErr } = await supabaseAdmin
         .from("funcionarios")
-        .select("auth_user_id, email, usuario")
+        .select("auth_user_id, email, usuario, custom_data")
         .eq("id", id)
         .single();
 
@@ -164,6 +167,16 @@ serve(async (req) => {
         if (body[key] !== undefined) {
           dbFields[key] = body[key];
         }
+      }
+
+      // Merge CBO into custom_data (preserve existing custom fields)
+      if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined) {
+        const existingCustom = (current.custom_data as Record<string, any>) || {};
+        dbFields.custom_data = {
+          ...existingCustom,
+          cbo_codigo: String(body.cbo_codigo || ''),
+          cbo_descricao: String(body.cbo_descricao || ''),
+        };
       }
 
       // Normalize email
