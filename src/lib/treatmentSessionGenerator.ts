@@ -94,31 +94,34 @@ export interface BlockedRange {
 /**
  * Build blocked ranges from bloqueios data for a specific professional.
  * Includes global blocks (no profissional_id) and professional-specific blocks.
+ * Accepts both camelCase (DataContext shape) and snake_case (raw DB) fields.
  */
 export function buildBlockedRanges(
-  bloqueios: Array<{
-    dataInicio: string;
-    dataFim: string;
-    profissionalId?: string;
-    unidadeId?: string;
-    diaInteiro?: boolean;
-  }>,
+  bloqueios: Array<any>,
   profissionalId: string,
   unidadeId?: string,
 ): BlockedRange[] {
-  return bloqueios
-    .filter(b => {
-      const isGlobal = (!b.profissionalId || b.profissionalId === '') && (!b.unidadeId || b.unidadeId === '');
-      const isUnit = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === '');
-      const isProfessional = b.profissionalId === profissionalId;
+  return (bloqueios || [])
+    .map((b) => ({
+      dataInicio: b.dataInicio || b.data_inicio || '',
+      dataFim: b.dataFim || b.data_fim || b.dataInicio || b.data_inicio || '',
+      profissionalId: b.profissionalId ?? b.profissional_id ?? '',
+      unidadeId: b.unidadeId ?? b.unidade_id ?? '',
+    }))
+    .filter((b) => {
+      if (!b.dataInicio) return false;
+      const isGlobal = !b.profissionalId && !b.unidadeId;
+      const isUnit = !!unidadeId && b.unidadeId === unidadeId && !b.profissionalId;
+      const isProfessional = !!profissionalId && b.profissionalId === profissionalId;
       return isGlobal || isUnit || isProfessional;
     })
-    .map(b => ({ start: b.dataInicio, end: b.dataFim }));
+    .map((b) => ({ start: b.dataInicio, end: b.dataFim || b.dataInicio }));
 }
 
 /**
  * Find the next valid date on or after `current` that matches one of the given
  * weekdays and is not blocked. Advances day-by-day.
+ * NOTE: Weekends (Sat/Sun) are always considered invalid for treatment sessions.
  */
 function findNextValidDate(
   current: Date,
@@ -131,7 +134,7 @@ function findNextValidDate(
   for (let i = 0; i < maxAttempts; i++) {
     const dow = d.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
       const dateStr = d.toISOString().split('T')[0];
       if (!isDateBlocked(dateStr, blockedRanges)) {
         return { date: new Date(d), skipped };
