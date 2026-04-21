@@ -383,6 +383,28 @@ const Tratamentos: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  // Auto-fix: detect treatment_sessions agendadas/pendentes em datas inválidas
+  // (sábado, domingo, feriado, bloqueio manual) e devolve para "pendente_agendamento".
+  // Roda uma vez quando bloqueios + user estão prontos.
+  const autoFixRanRef = React.useRef(false);
+  useEffect(() => {
+    if (autoFixRanRef.current) return;
+    if (!user || !bloqueios) return;
+    autoFixRanRef.current = true;
+    const isProf = user.role === "profissional";
+    const restrictUnit = !!(user.unidadeId && user.usuario !== 'admin.sms');
+    autoFixInvalidTreatmentSessions({
+      bloqueios,
+      professionalId: isProf ? user.id : undefined,
+      unitId: restrictUnit ? user.unidadeId : undefined,
+    }).then((res) => {
+      if (res.fixed > 0) {
+        toast.info(`${res.fixed} sessão(ões) em datas inválidas foram devolvidas para "Aguardando agendamento".`);
+        loadData(true);
+      }
+    }).catch(() => { /* silent */ });
+  }, [user, bloqueios, loadData]);
+
   // Lazy load sessions when a cycle is selected
   useEffect(() => {
     if (selectedCycle && selectedCycle.id !== loadedSessionsCycleId) {
