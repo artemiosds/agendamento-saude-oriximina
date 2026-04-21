@@ -45,12 +45,15 @@ interface LinhaBPA {
 }
 
 interface ValidationFlags {
-  cns: boolean;
-  cbo: boolean;
-  sigtap: boolean;
-  raca: boolean;
-  nacionalidade: boolean;
+  identificacao: boolean;  // CNS (15) OU CPF (11)
+  cbo: boolean;            // CBO obrigatório
+  sigtap: boolean;         // SIGTAP só obrigatório p/ não-médicos
+  nome: boolean;           // Nome paciente
+  dataNasc: boolean;       // Data nascimento
 }
+
+// CBOs de médicos (família 225*) — médicos podem registrar atendimento sem SIGTAP
+const isCboMedico = (cbo: string) => (cbo || '').replace(/\D/g, '').startsWith('225');
 
 const currentCompetencia = (): string => {
   const d = new Date();
