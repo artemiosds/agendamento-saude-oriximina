@@ -501,13 +501,44 @@ const BpaProducao: React.FC = () => {
               </Select>
             </div>
             <div>
-              <Label>CNES (opcional — se a unidade não tiver cadastrado)</Label>
+              <Label>CNES da Unidade (7 dígitos) <span className="text-destructive">*</span></Label>
               <Input
                 value={modalCnes}
                 onChange={(e) => setModalCnes(e.target.value.replace(/\D/g, '').slice(0, 7))}
                 maxLength={7}
                 placeholder="0000000"
+                className={cn(modalCnes.length !== 7 && "border-destructive/50")}
               />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {getCnesFromUnidade(modalUnidade)
+                  ? '✓ CNES preenchido automaticamente da unidade'
+                  : 'Informe manualmente — a unidade não possui CNES cadastrado'}
+              </p>
+            </div>
+
+            {/* Preview de validação */}
+            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-medium text-foreground mb-2">Resumo da exportação</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold">{modalPreview.total}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-success">Serão exportados</p>
+                  <p className="text-lg font-bold text-success">{modalPreview.validos}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-destructive">Pendentes (pulados)</p>
+                  <p className="text-lg font-bold text-destructive">{modalPreview.pendentes}</p>
+                </div>
+              </div>
+              {modalPreview.pendentes > 0 && (
+                <p className="text-[11px] text-destructive flex items-start gap-1 pt-1">
+                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {modalPreview.pendentes} registro(s) com CNS, CBO, SIGTAP, Raça/Cor ou Nacionalidade ausentes serão ignorados.
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>
