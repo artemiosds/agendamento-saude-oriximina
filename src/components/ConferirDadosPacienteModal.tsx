@@ -125,6 +125,7 @@ export function ConferirDadosPacienteModal({
   const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open || !pacienteId) return;
