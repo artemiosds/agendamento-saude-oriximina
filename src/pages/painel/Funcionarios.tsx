@@ -132,9 +132,14 @@ const Funcionarios: React.FC = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
     setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setCbo(null);
+    setShowCboError(false);
     setCustomData({});
     setDialogOpen(true);
   };
+
+  // Roles that require CBO (clinical/triage staff that generate BPA-I records)
+  const requiresCbo = (role: string) => role === 'profissional' || role === 'tecnico' || role === 'enfermagem';
 
   const handleSave = async () => {
     if (!form.nome || !form.usuario || !form.email || !form.role) {
