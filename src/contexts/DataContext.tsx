@@ -460,19 +460,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      let query = supabase
-        .from("pacientes" as any)
-        .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
-        );
-      // Unit isolation for pacientes — include patients with matching unit OR no unit (legacy/empty)
-      if (!isGlobalAdmin && userUnidadeId) {
-        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+      const PAGE = 1000;
+      let from = 0;
+      let allData: any[] = [];
+      while (true) {
+        let query = supabase
+          .from("pacientes" as any)
+          .select(
+            "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
+          )
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) {
+          query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+        }
+        const { data, error } = await query;
+        if (error) {
+          console.error("Error loading pacientes page:", error);
+          break;
+        }
+        if (!data || data.length === 0) break;
+        allData.push(...data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      const { data, error } = await query;
-      if (data && !error) {
+      {
         setPacientes(
-          data.map((p: any) => ({
+          allData.map((p: any) => ({
             id: p.id,
             nome: p.nome,
             cpf: p.cpf || "",

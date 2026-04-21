@@ -314,6 +314,34 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                 <InfoField icon={<Mail className="w-3.5 h-3.5" />} label="E-mail" value={paciente.email || "—"} />
                 <InfoField icon={<MapPin className="w-3.5 h-3.5" />} label="Endereço" value={paciente.endereco || "—"} />
                 <InfoField
+                  icon={<User className="w-3.5 h-3.5" />}
+                  label="Raça/Cor (IBGE)"
+                  value={
+                    customData.racaCor || customData.raca_cor
+                      ? String(customData.racaCor || customData.raca_cor).replace(/_/g, " ")
+                      : "—"
+                  }
+                />
+                <InfoField
+                  icon={<User className="w-3.5 h-3.5" />}
+                  label="Nacionalidade"
+                  value={customData.nacionalidade ? String(customData.nacionalidade) : "—"}
+                />
+                {(customData.racaCor === "indigena" || customData.raca_cor === "indigena") && (
+                  <InfoField
+                    icon={<User className="w-3.5 h-3.5" />}
+                    label="Etnia"
+                    value={customData.etnia === "X999" ? (customData.etniaOutra || "—") : (customData.etnia || "—")}
+                  />
+                )}
+                {customData.nacionalidade === "estrangeiro" && (
+                  <InfoField
+                    icon={<MapPin className="w-3.5 h-3.5" />}
+                    label="País de nascimento"
+                    value={customData.paisNascimento || "—"}
+                  />
+                )}
+                <InfoField
                   icon={<AlertCircle className="w-3.5 h-3.5" />}
                   label="Contato de emergência"
                   value={

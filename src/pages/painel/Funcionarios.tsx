@@ -21,6 +21,7 @@ import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import ProfissionaisExternos from './ProfissionaisExternos';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
+import CboAutocomplete, { CboValue } from '@/components/CboAutocomplete';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
@@ -52,6 +53,7 @@ interface FuncionarioDB {
   uf_conselho: string;
   pode_agendar_retorno: boolean;
   coren: string;
+  custom_data?: Record<string, any> | null;
 }
 
 const Funcionarios: React.FC = () => {
@@ -71,6 +73,8 @@ const Funcionarios: React.FC = () => {
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
   });
+  const [cbo, setCbo] = useState<CboValue | null>(null);
+  const [showCboError, setShowCboError] = useState(false);
   const canManage = can('usuarios', 'can_edit');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -113,7 +117,14 @@ const Funcionarios: React.FC = () => {
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
     });
-    setCustomData({});
+    const cd = (f.custom_data as any) || {};
+    if (cd.cbo_codigo && cd.cbo_descricao) {
+      setCbo({ codigo: cd.cbo_codigo, descricao: cd.cbo_descricao });
+    } else {
+      setCbo(null);
+    }
+    setShowCboError(false);
+    setCustomData(cd);
     setDialogOpen(true);
   };
 
@@ -121,13 +132,24 @@ const Funcionarios: React.FC = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
     setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setCbo(null);
+    setShowCboError(false);
     setCustomData({});
     setDialogOpen(true);
   };
 
+  // Roles that require CBO (clinical/triage staff that generate BPA-I records)
+  const requiresCbo = (role: string) => role === 'profissional' || role === 'tecnico' || role === 'enfermagem';
+
   const handleSave = async () => {
     if (!form.nome || !form.usuario || !form.email || !form.role) {
       toast.error('Nome, usuário, e-mail e perfil são obrigatórios.');
+      return;
+    }
+    // CBO is mandatory for clinical roles (used for BPA-I production export)
+    if (requiresCbo(form.role) && !cbo?.codigo) {
+      setShowCboError(true);
+      toast.error('CBO é obrigatório para profissionais clínicos. Selecione no autocomplete.');
       return;
     }
     // Unit master: force unit to their own and block editing global master
@@ -165,6 +187,8 @@ const Funcionarios: React.FC = () => {
           uf_conselho: form.uf_conselho,
           pode_agendar_retorno: form.pode_agendar_retorno,
           coren: form.coren,
+          cbo_codigo: cbo?.codigo || '',
+          cbo_descricao: cbo?.descricao || '',
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -205,6 +229,8 @@ const Funcionarios: React.FC = () => {
             uf_conselho: form.uf_conselho,
             pode_agendar_retorno: form.pode_agendar_retorno,
             coren: form.coren,
+            cbo_codigo: cbo?.codigo || '',
+            cbo_descricao: cbo?.descricao || '',
             criado_por: user?.id || '',
           },
         });
@@ -377,6 +403,19 @@ const Funcionarios: React.FC = () => {
                     <div className="border-t pt-3 mt-2">
                       <p className="text-sm font-semibold text-foreground mb-2">Conselho Profissional</p>
                     </div>
+                    <div>
+                      <Label>CBO (Classificação Brasileira de Ocupações) *</Label>
+                      <CboAutocomplete
+                        value={cbo}
+                        onChange={(v) => { setCbo(v); if (v) setShowCboError(false); }}
+                        profissaoSugestao={form.profissao || form.cargo}
+                        required
+                        showError={showCboError}
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Obrigatório para geração do BPA-I (SIA/SUS).
+                      </p>
+                    </div>
                     {(form.role === 'tecnico' || form.role === 'enfermagem') && (
                       <div>
                         <Label>COREN</Label>
@@ -480,6 +519,9 @@ const Funcionarios: React.FC = () => {
                         </p>
                         {f.tipo_conselho && f.numero_conselho && (
                           <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
+                        )}
+                        {(f.custom_data as any)?.cbo_codigo && (
+                          <p className="text-xs text-muted-foreground font-mono">CBO {(f.custom_data as any).cbo_codigo}</p>
                         )}
                         {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
                         {f.role === 'profissional' && f.pode_agendar_retorno && (
