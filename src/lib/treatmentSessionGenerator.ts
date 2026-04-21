@@ -67,6 +67,25 @@ function isDateBlocked(dateStr: string, blockedRanges: BlockedRange[]): boolean 
   return false;
 }
 
+/**
+ * Check if a date string (YYYY-MM-DD) is a weekend (Saturday or Sunday).
+ * Uses local timezone (date-only) to avoid UTC drift.
+ */
+export function isWeekend(dateStr: string): boolean {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+
+/**
+ * Centralized rule: a date is INVALID for a treatment session if it is
+ * a weekend OR falls in any blocked range (holiday/professional/unit block).
+ */
+export function isInvalidSessionDate(dateStr: string, blockedRanges: BlockedRange[]): boolean {
+  if (!dateStr) return false;
+  return isWeekend(dateStr) || isDateBlocked(dateStr, blockedRanges);
+}
+
 export interface BlockedRange {
   start: string; // YYYY-MM-DD
   end: string;   // YYYY-MM-DD
@@ -75,31 +94,34 @@ export interface BlockedRange {
 /**
  * Build blocked ranges from bloqueios data for a specific professional.
  * Includes global blocks (no profissional_id) and professional-specific blocks.
+ * Accepts both camelCase (DataContext shape) and snake_case (raw DB) fields.
  */
 export function buildBlockedRanges(
-  bloqueios: Array<{
-    dataInicio: string;
-    dataFim: string;
-    profissionalId?: string;
-    unidadeId?: string;
-    diaInteiro?: boolean;
-  }>,
+  bloqueios: Array<any>,
   profissionalId: string,
   unidadeId?: string,
 ): BlockedRange[] {
-  return bloqueios
-    .filter(b => {
-      const isGlobal = (!b.profissionalId || b.profissionalId === '') && (!b.unidadeId || b.unidadeId === '');
-      const isUnit = b.unidadeId === unidadeId && (!b.profissionalId || b.profissionalId === '');
-      const isProfessional = b.profissionalId === profissionalId;
+  return (bloqueios || [])
+    .map((b) => ({
+      dataInicio: b.dataInicio || b.data_inicio || '',
+      dataFim: b.dataFim || b.data_fim || b.dataInicio || b.data_inicio || '',
+      profissionalId: b.profissionalId ?? b.profissional_id ?? '',
+      unidadeId: b.unidadeId ?? b.unidade_id ?? '',
+    }))
+    .filter((b) => {
+      if (!b.dataInicio) return false;
+      const isGlobal = !b.profissionalId && !b.unidadeId;
+      const isUnit = !!unidadeId && b.unidadeId === unidadeId && !b.profissionalId;
+      const isProfessional = !!profissionalId && b.profissionalId === profissionalId;
       return isGlobal || isUnit || isProfessional;
     })
-    .map(b => ({ start: b.dataInicio, end: b.dataFim }));
+    .map((b) => ({ start: b.dataInicio, end: b.dataFim || b.dataInicio }));
 }
 
 /**
  * Find the next valid date on or after `current` that matches one of the given
  * weekdays and is not blocked. Advances day-by-day.
+ * NOTE: Weekends (Sat/Sun) are always considered invalid for treatment sessions.
  */
 function findNextValidDate(
   current: Date,
@@ -112,7 +134,7 @@ function findNextValidDate(
   for (let i = 0; i < maxAttempts; i++) {
     const dow = d.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
       const dateStr = d.toISOString().split('T')[0];
       if (!isDateBlocked(dateStr, blockedRanges)) {
         return { date: new Date(d), skipped };
@@ -158,12 +180,14 @@ export function generateSessionDatesWithInfo(
       const d = new Date(start);
       d.setDate(d.getDate() + i * 7);
       const dateStr = d.toISOString().split('T')[0];
-      if (isDateBlocked(dateStr, blockedRanges)) {
-        // Find next valid weekday
-        const valid = findNextValidDate(d, [d.getDay() === 0 ? 7 : d.getDay()], blockedRanges);
+      if (isInvalidSessionDate(dateStr, blockedRanges)) {
+        // Find next valid weekday (Mon-Fri only)
+        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+        const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
+        const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped;
+          totalSkipped += valid.skipped + 1;
         } else {
           dates.push(dateStr); // fallback
         }
@@ -179,12 +203,13 @@ export function generateSessionDatesWithInfo(
       const d = new Date(start);
       d.setMonth(d.getMonth() + i);
       const dateStr = d.toISOString().split('T')[0];
-      if (isDateBlocked(dateStr, blockedRanges)) {
-        const dow = d.getDay() === 0 ? 7 : d.getDay();
-        const valid = findNextValidDate(d, [dow], blockedRanges);
+      if (isInvalidSessionDate(dateStr, blockedRanges)) {
+        const baseDow = d.getDay() === 0 ? 7 : d.getDay();
+        const targetDays = (baseDow >= 1 && baseDow <= 5) ? [baseDow] : [1, 2, 3, 4, 5];
+        const valid = findNextValidDate(d, targetDays, blockedRanges);
         if (valid) {
           dates.push(valid.date.toISOString().split('T')[0]);
-          totalSkipped += valid.skipped;
+          totalSkipped += valid.skipped + 1;
         } else {
           dates.push(dateStr);
         }
@@ -200,7 +225,10 @@ export function generateSessionDatesWithInfo(
     weekdays = [start.getDay() === 0 ? 1 : start.getDay()];
   }
 
-  const sortedDays = [...weekdays].sort((a, b) => a - b);
+  // Filter out weekends from requested weekdays (Sat=6, Sun=7)
+  const sortedDays = [...weekdays].filter((d) => d >= 1 && d <= 5).sort((a, b) => a - b);
+  if (sortedDays.length === 0) sortedDays.push(1, 2, 3, 4, 5);
+
   const current = new Date(start);
   let count = 0;
   const maxIterations = totalSessions * 60; // increased safety margin for skips
@@ -209,7 +237,7 @@ export function generateSessionDatesWithInfo(
   while (count < totalSessions && iter < maxIterations) {
     const dow = current.getDay();
     const mappedDow = dow === 0 ? 7 : dow;
-    if (sortedDays.includes(mappedDow)) {
+    if (dow !== 0 && dow !== 6 && sortedDays.includes(mappedDow)) {
       const dateStr = current.toISOString().split('T')[0];
       if (!isDateBlocked(dateStr, blockedRanges)) {
         dates.push(dateStr);
