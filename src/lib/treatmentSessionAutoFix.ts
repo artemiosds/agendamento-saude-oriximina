@@ -50,15 +50,17 @@ export async function autoFixInvalidTreatmentSessions(params: {
       .from('treatment_sessions')
       .select('id, cycle_id, patient_id, professional_id, scheduled_date, status, appointment_id')
       .in('status', ['agendada', 'pendente_agendamento'])
-      .not('scheduled_date', 'is', null)
-      .neq('scheduled_date', '');
+      .not('scheduled_date', 'is', null);
 
     if (params.professionalId) q = q.eq('professional_id', params.professionalId);
 
     const { data: sessions, error } = await q;
     if (error) throw error;
 
-    const sessionList = (sessions || []) as SessionRow[];
+    // Filtra fora as datas vazias/nulas no JS (evita 22007 no Postgres ao usar .neq('','') em coluna date)
+    const sessionList = ((sessions || []) as SessionRow[]).filter(
+      (s) => !!s.scheduled_date && String(s.scheduled_date).trim() !== ''
+    );
     result.scanned = sessionList.length;
     if (sessionList.length === 0) return result;
 
