@@ -41,10 +41,7 @@ const UBS_LIST = [
 
 const EQUIPAMENTOS_OPTIONS = ["Cadeira de rodas", "Andador", "Muleta", "Órtese", "Prótese", "Sonda", "Outro"];
 
-const TIPOS_LOGRADOURO = [
-  "Rua", "Avenida", "Travessa", "Alameda", "Praça", "Rodovia", "Estrada",
-  "Beco", "Largo", "Passagem", "Quadra", "Vila", "Conjunto", "Outro",
-];
+// Tipos de logradouro agora vêm da tabela DNE (logradouros_dne) via LogradouroDneAutocomplete
 
 const UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
