@@ -863,6 +863,35 @@ const Agenda: React.FC = () => {
       return;
     }
 
+    // Intercept "confirmado_chegada" — open conferência de dados modal first
+    if (newStatus === "confirmado_chegada") {
+      const profSel = profissionais.find((p) => p.id === ag.profissionalId);
+      const unidSel = unidades.find((u) => u.id === ag.unidadeId);
+      setConferenciaModal({
+        open: true,
+        pacienteId: ag.pacienteId,
+        modo: "chegada",
+        agendamentoInfo: {
+          data: ag.data,
+          hora: ag.hora,
+          tipo: ag.tipo,
+          profissionalNome: ag.profissionalNome || profSel?.nome || "",
+          profissionalEspecialidade: (profSel as any)?.especialidade || (profSel as any)?.profissao || "",
+          profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
+          unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
+        },
+        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+      });
+      return;
+    }
+
+    return executarStatusChange(agId, newStatus);
+  };
+
+  const executarStatusChange = async (agId: string, newStatus: string) => {
+    const ag = agendamentos.find((a) => a.id === agId);
+    if (!ag) return;
+
     if (newStatus === "concluido") {
       // Block concluding appointments for future dates
       const today = todayLocalStr();
