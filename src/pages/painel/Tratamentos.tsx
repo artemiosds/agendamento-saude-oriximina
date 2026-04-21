@@ -336,7 +336,7 @@ const Tratamentos: React.FC = () => {
       if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
     if (!silent) setLoading(false);
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, searchTerm]);
+  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
