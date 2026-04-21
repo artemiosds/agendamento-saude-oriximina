@@ -37,6 +37,8 @@ interface ValidationFlags {
   cns: boolean;
   cbo: boolean;
   sigtap: boolean;
+  raca: boolean;
+  nacionalidade: boolean;
 }
 
 const currentCompetencia = (): string => {
@@ -140,6 +142,8 @@ const BpaProducao: React.FC = () => {
       cns: cns.length === 15,
       cbo: cbo.length > 0,
       sigtap: sigtap.length > 0,
+      raca: !!(pac?.raca_cor && pac.raca_cor.length > 0),
+      nacionalidade: !!(pac?.nacionalidade && pac.nacionalidade.length > 0),
     };
   };
 
@@ -147,7 +151,7 @@ const BpaProducao: React.FC = () => {
     let validos = 0, pendentes = 0;
     atendimentos.forEach(a => {
       const v = validateRow(a);
-      if (v.cns && v.cbo && v.sigtap) validos++; else pendentes++;
+      if (v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade) validos++; else pendentes++;
     });
     return { total: atendimentos.length, validos, pendentes };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,6 +308,8 @@ const BpaProducao: React.FC = () => {
                     <TableHead>Paciente</TableHead>
                     <TableHead>CNS</TableHead>
                     <TableHead>CPF</TableHead>
+                    <TableHead>Raça/Cor</TableHead>
+                    <TableHead>Nacionalid.</TableHead>
                     <TableHead>Profissional</TableHead>
                     <TableHead>CBO</TableHead>
                     <TableHead>SIGTAP</TableHead>
@@ -315,7 +321,7 @@ const BpaProducao: React.FC = () => {
                     const pac = pacMap[at.paciente_id];
                     const prof = profMap[at.profissional_id];
                     const v = validateRow(at);
-                    const ok = v.cns && v.cbo && v.sigtap;
+                    const ok = v.cns && v.cbo && v.sigtap && v.raca && v.nacionalidade;
                     return (
                       <TableRow key={at.id} className={cn(!ok && "bg-destructive/5")}>
                         <TableCell>
@@ -329,6 +335,12 @@ const BpaProducao: React.FC = () => {
                           {pac?.cns || <span className="italic">faltando</span>}
                         </TableCell>
                         <TableCell className="text-xs font-mono">{pac?.cpf || '—'}</TableCell>
+                        <TableCell className={cn("text-xs capitalize", !v.raca && "text-destructive italic")}>
+                          {pac?.raca_cor || 'faltando'}
+                        </TableCell>
+                        <TableCell className={cn("text-xs capitalize", !v.nacionalidade && "text-destructive italic")}>
+                          {pac?.nacionalidade || 'faltando'}
+                        </TableCell>
                         <TableCell className="text-xs">{at.profissional_nome}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.cbo && "text-destructive")}>
                           {prof?.cbo || <span className="italic">faltando</span>}
