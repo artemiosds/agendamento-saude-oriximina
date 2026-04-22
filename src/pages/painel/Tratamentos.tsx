@@ -884,10 +884,7 @@ const Tratamentos: React.FC = () => {
 
   const handleEditRealizada = async () => {
     if (!editRealizadaTarget || !selectedCycle) return;
-    if (!editRealizadaProcedure?.trim()) {
-      toast.error("Informe o procedimento realizado.");
-      return;
-    }
+    // procedure_done is optional
     setEditRealizadaSaving(true);
     try {
       const clinicalNotesJson = JSON.stringify({
@@ -2643,42 +2640,12 @@ const Tratamentos: React.FC = () => {
                 />
               </div>
               <div>
-                <Label>Procedimento Realizado *</Label>
-                {sessionProcedimentos.length > 0 ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                        {editRealizadaProcedure || "Selecione o procedimento"}
-                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Buscar procedimento..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {sessionProcedimentos.map((proc) => (
-                              <CommandItem
-                                key={proc.id}
-                                value={proc.nome}
-                                onSelect={() => setEditRealizadaProcedure(proc.nome)}
-                              >
-                                {proc.nome}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <Input
-                    value={editRealizadaProcedure}
-                    onChange={(e) => setEditRealizadaProcedure(e.target.value)}
-                    placeholder="Nome do procedimento"
-                  />
-                )}
+                <Label>Procedimento Realizado</Label>
+                <Input
+                  value={editRealizadaProcedure}
+                  onChange={(e) => setEditRealizadaProcedure(e.target.value)}
+                  placeholder="Descreva o procedimento (opcional)"
+                />
               </div>
               <div className="space-y-3 border-t pt-3">
                 <p className="text-sm font-semibold text-foreground">Prontuário SOAP <span className="text-destructive">*</span></p>
