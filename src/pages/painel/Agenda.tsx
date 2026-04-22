@@ -288,6 +288,7 @@ const Agenda: React.FC = () => {
   const [conferenciaModal, setConferenciaModal] = useState<{
     open: boolean;
     pacienteId: string;
+    agendamentoId?: string;
     modo: "agendamento" | "chegada";
     agendamentoInfo?: {
       data: string;
@@ -298,7 +299,7 @@ const Agenda: React.FC = () => {
       profissionalCbo?: string;
       unidadeNome?: string;
     };
-    onConfirm: () => void;
+    onConfirm: () => Promise<void> | void;
   }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
   // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
