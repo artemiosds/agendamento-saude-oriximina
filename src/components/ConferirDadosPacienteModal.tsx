@@ -120,30 +120,32 @@ export function ConferirDadosPacienteModal({
   confirmLabel,
 }: ConferirDadosPacienteModalProps) {
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!open || !pacienteId) return;
-    setConfirmou(false);
-    setDirty(false);
+  const fetchPaciente = useCallback(async (id: string) => {
+    console.log("[ConferirDados] Buscando paciente ID:", id);
     setLoading(true);
-    (async () => {
-      // Carrega SEMPRE do cadastro do paciente (fonte única)
+    setLoadError(null);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
       const { data, error } = await (supabase as any)
         .from("pacientes")
         .select("*")
-        .eq("id", pacienteId)
-        .maybeSingle();
-      if (error || !data) {
-        toast.error("Paciente não encontrado.");
-        onOpenChange(false);
-        return;
-      }
+        .eq("id", id)
+        .maybeSingle()
+        .abortSignal(controller.signal);
+      clearTimeout(timeout);
+      if (error) throw error;
+      if (!data) throw new Error("Paciente não encontrado");
+      console.log("[ConferirDados] Dados carregados com sucesso");
       const cd = data.custom_data || {};
       setPaciente(data);
       setForm({
@@ -157,7 +159,6 @@ export function ConferirDadosPacienteModal({
         endereco: data.endereco || "",
         municipio: data.municipio || "",
         sexo: cd.sexo || "",
-        // racaCor é a chave canônica usada no cadastro; mantemos compat com raca_cor
         raca_cor: cd.racaCor || cd.raca_cor || "",
         etnia: cd.etnia || "",
         etnia_outra: cd.etniaOutra || "",
@@ -172,9 +173,22 @@ export function ConferirDadosPacienteModal({
         cep: cd.cep || "",
         telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
       });
+    } catch (err: any) {
+      console.error("[ConferirDados] Erro ao carregar:", err);
+      setLoadError(err?.message || "Erro ao carregar dados do paciente");
+    } finally {
       setLoading(false);
-    })();
-  }, [open, pacienteId, onOpenChange]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open || !pacienteId) return;
+    setConfirmou(false);
+    setDirty(false);
+    setPaciente(null);
+    setLoadError(null);
+    fetchPaciente(pacienteId);
+  }, [open, pacienteId, fetchPaciente]);
 
   const validacao = useMemo(() => {
     if (!paciente) return { incompleto: false, faltando: [] as string[] };
