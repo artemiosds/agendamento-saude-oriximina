@@ -970,7 +970,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           detalhes: { data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId },
         });
         invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      } else console.error("Error adding agendamento:", error);
+      } else {
+        console.error("Error adding agendamento:", error);
+        throw error;
+      }
     },
     [logAction, invalidateCache],
   );
