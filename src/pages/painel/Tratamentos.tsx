@@ -2869,7 +2869,17 @@ const Tratamentos: React.FC = () => {
                 .update({ appointment_id: agId, status: "agendada", scheduled_date: data })
                 .eq("id", agendarSessaoTarget.id);
               if (updateError) throw updateError;
-              await logAction({
+
+              // Optimistic local update — instant UI feedback
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.id === agendarSessaoTarget.id
+                    ? { ...s, status: "agendada", appointment_id: agId, scheduled_date: data }
+                    : s
+                )
+              );
+
+              logAction({
                 acao: "agendar_sessao_tratamento",
                 entidade: "treatment_session",
                 entidadeId: agendarSessaoTarget.id,
@@ -2879,6 +2889,7 @@ const Tratamentos: React.FC = () => {
               });
               toast.success(`Sessão ${agendarSessaoTarget.session_number} agendada para ${new Date(data + "T12:00:00").toLocaleDateString("pt-BR")} às ${hora}!`);
               setAgendarSessaoTarget(null);
+              // Background refresh — no blocking
               loadData(true);
             } catch (err: any) {
               console.error(err);
