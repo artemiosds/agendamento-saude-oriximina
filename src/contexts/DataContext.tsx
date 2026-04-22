@@ -887,8 +887,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      // Unit isolation
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      // Load all employees — unit filtering is done at UI level via useUnidadeFilter
       setFuncionarios((prev) =>
         upsertById(prev, {
           id: row.id,
