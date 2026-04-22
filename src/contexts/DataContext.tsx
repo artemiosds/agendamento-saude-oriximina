@@ -386,14 +386,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      let query = supabase
+      // Load ALL employees regardless of unit — needed for:
+      // - Agenda references professionals from any unit
+      // - Treatment management cross-unit visibility
+      // - Slot calculation / availability checks
+      // Unit-scoped visibility is handled at the UI level via useUnidadeFilter
+      const { data, error } = await supabase
         .from("funcionarios" as any)
         .select(
           "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
         );
-      // Unit isolation: non-global users only see employees from their unit
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-      const { data, error } = await query;
       if (data && !error) {
         setFuncionarios(
           data.map((f: any) => ({
@@ -424,7 +426,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading funcionarios:", err);
     }
-  }, [isGlobalAdmin, userUnidadeId]);
+  }, []);
 
   const loadDisponibilidades = useCallback(async () => {
     try {
@@ -784,8 +786,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      // Unit isolation: skip events from other units
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      // Pacientes are shared resources — all staff see ALL patients.
+      // Do NOT filter by unit here (loadPacientes also loads all).
       setPacientes((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -885,8 +887,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      // Unit isolation
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      // Load all employees — unit filtering is done at UI level via useUnidadeFilter
       setFuncionarios((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -1086,7 +1087,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
-      } else console.error("Error adding paciente:", error);
+      } else {
+        console.error("Error adding paciente:", error);
+        throw error;
+      }
     },
     [invalidateCache, userUnidadeId],
   );
@@ -1115,7 +1119,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Also invalidate agendamentos/fila so components using resolvePaciente re-render
         invalidateCache(queryKeys.agendamentos.all);
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating paciente:", error);
+      } else {
+        console.error("Error updating paciente:", error);
+        throw error;
+      }
     },
     [invalidateCache],
   );
