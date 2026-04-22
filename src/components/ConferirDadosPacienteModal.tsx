@@ -335,6 +335,29 @@ export function ConferirDadosPacienteModal({
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
 
+  const handleRetry = () => {
+    setReloadKey((prev) => prev + 1);
+  };
+
+  const handleConfirmClick = async () => {
+    try {
+      setConfirming(true);
+      if (modo === "chegada") {
+        console.log("Confirmando chegada...");
+      }
+      if (dirty) await handleSave();
+      await Promise.resolve(onConfirm());
+      console.log(modo === "chegada" ? "Chegada confirmada com sucesso" : "Dados confirmados com sucesso");
+      toast.success(modo === "chegada" ? "Chegada confirmada com sucesso!" : "Dados conferidos!");
+      onOpenChange(false);
+    } catch (e: any) {
+      console.error(modo === "chegada" ? "Erro ao confirmar chegada:" : "Erro ao confirmar:", e);
+      toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -349,6 +372,21 @@ export function ConferirDadosPacienteModal({
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-10 text-sm text-muted-foreground">
             Carregando dados do paciente…
+          </div>
+        ) : loadError ? (
+          <div className="flex-1 px-4 sm:px-6 py-6 overflow-y-auto">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Erro ao carregar dados</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{loadError}</p>
+                <div>
+                  <Button type="button" variant="outline" onClick={handleRetry}>
+                    Tentar novamente
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           </div>
         ) : (
           <div
@@ -517,20 +555,13 @@ export function ConferirDadosPacienteModal({
               Cancelar
             </Button>
             <Button
-              onClick={async () => {
-                try {
-                  if (dirty) await handleSave();
-                  await Promise.resolve(onConfirm());
-                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos!");
-                  onOpenChange(false);
-                } catch (e: any) {
-                  toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
-                }
-              }}
-              disabled={!confirmou || loading || saving}
+              onClick={handleConfirmClick}
+              disabled={!confirmou || loading || saving || confirming || !!loadError}
               className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
             >
-              {confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
+              {confirming
+                ? "Confirmando…"
+                : confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
             </Button>
           </div>
         </DialogFooter>
