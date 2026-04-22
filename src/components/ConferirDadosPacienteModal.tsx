@@ -265,13 +265,10 @@ export function ConferirDadosPacienteModal({
     }
   };
 
-  // ───────── Componentes inline ─────────
-  const FieldText = ({
-    label, name, type = "text", placeholder, inputMode,
-  }: {
-    label: string; name: string; type?: string;
-    placeholder?: string; inputMode?: "text" | "tel" | "email" | "numeric";
-  }) => (
+  const renderFieldText = useCallback((
+    label: string, name: string, type = "text", placeholder?: string,
+    inputMode?: "text" | "tel" | "email" | "numeric",
+  ) => (
     <div className="space-y-1.5">
       <Label htmlFor={`fld-${name}`} className="text-xs text-muted-foreground">{label}</Label>
       <Input
@@ -284,14 +281,12 @@ export function ConferirDadosPacienteModal({
         className="h-11 sm:h-10 text-base sm:text-sm"
       />
     </div>
-  );
+  ), [form, updateField]);
 
-  const FieldSelect = ({
-    label, name, options, placeholder = "Selecione",
-  }: {
-    label: string; name: string;
-    options: { value: string; label: string }[]; placeholder?: string;
-  }) => (
+  const renderFieldSelect = useCallback((
+    label: string, name: string,
+    options: { value: string; label: string }[], placeholder = "Selecione",
+  ) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Select value={form[name] || ""} onValueChange={(v) => updateField(name, v)}>
@@ -305,14 +300,7 @@ export function ConferirDadosPacienteModal({
         </SelectContent>
       </Select>
     </div>
-  );
-
-  const SectionTitle = ({ icon: Icon, children }: { icon: any; children: React.ReactNode }) => (
-    <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
-      <Icon className="w-4 h-4 text-primary" />
-      {children}
-    </div>
-  );
+  ), [form, updateField]);
 
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
@@ -375,7 +363,9 @@ export function ConferirDadosPacienteModal({
               {modo === "chegada" && agendamento && (
                 <div className="grid sm:grid-cols-2 gap-4 p-4 rounded-lg bg-muted/30 border">
                   <div>
-                    <SectionTitle icon={Calendar}>Agendamento</SectionTitle>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                      <Calendar className="w-4 h-4 text-primary" />Agendamento
+                    </div>
                     <div className="space-y-1 text-sm">
                       <div><span className="text-muted-foreground">Data:</span> <strong>{agendamento.data}</strong></div>
                       <div><span className="text-muted-foreground">Hora:</span> <strong>{agendamento.hora}</strong></div>
@@ -383,7 +373,9 @@ export function ConferirDadosPacienteModal({
                     </div>
                   </div>
                   <div>
-                    <SectionTitle icon={Stethoscope}>Profissional</SectionTitle>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                      <Stethoscope className="w-4 h-4 text-primary" />Profissional
+                    </div>
                     <div className="space-y-1 text-sm">
                       <div><strong>{agendamento.profissionalNome}</strong></div>
                       {agendamento.profissionalEspecialidade && (
@@ -402,38 +394,38 @@ export function ConferirDadosPacienteModal({
 
               {/* Identificação */}
               <div>
-                <SectionTitle icon={User}>Identificação</SectionTitle>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <User className="w-4 h-4 text-primary" />Identificação
+                </div>
                 <div className="grid sm:grid-cols-2 gap-3">
-                  <FieldText label="Nome completo" name="nome" />
-                  <FieldText label="Nome da mãe" name="nome_mae" />
-                  <FieldText label="Data de nascimento" name="data_nascimento" type="date" />
-                  <FieldSelect label="Sexo" name="sexo" options={SEXO_OPTIONS} />
-                  <FieldText label="CPF" name="cpf" inputMode="numeric" placeholder="000.000.000-00" />
-                  <FieldText label="CNS" name="cns" inputMode="numeric" placeholder="000 0000 0000 0000" />
+                  {renderFieldText("Nome completo", "nome")}
+                  {renderFieldText("Nome da mãe", "nome_mae")}
+                  {renderFieldText("Data de nascimento", "data_nascimento", "date")}
+                  {renderFieldSelect("Sexo", "sexo", SEXO_OPTIONS)}
+                  {renderFieldText("CPF", "cpf", "text", "000.000.000-00", "numeric")}
+                  {renderFieldText("CNS", "cns", "text", "000 0000 0000 0000", "numeric")}
                 </div>
               </div>
 
               {/* Sociais (padrão SUS / IBGE) */}
               <div>
-                <SectionTitle icon={Globe}>Dados Sociais (SUS/IBGE)</SectionTitle>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <Globe className="w-4 h-4 text-primary" />Dados Sociais (SUS/IBGE)
+                </div>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <FieldSelect label="Nacionalidade" name="nacionalidade" options={NACIONALIDADE_OPTIONS} />
-                  <FieldSelect label="Raça/Cor (IBGE)" name="raca_cor" options={RACA_COR_OPTIONS} />
-                  {isIndigena && (
-                    <FieldSelect label="Etnia (povo indígena)" name="etnia" options={ETNIA_OPTIONS} />
-                  )}
-                  {isIndigena && form.etnia === "X999" && (
-                    <FieldText label="Especificar etnia" name="etnia_outra" />
-                  )}
-                  {isEstrangeiro && (
-                    <FieldText label="País de nascimento" name="pais_nascimento" placeholder="Ex: VENEZUELA" />
-                  )}
+                  {renderFieldSelect("Nacionalidade", "nacionalidade", NACIONALIDADE_OPTIONS)}
+                  {renderFieldSelect("Raça/Cor (IBGE)", "raca_cor", RACA_COR_OPTIONS)}
+                  {isIndigena && renderFieldSelect("Etnia (povo indígena)", "etnia", ETNIA_OPTIONS)}
+                  {isIndigena && form.etnia === "X999" && renderFieldText("Especificar etnia", "etnia_outra")}
+                  {isEstrangeiro && renderFieldText("País de nascimento", "pais_nascimento", "text", "Ex: VENEZUELA")}
                 </div>
               </div>
 
               {/* Endereço */}
               <div>
-                <SectionTitle icon={MapPin}>Endereço</SectionTitle>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <MapPin className="w-4 h-4 text-primary" />Endereço
+                </div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   {/* Tipo de Logradouro: SELECT DNE oficial (código + descrição) */}
                   <div className="space-y-1.5 sm:col-span-2">
@@ -451,31 +443,25 @@ export function ConferirDadosPacienteModal({
                       }}
                     />
                   </div>
-                  <FieldText label="Logradouro" name="endereco" />
-                  <FieldText label="Número" name="numero" inputMode="numeric" />
-                  <FieldText label="Complemento" name="complemento" />
-                  <FieldText label="Bairro" name="bairro" />
-                  <FieldSelect
-                    label="Município"
-                    name="municipio"
-                    options={MUNICIPIOS.map((m) => ({ value: m, label: m }))}
-                  />
-                  <FieldSelect
-                    label="UF"
-                    name="uf"
-                    options={UFS.map((u) => ({ value: u, label: u }))}
-                  />
-                  <FieldText label="CEP" name="cep" inputMode="numeric" placeholder="00000-000" />
+                  {renderFieldText("Logradouro", "endereco")}
+                  {renderFieldText("Número", "numero", "text", undefined, "numeric")}
+                  {renderFieldText("Complemento", "complemento")}
+                  {renderFieldText("Bairro", "bairro")}
+                  {renderFieldSelect("Município", "municipio", MUNICIPIOS.map((m) => ({ value: m, label: m })))}
+                  {renderFieldSelect("UF", "uf", UFS.map((u) => ({ value: u, label: u })))}
+                  {renderFieldText("CEP", "cep", "text", "00000-000", "numeric")}
                 </div>
               </div>
 
               {/* Contato */}
               <div>
-                <SectionTitle icon={Phone}>Contato</SectionTitle>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <Phone className="w-4 h-4 text-primary" />Contato
+                </div>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  <FieldText label="Telefone principal" name="telefone" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
-                  <FieldText label="Telefone secundário" name="telefone_secundario" type="tel" inputMode="tel" placeholder="(00) 00000-0000" />
-                  <FieldText label="E-mail" name="email" type="email" inputMode="email" placeholder="email@exemplo.com" />
+                  {renderFieldText("Telefone principal", "telefone", "tel", "(00) 00000-0000", "tel")}
+                  {renderFieldText("Telefone secundário", "telefone_secundario", "tel", "(00) 00000-0000", "tel")}
+                  {renderFieldText("E-mail", "email", "email", "email@exemplo.com", "email")}
                 </div>
               </div>
 
