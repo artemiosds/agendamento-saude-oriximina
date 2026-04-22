@@ -3135,7 +3135,7 @@ const ProntuarioPage: React.FC = () => {
 
       {/* Drawer de visualização rápida do prontuário */}
       <Sheet open={!!viewerProntuario} onOpenChange={(open) => !open && setViewerProntuario(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
           {viewerProntuario && (
             <>
               <SheetHeader>
