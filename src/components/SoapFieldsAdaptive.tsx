@@ -297,18 +297,18 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
                 )}
 
                 <DebouncedTextarea
-                  rows={isMedicoMode ? 3 : 2}
+                  rows={isMedicoMode ? 5 : 4}
                   value={values[field.key]}
                   onChange={(e) => {
                     onClearErrors();
                     onChange(field.key, e.target.value);
                   }}
                   placeholder={showDropdown ? 'Complemento livre (opcional)...' : field.placeholder}
-                  className={
+                  className={`min-h-[120px] ${
                     soapErrors && soapEnabled && !values[field.key]?.trim()
                       ? 'border-destructive border-2'
                       : ''
-                  }
+                  }`}
                 />
                 {soapErrors && soapEnabled && !values[field.key]?.trim() && !isMedicoMode && (
                   <span className="text-xs text-destructive">Campo obrigatório</span>
