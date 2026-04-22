@@ -2478,21 +2478,34 @@ const Tratamentos: React.FC = () => {
                 <div>
                   <Label>Procedimento Realizado *</Label>
                   {sessionProcedimentos.length > 0 ? (
-                    <Select
-                      value={newSession.procedure_done}
-                      onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o procedimento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sessionProcedimentos.map((proc) => (
-                          <SelectItem key={proc.id} value={proc.nome}>
-                            {proc.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                          {newSession.procedure_done || "Selecione o procedimento"}
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Buscar procedimento..." />
+                          <CommandList>
+                            <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              {sessionProcedimentos.map((proc) => (
+                                <CommandItem
+                                  key={proc.id}
+                                  value={proc.nome}
+                                  onSelect={() => setNewSession((p) => ({ ...p, procedure_done: proc.nome }))}
+                                >
+                                  {proc.nome}
+                                  {proc.codigo_sigtap && <span className="ml-2 text-xs text-muted-foreground">({proc.codigo_sigtap})</span>}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   ) : (
                     <Input
                       value={newSession.procedure_done}
