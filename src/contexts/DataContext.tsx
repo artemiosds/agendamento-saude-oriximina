@@ -460,20 +460,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadPacientes = useCallback(async () => {
     try {
       // ALL staff see ALL patients regardless of unit — critical for cross-unit workflows
-      const INITIAL_LIMIT = 1000;
-      const query = supabase
-        .from("pacientes" as any)
-        .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
-        )
-        .order("criado_em", { ascending: false })
-        .limit(INITIAL_LIMIT);
-      const { data, error } = await query;
-      if (error) {
-        console.error("Error loading pacientes:", error);
-        return;
+      // Recursive pagination to handle >1000 patients
+      const PAGE = 1000;
+      const columns =
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id";
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("pacientes" as any)
+          .select(columns)
+          .order("criado_em", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (error) {
+          console.error("Error loading pacientes:", error);
+          break;
+        }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      const allData = data || [];
       setPacientes(
         allData.map((p: any) => ({
           id: p.id,
