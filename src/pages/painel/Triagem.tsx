@@ -108,7 +108,7 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
 
 const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
   const [customData, setCustomData] = useState<Record<string, any>>({});
@@ -252,27 +252,44 @@ const Triagem: React.FC = () => {
     const termo = busca.trim().toLowerCase();
 
     return fila
-      .filter((item) => (user?.usuario === 'admin.sms' || item.unidadeId === user?.unidadeId) && STATUS_TRIAGEM_FILA.includes(item.status))
+      .filter((item) => (isGlobalAdmin || !user?.unidadeId || item.unidadeId === user?.unidadeId) && STATUS_TRIAGEM_FILA.includes(item.status))
       .map((item) => {
         const agendamentoRelacionado =
-          agendamentos.find((ag) => ag.id === item.id);
+          agendamentos.find((ag) => ag.id === item.id)
+          ?? agendamentos.find(
+            (ag) =>
+              ag.pacienteId === item.pacienteId &&
+              ag.unidadeId === item.unidadeId &&
+              STATUS_AGENDAMENTO_TRIAGEM.includes(ag.status),
+          );
 
-        if (!agendamentoRelacionado) return null;
+        const profissionalId = agendamentoRelacionado?.profissionalId || item.profissionalId || "";
 
-        // Exclude patients whose professional has triage disabled
-        if (profTriageDisabled.has(agendamentoRelacionado.profissionalId)) return null;
+        if (profissionalId && profTriageDisabled.has(profissionalId)) return null;
 
         return {
-          ...agendamentoRelacionado,
+          id: agendamentoRelacionado?.id || item.id,
           filaId: item.id,
           filaStatus: item.status,
           filaCriadoEm: item.criadoEm,
+          pacienteId: item.pacienteId,
+          pacienteNome: agendamentoRelacionado?.pacienteNome || item.pacienteNome,
+          unidadeId: item.unidadeId,
+          profissionalId,
+          profissionalNome: agendamentoRelacionado?.profissionalNome || "—",
+          data: agendamentoRelacionado?.data || "",
+          hora: agendamentoRelacionado?.hora || item.horaChegada || "",
+          status: agendamentoRelacionado?.status || item.status,
+          tipo: agendamentoRelacionado?.tipo || "Triagem",
+          cid: item.cid,
+          descricaoClinica: item.descricaoClinica,
+          observacoes: agendamentoRelacionado?.observacoes || item.observacoes || "",
         } as Agendamento;
       })
       .filter((item): item is Agendamento => Boolean(item))
       .filter((item) => !termo || item.pacienteNome.toLowerCase().includes(termo))
-      .sort((a, b) => a.hora.localeCompare(b.hora));
-  }, [agendamentos, fila, user?.unidadeId, busca, profTriageDisabled]);
+      .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+  }, [agendamentos, fila, isGlobalAdmin, user?.unidadeId, busca, profTriageDisabled]);
 
   const imc = useMemo(() => {
     const peso = parseFloat(form.peso);
