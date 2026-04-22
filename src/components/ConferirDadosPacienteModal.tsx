@@ -19,6 +19,7 @@ export interface ConferirDadosPacienteModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pacienteId: string;
+  agendamentoId?: string;
   /** Se fornecido, exibe os blocos de Agendamento + Profissional (modo Confirmar Chegada). */
   agendamento?: {
     data: string;
@@ -31,7 +32,7 @@ export interface ConferirDadosPacienteModalProps {
   };
   modo: "agendamento" | "chegada";
   /** Chamado após o usuário confirmar (com checkbox marcado). */
-  onConfirm: () => void;
+  onConfirm: () => Promise<void> | void;
   confirmLabel?: string;
 }
 
@@ -114,6 +115,7 @@ export function ConferirDadosPacienteModal({
   open,
   onOpenChange,
   pacienteId,
+  agendamentoId,
   agendamento,
   modo,
   onConfirm,
@@ -121,60 +123,88 @@ export function ConferirDadosPacienteModal({
 }: ConferirDadosPacienteModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open || !pacienteId) return;
+
+    let cancelled = false;
     setConfirmou(false);
     setDirty(false);
+    setLoadError(null);
     setLoading(true);
+
+    console.log(`Abrindo Conferir Dados do Paciente para agendamento ID: ${agendamentoId || "novo"}`);
+    console.log(`Buscando dados do paciente ID: ${pacienteId}`);
+
     (async () => {
-      // Carrega SEMPRE do cadastro do paciente (fonte única)
-      const { data, error } = await (supabase as any)
-        .from("pacientes")
-        .select("*")
-        .eq("id", pacienteId)
-        .maybeSingle();
-      if (error || !data) {
-        toast.error("Paciente não encontrado.");
-        onOpenChange(false);
-        return;
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error("Tempo limite excedido ao carregar os dados do paciente.")), 10000);
+        });
+
+        const queryPromise = (supabase as any)
+          .from("pacientes")
+          .select("*")
+          .eq("id", pacienteId)
+          .maybeSingle();
+
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+        if (error) throw error;
+        if (!data) throw new Error("Paciente não encontrado.");
+        if (cancelled) return;
+
+        const cd = data.custom_data || {};
+        setPaciente(data);
+        setForm({
+          nome: data.nome || "",
+          nome_mae: data.nome_mae || "",
+          data_nascimento: data.data_nascimento || "",
+          cpf: data.cpf || "",
+          cns: data.cns || "",
+          telefone: data.telefone || "",
+          email: data.email || "",
+          endereco: data.endereco || "",
+          municipio: data.municipio || "",
+          sexo: cd.sexo || "",
+          raca_cor: cd.racaCor || cd.raca_cor || "",
+          etnia: cd.etnia || "",
+          etnia_outra: cd.etniaOutra || "",
+          nacionalidade: cd.nacionalidade || "brasileiro",
+          pais_nascimento: cd.paisNascimento || "",
+          tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || "",
+          tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
+          numero: cd.numero || "",
+          complemento: cd.complemento || "",
+          bairro: cd.bairro || "",
+          uf: cd.uf || "PA",
+          cep: cd.cep || "",
+          telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
+        });
+        console.log("Dados carregados com sucesso");
+      } catch (e: any) {
+        if (cancelled) return;
+        const message = e?.message || "Não foi possível carregar os dados do paciente.";
+        console.error("Erro ao carregar:", e);
+        setLoadError(message);
+        toast.error(message);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      const cd = data.custom_data || {};
-      setPaciente(data);
-      setForm({
-        nome: data.nome || "",
-        nome_mae: data.nome_mae || "",
-        data_nascimento: data.data_nascimento || "",
-        cpf: data.cpf || "",
-        cns: data.cns || "",
-        telefone: data.telefone || "",
-        email: data.email || "",
-        endereco: data.endereco || "",
-        municipio: data.municipio || "",
-        sexo: cd.sexo || "",
-        // racaCor é a chave canônica usada no cadastro; mantemos compat com raca_cor
-        raca_cor: cd.racaCor || cd.raca_cor || "",
-        etnia: cd.etnia || "",
-        etnia_outra: cd.etniaOutra || "",
-        nacionalidade: cd.nacionalidade || "brasileiro",
-        pais_nascimento: cd.paisNascimento || "",
-        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || "",
-        tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
-        numero: cd.numero || "",
-        complemento: cd.complemento || "",
-        bairro: cd.bairro || "",
-        uf: cd.uf || "PA",
-        cep: cd.cep || "",
-        telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
-      });
-      setLoading(false);
     })();
-  }, [open, pacienteId, onOpenChange]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, pacienteId, agendamentoId, reloadKey]);
 
   const validacao = useMemo(() => {
     if (!paciente) return { incompleto: false, faltando: [] as string[] };
@@ -244,8 +274,10 @@ export function ConferirDadosPacienteModal({
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
       toast.success("Dados atualizados!");
+      return;
     } catch (e: any) {
       toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      throw e;
     } finally {
       setSaving(false);
     }
@@ -303,6 +335,29 @@ export function ConferirDadosPacienteModal({
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
 
+  const handleRetry = () => {
+    setReloadKey((prev) => prev + 1);
+  };
+
+  const handleConfirmClick = async () => {
+    try {
+      setConfirming(true);
+      if (modo === "chegada") {
+        console.log("Confirmando chegada...");
+      }
+      if (dirty) await handleSave();
+      await Promise.resolve(onConfirm());
+      console.log(modo === "chegada" ? "Chegada confirmada com sucesso" : "Dados confirmados com sucesso");
+      toast.success(modo === "chegada" ? "Chegada confirmada com sucesso!" : "Dados conferidos!");
+      onOpenChange(false);
+    } catch (e: any) {
+      console.error(modo === "chegada" ? "Erro ao confirmar chegada:" : "Erro ao confirmar:", e);
+      toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -317,6 +372,21 @@ export function ConferirDadosPacienteModal({
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-10 text-sm text-muted-foreground">
             Carregando dados do paciente…
+          </div>
+        ) : loadError ? (
+          <div className="flex-1 px-4 sm:px-6 py-6 overflow-y-auto">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Erro ao carregar dados</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{loadError}</p>
+                <div>
+                  <Button type="button" variant="outline" onClick={handleRetry}>
+                    Tentar novamente
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           </div>
         ) : (
           <div
@@ -485,20 +555,13 @@ export function ConferirDadosPacienteModal({
               Cancelar
             </Button>
             <Button
-              onClick={async () => {
-                try {
-                  if (dirty) await handleSave();
-                  await Promise.resolve(onConfirm());
-                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos!");
-                  onOpenChange(false);
-                } catch (e: any) {
-                  toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
-                }
-              }}
-              disabled={!confirmou || loading || saving}
+              onClick={handleConfirmClick}
+              disabled={!confirmou || loading || saving || confirming || !!loadError}
               className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
             >
-              {confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
+              {confirming
+                ? "Confirmando…"
+                : confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
             </Button>
           </div>
         </DialogFooter>

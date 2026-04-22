@@ -288,6 +288,7 @@ const Agenda: React.FC = () => {
   const [conferenciaModal, setConferenciaModal] = useState<{
     open: boolean;
     pacienteId: string;
+    agendamentoId?: string;
     modo: "agendamento" | "chegada";
     agendamentoInfo?: {
       data: string;
@@ -298,7 +299,7 @@ const Agenda: React.FC = () => {
       profissionalCbo?: string;
       unidadeNome?: string;
     };
-    onConfirm: () => void;
+    onConfirm: () => Promise<void> | void;
   }>({ open: false, pacienteId: "", modo: "agendamento", onConfirm: () => {} });
 
   // Pacientes já conferidos durante a sessão atual do diálogo de Novo Agendamento
@@ -315,11 +316,12 @@ const Agenda: React.FC = () => {
     setNewAg((p) => ({ ...p, pacienteId }));
     // Se já foi conferido nesta sessão, não reabre o modal
     if (pacientesConferidos.has(pacienteId)) return;
+    console.log(`Abrindo Conferir Dados do Paciente para agendamento ID: novo`);
     setConferenciaModal({
       open: true,
       pacienteId,
       modo: "agendamento",
-      onConfirm: () => {
+      onConfirm: async () => {
         setPacientesConferidos((prev) => {
           const next = new Set(prev);
           next.add(pacienteId);
@@ -640,13 +642,13 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => {
+        onConfirm: async () => {
           setPacientesConferidos((prev) => {
             const next = new Set(prev);
             next.add(newAg.pacienteId);
             return next;
           });
-          void executarCreate();
+          await executarCreate();
         },
       });
       return;
@@ -655,152 +657,156 @@ const Agenda: React.FC = () => {
   };
 
   const executarCreate = async () => {
-    let pac = pacientes.find((p) => p.id === newAg.pacienteId);
-    const prof = profissionais.find((p) => p.id === newAg.profissionalId);
-
-    if (!pac && newAg.pacienteId) {
-      const { data, error } = await (supabase as any)
-        .from("pacientes")
-        .select("id, nome, telefone, email")
-        .eq("id", newAg.pacienteId)
-        .maybeSingle();
-
-      if (error || !data) {
-        toast.error("Paciente selecionado não foi encontrado no banco.");
-        return;
-      }
-
-      pac = {
-        id: data.id,
-        nome: data.nome,
-        telefone: data.telefone || "",
-        email: data.email || "",
-      } as typeof pac;
-    }
-
-    if (!pac || !prof || !newAg.hora) return;
-    if (selectedDate < todayLocalStr()) {
-      if (!isMaster) {
-        toast.error("Não é possível agendar em data passada.");
-        return;
-      }
-      const confirmouPassado = window.confirm(
-        "⚠️ Atenção: Você está agendando em DATA PASSADA como MASTER. Deseja continuar com o registro retroativo?",
-      );
-      if (!confirmouPassado) return;
-    }
-    if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
-      if (user?.role === "recepcao") {
-        toast.error("Não é possível agendar em fim de semana sem disponibilidade cadastrada.");
-        return;
-      }
-      if (user && ["master", "coordenador"].includes(user.role)) {
-        const confirmou = window.confirm(
-          "Este dia é fim de semana sem disponibilidade cadastrada. Deseja criar um encaixe mesmo assim?",
-        );
-        if (!confirmou) return;
-      }
-    }
-
-    // Server-side slot availability check
-    const canOverride = user && ["master", "coordenador"].includes(user.role);
     try {
-      const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
-        p_profissional_id: newAg.profissionalId,
-        p_unidade_id: prof.unidadeId,
-        p_data: selectedDate,
-        p_hora: newAg.hora,
-      });
-      if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
-        const reason = (slotCheck as any).reason;
-        const reasonMsg =
-          reason === "date_blocked" ? "Data bloqueada." :
-          reason === "day_full" ? "Vagas do dia esgotadas." :
-          reason === "hour_full" ? "Vagas deste horário esgotadas." :
-          reason === "no_availability" ? "Sem disponibilidade cadastrada." :
-          "Sem disponibilidade.";
-        if (!canOverride) {
-          toast.error(`Não é possível agendar: ${reasonMsg}`);
+      let pac = pacientes.find((p) => p.id === newAg.pacienteId);
+      const prof = profissionais.find((p) => p.id === newAg.profissionalId);
+
+      if (!pac && newAg.pacienteId) {
+        console.log(`Buscando dados do paciente ID: ${newAg.pacienteId}`);
+        const { data, error } = await (supabase as any)
+          .from("pacientes")
+          .select("id, nome, telefone, email")
+          .eq("id", newAg.pacienteId)
+          .maybeSingle();
+
+        if (error || !data) {
+          throw new Error("Paciente selecionado não foi encontrado no banco.");
+        }
+
+        pac = {
+          id: data.id,
+          nome: data.nome,
+          telefone: data.telefone || "",
+          email: data.email || "",
+        } as typeof pac;
+      }
+
+      if (!pac || !prof || !newAg.hora) return;
+      if (selectedDate < todayLocalStr()) {
+        if (!isMaster) {
+          toast.error("Não é possível agendar em data passada.");
           return;
         }
-        const confirmou = window.confirm(
-          `${reasonMsg} Deseja forçar um encaixe como ${user?.role}?`,
+        const confirmouPassado = window.confirm(
+          "⚠️ Atenção: Você está agendando em DATA PASSADA como MASTER. Deseja continuar com o registro retroativo?",
         );
-        if (!confirmou) return;
+        if (!confirmouPassado) return;
       }
-    } catch {
-      // If RPC fails, allow creation (fallback)
-    }
+      if (weekendInfo.isWeekend && !weekendInfo.hasAvailability) {
+        if (user?.role === "recepcao") {
+          toast.error("Não é possível agendar em fim de semana sem disponibilidade cadastrada.");
+          return;
+        }
+        if (user && ["master", "coordenador"].includes(user.role)) {
+          const confirmou = window.confirm(
+            "Este dia é fim de semana sem disponibilidade cadastrada. Deseja criar um encaixe mesmo assim?",
+          );
+          if (!confirmou) return;
+        }
+      }
 
-    const unidade = unidades.find((u) => u.id === prof.unidadeId);
-    const agId = `ag${Date.now()}`;
-    const agData = {
-      id: agId,
-      pacienteId: pac.id,
-      pacienteNome: pac.nome,
-      unidadeId: prof.unidadeId,
-      salaId: newAg.salaId,
-      setorId: "",
-      profissionalId: prof.id,
-      profissionalNome: prof.nome,
-      data: selectedDate,
-      hora: newAg.hora,
-      status: "confirmado" as const,
-      tipo: newAg.tipo,
-      observacoes: newAg.obs,
-      origem: "recepcao" as const,
-      criadoEm: new Date().toISOString(),
-      criadoPor: "current",
-    };
-    addAgendamento(agData);
-    // Close dialog immediately (optimistic)
-    setDialogOpen(false);
-    setNewAg({
-      pacienteId: "",
-      profissionalId: filterProf !== "all" ? filterProf : "",
-      salaId: "",
-      hora: "",
-      tipo: "Consulta",
-      obs: "",
-    });
-    toast.success("Agendamento criado!");
+      const canOverride = user && ["master", "coordenador"].includes(user.role);
+      try {
+        const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
+          p_profissional_id: newAg.profissionalId,
+          p_unidade_id: prof.unidadeId,
+          p_data: selectedDate,
+          p_hora: newAg.hora,
+        });
+        if (slotCheck && typeof slotCheck === "object" && "available" in slotCheck && !slotCheck.available) {
+          const reason = (slotCheck as any).reason;
+          const reasonMsg =
+            reason === "date_blocked" ? "Data bloqueada." :
+            reason === "day_full" ? "Vagas do dia esgotadas." :
+            reason === "hour_full" ? "Vagas deste horário esgotadas." :
+            reason === "no_availability" ? "Sem disponibilidade cadastrada." :
+            "Sem disponibilidade.";
+          if (!canOverride) {
+            toast.error(`Não é possível agendar: ${reasonMsg}`);
+            return;
+          }
+          const confirmou = window.confirm(
+            `${reasonMsg} Deseja forçar um encaixe como ${user?.role}?`,
+          );
+          if (!confirmou) return;
+        }
+      } catch {
+        // If RPC fails, allow creation (fallback)
+      }
 
-    // Background tasks (portal, gcal, notification)
-    ensurePortalAccess({
-      pacienteId: pac.id,
-      contexto: "agendamento",
-      data: selectedDate,
-      hora: newAg.hora,
-      unidade: unidade?.nome || "",
-      profissional: prof.nome,
-      tipo: newAg.tipo,
-    })
-      .then((result) => {
-        if (result.created)
-          toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
+      const unidade = unidades.find((u) => u.id === prof.unidadeId);
+      const agId = `ag${Date.now()}`;
+      const agData = {
+        id: agId,
+        pacienteId: pac.id,
+        pacienteNome: pac.nome,
+        unidadeId: prof.unidadeId,
+        salaId: newAg.salaId,
+        setorId: "",
+        profissionalId: prof.id,
+        profissionalNome: prof.nome,
+        data: selectedDate,
+        hora: newAg.hora,
+        status: "confirmado" as const,
+        tipo: newAg.tipo,
+        observacoes: newAg.obs,
+        origem: "recepcao" as const,
+        criadoEm: new Date().toISOString(),
+        criadoPor: "current",
+      };
+      await addAgendamento(agData);
+      setDialogOpen(false);
+      setNewAg({
+        pacienteId: "",
+        profissionalId: filterProf !== "all" ? filterProf : "",
+        salaId: "",
+        hora: "",
+        tipo: "Consulta",
+        obs: "",
+      });
+      toast.success("Agendamento criado!");
+
+      ensurePortalAccess({
+        pacienteId: pac.id,
+        contexto: "agendamento",
+        data: selectedDate,
+        hora: newAg.hora,
+        unidade: unidade?.nome || "",
+        profissional: prof.nome,
+        tipo: newAg.tipo,
       })
-      .catch(() => {});
-    syncToGoogleCalendar({ ...agData, pacienteId: pac.id }).then((googleEventId) => {
-      if (googleEventId) {
-        updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
-      }
-    });
-    notify({
-      evento: "novo_agendamento",
-      paciente_nome: pac.nome,
-      telefone: pac.telefone,
-      email: pac.email,
-      data_consulta: selectedDate,
-      hora_consulta: newAg.hora,
-      unidade: unidade?.nome || "",
-      profissional: prof.nome,
-      tipo_atendimento: newAg.tipo,
-      status_agendamento: "confirmado",
-      id_agendamento: agId,
-      observacoes: newAg.obs,
-    });
-    // WhatsApp: confirmação de agendamento
-    whatsappService.sendByAgendamento(agId, "confirmacao").catch(() => {});
+        .then((result) => {
+          if (result.created)
+            toast.info(`Acesso ao portal criado para ${pac.nome}. ${result.emailSent ? "E-mail enviado." : ""}`);
+        })
+        .catch(() => {});
+      syncToGoogleCalendar({ ...agData, pacienteId: pac.id })
+        .then(async (googleEventId) => {
+          if (googleEventId) {
+            await updateAgendamento(agId, { googleEventId, syncStatus: "ok" });
+          }
+        })
+        .catch(() => {});
+      notify({
+        evento: "novo_agendamento",
+        paciente_nome: pac.nome,
+        telefone: pac.telefone,
+        email: pac.email,
+        data_consulta: selectedDate,
+        hora_consulta: newAg.hora,
+        unidade: unidade?.nome || "",
+        profissional: prof.nome,
+        tipo_atendimento: newAg.tipo,
+        status_agendamento: "confirmado",
+        id_agendamento: agId,
+        observacoes: newAg.obs,
+      });
+      whatsappService.sendByAgendamento(agId, "confirmacao").catch(() => {});
+    } catch (err: any) {
+      console.error("Erro ao criar agendamento:", err);
+      toast.error(err?.message || "Erro ao criar agendamento.");
+      throw err;
+    }
   };
 
   // NOVO: aprovar agendamento online
@@ -914,9 +920,11 @@ const Agenda: React.FC = () => {
     if (newStatus === "confirmado_chegada") {
       const profSel = profissionais.find((p) => p.id === ag.profissionalId);
       const unidSel = unidades.find((u) => u.id === ag.unidadeId);
+      console.log(`Abrindo Conferir Dados do Paciente para agendamento ID: ${agId}`);
       setConferenciaModal({
         open: true,
         pacienteId: ag.pacienteId,
+        agendamentoId: agId,
         modo: "chegada",
         agendamentoInfo: {
           data: ag.data,
@@ -927,7 +935,9 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+        onConfirm: async () => {
+          await executarStatusChange(agId, newStatus);
+        },
       });
       return;
     }
@@ -2908,6 +2918,7 @@ const Agenda: React.FC = () => {
         open={conferenciaModal.open}
         onOpenChange={(o) => setConferenciaModal((p) => ({ ...p, open: o }))}
         pacienteId={conferenciaModal.pacienteId}
+        agendamentoId={conferenciaModal.agendamentoId}
         modo={conferenciaModal.modo}
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}

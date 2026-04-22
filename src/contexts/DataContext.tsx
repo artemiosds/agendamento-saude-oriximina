@@ -976,7 +976,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           detalhes: { data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId },
         });
         invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      } else console.error("Error adding agendamento:", error);
+      } else {
+        console.error("Error adding agendamento:", error);
+        throw error;
+      }
     },
     [logAction, invalidateCache],
   );
@@ -1015,6 +1018,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.error("Error updating agendamento:", error);
         toast.error("Erro ao atualizar agendamento");
+        throw error;
       }
     },
     [logAction, invalidateCache],
@@ -1148,7 +1152,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           detalhes: { prioridade: f.prioridade, origemCadastro: f.origemCadastro },
         });
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error adding to fila:", error);
+      } else {
+        console.error("Error adding to fila:", error);
+        throw error;
+      }
     },
     [logAction, invalidateCache],
   );
@@ -1184,7 +1191,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           detalhes: data as Record<string, unknown>,
         });
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating fila:", error);
+      } else {
+        console.error("Error updating fila:", error);
+        throw error;
+      }
     },
     [logAction, invalidateCache],
   );
