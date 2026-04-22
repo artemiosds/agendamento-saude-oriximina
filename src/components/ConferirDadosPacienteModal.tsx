@@ -14,6 +14,7 @@ import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import { applyPhoneMask } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
+import { useData } from "@/contexts/DataContext";
 
 export interface ConferirDadosPacienteModalProps {
   open: boolean;
@@ -128,6 +129,7 @@ export function ConferirDadosPacienteModal({
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
   const queryClient = useQueryClient();
+  const { refreshPacientes } = useData();
 
   const fetchPaciente = useCallback(async (id: string) => {
     console.log("[ConferirDados] Buscando paciente ID:", id);
@@ -252,12 +254,14 @@ export function ConferirDadosPacienteModal({
       if (error) throw error;
       setPaciente({ ...paciente, ...form, custom_data: customData });
       setDirty(false);
-      // CRÍTICO: invalidar caches para refletir em prontuário, agendamento, BPA, etc.
+      // CRÍTICO: invalidar caches + recarregar contexto global para refletir
+      // imediatamente em Paciente, Agenda, Prontuário, Tratamento, PTS, Triagem, BPA.
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
-      toast.success("Dados atualizados!");
+      try { await refreshPacientes(); } catch {}
+      toast.success("Dados atualizados em todo o sistema!");
     } catch (e: any) {
       toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
     } finally {

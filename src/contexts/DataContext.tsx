@@ -785,30 +785,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (id) setPacientes((prev) => removeById(prev, id));
         return;
       }
-      const row = payload.new as any;
-      if (!row?.id) return;
-      // All staff see all patients — no unit filter on realtime
-      setPacientes((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          nome: row.nome,
-          cpf: row.cpf || "",
-          cns: row.cns || "",
-          nomeMae: row.nome_mae || "",
-          telefone: row.telefone || "",
-          dataNascimento: row.data_nascimento || "",
-          email: row.email || "",
-          endereco: row.endereco || "",
-          observacoes: row.observacoes || "",
-          descricaoClinica: row.descricao_clinica || "",
-          cid: row.cid || "",
-          criadoEm: row.criado_em || "",
-          unidadeId: row.unidade_id || "",
-          isGestante: !!row.is_gestante,
-          isPne: !!row.is_pne,
-          isAutista: !!row.is_autista,
-        }),
-      );
+      // For INSERT/UPDATE: reload full list so all consumers (Prontuário,
+      // Agenda, Triagem, Tratamentos, PTS, BPA) get fresh data including
+      // custom_data, municipio, etc.
+      loadPacientes();
     },
     poll: loadPacientes,
   });
