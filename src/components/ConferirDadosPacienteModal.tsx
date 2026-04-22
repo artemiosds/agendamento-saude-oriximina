@@ -265,13 +265,10 @@ export function ConferirDadosPacienteModal({
     }
   };
 
-  // ───────── Componentes inline ─────────
-  const FieldText = ({
-    label, name, type = "text", placeholder, inputMode,
-  }: {
-    label: string; name: string; type?: string;
-    placeholder?: string; inputMode?: "text" | "tel" | "email" | "numeric";
-  }) => (
+  const renderFieldText = useCallback((
+    label: string, name: string, type = "text", placeholder?: string,
+    inputMode?: "text" | "tel" | "email" | "numeric",
+  ) => (
     <div className="space-y-1.5">
       <Label htmlFor={`fld-${name}`} className="text-xs text-muted-foreground">{label}</Label>
       <Input
@@ -284,14 +281,12 @@ export function ConferirDadosPacienteModal({
         className="h-11 sm:h-10 text-base sm:text-sm"
       />
     </div>
-  );
+  ), [form, updateField]);
 
-  const FieldSelect = ({
-    label, name, options, placeholder = "Selecione",
-  }: {
-    label: string; name: string;
-    options: { value: string; label: string }[]; placeholder?: string;
-  }) => (
+  const renderFieldSelect = useCallback((
+    label: string, name: string,
+    options: { value: string; label: string }[], placeholder = "Selecione",
+  ) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Select value={form[name] || ""} onValueChange={(v) => updateField(name, v)}>
@@ -305,14 +300,7 @@ export function ConferirDadosPacienteModal({
         </SelectContent>
       </Select>
     </div>
-  );
-
-  const SectionTitle = ({ icon: Icon, children }: { icon: any; children: React.ReactNode }) => (
-    <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
-      <Icon className="w-4 h-4 text-primary" />
-      {children}
-    </div>
-  );
+  ), [form, updateField]);
 
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
