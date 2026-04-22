@@ -568,41 +568,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFila = useCallback(async () => {
     try {
-      let query = supabase
-        .from("fila_espera" as any)
-        .select(
-          "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino",
-        )
-        .order("criado_em", { ascending: true });
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-      const { data, error } = await query;
-      if (data && !error) {
-        setFila(
-          (data as any[]).map((f: any) => ({
-            id: f.id,
-            pacienteId: f.paciente_id,
-            pacienteNome: f.paciente_nome,
-            unidadeId: f.unidade_id,
-            profissionalId: f.profissional_id || "",
-            setor: f.setor || "",
-            prioridade: (f.prioridade_perfil && f.prioridade_perfil !== "normal"
-              ? f.prioridade_perfil
-              : f.prioridade) as FilaEspera["prioridade"],
-            status: f.status as FilaEspera["status"],
-            posicao: f.posicao,
-            horaChegada: f.hora_chegada,
-            horaChamada: f.hora_chamada || "",
-            observacoes: f.observacoes || "",
-            descricaoClinica: f.descricao_clinica || "",
-            cid: f.cid || "",
-            criadoPor: f.criado_por || "",
-            criadoEm: f.criado_em || "",
-            dataSolicitacaoOriginal: f.data_solicitacao_original || "",
-            origemCadastro: f.origem_cadastro || "normal",
-            especialidadeDestino: f.especialidade_destino || "",
-          })),
-        );
+      const TERMINAL = ['atendido', 'cancelado', 'falta', 'concluido', 'excluido_da_fila_triagem'];
+      const columns =
+        "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let query = supabase
+          .from("fila_espera" as any)
+          .select(columns)
+          .not('status', 'in', `(${TERMINAL.join(',')})`)
+          .order("criado_em", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        const { data, error } = await query;
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
+      setFila(
+        allData.map((f: any) => ({
+          id: f.id,
+          pacienteId: f.paciente_id,
+          pacienteNome: f.paciente_nome,
+          unidadeId: f.unidade_id,
+          profissionalId: f.profissional_id || "",
+          setor: f.setor || "",
+          prioridade: (f.prioridade_perfil && f.prioridade_perfil !== "normal"
+            ? f.prioridade_perfil
+            : f.prioridade) as FilaEspera["prioridade"],
+          status: f.status as FilaEspera["status"],
+          posicao: f.posicao,
+          horaChegada: f.hora_chegada,
+          horaChamada: f.hora_chamada || "",
+          observacoes: f.observacoes || "",
+          descricaoClinica: f.descricao_clinica || "",
+          cid: f.cid || "",
+          criadoPor: f.criado_por || "",
+          criadoEm: f.criado_em || "",
+          dataSolicitacaoOriginal: f.data_solicitacao_original || "",
+          origemCadastro: f.origem_cadastro || "normal",
+          especialidadeDestino: f.especialidade_destino || "",
+        })),
+      );
     } catch (err) {
       console.error("Error loading fila:", err);
     }
