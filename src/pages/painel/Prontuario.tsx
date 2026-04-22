@@ -2677,7 +2677,9 @@ const ProntuarioPage: React.FC = () => {
               );
             })()}
 
-            <div className="flex gap-2 flex-wrap">
+          </div>{/* end scrollable area */}
+
+            <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
               {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
               {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
                 <Button
@@ -2718,7 +2720,6 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
             </div>
-          </div>
         </DialogContent>
       </Dialog>
 
