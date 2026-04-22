@@ -486,9 +486,14 @@ export function ConferirDadosPacienteModal({
             </Button>
             <Button
               onClick={async () => {
-                if (dirty) await handleSave();
-                onConfirm();
-                onOpenChange(false);
+                try {
+                  if (dirty) await handleSave();
+                  await Promise.resolve(onConfirm());
+                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos!");
+                  onOpenChange(false);
+                } catch (e: any) {
+                  toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
+                }
               }}
               disabled={!confirmou || loading || saving}
               className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
