@@ -445,10 +445,10 @@ const Tratamentos: React.FC = () => {
   }, [loadData, loadSessionsForCycle, selectedCycle]);
 
   useRealtimeSubscription({
-    tables: ['agendamentos', 'treatment_sessions'],
+    tables: ['agendamentos', 'treatment_sessions', 'treatment_cycles'],
     onchange: silentRefresh,
     enabled: true,
-    debounceMs: 1000,
+    debounceMs: 400,
   });
 
   // O(1) lookup maps to avoid .find() per row
@@ -2956,10 +2956,20 @@ const Tratamentos: React.FC = () => {
                 .update({ scheduled_date: data })
                 .eq("id", remarcarTarget.id);
               if (error) throw error;
+
+              // Optimistic local update
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.id === remarcarTarget.id
+                    ? { ...s, scheduled_date: data }
+                    : s
+                )
+              );
+
               if (remarcarTarget.appointment_id) {
                 await supabase.from("agendamentos").update({ data, hora }).eq("id", remarcarTarget.appointment_id);
               }
-              await logAction({
+              logAction({
                 acao: "remarcar_sessao",
                 entidade: "treatment_session",
                 entidadeId: remarcarTarget.id,
