@@ -1,73 +1,100 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Search, Check, Loader2 } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { Search, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 
 interface LogradouroDne {
   codigo: string;
   descricao: string;
+  abreviacao?: string;
+  aliases?: string[];
 }
 
 interface Props {
-  value?: string; // descricao selecionada (uppercase)
-  codigo?: string; // codigo DNE selecionado
+  value?: string; // descricao selecionada (ex.: "Rua")
+  codigo?: string; // codigo DNE selecionado (ex.: "081")
   onChange: (descricao: string, codigo: string) => void;
   required?: boolean;
   placeholder?: string;
 }
 
-// Normaliza para busca sem acentos
-const normalize = (s: string) =>
-  (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+// Lista padronizada DNE (apenas tipos mais utilizados, alinhada com BPA/e-SUS)
+// Formato salvo no banco: codigo (ex.: "081") + descricao (ex.: "Rua")
+const TIPOS_LOGRADOURO_DNE: LogradouroDne[] = [
+  { codigo: "081", descricao: "Rua", abreviacao: "R", aliases: ["rua", "r"] },
+  { codigo: "008", descricao: "Avenida", abreviacao: "Av", aliases: ["avenida", "av", "ave"] },
+  { codigo: "100", descricao: "Travessa", abreviacao: "Tv", aliases: ["travessa", "tv", "trav"] },
+  { codigo: "011", descricao: "Beco", abreviacao: "Bc", aliases: ["beco", "bc"] },
+  { codigo: "082", descricao: "Ramal", aliases: ["ramal"] },
+  { codigo: "107", descricao: "Via", aliases: ["via"] },
+  { codigo: "109", descricao: "Viela", aliases: ["viela"] },
+  { codigo: "035", descricao: "Estrada", abreviacao: "Est", aliases: ["estrada", "est"] },
+  { codigo: "072", descricao: "Rodovia", abreviacao: "Rod", aliases: ["rodovia", "rod"] },
+  { codigo: "049", descricao: "Largo", aliases: ["largo"] },
+  { codigo: "063", descricao: "Praça", abreviacao: "Pç", aliases: ["praca", "praça", "pc", "pç"] },
+  { codigo: "028", descricao: "Conjunto", abreviacao: "Conj", aliases: ["conjunto", "conj"] },
+  { codigo: "026", descricao: "Condomínio", abreviacao: "Cond", aliases: ["condominio", "condomínio", "cond"] },
+];
 
-let cache: LogradouroDne[] | null = null;
+const normalize = (s: string) =>
+  (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+// Resolve um valor legado para a entrada DNE oficial (caso descrição venha em UPPERCASE ou abreviada)
+function resolveItem(value?: string, codigo?: string): LogradouroDne | undefined {
+  if (codigo) {
+    const byCode = TIPOS_LOGRADOURO_DNE.find((i) => i.codigo === codigo);
+    if (byCode) return byCode;
+  }
+  if (value) {
+    const v = normalize(value);
+    return TIPOS_LOGRADOURO_DNE.find(
+      (i) =>
+        normalize(i.descricao) === v ||
+        normalize(i.abreviacao || "") === v ||
+        (i.aliases || []).includes(v),
+    );
+  }
+  return undefined;
+}
 
 export default function LogradouroDneAutocomplete({
   value,
   codigo,
   onChange,
   required,
-  placeholder = "Pesquisar tipo de logradouro...",
+  placeholder = "Selecionar tipo de logradouro...",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [items, setItems] = useState<LogradouroDne[]>(cache || []);
-  const [loading, setLoading] = useState(!cache);
+
+  // Auto-corrige valores legados (ex.: descrição em UPPERCASE) para o padrão DNE
+  const resolved = useMemo(() => resolveItem(value, codigo), [value, codigo]);
 
   useEffect(() => {
-    if (cache) return;
-    let active = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from("logradouros_dne")
-        .select("codigo, descricao")
-        .order("descricao", { ascending: true });
-      if (!active) return;
-      if (!error && data) {
-        cache = data as LogradouroDne[];
-        setItems(cache);
-      }
-      setLoading(false);
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!resolved) return;
+    if (resolved.descricao !== value || resolved.codigo !== codigo) {
+      onChange(resolved.descricao, resolved.codigo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved?.codigo]);
 
   const filtered = useMemo(() => {
-    const q = normalize(search.trim());
-    if (!q) return items.slice(0, 100);
-    return items
-      .filter(
-        (i) => normalize(i.descricao).includes(q) || i.codigo.includes(q),
-      )
-      .slice(0, 100);
-  }, [items, search]);
+    const q = normalize(search);
+    if (!q) return TIPOS_LOGRADOURO_DNE;
+    return TIPOS_LOGRADOURO_DNE.filter(
+      (i) =>
+        normalize(i.descricao).includes(q) ||
+        normalize(i.abreviacao || "").includes(q) ||
+        i.codigo.includes(q) ||
+        (i.aliases || []).some((a) => a.includes(q)),
+    );
+  }, [search]);
 
-  const displayLabel = value
+  const displayLabel = resolved
+    ? `${resolved.codigo} — ${resolved.descricao}`
+    : value
     ? codigo
       ? `${codigo} — ${value}`
       : value
@@ -83,43 +110,39 @@ export default function LogradouroDneAutocomplete({
           aria-expanded={open}
           className={cn(
             "w-full justify-between font-normal",
-            !value && "text-muted-foreground",
+            !resolved && !value && "text-muted-foreground",
           )}
         >
           <span className="flex items-center gap-2 truncate">
             <Search className="w-4 h-4 shrink-0 opacity-50" />
             <span className="truncate">{displayLabel || placeholder}</span>
           </span>
-          {required && !value && (
+          {required && !resolved && (
             <span className="text-destructive text-xs ml-2">*</span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="p-0 w-[--radix-popover-trigger-width] max-h-[320px] overflow-hidden"
+        className="p-0 w-[--radix-popover-trigger-width] max-h-[360px] overflow-hidden"
         align="start"
       >
-        <div className="p-2 border-b bg-background sticky top-0">
+        <div className="p-2 border-b bg-background">
           <Input
             autoFocus
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Digite para pesquisar (ex.: RUA, AV, 081)"
+            placeholder="Pesquisar (ex.: rua, av, travessa, 081)"
             className="h-9"
           />
         </div>
-        <div className="max-h-[260px] overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-6 text-muted-foreground text-sm gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Carregando DNE...
-            </div>
-          ) : filtered.length === 0 ? (
+        <div className="max-h-[300px] overflow-y-auto">
+          {filtered.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
               Nenhum resultado encontrado
             </div>
           ) : (
             filtered.map((item) => {
-              const selected = value === item.descricao;
+              const selected = resolved?.codigo === item.codigo;
               return (
                 <button
                   type="button"
@@ -143,7 +166,12 @@ export default function LogradouroDneAutocomplete({
                   <span className="font-mono text-xs text-muted-foreground w-10 shrink-0">
                     {item.codigo}
                   </span>
-                  <span className="flex-1 truncate">{item.descricao}</span>
+                  <span className="flex-1 truncate">
+                    {item.descricao}
+                    {item.abreviacao && (
+                      <span className="text-muted-foreground ml-1">({item.abreviacao})</span>
+                    )}
+                  </span>
                 </button>
               );
             })
