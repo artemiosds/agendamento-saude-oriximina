@@ -1777,7 +1777,7 @@ const ProntuarioPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className="w-[95vw] max-w-5xl h-[95vh] max-h-[95vh] flex flex-col overflow-hidden" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
@@ -1801,6 +1801,7 @@ const ProntuarioPage: React.FC = () => {
             </div>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-4">
           {activeAtendimento && (
             <AtendimentoTimer
               horaInicio={activeAtendimento.horaInicio}
@@ -2676,7 +2677,10 @@ const ProntuarioPage: React.FC = () => {
               );
             })()}
 
-            <div className="flex gap-2 flex-wrap">
+          </div>{/* end space-y-4 form */}
+          </div>{/* end scrollable area */}
+
+            <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
               {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
               {form.tipo_registro === 'sessao' && currentSessionForRegistration && sessaoCycle && (
                 <Button
@@ -2717,7 +2721,6 @@ const ProntuarioPage: React.FC = () => {
                 </Button>
               )}
             </div>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -3132,7 +3135,7 @@ const ProntuarioPage: React.FC = () => {
 
       {/* Drawer de visualização rápida do prontuário */}
       <Sheet open={!!viewerProntuario} onOpenChange={(open) => !open && setViewerProntuario(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
           {viewerProntuario && (
             <>
               <SheetHeader>
