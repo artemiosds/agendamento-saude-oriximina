@@ -460,49 +460,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      // PERF: load only the 1000 most recent patients on startup. Search/lookup by CPF/CNS
-      // continues to work via patientService.search() which queries the DB directly.
-      // This avoids loading 10k+ rows up-front and blocking UI for several seconds.
-      const INITIAL_LIMIT = 1000;
-      let query = supabase
-        .from("pacientes" as any)
-        .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
-        )
-        .order("criado_em", { ascending: false })
-        .limit(INITIAL_LIMIT);
-      if (!isGlobalAdmin && userUnidadeId) {
-        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+      const columns =
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id";
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let query = supabase
+          .from("pacientes" as any)
+          .select(columns)
+          .order("criado_em", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) {
+          query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+        }
+        const { data, error } = await query;
+        if (error) { console.error("Error loading pacientes:", error); break; }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      const { data, error } = await query;
-      if (error) {
-        console.error("Error loading pacientes:", error);
-        return;
-      }
-      const allData = data || [];
-      {
-        setPacientes(
-          allData.map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            cpf: p.cpf || "",
-            cns: p.cns || "",
-            nomeMae: p.nome_mae || "",
-            telefone: p.telefone || "",
-            dataNascimento: p.data_nascimento || "",
-            email: p.email || "",
-            endereco: p.endereco || "",
-            observacoes: p.observacoes || "",
-            descricaoClinica: p.descricao_clinica || "",
-            cid: p.cid || "",
-            criadoEm: p.criado_em || "",
-            unidadeId: p.unidade_id || "",
-            isGestante: !!p.is_gestante,
-            isPne: !!p.is_pne,
-            isAutista: !!p.is_autista,
-          })),
-        );
-      }
+      setPacientes(
+        allData.map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          cpf: p.cpf || "",
+          cns: p.cns || "",
+          nomeMae: p.nome_mae || "",
+          telefone: p.telefone || "",
+          dataNascimento: p.data_nascimento || "",
+          email: p.email || "",
+          endereco: p.endereco || "",
+          observacoes: p.observacoes || "",
+          descricaoClinica: p.descricao_clinica || "",
+          cid: p.cid || "",
+          criadoEm: p.criado_em || "",
+          unidadeId: p.unidade_id || "",
+          isGestante: !!p.is_gestante,
+          isPne: !!p.is_pne,
+          isAutista: !!p.is_autista,
+        })),
+      );
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
@@ -568,41 +567,51 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFila = useCallback(async () => {
     try {
-      let query = supabase
-        .from("fila_espera" as any)
-        .select(
-          "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino",
-        )
-        .order("criado_em", { ascending: true });
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-      const { data, error } = await query;
-      if (data && !error) {
-        setFila(
-          (data as any[]).map((f: any) => ({
-            id: f.id,
-            pacienteId: f.paciente_id,
-            pacienteNome: f.paciente_nome,
-            unidadeId: f.unidade_id,
-            profissionalId: f.profissional_id || "",
-            setor: f.setor || "",
-            prioridade: (f.prioridade_perfil && f.prioridade_perfil !== "normal"
-              ? f.prioridade_perfil
-              : f.prioridade) as FilaEspera["prioridade"],
-            status: f.status as FilaEspera["status"],
-            posicao: f.posicao,
-            horaChegada: f.hora_chegada,
-            horaChamada: f.hora_chamada || "",
-            observacoes: f.observacoes || "",
-            descricaoClinica: f.descricao_clinica || "",
-            cid: f.cid || "",
-            criadoPor: f.criado_por || "",
-            criadoEm: f.criado_em || "",
-            dataSolicitacaoOriginal: f.data_solicitacao_original || "",
-            origemCadastro: f.origem_cadastro || "normal",
-            especialidadeDestino: f.especialidade_destino || "",
-          })),
-        );
+      const TERMINAL = ['atendido', 'cancelado', 'falta', 'concluido', 'excluido_da_fila_triagem'];
+      const columns =
+        "id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,observacoes,descricao_clinica,cid,criado_por,criado_em,data_solicitacao_original,origem_cadastro,especialidade_destino";
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let query = supabase
+          .from("fila_espera" as any)
+          .select(columns)
+          .not('status', 'in', `(${TERMINAL.join(',')})`)
+          .order("criado_em", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        const { data, error } = await query;
+        if (error || !data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
+      setFila(
+        allData.map((f: any) => ({
+          id: f.id,
+          pacienteId: f.paciente_id,
+          pacienteNome: f.paciente_nome,
+          unidadeId: f.unidade_id,
+          profissionalId: f.profissional_id || "",
+          setor: f.setor || "",
+          prioridade: (f.prioridade_perfil && f.prioridade_perfil !== "normal"
+            ? f.prioridade_perfil
+            : f.prioridade) as FilaEspera["prioridade"],
+          status: f.status as FilaEspera["status"],
+          posicao: f.posicao,
+          horaChegada: f.hora_chegada,
+          horaChamada: f.hora_chamada || "",
+          observacoes: f.observacoes || "",
+          descricaoClinica: f.descricao_clinica || "",
+          cid: f.cid || "",
+          criadoPor: f.criado_por || "",
+          criadoEm: f.criado_em || "",
+          dataSolicitacaoOriginal: f.data_solicitacao_original || "",
+          origemCadastro: f.origem_cadastro || "normal",
+          especialidadeDestino: f.especialidade_destino || "",
+        })),
+      );
     } catch (err) {
       console.error("Error loading fila:", err);
     }
