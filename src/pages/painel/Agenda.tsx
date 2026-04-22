@@ -315,11 +315,12 @@ const Agenda: React.FC = () => {
     setNewAg((p) => ({ ...p, pacienteId }));
     // Se já foi conferido nesta sessão, não reabre o modal
     if (pacientesConferidos.has(pacienteId)) return;
+    console.log(`Abrindo Conferir Dados do Paciente para agendamento ID: novo`);
     setConferenciaModal({
       open: true,
       pacienteId,
       modo: "agendamento",
-      onConfirm: () => {
+      onConfirm: async () => {
         setPacientesConferidos((prev) => {
           const next = new Set(prev);
           next.add(pacienteId);
@@ -640,13 +641,13 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => {
+        onConfirm: async () => {
           setPacientesConferidos((prev) => {
             const next = new Set(prev);
             next.add(newAg.pacienteId);
             return next;
           });
-          void executarCreate();
+          await executarCreate();
         },
       });
       return;
@@ -752,8 +753,8 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    addAgendamento(agData);
-    // Close dialog immediately (optimistic)
+    await addAgendamento(agData);
+    // Close only after persistence succeeds
     setDialogOpen(false);
     setNewAg({
       pacienteId: "",
@@ -914,9 +915,11 @@ const Agenda: React.FC = () => {
     if (newStatus === "confirmado_chegada") {
       const profSel = profissionais.find((p) => p.id === ag.profissionalId);
       const unidSel = unidades.find((u) => u.id === ag.unidadeId);
+      console.log(`Abrindo Conferir Dados do Paciente para agendamento ID: ${agId}`);
       setConferenciaModal({
         open: true,
         pacienteId: ag.pacienteId,
+        agendamentoId: agId,
         modo: "chegada",
         agendamentoInfo: {
           data: ag.data,
@@ -927,7 +930,9 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+        onConfirm: async () => {
+          await executarStatusChange(agId, newStatus);
+        },
       });
       return;
     }
@@ -2908,6 +2913,7 @@ const Agenda: React.FC = () => {
         open={conferenciaModal.open}
         onOpenChange={(o) => setConferenciaModal((p) => ({ ...p, open: o }))}
         pacienteId={conferenciaModal.pacienteId}
+        agendamentoId={conferenciaModal.agendamentoId}
         modo={conferenciaModal.modo}
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}
