@@ -1777,7 +1777,7 @@ const ProntuarioPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className="w-[95vw] max-w-5xl h-[95vh] max-h-[95vh] flex flex-col overflow-hidden" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
