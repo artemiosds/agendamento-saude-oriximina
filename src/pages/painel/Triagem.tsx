@@ -108,7 +108,7 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
 
 const Triagem: React.FC = () => {
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
   const { resolved: customConfig } = useCustomFields('triagem', user?.unidadeId);
   const [customData, setCustomData] = useState<Record<string, any>>({});
