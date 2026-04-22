@@ -1012,6 +1012,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.error("Error updating agendamento:", error);
         toast.error("Erro ao atualizar agendamento");
+        throw error;
       }
     },
     [logAction, invalidateCache],
