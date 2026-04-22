@@ -2498,7 +2498,6 @@ const Tratamentos: React.FC = () => {
                                   onSelect={() => setNewSession((p) => ({ ...p, procedure_done: proc.nome }))}
                                 >
                                   {proc.nome}
-                                  {proc.codigo_sigtap && <span className="ml-2 text-xs text-muted-foreground">({proc.codigo_sigtap})</span>}
                                 </CommandItem>
                               ))}
                             </CommandGroup>
