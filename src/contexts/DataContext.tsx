@@ -460,49 +460,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      // PERF: load only the 1000 most recent patients on startup. Search/lookup by CPF/CNS
-      // continues to work via patientService.search() which queries the DB directly.
-      // This avoids loading 10k+ rows up-front and blocking UI for several seconds.
-      const INITIAL_LIMIT = 1000;
-      let query = supabase
-        .from("pacientes" as any)
-        .select(
-          "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
-        )
-        .order("criado_em", { ascending: false })
-        .limit(INITIAL_LIMIT);
-      if (!isGlobalAdmin && userUnidadeId) {
-        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+      const columns =
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id";
+      let allData: any[] = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let query = supabase
+          .from("pacientes" as any)
+          .select(columns)
+          .order("criado_em", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (!isGlobalAdmin && userUnidadeId) {
+          query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+        }
+        const { data, error } = await query;
+        if (error) { console.error("Error loading pacientes:", error); break; }
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
       }
-      const { data, error } = await query;
-      if (error) {
-        console.error("Error loading pacientes:", error);
-        return;
-      }
-      const allData = data || [];
-      {
-        setPacientes(
-          allData.map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            cpf: p.cpf || "",
-            cns: p.cns || "",
-            nomeMae: p.nome_mae || "",
-            telefone: p.telefone || "",
-            dataNascimento: p.data_nascimento || "",
-            email: p.email || "",
-            endereco: p.endereco || "",
-            observacoes: p.observacoes || "",
-            descricaoClinica: p.descricao_clinica || "",
-            cid: p.cid || "",
-            criadoEm: p.criado_em || "",
-            unidadeId: p.unidade_id || "",
-            isGestante: !!p.is_gestante,
-            isPne: !!p.is_pne,
-            isAutista: !!p.is_autista,
-          })),
-        );
-      }
+      setPacientes(
+        allData.map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          cpf: p.cpf || "",
+          cns: p.cns || "",
+          nomeMae: p.nome_mae || "",
+          telefone: p.telefone || "",
+          dataNascimento: p.data_nascimento || "",
+          email: p.email || "",
+          endereco: p.endereco || "",
+          observacoes: p.observacoes || "",
+          descricaoClinica: p.descricao_clinica || "",
+          cid: p.cid || "",
+          criadoEm: p.criado_em || "",
+          unidadeId: p.unidade_id || "",
+          isGestante: !!p.is_gestante,
+          isPne: !!p.is_pne,
+          isAutista: !!p.is_autista,
+        })),
+      );
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
