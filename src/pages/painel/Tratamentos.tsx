@@ -2684,14 +2684,33 @@ const Tratamentos: React.FC = () => {
               <div>
                 <Label>Procedimento Realizado *</Label>
                 {sessionProcedimentos.length > 0 ? (
-                  <Select value={editRealizadaProcedure} onValueChange={setEditRealizadaProcedure}>
-                    <SelectTrigger><SelectValue placeholder="Selecione o procedimento" /></SelectTrigger>
-                    <SelectContent>
-                      {sessionProcedimentos.map((proc) => (
-                        <SelectItem key={proc.id} value={proc.nome}>{proc.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                        {editRealizadaProcedure || "Selecione o procedimento"}
+                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar procedimento..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {sessionProcedimentos.map((proc) => (
+                              <CommandItem
+                                key={proc.id}
+                                value={proc.nome}
+                                onSelect={() => setEditRealizadaProcedure(proc.nome)}
+                              >
+                                {proc.nome}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 ) : (
                   <Input
                     value={editRealizadaProcedure}
