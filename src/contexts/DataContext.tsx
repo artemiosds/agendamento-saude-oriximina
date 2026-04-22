@@ -386,13 +386,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadFuncionarios = useCallback(async () => {
     try {
-      let query = supabase
+      // ALL staff see ALL funcionarios — needed for agenda cross-unit references
+      const query = supabase
         .from("funcionarios" as any)
         .select(
           "id,auth_user_id,nome,usuario,email,cpf,profissao,tipo_conselho,numero_conselho,uf_conselho,role,unidade_id,sala_id,setor,cargo,criado_em,criado_por,tempo_atendimento,pode_agendar_retorno,coren,ativo",
         );
-      // Unit isolation: non-global users only see employees from their unit
-      if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
       const { data, error } = await query;
       if (data && !error) {
         setFuncionarios(
@@ -424,7 +423,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading funcionarios:", err);
     }
-  }, [isGlobalAdmin, userUnidadeId]);
+  }, []);
 
   const loadDisponibilidades = useCallback(async () => {
     try {
@@ -460,53 +459,46 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadPacientes = useCallback(async () => {
     try {
-      // PERF: load only the 1000 most recent patients on startup. Search/lookup by CPF/CNS
-      // continues to work via patientService.search() which queries the DB directly.
-      // This avoids loading 10k+ rows up-front and blocking UI for several seconds.
+      // ALL staff see ALL patients regardless of unit — critical for cross-unit workflows
       const INITIAL_LIMIT = 1000;
-      let query = supabase
+      const query = supabase
         .from("pacientes" as any)
         .select(
           "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id",
         )
         .order("criado_em", { ascending: false })
         .limit(INITIAL_LIMIT);
-      if (!isGlobalAdmin && userUnidadeId) {
-        query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
-      }
       const { data, error } = await query;
       if (error) {
         console.error("Error loading pacientes:", error);
         return;
       }
       const allData = data || [];
-      {
-        setPacientes(
-          allData.map((p: any) => ({
-            id: p.id,
-            nome: p.nome,
-            cpf: p.cpf || "",
-            cns: p.cns || "",
-            nomeMae: p.nome_mae || "",
-            telefone: p.telefone || "",
-            dataNascimento: p.data_nascimento || "",
-            email: p.email || "",
-            endereco: p.endereco || "",
-            observacoes: p.observacoes || "",
-            descricaoClinica: p.descricao_clinica || "",
-            cid: p.cid || "",
-            criadoEm: p.criado_em || "",
-            unidadeId: p.unidade_id || "",
-            isGestante: !!p.is_gestante,
-            isPne: !!p.is_pne,
-            isAutista: !!p.is_autista,
-          })),
-        );
-      }
+      setPacientes(
+        allData.map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          cpf: p.cpf || "",
+          cns: p.cns || "",
+          nomeMae: p.nome_mae || "",
+          telefone: p.telefone || "",
+          dataNascimento: p.data_nascimento || "",
+          email: p.email || "",
+          endereco: p.endereco || "",
+          observacoes: p.observacoes || "",
+          descricaoClinica: p.descricao_clinica || "",
+          cid: p.cid || "",
+          criadoEm: p.criado_em || "",
+          unidadeId: p.unidade_id || "",
+          isGestante: !!p.is_gestante,
+          isPne: !!p.is_pne,
+          isAutista: !!p.is_autista,
+        })),
+      );
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, [isGlobalAdmin, userUnidadeId]);
+  }, []);
 
   const loadAgendamentos = useCallback(async () => {
     try {
@@ -788,8 +780,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      // Unit isolation: skip events from other units
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      // All staff see all patients — no unit filter on realtime
       setPacientes((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -889,8 +880,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const row = payload.new as any;
       if (!row?.id) return;
-      // Unit isolation
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      // All staff see all funcionarios — no unit filter on realtime
       setFuncionarios((prev) =>
         upsertById(prev, {
           id: row.id,
@@ -980,7 +970,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           detalhes: { data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId },
         });
         invalidateCache(queryKeys.agendamentos.all, queryKeys.fila.all);
-      } else console.error("Error adding agendamento:", error);
+      } else {
+        console.error("Error adding agendamento:", error);
+        throw error;
+      }
     },
     [logAction, invalidateCache],
   );
@@ -1019,6 +1012,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         console.error("Error updating agendamento:", error);
         toast.error("Erro ao atualizar agendamento");
+        throw error;
       }
     },
     [logAction, invalidateCache],
@@ -1086,7 +1080,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => [{ ...p, unidadeId: unidadeIdToUse }, ...prev]);
         invalidateCache(queryKeys.pacientes.all);
-      } else console.error("Error adding paciente:", error);
+      } else {
+        console.error("Error adding paciente:", error);
+        throw error;
+      }
     },
     [invalidateCache, userUnidadeId],
   );
@@ -1112,10 +1109,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!error) {
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
         invalidateCache(queryKeys.pacientes.all);
-        // Also invalidate agendamentos/fila so components using resolvePaciente re-render
         invalidateCache(queryKeys.agendamentos.all);
         invalidateCache(queryKeys.fila.all);
-      } else console.error("Error updating paciente:", error);
+      } else {
+        console.error("Error updating paciente:", error);
+        throw error;
+      }
     },
     [invalidateCache],
   );
