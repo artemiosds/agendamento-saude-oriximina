@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -2476,21 +2478,33 @@ const Tratamentos: React.FC = () => {
                 <div>
                   <Label>Procedimento Realizado *</Label>
                   {sessionProcedimentos.length > 0 ? (
-                    <Select
-                      value={newSession.procedure_done}
-                      onValueChange={(v) => setNewSession((p) => ({ ...p, procedure_done: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o procedimento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sessionProcedimentos.map((proc) => (
-                          <SelectItem key={proc.id} value={proc.nome}>
-                            {proc.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                          {newSession.procedure_done || "Selecione o procedimento"}
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Buscar procedimento..." />
+                          <CommandList>
+                            <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
+                            <CommandGroup>
+                              {sessionProcedimentos.map((proc) => (
+                                <CommandItem
+                                  key={proc.id}
+                                  value={proc.nome}
+                                  onSelect={() => setNewSession((p) => ({ ...p, procedure_done: proc.nome }))}
+                                >
+                                  {proc.nome}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   ) : (
                     <Input
                       value={newSession.procedure_done}
@@ -2670,14 +2684,33 @@ const Tratamentos: React.FC = () => {
               <div>
                 <Label>Procedimento Realizado *</Label>
                 {sessionProcedimentos.length > 0 ? (
-                  <Select value={editRealizadaProcedure} onValueChange={setEditRealizadaProcedure}>
-                    <SelectTrigger><SelectValue placeholder="Selecione o procedimento" /></SelectTrigger>
-                    <SelectContent>
-                      {sessionProcedimentos.map((proc) => (
-                        <SelectItem key={proc.id} value={proc.nome}>{proc.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+                        {editRealizadaProcedure || "Selecione o procedimento"}
+                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar procedimento..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            {sessionProcedimentos.map((proc) => (
+                              <CommandItem
+                                key={proc.id}
+                                value={proc.nome}
+                                onSelect={() => setEditRealizadaProcedure(proc.nome)}
+                              >
+                                {proc.nome}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 ) : (
                   <Input
                     value={editRealizadaProcedure}
