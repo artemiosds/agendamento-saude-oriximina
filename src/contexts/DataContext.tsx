@@ -471,9 +471,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select(columns)
           .order("criado_em", { ascending: false })
           .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && userUnidadeId) {
-          query = query.or(`unidade_id.eq.${userUnidadeId},unidade_id.is.null,unidade_id.eq.`);
-        }
+        // All staff members see ALL patients regardless of unit
+        // Unit filtering is NOT applied here — patients are shared resources
         const { data, error } = await query;
         if (error) { console.error("Error loading pacientes:", error); break; }
         if (!data || data.length === 0) break;

@@ -110,7 +110,7 @@ const MASKS: Record<string, (v: string) => string> = {
   cep: maskCep,
 };
 
-export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, ConferirDadosPacienteModalProps>(function ConferirDadosPacienteModal({
+export function ConferirDadosPacienteModal({
   open,
   onOpenChange,
   pacienteId,
@@ -118,7 +118,7 @@ export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, Confe
   modo,
   onConfirm,
   confirmLabel,
-}, _ref) {
+}: ConferirDadosPacienteModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
@@ -486,9 +486,14 @@ export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, Confe
             </Button>
             <Button
               onClick={async () => {
-                if (dirty) await handleSave();
-                onConfirm();
-                onOpenChange(false);
+                try {
+                  if (dirty) await handleSave();
+                  await Promise.resolve(onConfirm());
+                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos!");
+                  onOpenChange(false);
+                } catch (e: any) {
+                  toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
+                }
               }}
               disabled={!confirmou || loading || saving}
               className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
@@ -500,4 +505,4 @@ export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, Confe
       </DialogContent>
     </Dialog>
   );
-});
+}
