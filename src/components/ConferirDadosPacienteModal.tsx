@@ -110,7 +110,7 @@ const MASKS: Record<string, (v: string) => string> = {
   cep: maskCep,
 };
 
-export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, ConferirDadosPacienteModalProps>(function ConferirDadosPacienteModal({
+export function ConferirDadosPacienteModal({
   open,
   onOpenChange,
   pacienteId,
@@ -118,7 +118,7 @@ export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, Confe
   modo,
   onConfirm,
   confirmLabel,
-}, _ref) {
+}: ConferirDadosPacienteModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
