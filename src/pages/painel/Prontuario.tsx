@@ -1801,6 +1801,7 @@ const ProntuarioPage: React.FC = () => {
             </div>
           </DialogHeader>
 
+          <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-4">
           {activeAtendimento && (
             <AtendimentoTimer
               horaInicio={activeAtendimento.horaInicio}
