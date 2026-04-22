@@ -590,19 +590,15 @@ const Tratamentos: React.FC = () => {
 
   const sessionRegisterHint = useMemo(() => {
     if (newSession.status !== "realizada") return null;
-    if (!newSession.procedure_done?.trim()) return "❌ Selecione o procedimento realizado";
     return null;
-  }, [newSession.status, newSession.procedure_done]);
+  }, [newSession.status]);
 
   const canSubmitSessionRegistration = useMemo(() => {
-    if (newSession.status === "realizada") {
-      return !!newSession.procedure_done?.trim();
-    }
     if (newSession.status === "paciente_faltou") {
       return !!newSession.absence_type;
     }
     return true;
-  }, [newSession.absence_type, newSession.procedure_done, newSession.status]);
+  }, [newSession.absence_type, newSession.status]);
 
   // Get current cycle's professional profissão for SOAP adaptation
   const cycleProfissao = useMemo(() => {
@@ -815,12 +811,7 @@ const Tratamentos: React.FC = () => {
       return;
     }
 
-    if (newSession.status === "realizada") {
-      if (!newSession.procedure_done) {
-        toast.error("Selecione o procedimento realizado.");
-        return;
-      }
-    }
+    // procedure_done is optional — no validation needed
 
     if (newSession.status === "paciente_faltou" && !newSession.absence_type) {
       toast.error("Informe o tipo de falta (justificada ou injustificada).");
@@ -893,10 +884,7 @@ const Tratamentos: React.FC = () => {
 
   const handleEditRealizada = async () => {
     if (!editRealizadaTarget || !selectedCycle) return;
-    if (!editRealizadaProcedure?.trim()) {
-      toast.error("Informe o procedimento realizado.");
-      return;
-    }
+    // procedure_done is optional
     setEditRealizadaSaving(true);
     try {
       const clinicalNotesJson = JSON.stringify({
@@ -2476,42 +2464,12 @@ const Tratamentos: React.FC = () => {
 
               {newSession.status === "realizada" && (
                 <div>
-                  <Label>Procedimento Realizado *</Label>
-                  {sessionProcedimentos.length > 0 ? (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                          {newSession.procedure_done || "Selecione o procedimento"}
-                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Buscar procedimento..." />
-                          <CommandList>
-                            <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              {sessionProcedimentos.map((proc) => (
-                                <CommandItem
-                                  key={proc.id}
-                                  value={proc.nome}
-                                  onSelect={() => setNewSession((p) => ({ ...p, procedure_done: proc.nome }))}
-                                >
-                                  {proc.nome}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  ) : (
-                    <Input
-                      value={newSession.procedure_done}
-                      onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
-                      placeholder="Nome do procedimento"
-                    />
-                  )}
+                  <Label>Procedimento Realizado</Label>
+                  <Input
+                    value={newSession.procedure_done}
+                    onChange={(e) => setNewSession((p) => ({ ...p, procedure_done: e.target.value }))}
+                    placeholder="Descreva o procedimento (opcional)"
+                  />
                 </div>
               )}
 
@@ -2682,42 +2640,12 @@ const Tratamentos: React.FC = () => {
                 />
               </div>
               <div>
-                <Label>Procedimento Realizado *</Label>
-                {sessionProcedimentos.length > 0 ? (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
-                        {editRealizadaProcedure || "Selecione o procedimento"}
-                        <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="Buscar procedimento..." />
-                        <CommandList>
-                          <CommandEmpty>Nenhum procedimento encontrado.</CommandEmpty>
-                          <CommandGroup>
-                            {sessionProcedimentos.map((proc) => (
-                              <CommandItem
-                                key={proc.id}
-                                value={proc.nome}
-                                onSelect={() => setEditRealizadaProcedure(proc.nome)}
-                              >
-                                {proc.nome}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <Input
-                    value={editRealizadaProcedure}
-                    onChange={(e) => setEditRealizadaProcedure(e.target.value)}
-                    placeholder="Nome do procedimento"
-                  />
-                )}
+                <Label>Procedimento Realizado</Label>
+                <Input
+                  value={editRealizadaProcedure}
+                  onChange={(e) => setEditRealizadaProcedure(e.target.value)}
+                  placeholder="Descreva o procedimento (opcional)"
+                />
               </div>
               <div className="space-y-3 border-t pt-3">
                 <p className="text-sm font-semibold text-foreground">Prontuário SOAP <span className="text-destructive">*</span></p>
