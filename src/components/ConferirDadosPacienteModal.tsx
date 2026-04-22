@@ -500,4 +500,4 @@ export const ConferirDadosPacienteModal = React.forwardRef<HTMLDivElement, Confe
       </DialogContent>
     </Dialog>
   );
-}
+});
