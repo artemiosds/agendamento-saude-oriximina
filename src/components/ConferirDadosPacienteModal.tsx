@@ -329,8 +329,17 @@ export function ConferirDadosPacienteModal({
         </DialogHeader>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center py-10 text-sm text-muted-foreground">
+          <div className="flex-1 flex flex-col items-center justify-center py-10 text-sm text-muted-foreground gap-3">
+            <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
             Carregando dados do paciente…
+          </div>
+        ) : loadError ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-10 gap-3">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <p className="text-sm text-destructive font-medium">{loadError}</p>
+            <Button size="sm" variant="outline" onClick={() => fetchPaciente(pacienteId)}>
+              Tentar novamente
+            </Button>
           </div>
         ) : (
           <div
@@ -500,14 +509,25 @@ export function ConferirDadosPacienteModal({
             </Button>
             <Button
               onClick={async () => {
-                if (dirty) await handleSave();
-                onConfirm();
-                onOpenChange(false);
+                try {
+                  setConfirming(true);
+                  console.log("[ConferirDados] Confirmando operação…");
+                  if (dirty) await handleSave();
+                  await Promise.resolve(onConfirm());
+                  console.log("[ConferirDados] Operação concluída com sucesso");
+                  toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos com sucesso!");
+                  onOpenChange(false);
+                } catch (e: any) {
+                  console.error("[ConferirDados] Erro ao confirmar:", e);
+                  toast.error("Erro ao confirmar: " + (e?.message || "tente novamente"));
+                } finally {
+                  setConfirming(false);
+                }
               }}
-              disabled={!confirmou || loading || saving}
+              disabled={!confirmou || loading || saving || confirming || !!loadError}
               className="gradient-primary text-primary-foreground flex-1 sm:flex-none"
             >
-              {confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar")}
+              {confirming ? "Processando…" : (confirmLabel || (modo === "chegada" ? "Confirmar Chegada" : "Confirmar e continuar"))}
             </Button>
           </div>
         </DialogFooter>
