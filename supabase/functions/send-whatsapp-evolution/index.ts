@@ -104,9 +104,9 @@ function buildMessage(tipo: string, data: any): string {
     case "agendamento_criado":
       return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento foi agendado.\n\n📍 Unidade: ${data.unidade}\n👨‍⚕️ Profissional: *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n${data.observacoes ? `📝 ${data.observacoes}\n` : ""}\nChegue com antecedência.${footer}`;
     case "lembrete_24h":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nLembrete do seu atendimento amanhã:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}\n⏰ ${data.hora_consulta}\n\nContamos com sua presença.${footer}`;
+      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nLembrete do seu atendimento:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}\n\nContamos com sua presença.${footer}`;
     case "lembrete_2h":
-      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento é hoje:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n⏰ ${data.hora_consulta}${footer}`;
+      return `${greeting}, *${data.paciente_nome}*! ${emoji}\n\nSeu atendimento está próximo:\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 Data: ${data.data_consulta}\n⏰ Horário: ${data.hora_consulta}${footer}`;
     case "cancelamento":
       return `${greeting}, *${data.paciente_nome}*.\n\nSeu atendimento foi cancelado.\n\n📍 ${data.unidade}\n👨‍⚕️ *${data.profissional}*\n📅 ${data.data_consulta}${data.observacoes ? `\n📝 ${data.observacoes}` : ""}${footer}`;
     case "remarcacao":
