@@ -125,16 +125,47 @@ function buildMessage(tipo: string, data: any): string {
 }
 
 async function sendEvolutionMessage(config: ClinicaConfig, phone: string, message: string) {
-  const resp = await fetch(
-    `${config.evolution_base_url}/message/sendText/${config.evolution_instance_name}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: config.evolution_api_key },
-      body: JSON.stringify({ number: phone, text: message }),
-    },
-  );
-  const body = await resp.text();
-  return { ok: resp.ok, body };
+  try {
+    const resp = await fetch(
+      `${config.evolution_base_url}/message/sendText/${config.evolution_instance_name}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: config.evolution_api_key },
+        body: JSON.stringify({ number: phone, text: message }),
+      },
+    );
+    const body = await resp.text();
+    return { ok: resp.ok, body, status: resp.status };
+  } catch (error) {
+    return {
+      ok: false,
+      body: error instanceof Error ? error.message : "fetch_error",
+      status: 0,
+    };
+  }
+}
+
+async function fetchEvolutionJson(config: ClinicaConfig, path: string) {
+  try {
+    const resp = await fetch(`${config.evolution_base_url}${path}`, {
+      headers: { apikey: config.evolution_api_key },
+    });
+    const text = await resp.text();
+    let json: any = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    return { ok: resp.ok, status: resp.status, text, json };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      text: error instanceof Error ? error.message : "fetch_error",
+      json: null,
+    };
+  }
 }
 
 // ============================================================
@@ -284,6 +315,40 @@ serve(async (req) => {
       );
     }
 
+    if (body.action === "status") {
+      const result = await fetchEvolutionJson(config, `/instance/connectionState/${config.evolution_instance_name}`);
+      const state = result.json?.instance?.state || result.json?.state || "unknown";
+      return new Response(
+        JSON.stringify({
+          success: result.ok,
+          connected: state === "open",
+          state,
+          error: result.ok ? null : result.text || "Erro ao consultar conexão",
+        }),
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
+    if (body.action === "instances") {
+      const result = await fetchEvolutionJson(config, "/instance/fetchInstances");
+      const instances = Array.isArray(result.json)
+        ? result.json
+          .map((i: any) => ({
+            instanceName: i.instance?.instanceName || i.instanceName || "",
+            state: i.instance?.state || i.state || "unknown",
+          }))
+          .filter((i: any) => i.instanceName)
+        : [];
+      return new Response(
+        JSON.stringify({
+          success: result.ok,
+          instances,
+          error: result.ok ? null : result.text || "Erro ao listar instâncias",
+        }),
+        { status: 200, headers: corsHeaders },
+      );
+    }
+
     // ── TESTE: envia direto, sem fila/validação anti-ban ──
     if (tipo === "teste" && telefone_teste) {
       const normalized = normalizePhone(telefone_teste);
@@ -304,8 +369,14 @@ serve(async (req) => {
         resposta: result.body.substring(0, 500),
       });
       return new Response(
-        JSON.stringify({ success: result.ok, message: result.ok ? "Teste enviado!" : `Falha: ${result.body}` }),
-        { status: result.ok ? 200 : 500, headers: corsHeaders },
+        JSON.stringify({
+          success: result.ok,
+          connected: result.ok,
+          message: result.ok ? "Teste enviado!" : `Falha: ${result.body}`,
+          error: result.ok ? null : result.body,
+          status_code: result.status,
+        }),
+        { status: 200, headers: corsHeaders },
       );
     }
 
@@ -330,6 +401,7 @@ serve(async (req) => {
           { status: 200, headers: corsHeaders },
         );
       }
+      const unidadeId = dados_direto?.unidade_id || "";
       const cfg = await getUnitConfig(supabase, unidadeId);
       const validation = await validateSend(supabase, cfg, "", normalized);
       if (!validation.ok) {
@@ -473,8 +545,8 @@ serve(async (req) => {
   } catch (err) {
     console.error("[send-whatsapp-evolution]", err);
     return new Response(
-      JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Erro" }),
-      { status: 500, headers: corsHeaders },
+      JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Erro", fallback: true }),
+      { status: 200, headers: corsHeaders },
     );
   }
 });

@@ -41,6 +41,7 @@ import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
 import { cn } from '@/lib/utils';
+import { whatsappService } from '@/services/whatsappService';
 
 const TABS = [
   { id: 'prontuario', label: 'Prontuário', icon: FileText, globalOnly: false },
@@ -361,40 +362,18 @@ const Configuracoes: React.FC = () => {
             evolution_instance_name: data.evolution_instance_name || '',
           });
           if (data.evolution_instance_name && data.evolution_api_key) {
-            try {
-              const resp = await fetch(
-                `${data.evolution_base_url}/instance/connectionState/${data.evolution_instance_name}`,
-                { headers: { apikey: data.evolution_api_key } }
-              );
-              if (resp.ok) {
-                const state = await resp.json();
-                setEvolutionStatus(state?.instance?.state === 'open' ? 'connected' : 'disconnected');
-              } else {
-                setEvolutionStatus('error');
-              }
-            } catch {
-              setEvolutionStatus('error');
+            const [{ data: statusData }, { data: instancesData }] = await Promise.all([
+              whatsappService.getConnectionStatus(),
+              whatsappService.getInstances(),
+            ]);
+            if (statusData) {
+              setEvolutionStatus(statusData.connected ? 'connected' : statusData.success ? 'disconnected' : 'error');
+            }
+            if (instancesData?.instances) {
+              setEvolutionInstances(instancesData.instances);
             }
           }
         }
-        try {
-          const baseUrl = data?.evolution_base_url || evolutionConfig.evolution_base_url;
-          const apiKey = data?.evolution_api_key || evolutionConfig.evolution_api_key;
-          if (apiKey) {
-            const resp = await fetch(`${baseUrl}/instance/fetchInstances`, {
-              headers: { apikey: apiKey },
-            });
-            if (resp.ok) {
-              const instances = await resp.json();
-              if (Array.isArray(instances)) {
-                setEvolutionInstances(instances.map((i: any) => ({
-                  instanceName: i.instance?.instanceName || i.instanceName || '',
-                  state: i.instance?.state || i.state || 'unknown',
-                })).filter((i: any) => i.instanceName));
-              }
-            }
-          }
-        } catch { }
       } catch { }
       setEvolutionLoading(false);
     })();
@@ -429,9 +408,7 @@ const Configuracoes: React.FC = () => {
   const testEvolutionWhatsApp = async () => {
     setEvolutionTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-whatsapp-evolution', {
-        body: { tipo: 'teste', telefone_teste: evolutionConfig.telefone || user?.email },
-      });
+      const { data, error } = await whatsappService.sendTest(evolutionConfig.telefone || user?.email || '');
       if (error) throw error;
       if (data?.success) {
         toast.success('Mensagem de teste enviada com sucesso!');
@@ -454,18 +431,19 @@ const Configuracoes: React.FC = () => {
       return;
     }
     try {
-      const resp = await fetch(
-        `${evolutionConfig.evolution_base_url}/instance/connectionState/${evolutionConfig.evolution_instance_name}`,
-        { headers: { apikey: evolutionConfig.evolution_api_key } }
-      );
-      if (resp.ok) {
-        const state = await resp.json();
-        const connected = state?.instance?.state === 'open';
+      const [{ data: statusData, error: statusError }, { data: instancesData }] = await Promise.all([
+        whatsappService.getConnectionStatus(),
+        whatsappService.getInstances(),
+      ]);
+      if (statusError) throw statusError;
+      if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
+      if (statusData?.success) {
+        const connected = !!statusData.connected;
         setEvolutionStatus(connected ? 'connected' : 'disconnected');
         toast[connected ? 'success' : 'warning'](connected ? 'Instância conectada!' : 'Instância desconectada. Verifique o QR Code.');
       } else {
         setEvolutionStatus('error');
-        toast.error('Erro ao verificar conexão.');
+        toast.error(statusData?.error || 'Erro ao verificar conexão.');
       }
     } catch {
       setEvolutionStatus('error');
