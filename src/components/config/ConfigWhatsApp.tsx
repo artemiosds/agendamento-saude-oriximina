@@ -20,6 +20,7 @@ import {
   Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
 import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
+import { whatsappService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
 const TEMPLATE_TYPES = [
@@ -131,31 +132,17 @@ const ConfigWhatsApp: React.FC = () => {
             evolution_instance_name: data.evolution_instance_name || '',
           });
           if (data.evolution_instance_name && data.evolution_api_key) {
-            try {
-              const resp = await fetch(
-                `${data.evolution_base_url}/instance/connectionState/${data.evolution_instance_name}`,
-                { headers: { apikey: data.evolution_api_key } }
-              );
-              if (resp.ok) {
-                const state = await resp.json();
-                setEvolutionStatus(state?.instance?.state === 'open' ? 'connected' : 'disconnected');
-              } else { setEvolutionStatus('error'); }
-            } catch { setEvolutionStatus('error'); }
-          }
-          try {
-            const resp = await fetch(`${data?.evolution_base_url || evolutionConfig.evolution_base_url}/instance/fetchInstances`, {
-              headers: { apikey: data?.evolution_api_key || evolutionConfig.evolution_api_key },
-            });
-            if (resp.ok) {
-              const instances = await resp.json();
-              if (Array.isArray(instances)) {
-                setEvolutionInstances(instances.map((i: any) => ({
-                  instanceName: i.instance?.instanceName || i.instanceName || '',
-                  state: i.instance?.state || i.state || 'unknown',
-                })).filter((i: any) => i.instanceName));
-              }
+            const [{ data: statusData }, { data: instancesData }] = await Promise.all([
+              whatsappService.getConnectionStatus(),
+              whatsappService.getInstances(),
+            ]);
+            if (statusData) {
+              setEvolutionStatus(statusData.connected ? 'connected' : statusData.success ? 'disconnected' : 'error');
             }
-          } catch {}
+            if (instancesData?.instances) {
+              setEvolutionInstances(instancesData.instances);
+            }
+          }
         }
 
         // Load reminder hours from system_config
@@ -263,16 +250,17 @@ const ConfigWhatsApp: React.FC = () => {
       return;
     }
     try {
-      const resp = await fetch(
-        `${evolutionConfig.evolution_base_url}/instance/connectionState/${evolutionConfig.evolution_instance_name}`,
-        { headers: { apikey: evolutionConfig.evolution_api_key } }
-      );
-      if (resp.ok) {
-        const state = await resp.json();
-        const connected = state?.instance?.state === 'open';
+      const [{ data: statusData, error: statusError }, { data: instancesData }] = await Promise.all([
+        whatsappService.getConnectionStatus(),
+        whatsappService.getInstances(),
+      ]);
+      if (statusError) throw statusError;
+      if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
+      if (statusData?.success) {
+        const connected = !!statusData.connected;
         setEvolutionStatus(connected ? 'connected' : 'disconnected');
         toast[connected ? 'success' : 'warning'](connected ? 'Instância conectada!' : 'Desconectada. Verifique QR Code.');
-      } else { setEvolutionStatus('error'); toast.error('Erro ao verificar.'); }
+      } else { setEvolutionStatus('error'); toast.error(statusData?.error || 'Erro ao verificar.'); }
     } catch { setEvolutionStatus('error'); toast.error('Não foi possível conectar.'); }
   };
 
@@ -280,9 +268,7 @@ const ConfigWhatsApp: React.FC = () => {
     if (!testPhone) { toast.error('Informe o número para teste.'); return; }
     setEvolutionTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-whatsapp-evolution', {
-        body: { tipo: 'teste', telefone_teste: testPhone },
-      });
+      const { data, error } = await whatsappService.sendTest(testPhone);
       if (error) throw error;
       if (data?.success) {
         toast.success('Mensagem de teste enviada!');
