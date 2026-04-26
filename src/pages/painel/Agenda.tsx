@@ -703,7 +703,9 @@ const Agenda: React.FC = () => {
     }
 
     // Server-side slot availability check
-    const canOverride = user && ["master", "coordenador"].includes(user.role);
+    // Apenas MASTER pode forçar encaixe quando o limite de vagas está atingido/excedido.
+    // RECEPÇÃO e GESTÃO ficam bloqueados conforme regra de negócio.
+    const canOverride = user?.role === "master";
     try {
       const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
         p_profissional_id: newAg.profissionalId,
@@ -715,16 +717,17 @@ const Agenda: React.FC = () => {
         const reason = (slotCheck as any).reason;
         const reasonMsg =
           reason === "date_blocked" ? "Data bloqueada." :
-          reason === "day_full" ? "Vagas do dia esgotadas." :
-          reason === "hour_full" ? "Vagas deste horário esgotadas." :
+          reason === "day_full" ? "Limite de vagas atingido para este profissional neste dia/turno." :
+          reason === "hour_full" ? "Limite de vagas atingido para este horário." :
+          reason === "turno_full" ? "Limite de vagas atingido para este profissional neste dia/turno." :
           reason === "no_availability" ? "Sem disponibilidade cadastrada." :
           "Sem disponibilidade.";
         if (!canOverride) {
-          toast.error(`Não é possível agendar: ${reasonMsg}`);
+          toast.error(reasonMsg);
           return;
         }
         const confirmou = window.confirm(
-          `${reasonMsg} Deseja forçar um encaixe como ${user?.role}?`,
+          `⚠️ Agenda lotada. ${reasonMsg}\n\nDeseja forçar o encaixe como MASTER?`,
         );
         if (!confirmou) return;
       }
