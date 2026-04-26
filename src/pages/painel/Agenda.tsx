@@ -261,6 +261,29 @@ const Agenda: React.FC = () => {
     return () => { cancelled = true; };
   }, [agendamentos, selectedDate]);
 
+  // Realtime: refletir imediatamente nova classificação de risco da triagem
+  useEffect(() => {
+    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    if (dayAgIds.length === 0) return;
+    const channel = supabase
+      .channel(`triage-agenda-${selectedDate}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "triage_records" },
+        (payload) => {
+          const row: any = (payload.new as any) || (payload.old as any);
+          if (!row?.agendamento_id) return;
+          if (!dayAgIds.includes(row.agendamento_id)) return;
+          setTriageMap((prev) => ({
+            ...prev,
+            [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase() },
+          }));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [agendamentos, selectedDate]);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
