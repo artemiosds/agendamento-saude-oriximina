@@ -42,6 +42,7 @@ export interface TurnoInfoResult {
   vagasOcupadas: number;
   vagasLivres: number;
   lotado: boolean;
+  excedido: boolean;
 }
 
 interface BloqueioAgenda {
