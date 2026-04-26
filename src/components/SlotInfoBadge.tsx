@@ -71,10 +71,15 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   if (info.isTurnoMode && turnoData.length > 0 && !compact) {
     const totalOcupadas = turnoData.reduce((s, t) => s + t.vagasOcupadas, 0);
     const totalVagas = turnoData.reduce((s, t) => s + t.vagasTotal, 0);
+    const totalExcedido = totalOcupadas > totalVagas;
     return (
       <div ref={ref as React.Ref<HTMLDivElement>} className={cn('space-y-1.5', className)}>
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className={cn(
+          "text-xs font-medium",
+          totalExcedido ? "text-destructive font-semibold" : "text-muted-foreground",
+        )}>
           📊 {totalOcupadas} de {totalVagas} vagas ocupadas no dia
+          {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
         <div className="flex flex-col gap-1">
           {turnoData.map((t) => {
@@ -95,9 +100,15 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 <span className="font-medium">{t.nome}</span>
                 <span className="text-muted-foreground">{t.horaInicio}–{t.horaFim}</span>
                 <span className="ml-auto font-semibold">
-                  {t.vagasLivres} de {t.vagasTotal} livres
+                  {t.excedido
+                    ? `${t.vagasOcupadas} de ${t.vagasTotal} ocupadas`
+                    : `${t.vagasLivres} de ${t.vagasTotal} livres`}
                 </span>
-                {t.lotado && (
+                {t.excedido ? (
+                  <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
+                    Excedido
+                  </span>
+                ) : t.lotado && (
                   <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
                     Lotado
                   </span>
