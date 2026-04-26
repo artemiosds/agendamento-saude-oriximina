@@ -51,15 +51,20 @@ export const SCREEN_LABELS: Record<ScreenKey, string> = {
 // Native fields per screen — exported so config UI and forms share one source of truth.
 export const NATIVE_FIELDS: Record<ScreenKey, { nome: string; rotulo: string }[]> = {
   paciente: [
-    { nome: 'nome', rotulo: 'Nome' },
+    // Aba Identificação
+    { nome: 'nome', rotulo: 'Nome completo' },
+    { nome: 'nomeMae', rotulo: 'Nome da Mãe' },
     { nome: 'dataNascimento', rotulo: 'Data de Nascimento' },
+    { nome: 'sexo', rotulo: 'Sexo' },
     { nome: 'cpf', rotulo: 'CPF' },
     { nome: 'cns', rotulo: 'CNS' },
-    { nome: 'telefone', rotulo: 'Telefone' },
-    { nome: 'email', rotulo: 'E-mail' },
-    { nome: 'endereco', rotulo: 'Endereço' },
+    // Aba Endereço
     { nome: 'municipio', rotulo: 'Município' },
-    { nome: 'nomeMae', rotulo: 'Nome da Mãe' },
+    { nome: 'endereco', rotulo: 'Endereço' },
+    // Aba Contato
+    { nome: 'telefone', rotulo: 'Telefone Principal' },
+    { nome: 'email', rotulo: 'E-mail' },
+    // Aba Complementares
     { nome: 'observacoes', rotulo: 'Observações' },
     { nome: 'isGestante', rotulo: 'Gestante' },
     { nome: 'isPne', rotulo: 'PNE' },
