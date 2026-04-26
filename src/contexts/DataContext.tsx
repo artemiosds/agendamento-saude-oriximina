@@ -1748,20 +1748,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const key = `${profissionalId}|${unidadeId}|${date}`;
       const dayAppointments = appointmentsByDateProfUnitRef.current.get(key) || [];
 
+      // Cálculo único e centralizado de vagas por turno.
+      // Conta TODOS os agendamentos ATIVOS (statusOcupaVaga) cujo horário pertence
+      // ao range [horaInicio, horaFim) do turno. Já temos pré-filtro por
+      // profissional+unidade+data via appointmentsByDateProfUnit (que aplica statusOcupaVaga).
       return turnoDisps.map((td) => {
         const count = dayAppointments.filter(
           (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
         ).length;
         const nome = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+        const vagasTotal = td.vagasPorDia;
+        const vagasOcupadas = count; // valor REAL, pode ultrapassar o limite
+        const vagasLivres = Math.max(0, vagasTotal - vagasOcupadas);
+        const lotado = vagasOcupadas >= vagasTotal;
+        const excedido = vagasOcupadas > vagasTotal;
         return {
           turnoId: td.salaId || td.id, // salaId stores turno ID in turno mode
           nome,
           horaInicio: td.horaInicio,
           horaFim: td.horaFim,
-          vagasTotal: td.vagasPorDia,
-          vagasOcupadas: count,
-          vagasLivres: Math.max(0, td.vagasPorDia - count),
-          lotado: count >= td.vagasPorDia,
+          vagasTotal,
+          vagasOcupadas,
+          vagasLivres,
+          lotado,
+          excedido,
         };
       }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
     },
