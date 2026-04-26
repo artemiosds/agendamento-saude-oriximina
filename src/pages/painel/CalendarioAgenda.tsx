@@ -160,11 +160,24 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
 
           if (!isBlocked && profUnit) {
             agendamentosConfirmados = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
-            if (!isPast) {
+            // Use o limite REAL configurado (soma de vagasPorDia das disponibilidades aplicáveis)
+            // para que o status do calendário (lotado/excedido) bata com o resumo do dia/turno.
+            const limiteDia = dispIndex
+              .filter((disp) => (
+                disp.profissionalId === prof.id &&
+                disp.unidadeId === profUnit &&
+                dateStr >= disp.dataInicio &&
+                dateStr <= disp.dataFim &&
+                disp.diasSemana.includes(dayOfWeek)
+              ))
+              .reduce((sum, d) => sum + d.vagasPorDia, 0);
+            if (limiteDia > 0) {
+              totalVagas = limiteDia;
+            } else if (!isPast) {
               const slots = getAvailableSlots(prof.id, profUnit, dateStr);
               totalVagas = slots.length + agendamentosConfirmados;
             } else {
-              totalVagas = agendamentosConfirmados || 1; // past days: show count
+              totalVagas = agendamentosConfirmados || 1;
             }
           }
         }
