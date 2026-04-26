@@ -70,12 +70,16 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
     return [...prevDays, ...days, ...nextDays];
   }, [currentMonth]);
 
-  // Pre-index agendamentos by date for O(1) lookup instead of filtering per day
+  // Pre-index agendamentos by date for O(1) lookup instead of filtering per day.
+  // CRITICAL: chave inclui unidadeId para alinhar com SlotInfoBadge / getTurnoInfo,
+  // evitando divergência (ex.: calendário mostrar 17, mas resumo do dia 11 da unidade).
+  // Lista de status alinhada com STATUS_NAO_OCUPA_VAGA do DataContext.
+  const STATUS_NAO_OCUPA = new Set(["cancelado", "falta", "excluido", "removido", "inativo"]);
   const agendamentosByDate = useMemo(() => {
     const map = new Map<string, Map<string, number>>();
     for (const a of agendamentos) {
-      if (a.status === "cancelado" || a.status === "falta") continue;
-      const profKey = a.profissionalId;
+      if (STATUS_NAO_OCUPA.has(a.status)) continue;
+      const profKey = `${a.profissionalId}|${a.unidadeId}`;
       let dateMap = map.get(a.data);
       if (!dateMap) {
         dateMap = new Map();
