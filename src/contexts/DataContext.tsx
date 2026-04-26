@@ -230,7 +230,18 @@ const safeConfigMerge = (incoming: Partial<Configuracoes> | null | undefined): C
   };
 };
 
-const statusOcupaVaga = (status: string) => !["cancelado", "falta"].includes(status);
+// Lista única de status que NÃO ocupam vaga na agenda.
+// Qualquer outro status (pendente, confirmado, confirmado_chegada, aguardando_*,
+// em_atendimento, atendido, concluido, remarcado, encaixe, etc.) é considerado ATIVO
+// e ocupa vaga real do profissional/unidade/data/turno.
+const STATUS_NAO_OCUPA_VAGA = new Set([
+  "cancelado",
+  "falta",
+  "excluido",
+  "removido",
+  "inativo",
+]);
+const statusOcupaVaga = (status: string) => !STATUS_NAO_OCUPA_VAGA.has(status);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
