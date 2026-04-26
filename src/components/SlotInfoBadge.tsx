@@ -56,7 +56,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
       hourTotal = disp.vagasPorHora;
     }
 
-    return { dayOccupied, dayTotal, dayAvailable, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
+    return { dayOccupied, dayTotal, dayAvailable, dayExcedido, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
   }, [profissionalId, unidadeId, date, hora, agendamentos, disponibilidades, getAvailableSlots]);
 
   if (!info) return null;
