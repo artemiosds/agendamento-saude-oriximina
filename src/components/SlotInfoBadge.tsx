@@ -32,16 +32,19 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
 
     const isTurnoMode = allDisps.some(d => d.vagasPorHora === 0);
 
+    // Status que NÃO ocupam vaga (mantém em sincronia com DataContext.statusOcupaVaga)
+    const STATUS_INATIVOS = ['cancelado', 'falta', 'excluido', 'removido', 'inativo'];
     const active = agendamentos.filter(
       a => a.profissionalId === profissionalId &&
         a.unidadeId === unidadeId &&
         a.data === date &&
-        !['cancelado', 'falta'].includes(a.status),
+        !STATUS_INATIVOS.includes(a.status),
     );
 
     const dayOccupied = active.length;
     const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
+    const dayExcedido = dayOccupied > dayTotal;
     const availableSlotOptions = getAvailableSlots(profissionalId, unidadeId, date).length;
 
     let hourOccupied: number | undefined;
@@ -53,7 +56,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
       hourTotal = disp.vagasPorHora;
     }
 
-    return { dayOccupied, dayTotal, dayAvailable, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
+    return { dayOccupied, dayTotal, dayAvailable, dayExcedido, hourOccupied, hourTotal, availableSlotOptions, isTurnoMode };
   }, [profissionalId, unidadeId, date, hora, agendamentos, disponibilidades, getAvailableSlots]);
 
   if (!info) return null;
@@ -68,10 +71,15 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   if (info.isTurnoMode && turnoData.length > 0 && !compact) {
     const totalOcupadas = turnoData.reduce((s, t) => s + t.vagasOcupadas, 0);
     const totalVagas = turnoData.reduce((s, t) => s + t.vagasTotal, 0);
+    const totalExcedido = totalOcupadas > totalVagas;
     return (
       <div ref={ref as React.Ref<HTMLDivElement>} className={cn('space-y-1.5', className)}>
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className={cn(
+          "text-xs font-medium",
+          totalExcedido ? "text-destructive font-semibold" : "text-muted-foreground",
+        )}>
           📊 {totalOcupadas} de {totalVagas} vagas ocupadas no dia
+          {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
         <div className="flex flex-col gap-1">
           {turnoData.map((t) => {
@@ -92,9 +100,15 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 <span className="font-medium">{t.nome}</span>
                 <span className="text-muted-foreground">{t.horaInicio}–{t.horaFim}</span>
                 <span className="ml-auto font-semibold">
-                  {t.vagasLivres} de {t.vagasTotal} livres
+                  {t.excedido
+                    ? `${t.vagasOcupadas} de ${t.vagasTotal} ocupadas`
+                    : `${t.vagasLivres} de ${t.vagasTotal} livres`}
                 </span>
-                {t.lotado && (
+                {t.excedido ? (
+                  <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
+                    Excedido
+                  </span>
+                ) : t.lotado && (
                   <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
                     Lotado
                   </span>
@@ -161,11 +175,13 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
         isNearFull && hasAvailableSlotOptions && 'bg-warning/10 text-warning',
         !isFull && !isNearFull && hasAvailableSlotOptions && 'bg-success/10 text-success',
       )}>
-        {isFull
-          ? '🔴 Dia lotado'
-          : hasNoRemainingSlotOptions
-            ? (isToday ? '⏰ Sem horários restantes hoje' : '⏰ Sem horários livres nesta data')
-            : `📊 ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas`
+        {info.dayExcedido
+          ? `⚠️ ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas (LIMITE EXCEDIDO)`
+          : isFull
+            ? `🔴 Dia lotado (${info.dayOccupied} de ${info.dayTotal})`
+            : hasNoRemainingSlotOptions
+              ? (isToday ? '⏰ Sem horários restantes hoje' : '⏰ Sem horários livres nesta data')
+              : `📊 ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas`
         }
       </span>
       {!isFull && (
