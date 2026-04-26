@@ -32,16 +32,19 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
 
     const isTurnoMode = allDisps.some(d => d.vagasPorHora === 0);
 
+    // Status que NÃO ocupam vaga (mantém em sincronia com DataContext.statusOcupaVaga)
+    const STATUS_INATIVOS = ['cancelado', 'falta', 'excluido', 'removido', 'inativo'];
     const active = agendamentos.filter(
       a => a.profissionalId === profissionalId &&
         a.unidadeId === unidadeId &&
         a.data === date &&
-        !['cancelado', 'falta'].includes(a.status),
+        !STATUS_INATIVOS.includes(a.status),
     );
 
     const dayOccupied = active.length;
     const dayTotal = allDisps.reduce((sum, d) => sum + d.vagasPorDia, 0);
     const dayAvailable = Math.max(0, dayTotal - dayOccupied);
+    const dayExcedido = dayOccupied > dayTotal;
     const availableSlotOptions = getAvailableSlots(profissionalId, unidadeId, date).length;
 
     let hourOccupied: number | undefined;
