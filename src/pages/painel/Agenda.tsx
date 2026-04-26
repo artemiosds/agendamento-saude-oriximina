@@ -261,6 +261,29 @@ const Agenda: React.FC = () => {
     return () => { cancelled = true; };
   }, [agendamentos, selectedDate]);
 
+  // Realtime: refletir imediatamente nova classificação de risco da triagem
+  useEffect(() => {
+    const dayAgIds = agendamentos.filter((a) => a.data === selectedDate).map((a) => a.id);
+    if (dayAgIds.length === 0) return;
+    const channel = supabase
+      .channel(`triage-agenda-${selectedDate}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "triage_records" },
+        (payload) => {
+          const row: any = (payload.new as any) || (payload.old as any);
+          if (!row?.agendamento_id) return;
+          if (!dayAgIds.includes(row.agendamento_id)) return;
+          setTriageMap((prev) => ({
+            ...prev,
+            [row.agendamento_id]: { risco: String(row.classificacao_risco || "").toLowerCase() },
+          }));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [agendamentos, selectedDate]);
+
   // NOVO: aba pendentes / agenda
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
 
@@ -408,9 +431,27 @@ const Agenda: React.FC = () => {
       "em_atendimento", "aguardando_enfermagem", "apto_atendimento",
     ]);
 
-    // Dynamic priority from triage: 1=Vermelho, 2=Amarelo/Laranja, 4=Verde, 6=Azul
-    const RISCO_PRIO: Record<string, number> = {
-      vermelho: 1, laranja: 2, amarelo: 2, verde: 4, azul: 6,
+    // Peso da classificação de risco (Manchester) — menor = mais urgente
+    // 1=Vermelho, 2=Laranja, 3=Amarelo, 4=Verde, 5=Azul, 6=Sem classificação
+    const getPesoClassificacaoRisco = (ag: any): number => {
+      const triage = triageMap[ag.id];
+      const raw =
+        triage?.risco ||
+        ag.classificacaoRisco ||
+        ag.classificacao_risco ||
+        ag.risco ||
+        ag.corRisco ||
+        ag.triagem?.classificacaoRisco ||
+        ag.triagem?.classificacao_risco ||
+        "";
+      const r = String(raw).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (!r) return 6;
+      if (r.includes("vermelho") || r.includes("emergencia") || r.includes("imediato")) return 1;
+      if (r.includes("laranja") || r.includes("muito urgente")) return 2;
+      if (r.includes("amarelo") || (r.includes("urgente") && !r.includes("nao") && !r.includes("pouco") && !r.includes("muito"))) return 3;
+      if (r.includes("verde") || r.includes("pouco urgente")) return 4;
+      if (r.includes("azul") || r.includes("nao urgente")) return 5;
+      return 6;
     };
 
     const calcAge = (dob: string): number => {
@@ -428,54 +469,14 @@ const Agenda: React.FC = () => {
     // Shift: morning (<12:00) vs afternoon (>=12:00)
     const getShift = (hora: string): number => hora < "12:00" ? 0 : 1;
 
-    /**
-     * Unified priority hierarchy (lower = higher priority):
-     *  1 = Risco Vermelho (dynamic)
-     *  2 = Risco Amarelo/Laranja (dynamic)
-     *  3 = Dor intensa 7-10 (dynamic, future)
-     *  4 = Risco Verde (dynamic)
-     *  5 = Fixed: Gestante / PNE / Autista
-     *  6 = Fixed: Idoso (≥60) OR Risco Azul (dynamic)
-     *  7 = Fixed: Criança (0-12)
-     *  8 = Normal (no priority)
-     * 50 = Not checked in (before triage/dynamic, use fixed priority)
-     * 99 = Concluded
-     */
-    const getFixedPrio = (pac: (typeof pacientes)[0] | undefined, age: number): number => {
-      if (!pac) return 8;
-      if ((pac as any).isGestante || (pac as any).isPne || (pac as any).isAutista) return 5;
-      if (age >= 60) return 6;
-      if (age > 0 && age <= 12) return 7;
-      return 8;
-    };
-
-    const getPrioLevel = (ag: (typeof agendamentos)[0]): number => {
-      const st = ag.status as string;
-      if (st === "concluido") return 99;
-
-      const pac = pacientes.find((p) => p.id === ag.pacienteId);
-      const age = pac ? calcAge(pac.dataNascimento) : 0;
-      const fixedPrio = getFixedPrio(pac, age);
-
-      // Not checked in — use fixed priority but put in 50+ range
-      // so they stay below all checked-in patients
-      if (!CHECKED_IN_STATUSES.has(st)) {
-        // Return 50 + a sub-priority so fixed priority still orders within unchecked group
-        return 50 + Math.min(fixedPrio, 8);
-      }
-
-      // Patient is present — check triage data (dynamic priority)
-      const triage = triageMap[ag.id];
-      const risco = triage?.risco || "";
-
-      if (risco && RISCO_PRIO[risco] !== undefined) {
-        const dynamicPrio = RISCO_PRIO[risco];
-        // Dynamic beats fixed. But for verde(4)/azul(6), if fixed is better, use fixed
-        return Math.min(dynamicPrio, fixedPrio);
-      }
-
-      // No triage classification — use fixed priority
-      return fixedPrio;
+    // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
+    // Menor = maior prioridade
+    const getPrioridadeIdade = (pac: (typeof pacientes)[0] | undefined, age: number): number => {
+      if (!pac) return 4;
+      if ((pac as any).isGestante || (pac as any).isPne || (pac as any).isAutista) return 1;
+      if (age >= 60) return 2;
+      if (age > 0 && age <= 12) return 3;
+      return 4;
     };
 
     const base = agendamentos
@@ -491,24 +492,39 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Separate by shift (morning first)
+        // 1. Separar por turno (manhã antes de tarde)
         const shiftA = getShift(a.hora);
         const shiftB = getShift(b.hora);
-
-        // Concluded items go to the end of their own shift
-        const prioA = getPrioLevel(a);
-        const prioB = getPrioLevel(b);
-        const isConcA = prioA === 99;
-        const isConcB = prioB === 99;
-
-        // Sort: shift ASC, then non-concluded before concluded, then priority, then time
         if (shiftA !== shiftB) return shiftA - shiftB;
-        if (isConcA !== isConcB) return isConcA ? 1 : -1;
-        if (prioA !== prioB) return prioA - prioB;
 
-        // Same priority — earlier check-in first; for non-checked-in use scheduled time
-        const isCheckedA = prioA < 50;
-        const isCheckedB = prioB < 50;
+        // 2. Concluídos vão para o fim do próprio turno
+        const concA = a.status === "concluido" ? 1 : 0;
+        const concB = b.status === "concluido" ? 1 : 0;
+        if (concA !== concB) return concA - concB;
+
+        // 3. Pacientes presentes (check-in feito) vêm antes dos não-checados,
+        //    para que a fila ativa fique no topo. Dentro de cada grupo aplicamos risco.
+        const checkedA = CHECKED_IN_STATUSES.has(a.status) ? 0 : 1;
+        const checkedB = CHECKED_IN_STATUSES.has(b.status) ? 0 : 1;
+        if (checkedA !== checkedB) return checkedA - checkedB;
+
+        // 4. CRITÉRIO PRINCIPAL: classificação de risco (Manchester)
+        const riscoA = getPesoClassificacaoRisco(a);
+        const riscoB = getPesoClassificacaoRisco(b);
+        if (riscoA !== riscoB) return riscoA - riscoB;
+
+        // 5. Desempate: prioridade legal/idade
+        const pacA = pacientes.find((p) => p.id === a.pacienteId);
+        const pacB = pacientes.find((p) => p.id === b.pacienteId);
+        const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
+        const ageB = pacB ? calcAge(pacB.dataNascimento) : 0;
+        const idadePrioA = getPrioridadeIdade(pacA, ageA);
+        const idadePrioB = getPrioridadeIdade(pacB, ageB);
+        if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
+
+        // 6. Desempate: ordem de chegada (para checked-in) ou horário agendado
+        const isCheckedA = checkedA === 0;
+        const isCheckedB = checkedB === 0;
         const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
         const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
