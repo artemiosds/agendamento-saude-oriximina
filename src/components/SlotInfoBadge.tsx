@@ -175,11 +175,13 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
         isNearFull && hasAvailableSlotOptions && 'bg-warning/10 text-warning',
         !isFull && !isNearFull && hasAvailableSlotOptions && 'bg-success/10 text-success',
       )}>
-        {isFull
-          ? '🔴 Dia lotado'
-          : hasNoRemainingSlotOptions
-            ? (isToday ? '⏰ Sem horários restantes hoje' : '⏰ Sem horários livres nesta data')
-            : `📊 ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas`
+        {info.dayExcedido
+          ? `⚠️ ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas (LIMITE EXCEDIDO)`
+          : isFull
+            ? `🔴 Dia lotado (${info.dayOccupied} de ${info.dayTotal})`
+            : hasNoRemainingSlotOptions
+              ? (isToday ? '⏰ Sem horários restantes hoje' : '⏰ Sem horários livres nesta data')
+              : `📊 ${info.dayOccupied} de ${info.dayTotal} vagas ocupadas`
         }
       </span>
       {!isFull && (
