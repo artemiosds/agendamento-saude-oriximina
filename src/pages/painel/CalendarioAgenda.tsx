@@ -159,7 +159,7 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
           ));
 
           if (!isBlocked && profUnit) {
-            agendamentosConfirmados = dateAgMap?.get(prof.id) || 0;
+            agendamentosConfirmados = dateAgMap?.get(`${prof.id}|${profUnit}`) || 0;
             if (!isPast) {
               const slots = getAvailableSlots(prof.id, profUnit, dateStr);
               totalVagas = slots.length + agendamentosConfirmados;
