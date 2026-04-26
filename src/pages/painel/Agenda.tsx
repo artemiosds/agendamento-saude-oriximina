@@ -1794,7 +1794,14 @@ const Agenda: React.FC = () => {
                                 </div>
                               </div>
                               <div className="text-right shrink-0">
-                                {t.lotado ? (
+                                {t.excedido ? (
+                                  <span className={cn(
+                                    "text-xs font-bold px-2 py-1 rounded-full",
+                                    isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
+                                  )}>
+                                    {t.vagasOcupadas} de {t.vagasTotal} {isMaster ? '(forçar)' : '(excedido)'}
+                                  </span>
+                                ) : t.lotado ? (
                                   <span className={cn(
                                     "text-xs font-bold px-2 py-1 rounded-full",
                                     isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
