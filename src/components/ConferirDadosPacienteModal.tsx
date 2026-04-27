@@ -261,6 +261,8 @@ export function ConferirDadosPacienteModal({
         email: form.email,
         endereco: form.endereco,
         municipio: form.municipio,
+        naturalidade: form.naturalidade || "",
+        naturalidade_uf: form.naturalidade_uf || "",
         custom_data: customData,
       };
 
