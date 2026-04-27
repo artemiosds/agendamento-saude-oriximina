@@ -176,15 +176,22 @@ const Pacientes: React.FC = () => {
   }, [fila]);
 
   // Profissionais só veem pacientes vinculados aos seus agendamentos
-  // Unit-scoped users see patients from their unit's agendamentos
+  // Unit-scoped users (Recepção, Master de unidade, Gestão) veem:
+  //   - pacientes cadastrados na sua unidade (paciente.unidade_id)
+  //   - + pacientes que possuem agendamento na sua unidade (continuidade do cuidado cross-unit)
+  // Admin global (admin.sms) vê tudo.
   const visiblePacientes = useMemo(() => {
     if (isProfissional && user) {
       const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
     if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-      const unitPacienteIds = new Set(agendamentos.filter((a) => a.unidadeId === user.unidadeId).map((a) => a.pacienteId));
-      return pacientes.filter((p) => unitPacienteIds.has(p.id));
+      const unitPacienteIds = new Set(
+        agendamentos.filter((a) => a.unidadeId === user.unidadeId).map((a) => a.pacienteId),
+      );
+      return pacientes.filter(
+        (p) => p.unidadeId === user.unidadeId || unitPacienteIds.has(p.id),
+      );
     }
     return pacientes;
   }, [pacientes, agendamentos, isProfissional, user]);
@@ -422,10 +429,14 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
+        // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
+        // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
+        const insertPayload: any = { id, ...dbFields };
+        if (user?.unidadeId) insertPayload.unidade_id = user.unidadeId;
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert({ id, ...dbFields }))
+        Promise.resolve(supabase.from("pacientes").insert(insertPayload))
           .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
           .catch((err) => console.error("Erro ao cadastrar paciente:", err))
           .finally(() => refreshPacientes());
