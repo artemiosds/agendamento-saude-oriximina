@@ -20,7 +20,7 @@ import {
   Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
 import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
-import { whatsappService } from '@/services/whatsappService';
+import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
 const TEMPLATE_TYPES = [
@@ -108,6 +108,23 @@ const ConfigWhatsApp: React.FC = () => {
   });
   const [reprocessing, setReprocessing] = useState(false);
 
+  // Provedor ativo
+  const [activeProvider, setActiveProvider] = useState<'evolution' | 'uazapigo'>('evolution');
+
+  // UazapiGO config
+  const [uazConfig, setUazConfig] = useState({
+    uazapi_server_url: 'https://free.uazapi.com',
+    uazapi_admin_token: '',
+    uazapi_instance: '',
+    uazapi_ativo: false,
+  });
+  const [uazTokenMasked, setUazTokenMasked] = useState(true);
+  const [originalUazToken, setOriginalUazToken] = useState('');
+  const [uazSaving, setUazSaving] = useState(false);
+  const [uazTesting, setUazTesting] = useState(false);
+  const [uazCreating, setUazCreating] = useState(false);
+  const [uazStatus, setUazStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error' | 'qrcode' | 'connecting' | 'no_instance'>('idle');
+
   // Templates
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
@@ -170,6 +187,18 @@ const ConfigWhatsApp: React.FC = () => {
               .maybeSingle();
             if (persisted) setStatusDetail(persisted as any);
           }
+
+          // UazapiGO
+          const uazTok = (data as any).uazapi_admin_token || '';
+          setOriginalUazToken(uazTok);
+          setUazConfig({
+            uazapi_server_url: (data as any).uazapi_server_url || 'https://free.uazapi.com',
+            uazapi_admin_token: uazTok,
+            uazapi_instance: (data as any).uazapi_instance || '',
+            uazapi_ativo: !!(data as any).uazapi_ativo,
+          });
+          setActiveProvider(((data as any).whatsapp_provider_active === 'uazapigo') ? 'uazapigo' : 'evolution');
+          if (!(data as any).uazapi_instance) setUazStatus('no_instance');
         }
 
         // Load reminder hours from system_config
@@ -442,6 +471,107 @@ const ConfigWhatsApp: React.FC = () => {
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
   };
 
+  // ─── UazapiGO ──────────────────────────────────────────────
+  const saveUazConfig = async () => {
+    setUazSaving(true);
+    try {
+      const serverUrl = (uazConfig.uazapi_server_url || '').trim().replace(/\/+$/, '');
+      if (serverUrl && !/^https?:\/\//i.test(serverUrl)) {
+        toast.error('Server URL deve começar com http:// ou https://');
+        setUazSaving(false); return;
+      }
+      const tokenToSave = uazConfig.uazapi_admin_token || originalUazToken;
+      const payload: any = {
+        uazapi_server_url: serverUrl,
+        uazapi_admin_token: tokenToSave,
+        uazapi_instance: uazConfig.uazapi_instance || '',
+        uazapi_ativo: uazConfig.uazapi_ativo,
+      };
+      if (evolutionConfigId) {
+        await supabase.from('clinica_config').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
+      } else {
+        const { data } = await supabase.from('clinica_config').insert(payload).select('id').single();
+        if (data) setEvolutionConfigId(data.id);
+      }
+      setOriginalUazToken(tokenToSave);
+      setUazTokenMasked(true);
+      toast.success('Configuração UazapiGO salva.');
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    setUazSaving(false);
+  };
+
+  const checkUazConnection = async () => {
+    if (!uazConfig.uazapi_server_url || !originalUazToken) {
+      toast.error('Preencha Server URL e Admin Token primeiro.');
+      return;
+    }
+    setUazTesting(true);
+    try {
+      const { data } = await uazapigoService.getConnectionStatus();
+      const detailed = (data as any)?.status_detailed;
+      switch (detailed) {
+        case 'conectado': setUazStatus('connected'); toast.success('✅ UazapiGO conectada!'); break;
+        case 'qrcode_necessario': setUazStatus('qrcode'); toast.warning('📱 QR Code necessário no painel UazapiGO.'); break;
+        case 'conectando': setUazStatus('connecting'); toast.info('🔄 Conectando...'); break;
+        case 'desconectado': setUazStatus('disconnected'); toast.warning('Instância desconectada.'); break;
+        case 'admin_token_invalido': setUazStatus('error'); toast.error('❌ Admin Token inválido'); break;
+        case 'instancia_inexistente': setUazStatus('no_instance'); toast.error('❌ Instância não encontrada'); break;
+        case 'server_url_invalida': setUazStatus('error'); toast.error('❌ Server URL inválido'); break;
+        case 'rede_indisponivel': setUazStatus('error'); toast.error('❌ Rede indisponível'); break;
+        default: setUazStatus('error'); toast.error((data as any)?.error || 'Erro ao verificar UazapiGO');
+      }
+    } catch (err: any) { setUazStatus('error'); toast.error(`Erro: ${err.message}`); }
+    setUazTesting(false);
+  };
+
+  const createUazInstance = async () => {
+    if (!uazConfig.uazapi_server_url || !originalUazToken) {
+      toast.error('Configure Server URL e Admin Token para criar instância.');
+      return;
+    }
+    const name = uazConfig.uazapi_instance?.trim() || prompt('Nome da nova instância UazapiGO:') || '';
+    if (!name) return;
+    setUazCreating(true);
+    try {
+      const { data } = await uazapigoService.createInstance(name);
+      const d = data as any;
+      if (d?.success && d?.instance) {
+        setUazConfig(p => ({ ...p, uazapi_instance: d.instance.name }));
+        toast.success(`Instância "${d.instance.name}" criada. Verifique o QR no painel UazapiGO.`);
+        setUazStatus('qrcode');
+      } else {
+        toast.error(d?.error || 'Falha ao criar instância');
+      }
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    setUazCreating(false);
+  };
+
+  const switchProvider = async (next: 'evolution' | 'uazapigo') => {
+    if (next === 'uazapigo' && !uazConfig.uazapi_ativo) {
+      toast.error('Ative e configure a UazapiGO antes de selecioná-la como provedor.');
+      return;
+    }
+    if (next === 'uazapigo' && (!uazConfig.uazapi_server_url || !originalUazToken || !uazConfig.uazapi_instance)) {
+      toast.error('UazapiGO ainda não está totalmente configurada.');
+      return;
+    }
+    setActiveProvider(next);
+    try {
+      if (evolutionConfigId) {
+        await supabase.from('clinica_config').update({
+          whatsapp_provider_active: next, updated_at: new Date().toISOString(),
+        }).eq('id', evolutionConfigId);
+        toast.success(`Provedor ativo: ${next === 'evolution' ? 'Evolution API' : 'UazapiGO'}`);
+      }
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+  };
+
+  const maskedUazToken = originalUazToken
+    ? originalUazToken.length <= 8
+      ? '••••••••'
+      : `${originalUazToken.slice(0, 4)}${'•'.repeat(Math.max(8, originalUazToken.length - 8))}${originalUazToken.slice(-4)}`
+    : '';
+
   const statusBadge = (status: string) => {
     switch (status) {
       case 'connected': return <Badge className="bg-success/10 text-success border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Conectado</Badge>;
@@ -494,6 +624,30 @@ const ConfigWhatsApp: React.FC = () => {
 
         {/* ─── CONEXÃO ─── */}
         <TabsContent value="conexao" className="space-y-4 mt-4">
+          {/* ─── PROVEDOR ATIVO ─── */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2"><Zap className="w-4 h-4" /> Provedor de envio ativo</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Apenas o provedor selecionado envia mensagens. Nunca os dois ao mesmo tempo.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={activeProvider} onValueChange={(v) => switchProvider(v as 'evolution' | 'uazapigo')}>
+                    <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="evolution">Evolution API</SelectItem>
+                      <SelectItem value="uazapigo">UazapiGO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Badge variant={activeProvider === 'uazapigo' ? 'default' : 'secondary'}>
+                    {activeProvider === 'uazapigo' ? 'UazapiGO' : 'Evolution'}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Smartphone className="w-4 h-4" /> Evolution API</h3>
@@ -553,7 +707,105 @@ const ConfigWhatsApp: React.FC = () => {
             </CardContent>
           </Card>
 
+          {/* ─── UAZAPIGO ─── */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Smartphone className="w-4 h-4" /> UazapiGO
+                  <Badge variant="outline" className="ml-1">Alternativa</Badge>
+                </h3>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="uaz-ativo" className="text-xs">Ativo</Label>
+                  <Switch
+                    id="uaz-ativo"
+                    checked={uazConfig.uazapi_ativo}
+                    onCheckedChange={(v) => setUazConfig(p => ({ ...p, uazapi_ativo: v }))}
+                  />
+                  <span className="ml-2">{statusBadge(uazStatus === 'no_instance' ? 'idle' : uazStatus)}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Server URL</Label>
+                  <Input
+                    placeholder="https://free.uazapi.com"
+                    value={uazConfig.uazapi_server_url}
+                    onChange={e => setUazConfig(p => ({ ...p, uazapi_server_url: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Admin Token</Label>
+                  {uazTokenMasked && originalUazToken ? (
+                    <div className="flex gap-2">
+                      <Input value={maskedUazToken} disabled className="font-mono" />
+                      <Button type="button" variant="outline" size="sm"
+                        onClick={() => { setUazTokenMasked(false); setUazConfig(p => ({ ...p, uazapi_admin_token: '' })); }}>
+                        Alterar
+                      </Button>
+                    </div>
+                  ) : (
+                    <Input
+                      type="password"
+                      placeholder={originalUazToken ? 'Digite o novo Admin Token' : 'Cole o Admin Token'}
+                      value={uazConfig.uazapi_admin_token}
+                      onChange={e => setUazConfig(p => ({ ...p, uazapi_admin_token: e.target.value }))}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label>Nome/ID da Instância</Label>
+                <Input
+                  placeholder="Ex.: clinica-sms (deixe vazio se ainda não criou)"
+                  value={uazConfig.uazapi_instance}
+                  onChange={e => setUazConfig(p => ({ ...p, uazapi_instance: e.target.value }))}
+                />
+                {!uazConfig.uazapi_instance && (
+                  <p className="text-xs text-muted-foreground mt-1">⚠️ Instância não configurada — UazapiGO não enviará mensagens.</p>
+                )}
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  className="gradient-primary text-primary-foreground flex-1 min-w-[120px]"
+                  disabled={uazSaving}
+                  onClick={saveUazConfig}
+                >
+                  {uazSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
+                  onClick={checkUazConnection}
+                >
+                  {uazTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                  Verificar
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={uazCreating || !uazConfig.uazapi_server_url || !originalUazToken}
+                  onClick={createUazInstance}
+                  title={(!uazConfig.uazapi_server_url || !originalUazToken)
+                    ? 'Configure Server URL e Admin Token para criar instância.'
+                    : 'Criar nova instância UazapiGO'}
+                >
+                  {uazCreating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Smartphone className="w-4 h-4 mr-1" />}
+                  Nova Instância UazapiGO
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                ℹ️ A UazapiGO só é usada para envios quando estiver marcada como <strong>Provedor ativo</strong> acima.
+                Admin Token nunca é exibido após salvar.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Painel de monitoramento e fila */}
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">

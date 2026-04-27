@@ -327,7 +327,12 @@ export type Database = {
           logo_url: string
           nome_clinica: string
           telefone: string
+          uazapi_admin_token: string
+          uazapi_ativo: boolean
+          uazapi_instance: string
+          uazapi_server_url: string
           updated_at: string
+          whatsapp_provider_active: string
         }
         Insert: {
           created_at?: string
@@ -338,7 +343,12 @@ export type Database = {
           logo_url?: string
           nome_clinica?: string
           telefone?: string
+          uazapi_admin_token?: string
+          uazapi_ativo?: boolean
+          uazapi_instance?: string
+          uazapi_server_url?: string
           updated_at?: string
+          whatsapp_provider_active?: string
         }
         Update: {
           created_at?: string
@@ -349,7 +359,12 @@ export type Database = {
           logo_url?: string
           nome_clinica?: string
           telefone?: string
+          uazapi_admin_token?: string
+          uazapi_ativo?: boolean
+          uazapi_instance?: string
+          uazapi_server_url?: string
           updated_at?: string
+          whatsapp_provider_active?: string
         }
         Relationships: []
       }
@@ -1006,6 +1021,7 @@ export type Database = {
           evento: string
           id: string
           payload: Json
+          provider: string
           resposta: string | null
           status: string
         }
@@ -1019,6 +1035,7 @@ export type Database = {
           evento: string
           id?: string
           payload?: Json
+          provider?: string
           resposta?: string | null
           status?: string
         }
@@ -1032,6 +1049,7 @@ export type Database = {
           evento?: string
           id?: string
           payload?: Json
+          provider?: string
           resposta?: string | null
           status?: string
         }
@@ -2760,6 +2778,7 @@ export type Database = {
           paciente_nome: string
           prioridade: string
           processado_em: string | null
+          provider: string
           status: string
           telefone: string
           tentativas: number
@@ -2780,6 +2799,7 @@ export type Database = {
           paciente_nome?: string
           prioridade?: string
           processado_em?: string | null
+          provider?: string
           status?: string
           telefone: string
           tentativas?: number
@@ -2800,6 +2820,7 @@ export type Database = {
           paciente_nome?: string
           prioridade?: string
           processado_em?: string | null
+          provider?: string
           status?: string
           telefone?: string
           tentativas?: number

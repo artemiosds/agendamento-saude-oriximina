@@ -38,7 +38,7 @@ function randomDelay(minSec: number, maxSec: number) {
 async function getClinicaConfig(supabase: any) {
   const { data } = await supabase
     .from("clinica_config")
-    .select("evolution_base_url, evolution_api_key, evolution_instance_name")
+    .select("evolution_base_url, evolution_api_key, evolution_instance_name, uazapi_server_url, uazapi_admin_token, uazapi_instance, uazapi_ativo, whatsapp_provider_active")
     .limit(1)
     .maybeSingle();
   return data;
@@ -60,6 +60,54 @@ async function sendEvolution(cfg: any, phone: string, message: string) {
     return { ok: false, body: e instanceof Error ? e.message : "fetch_error" };
   }
 }
+
+// ─── UazapiGO ─────────────────────────────────────────
+let _uazapiTokenCache: { name: string; token: string } | null = null;
+async function getUazapiInstanceToken(cfg: any): Promise<{ token: string | null; error?: string }> {
+  if (_uazapiTokenCache && _uazapiTokenCache.name === cfg.uazapi_instance) {
+    return { token: _uazapiTokenCache.token };
+  }
+  const base = (cfg.uazapi_server_url || "").replace(/\/+$/, "");
+  if (!base || !cfg.uazapi_admin_token || !cfg.uazapi_instance) {
+    return { token: null, error: "uazapi_config_incompleta" };
+  }
+  try {
+    const resp = await fetch(`${base}/instance/all`, {
+      headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" },
+    });
+    if (!resp.ok) return { token: null, error: `uazapi_admin_http_${resp.status}` };
+    const data = await resp.json();
+    const list: any[] = Array.isArray(data) ? data : (data?.instances || data?.data || []);
+    const found = list.find((i: any) =>
+      (i?.name && String(i.name).toLowerCase() === cfg.uazapi_instance.toLowerCase()) ||
+      (i?.id && String(i.id) === cfg.uazapi_instance),
+    );
+    const tok = found?.token || found?.instanceToken || found?.apiKey || null;
+    if (!tok) return { token: null, error: "uazapi_instancia_sem_token" };
+    _uazapiTokenCache = { name: cfg.uazapi_instance, token: tok };
+    return { token: tok };
+  } catch (e: any) {
+    return { token: null, error: e?.message || "uazapi_network_error" };
+  }
+}
+
+async function sendUazapi(cfg: any, phone: string, message: string) {
+  const tokRes = await getUazapiInstanceToken(cfg);
+  if (!tokRes.token) return { ok: false, body: tokRes.error || "uazapi_token_nao_resolvido" };
+  const base = (cfg.uazapi_server_url || "").replace(/\/+$/, "");
+  try {
+    const resp = await fetch(`${base}/send/text`, {
+      method: "POST",
+      headers: { token: tokRes.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+    const body = await resp.text();
+    return { ok: resp.ok, body };
+  } catch (e) {
+    return { ok: false, body: e instanceof Error ? e.message : "fetch_error" };
+  }
+}
+
 
 // Telefone BR válido = 13 dígitos começando em 55
 function isValidPhone(phone: string): boolean {
@@ -96,8 +144,14 @@ serve(async (req) => {
 
   try {
     const evoCfg = await getClinicaConfig(supabase);
-    if (!evoCfg?.evolution_instance_name) {
+    const activeProvider: 'evolution' | 'uazapigo' = (evoCfg?.whatsapp_provider_active === 'uazapigo' && evoCfg?.uazapi_ativo)
+      ? 'uazapigo' : 'evolution';
+    if (activeProvider === 'evolution' && !evoCfg?.evolution_instance_name) {
       return new Response(JSON.stringify({ success: false, error: "Evolution não configurada" }),
+        { status: 400, headers: corsHeaders });
+    }
+    if (activeProvider === 'uazapigo' && (!evoCfg?.uazapi_server_url || !evoCfg?.uazapi_admin_token || !evoCfg?.uazapi_instance)) {
+      return new Response(JSON.stringify({ success: false, error: "UazapiGO não configurada" }),
         { status: 400, headers: corsHeaders });
     }
 
@@ -188,7 +242,8 @@ serve(async (req) => {
         await supabase.from("notification_logs").insert({
           agendamento_id: msg.agendamento_id || "",
           evento: msg.evento,
-          canal: "whatsapp_evolution",
+          canal: msg.provider === 'uazapigo' ? 'whatsapp_uazapigo' : 'whatsapp_evolution',
+          provider: msg.provider || activeProvider,
           destinatario_telefone: msg.telefone || "",
           status: "erro",
           erro: "Falha: Sem Telefone",
@@ -228,39 +283,53 @@ serve(async (req) => {
       const { min, max } = effectiveDelays(cfg);
       await new Promise((r) => setTimeout(r, randomDelay(min, max)));
 
-      const result = await sendEvolution(evoCfg, msg.telefone, msg.mensagem);
+      // Define qual provedor enviar essa mensagem (msg.provider OU provedor ativo)
+      const msgProvider: 'evolution' | 'uazapigo' = (msg.provider === 'uazapigo' || (msg.provider !== 'evolution' && activeProvider === 'uazapigo'))
+        ? 'uazapigo' : 'evolution';
+      const canalLog = msgProvider === 'uazapigo' ? 'whatsapp_uazapigo' : 'whatsapp_evolution';
+
+      const result = msgProvider === 'uazapigo'
+        ? await sendUazapi(evoCfg, msg.telefone, msg.mensagem)
+        : await sendEvolution(evoCfg, msg.telefone, msg.mensagem);
 
       if (result.ok) {
         await supabase.from("whatsapp_queue").update({
           status: "enviado",
+          provider: msgProvider,
           processado_em: new Date().toISOString(),
         }).eq("id", msg.id);
 
         await supabase.from("notification_logs").insert({
           agendamento_id: msg.agendamento_id || "",
           evento: msg.evento,
-          canal: "whatsapp_evolution",
+          canal: canalLog,
+          provider: msgProvider,
           destinatario_telefone: msg.telefone,
           status: "enviado",
-          payload: { queue_id: msg.id, evento: msg.evento, prioridade: msg.prioridade },
+          payload: { queue_id: msg.id, evento: msg.evento, prioridade: msg.prioridade, provider: msgProvider },
           resposta: result.body.substring(0, 500),
         });
 
         // Atualiza last_success_send_at no monitor da conexão
         try {
+          const instKey = msgProvider === 'uazapigo'
+            ? `uazapi:${evoCfg.uazapi_instance}`
+            : evoCfg.evolution_instance_name;
           await supabase
             .from("whatsapp_connection_status")
             .update({ last_success_send_at: new Date().toISOString() })
-            .eq("instance_name", evoCfg.evolution_instance_name);
+            .eq("instance_name", instKey);
         } catch {}
 
         processed++;
         remainingThisMinute--;
+
       } else {
         const novasTentativas = (msg.tentativas ?? 0) + 1;
         const novoStatus = novasTentativas >= 2 ? "erro" : "pendente";
         await supabase.from("whatsapp_queue").update({
           status: novoStatus,
+          provider: msgProvider,
           tentativas: novasTentativas,
           motivo_erro: result.body.substring(0, 500),
           processado_em: novoStatus === "erro" ? new Date().toISOString() : null,
@@ -273,11 +342,12 @@ serve(async (req) => {
           await supabase.from("notification_logs").insert({
             agendamento_id: msg.agendamento_id || "",
             evento: msg.evento,
-            canal: "whatsapp_evolution",
+            canal: canalLog,
+            provider: msgProvider,
             destinatario_telefone: msg.telefone,
             status: "erro",
             erro: result.body.substring(0, 500),
-            payload: { queue_id: msg.id, tentativas: novasTentativas },
+            payload: { queue_id: msg.id, tentativas: novasTentativas, provider: msgProvider },
           });
           errors++;
         } else {
