@@ -791,6 +791,21 @@ const Pacientes: React.FC = () => {
         </div>
       </div>
 
+      {pacientesSemUnidade.length > 0 && (
+        <Card className="border-warning/30 bg-warning/10 shadow-card">
+          <CardContent className="p-3 text-sm text-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span>
+                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada. Revise o cadastro antes de liberar para a Recepção.
+              </span>
+              <Badge variant="outline" className="w-fit border-warning/40 text-warning">
+                Verificação Master/Gestão
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Patient create/edit dialog */}
       <Dialog
         open={dialogOpen}
