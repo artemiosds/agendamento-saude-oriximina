@@ -337,6 +337,8 @@ const Pacientes: React.FC = () => {
       cid: form.cid,
       especialidade_destino: form.especialidadeDestino,
       municipio: form.municipio,
+      naturalidade: form.naturalidade || "",
+      naturalidade_uf: form.naturalidadeUf || "",
       menor_idade: form.menorIdade,
       nome_responsavel: form.nomeResponsavel,
       cpf_responsavel: form.cpfResponsavel,
