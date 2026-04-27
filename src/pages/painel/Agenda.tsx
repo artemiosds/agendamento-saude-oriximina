@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
@@ -2227,7 +2228,7 @@ const Agenda: React.FC = () => {
                               )}
                               {paciente?.cns && (
                                 <p className="text-xs">
-                                  <strong>CNS:</strong> {paciente.cns}
+                                  <strong>CNS:</strong> {formatCNS(paciente.cns)}
                                 </p>
                               )}
                               <p className="text-xs">

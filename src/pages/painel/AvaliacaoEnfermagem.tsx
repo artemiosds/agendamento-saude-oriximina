@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useData } from '@/contexts/DataContext';
@@ -356,7 +357,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
               <h3 className="text-sm font-semibold text-foreground">Dados do Paciente</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-muted/50 rounded-lg p-3 border">
                 <span>CPF: <strong>{paciente.cpf || '—'}</strong></span>
-                <span>CNS: <strong>{paciente.cns || '—'}</strong></span>
+                <span>CNS: <strong>{formatCNS(paciente.cns) || '—'}</strong></span>
                 <span>Nasc.: <strong>{paciente.data_nascimento || '—'}</strong></span>
                 <span>Telefone: <strong>{paciente.telefone || '—'}</strong></span>
                 <span>Mãe: <strong>{paciente.nome_mae || '—'}</strong></span>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -608,7 +609,7 @@ const AgendamentoExterno: React.FC = () => {
                                 className="w-full text-left p-3 rounded-lg hover:bg-accent/50 transition-colors border"
                               >
                                 <p className="font-medium text-sm">{p.nome}</p>
-                                <p className="text-xs text-muted-foreground">CPF: {p.cpf || "—"} | CNS: {p.cns || "—"} | Tel: {p.telefone || "—"}</p>
+                                <p className="text-xs text-muted-foreground">CPF: {p.cpf || "—"} | CNS: {formatCNS(p.cns) || "—"} | Tel: {p.telefone || "—"}</p>
                               </button>
                             ))}
                           </div>
@@ -742,7 +743,7 @@ const AgendamentoExterno: React.FC = () => {
             <div><Label>Nome Completo *</Label><Input value={patientForm.nome} onChange={e => setPatientForm(p => ({ ...p, nome: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>CPF</Label><Input value={patientForm.cpf} onChange={e => setPatientForm(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-              <div><Label>CNS</Label><Input value={patientForm.cns} onChange={e => setPatientForm(p => ({ ...p, cns: e.target.value }))} /></div>
+              <div><Label>CNS</Label><Input value={patientForm.cns} onChange={e => setPatientForm(p => ({ ...p, cns: maskCNS(e.target.value) }))} placeholder="000 0000 0000 0000" maxLength={18} /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Data Nascimento</Label><Input type="date" value={patientForm.data_nascimento} onChange={e => setPatientForm(p => ({ ...p, data_nascimento: e.target.value }))} /></div>

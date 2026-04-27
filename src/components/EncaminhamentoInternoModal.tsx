@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -100,7 +101,7 @@ const EncaminhamentoInternoModal: React.FC<Props> = ({ open, onOpenChange, pacie
         `ENCAMINHAMENTO INTERNO`,
         ``,
         `Paciente: ${paciente.nome}`,
-        `CPF: ${paciente.cpf || '—'}    CNS: ${paciente.cns || '—'}`,
+        `CPF: ${paciente.cpf || '—'}    CNS: ${formatCNS(paciente.cns) || '—'}`,
         `Data de Nascimento: ${paciente.data_nascimento || '—'}`,
         ``,
         `Encaminhado de: ${user.nome} (${user.profissao || user.role})`,

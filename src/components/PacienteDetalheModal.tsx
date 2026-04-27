@@ -13,12 +13,7 @@ export const formatCPF = (cpf?: string | null): string => {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 };
 
-export const formatCNS = (cns?: string | null): string => {
-  if (!cns) return '';
-  const d = String(cns).replace(/\D/g, '');
-  if (d.length !== 15) return String(cns);
-  return `${d.slice(0, 3)} ${d.slice(3, 7)} ${d.slice(7, 11)} ${d.slice(11)}`;
-};
+export { formatCNS } from "@/lib/cnsUtils";
 
 export const formatTelefoneBR = (tel?: string | null): string => {
   if (!tel) return '';
