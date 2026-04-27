@@ -144,8 +144,14 @@ serve(async (req) => {
 
   try {
     const evoCfg = await getClinicaConfig(supabase);
-    if (!evoCfg?.evolution_instance_name) {
+    const activeProvider: 'evolution' | 'uazapigo' = (evoCfg?.whatsapp_provider_active === 'uazapigo' && evoCfg?.uazapi_ativo)
+      ? 'uazapigo' : 'evolution';
+    if (activeProvider === 'evolution' && !evoCfg?.evolution_instance_name) {
       return new Response(JSON.stringify({ success: false, error: "Evolution não configurada" }),
+        { status: 400, headers: corsHeaders });
+    }
+    if (activeProvider === 'uazapigo' && (!evoCfg?.uazapi_server_url || !evoCfg?.uazapi_admin_token || !evoCfg?.uazapi_instance)) {
+      return new Response(JSON.stringify({ success: false, error: "UazapiGO não configurada" }),
         { status: 400, headers: corsHeaders });
     }
 
