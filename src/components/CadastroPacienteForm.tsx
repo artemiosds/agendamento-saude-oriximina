@@ -377,10 +377,11 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                 <div>
                   <Label>{L("cns", "CNS")}</Label>
                   <Input
-                    value={form.cns}
+                    value={maskCNS(form.cns)}
                     onChange={(e) => set("cns", maskCNS(e.target.value))}
-                    placeholder="0000 0000 0000 0000"
+                    placeholder="000 0000 0000 0000"
                     inputMode="numeric"
+                    maxLength={18}
                   />
                   {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
                 </div>
