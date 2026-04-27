@@ -242,7 +242,8 @@ serve(async (req) => {
         await supabase.from("notification_logs").insert({
           agendamento_id: msg.agendamento_id || "",
           evento: msg.evento,
-          canal: "whatsapp_evolution",
+          canal: msg.provider === 'uazapigo' ? 'whatsapp_uazapigo' : 'whatsapp_evolution',
+          provider: msg.provider || activeProvider,
           destinatario_telefone: msg.telefone || "",
           status: "erro",
           erro: "Falha: Sem Telefone",
