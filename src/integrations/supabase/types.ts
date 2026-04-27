@@ -1137,6 +1137,8 @@ export type Database = {
           menor_idade: boolean
           mobilidade: string
           municipio: string
+          naturalidade: string
+          naturalidade_uf: string
           nome: string
           nome_mae: string
           nome_responsavel: string
@@ -1182,6 +1184,8 @@ export type Database = {
           menor_idade?: boolean
           mobilidade?: string
           municipio?: string
+          naturalidade?: string
+          naturalidade_uf?: string
           nome: string
           nome_mae?: string
           nome_responsavel?: string
@@ -1227,6 +1231,8 @@ export type Database = {
           menor_idade?: boolean
           mobilidade?: string
           municipio?: string
+          naturalidade?: string
+          naturalidade_uf?: string
           nome?: string
           nome_mae?: string
           nome_responsavel?: string
