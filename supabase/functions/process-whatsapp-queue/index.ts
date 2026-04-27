@@ -328,6 +328,7 @@ serve(async (req) => {
         const novoStatus = novasTentativas >= 2 ? "erro" : "pendente";
         await supabase.from("whatsapp_queue").update({
           status: novoStatus,
+          provider: msgProvider,
           tentativas: novasTentativas,
           motivo_erro: result.body.substring(0, 500),
           processado_em: novoStatus === "erro" ? new Date().toISOString() : null,
@@ -340,11 +341,12 @@ serve(async (req) => {
           await supabase.from("notification_logs").insert({
             agendamento_id: msg.agendamento_id || "",
             evento: msg.evento,
-            canal: "whatsapp_evolution",
+            canal: canalLog,
+            provider: msgProvider,
             destinatario_telefone: msg.telefone,
             status: "erro",
             erro: result.body.substring(0, 500),
-            payload: { queue_id: msg.id, tentativas: novasTentativas },
+            payload: { queue_id: msg.id, tentativas: novasTentativas, provider: msgProvider },
           });
           errors++;
         } else {
