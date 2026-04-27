@@ -36,6 +36,8 @@ import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface FichaDados {
   paciente: {
@@ -74,6 +76,56 @@ interface FichaDados {
   }>;
 }
 
+const PACIENTE_COLUMNS =
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+
+const mapPacienteRow = (p: any) => ({
+  id: p.id,
+  nome: p.nome,
+  cpf: p.cpf || "",
+  cns: p.cns || "",
+  nomeMae: p.nome_mae || "",
+  telefone: p.telefone || "",
+  dataNascimento: p.data_nascimento || "",
+  email: p.email || "",
+  endereco: p.endereco || "",
+  observacoes: p.observacoes || "",
+  descricaoClinica: p.descricao_clinica || "",
+  cid: p.cid || "",
+  criadoEm: p.criado_em || "",
+  unidadeId: p.unidade_id || "",
+  isGestante: !!p.is_gestante,
+  isPne: !!p.is_pne,
+  isAutista: !!p.is_autista,
+  naturalidade: p.naturalidade || "",
+  naturalidade_uf: p.naturalidade_uf || "",
+  municipio: p.municipio || "",
+  menor_idade: !!p.menor_idade,
+  nome_responsavel: p.nome_responsavel || "",
+  cpf_responsavel: p.cpf_responsavel || "",
+  ubs_origem: p.ubs_origem || "",
+  profissional_solicitante: p.profissional_solicitante || "",
+  tipo_encaminhamento: p.tipo_encaminhamento || "",
+  diagnostico_resumido: p.diagnostico_resumido || "",
+  justificativa: p.justificativa || "",
+  data_encaminhamento: p.data_encaminhamento || "",
+  documento_url: p.documento_url || "",
+  tipo_condicao: p.tipo_condicao || "",
+  mobilidade: p.mobilidade || "",
+  usa_dispositivo: !!p.usa_dispositivo,
+  tipo_dispositivo: p.tipo_dispositivo || "",
+  comunicacao: p.comunicacao || "",
+  comportamento: p.comportamento || "",
+  usa_equipamentos: !!p.usa_equipamentos,
+  equipamentos: p.equipamentos || [],
+  observacao_equipamentos: p.observacao_equipamentos || "",
+  outro_servico_sus: !!p.outro_servico_sus,
+  transporte: p.transporte || "",
+  turno_preferido: p.turno_preferido || "",
+  especialidade_destino: p.especialidade_destino || "",
+  custom_data: p.custom_data || {},
+});
+
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -90,6 +142,7 @@ const Pacientes: React.FC = () => {
     refreshFila,
   } = useData();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
@@ -102,6 +155,12 @@ const Pacientes: React.FC = () => {
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
   const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
+  const funcionarioLogado = useMemo(
+    () => funcionarios.find((f) => f.id === user?.id || f.authUserId === user?.authUserId || f.usuario === user?.usuario),
+    [funcionarios, user],
+  );
+  const unidadeIdFuncionario = funcionarioLogado?.unidadeId || user?.unidadeId || "";
+  const isGlobalAdminUser = user?.usuario === "admin.sms";
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -175,26 +234,56 @@ const Pacientes: React.FC = () => {
     return map;
   }, [fila]);
 
-  // Profissionais só veem pacientes vinculados aos seus agendamentos
-  // Unit-scoped users (Recepção, Master de unidade, Gestão) veem:
-  //   - pacientes cadastrados na sua unidade (paciente.unidade_id)
-  //   - + pacientes que possuem agendamento na sua unidade (continuidade do cuidado cross-unit)
-  // Admin global (admin.sms) vê tudo.
+  const pacientesQueryScope = useMemo(
+    () => ({
+      unidadeId: unidadeIdFuncionario || "global",
+      role: user?.role || "anon",
+      usuario: user?.usuario || "",
+      search: debouncedSearch,
+      filterFila,
+      sortBy,
+      page: Math.ceil(visibleCount / PAGE_SIZE),
+    }),
+    [unidadeIdFuncionario, user?.role, user?.usuario, debouncedSearch, filterFila, sortBy, visibleCount],
+  );
+
+  useQuery({
+    queryKey: queryKeys.pacientes.page(pacientesQueryScope),
+    queryFn: async () => true,
+    enabled: !!user,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+    refreshPacientes();
+  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario]);
+
+  // Profissionais veem pacientes vinculados aos seus agendamentos.
+  // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
+  // Não filtrar por setor, sala, criado_por, profissional, fila ou agendamento.
   const visiblePacientes = useMemo(() => {
     if (isProfissional && user) {
       const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
-    if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-      const unitPacienteIds = new Set(
-        agendamentos.filter((a) => a.unidadeId === user.unidadeId).map((a) => a.pacienteId),
-      );
-      return pacientes.filter(
-        (p) => p.unidadeId === user.unidadeId || unitPacienteIds.has(p.id),
-      );
+    if (!isGlobalAdminUser && unidadeIdFuncionario) {
+      return pacientes.filter((p) => (p.unidadeId || "") === unidadeIdFuncionario);
     }
     return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user]);
+  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
+
+  const pacientesSemUnidade = useMemo(() => {
+    if (!user || !["master", "gestao"].includes(user.role)) return [];
+    return pacientes.filter((p) => !p.unidadeId);
+  }, [pacientes, user]);
+
+  useQuery({
+    queryKey: queryKeys.pacientes.semUnidade({ role: user?.role || "", unidadeId: unidadeIdFuncionario || "global" }),
+    queryFn: async () => pacientesSemUnidade,
+    enabled: !!user && ["master", "gestao"].includes(user.role),
+    staleTime: 0,
+  });
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
@@ -326,6 +415,10 @@ const Pacientes: React.FC = () => {
       toast.error(Object.values(newErrors)[0]);
       return;
     }
+    if (!editId && !isGlobalAdminUser && !unidadeIdFuncionario) {
+      toast.error("Usuário sem unidade vinculada. Corrija o cadastro do funcionário antes de cadastrar paciente.");
+      return;
+    }
     setErrors({});
     setSaving(true);
 
@@ -371,7 +464,12 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
-      custom_data: form.customData || {},
+      custom_data: {
+        ...(form.customData || {}),
+        atualizado_em: new Date().toISOString(),
+        atualizado_por: user?.id || "",
+        atualizado_por_nome: user?.nome || "",
+      },
     };
 
     try {
@@ -431,15 +529,30 @@ const Pacientes: React.FC = () => {
         const id = `p${Date.now()}`;
         // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
         // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
-        const insertPayload: any = { id, ...dbFields };
-        if (user?.unidadeId) insertPayload.unidade_id = user.unidadeId;
+        const insertPayload: any = {
+          id,
+          ...dbFields,
+          criado_em: new Date().toISOString(),
+          unidade_id: unidadeIdFuncionario,
+          custom_data: {
+            ...(dbFields.custom_data || {}),
+            criado_por: user?.id || "",
+            criado_por_nome: user?.nome || "",
+            criado_por_usuario: user?.usuario || "",
+            unidade_origem_id: unidadeIdFuncionario,
+          },
+        };
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
         Promise.resolve(supabase.from("pacientes").insert(insertPayload))
           .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
           .catch((err) => console.error("Erro ao cadastrar paciente:", err))
-          .finally(() => refreshPacientes());
+          .finally(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            refreshPacientes();
+          });
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch {
@@ -727,6 +840,21 @@ const Pacientes: React.FC = () => {
           )}
         </div>
       </div>
+
+      {pacientesSemUnidade.length > 0 && (
+        <Card className="border-warning/30 bg-warning/10 shadow-card">
+          <CardContent className="p-3 text-sm text-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span>
+                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada. Revise o cadastro antes de liberar para a Recepção.
+              </span>
+              <Badge variant="outline" className="w-fit border-warning/40 text-warning">
+                Verificação Master/Gestão
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Patient create/edit dialog */}
       <Dialog
