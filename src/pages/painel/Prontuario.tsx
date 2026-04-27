@@ -1769,7 +1769,7 @@ const ProntuarioPage: React.FC = () => {
             <ResultadosExames
               pacienteId={queryPacienteId}
               pacienteNome={queryPacienteNome || ""}
-              unidadeId={user?.unidade_id || ""}
+              unidadeId={user?.unidadeId || ""}
               canEdit={canEdit}
               canDelete={canDelete}
             />
