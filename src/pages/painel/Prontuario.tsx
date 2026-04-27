@@ -858,10 +858,7 @@ const ProntuarioPage: React.FC = () => {
       toast.error("Não é possível registrar prontuário para data futura. O atendimento precisa ocorrer primeiro.");
       return false;
     }
-    if (editId && !form.motivo_alteracao && !isSessionRegistrationFlow) {
-      toast.error("Informe o motivo da alteração para salvar.");
-      return false;
-    }
+    // Motivo da alteração agora é opcional ao editar.
     if (sessionRegistrationError) {
       toast.error(sessionRegistrationError);
       return false;
@@ -2689,7 +2686,7 @@ const ProntuarioPage: React.FC = () => {
 
             {editId && (
               <div>
-                <Label className="text-warning">Motivo da Alteração *</Label>
+                <Label className="text-muted-foreground">Motivo da Alteração <span className="text-xs">(opcional)</span></Label>
                 <Textarea
                   rows={2}
                   value={form.motivo_alteracao}
