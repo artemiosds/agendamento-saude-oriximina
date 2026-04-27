@@ -92,7 +92,21 @@ const ConfigWhatsApp: React.FC = () => {
   const [evolutionLoading, setEvolutionLoading] = useState(true);
   const [evolutionSaving, setEvolutionSaving] = useState(false);
   const [evolutionTesting, setEvolutionTesting] = useState(false);
-  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error' | 'qrcode' | 'connecting'>('idle');
+  const [statusDetail, setStatusDetail] = useState<{
+    last_check_at?: string;
+    last_connected_at?: string;
+    last_disconnected_at?: string;
+    last_success_send_at?: string;
+    last_error?: string;
+  }>({});
+  const [apiKeyMasked, setApiKeyMasked] = useState(true);
+  const [originalApiKey, setOriginalApiKey] = useState('');
+  // Métricas da fila
+  const [queueStats, setQueueStats] = useState({
+    pendentes: 0, enviadas_24h: 0, falhas_24h: 0, expiradas_24h: 0, processando: 0,
+  });
+  const [reprocessing, setReprocessing] = useState(false);
 
   // Templates
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
