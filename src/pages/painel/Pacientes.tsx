@@ -265,6 +265,8 @@ const Pacientes: React.FC = () => {
       cid: p.cid || "",
       especialidadeDestino: (p as any).especialidade_destino || "",
       municipio: (p as any).municipio || "",
+      naturalidade: (p as any).naturalidade || "",
+      naturalidadeUf: (p as any).naturalidade_uf || "",
       menorIdade: (p as any).menor_idade || false,
       nomeResponsavel: (p as any).nome_responsavel || "",
       cpfResponsavel: (p as any).cpf_responsavel || "",
