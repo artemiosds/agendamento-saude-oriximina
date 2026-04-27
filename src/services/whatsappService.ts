@@ -58,10 +58,26 @@ export const whatsappService = {
   },
 
   async getConnectionStatus() {
-    return invokeWhatsApp<{ success?: boolean; connected?: boolean; state?: string; error?: string }>({ action: 'status' });
+    return invokeWhatsApp<{
+      success?: boolean;
+      connected?: boolean;
+      state?: string;
+      status_detailed?: string;
+      error?: string;
+    }>({ action: 'status' });
   },
 
   async getInstances() {
     return invokeWhatsApp<{ success?: boolean; instances?: { instanceName: string; state: string }[]; error?: string }>({ action: 'instances' });
+  },
+
+  /** Dispara processamento manual da fila WhatsApp */
+  async processQueue() {
+    try {
+      const { data, error } = await supabase.functions.invoke('process-whatsapp-queue', { body: {} });
+      return { data: data ?? null, error };
+    } catch (err) {
+      return { data: null, error: err };
+    }
   },
 };
