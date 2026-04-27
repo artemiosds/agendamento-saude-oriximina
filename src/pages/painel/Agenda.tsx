@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
+import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
