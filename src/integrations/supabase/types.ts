@@ -1679,6 +1679,75 @@ export type Database = {
         }
         Relationships: []
       }
+      prontuario_exames: {
+        Row: {
+          atendimento_id: string
+          created_at: string
+          created_by: string
+          data_exame: string | null
+          id: string
+          interpretacao_profissional: string
+          laboratorio: string
+          medico_solicitante: string
+          nome_exame: string
+          observacoes_medicas: string
+          paciente_id: string
+          profissional_id: string
+          profissional_nome: string
+          prontuario_id: string
+          resultado_descrito: string
+          status: string
+          tipo_atendimento_vinculado: string
+          tipo_exame: string
+          unidade_id: string
+          updated_at: string
+        }
+        Insert: {
+          atendimento_id?: string
+          created_at?: string
+          created_by?: string
+          data_exame?: string | null
+          id?: string
+          interpretacao_profissional?: string
+          laboratorio?: string
+          medico_solicitante?: string
+          nome_exame?: string
+          observacoes_medicas?: string
+          paciente_id?: string
+          profissional_id?: string
+          profissional_nome?: string
+          prontuario_id?: string
+          resultado_descrito?: string
+          status?: string
+          tipo_atendimento_vinculado?: string
+          tipo_exame?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Update: {
+          atendimento_id?: string
+          created_at?: string
+          created_by?: string
+          data_exame?: string | null
+          id?: string
+          interpretacao_profissional?: string
+          laboratorio?: string
+          medico_solicitante?: string
+          nome_exame?: string
+          observacoes_medicas?: string
+          paciente_id?: string
+          profissional_id?: string
+          profissional_nome?: string
+          prontuario_id?: string
+          resultado_descrito?: string
+          status?: string
+          tipo_atendimento_vinculado?: string
+          tipo_exame?: string
+          unidade_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       prontuario_procedimentos: {
         Row: {
           cids_selecionados: string[]
