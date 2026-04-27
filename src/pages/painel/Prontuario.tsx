@@ -1766,6 +1766,20 @@ const ProntuarioPage: React.FC = () => {
       {queryPacienteId && (
         <Card className="shadow-card border-0">
           <CardContent className="p-4">
+            <ResultadosExames
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || ""}
+              unidadeId={user?.unidade_id || ""}
+              canEdit={canEdit}
+              canDelete={canDelete}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {queryPacienteId && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
             <DocumentosHistorico
               pacienteId={queryPacienteId}
               pacienteNome={queryPacienteNome || "Paciente"}
