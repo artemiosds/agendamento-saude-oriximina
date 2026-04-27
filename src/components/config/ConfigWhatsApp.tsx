@@ -108,6 +108,23 @@ const ConfigWhatsApp: React.FC = () => {
   });
   const [reprocessing, setReprocessing] = useState(false);
 
+  // Provedor ativo
+  const [activeProvider, setActiveProvider] = useState<'evolution' | 'uazapigo'>('evolution');
+
+  // UazapiGO config
+  const [uazConfig, setUazConfig] = useState({
+    uazapi_server_url: 'https://free.uazapi.com',
+    uazapi_admin_token: '',
+    uazapi_instance: '',
+    uazapi_ativo: false,
+  });
+  const [uazTokenMasked, setUazTokenMasked] = useState(true);
+  const [originalUazToken, setOriginalUazToken] = useState('');
+  const [uazSaving, setUazSaving] = useState(false);
+  const [uazTesting, setUazTesting] = useState(false);
+  const [uazCreating, setUazCreating] = useState(false);
+  const [uazStatus, setUazStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error' | 'qrcode' | 'connecting' | 'no_instance'>('idle');
+
   // Templates
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
