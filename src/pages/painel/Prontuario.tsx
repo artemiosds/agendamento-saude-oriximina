@@ -2686,18 +2686,16 @@ const ProntuarioPage: React.FC = () => {
             />
             )}
 
-            {/* Resultados de Exames trazidos pelo paciente (transcrição manual) */}
-            {form.paciente_id && (
-              <div className="bg-muted/20 rounded-lg p-3 border">
-                <ResultadosExames
-                  pacienteId={form.paciente_id}
-                  pacienteNome={form.paciente_nome || ""}
-                  unidadeId={user?.unidadeId || ""}
-                  canEdit={canEdit}
-                  canDelete={canDelete}
-                />
-              </div>
-            )}
+            {/* Resultado de Exame trazido pelo paciente (transcrição manual) */}
+            <div>
+              <Label>Resultado de Exame</Label>
+              <DebouncedTextarea
+                rows={4}
+                value={form.resultado_exame}
+                onChange={(e) => setForm((p) => ({ ...p, resultado_exame: e.target.value }))}
+                placeholder="Descreva o resultado de exame apresentado pelo paciente..."
+              />
+            </div>
 
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
