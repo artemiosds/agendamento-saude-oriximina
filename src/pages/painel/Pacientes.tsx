@@ -429,10 +429,14 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
+        // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
+        // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
+        const insertPayload: any = { id, ...dbFields };
+        if (user?.unidadeId) insertPayload.unidade_id = user.unidadeId;
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert({ id, ...dbFields }))
+        Promise.resolve(supabase.from("pacientes").insert(insertPayload))
           .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
           .catch((err) => console.error("Erro ao cadastrar paciente:", err))
           .finally(() => refreshPacientes());
