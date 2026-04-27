@@ -2682,6 +2682,19 @@ const ProntuarioPage: React.FC = () => {
             />
             )}
 
+            {/* Resultados de Exames trazidos pelo paciente (transcrição manual) */}
+            {form.paciente_id && (
+              <div className="bg-muted/20 rounded-lg p-3 border">
+                <ResultadosExames
+                  pacienteId={form.paciente_id}
+                  pacienteNome={form.paciente_nome || ""}
+                  unidadeId={user?.unidadeId || ""}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
+                />
+              </div>
+            )}
+
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
               <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
