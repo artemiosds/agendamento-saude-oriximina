@@ -371,9 +371,8 @@ const Pacientes: React.FC = () => {
   }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
 
   const pacientesSemUnidade = useMemo(() => {
-    if (!user || !["master", "gestao"].includes(user.role)) return [];
-    return pacientes.filter((p) => !p.unidadeId);
-  }, [pacientes, user]);
+    return visiblePacientes.filter((p) => !p.unidadeId);
+  }, [visiblePacientes]);
 
   useQuery({
     queryKey: queryKeys.pacientes.semUnidade({ role: user?.role || "", unidadeId: unidadeIdFuncionario || "global" }),
