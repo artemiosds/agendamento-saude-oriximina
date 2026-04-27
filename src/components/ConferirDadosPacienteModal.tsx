@@ -457,6 +457,18 @@ export function ConferirDadosPacienteModal({
                   {renderFieldSelect("Sexo", "sexo", SEXO_OPTIONS)}
                   {renderFieldText("CPF", "cpf", "text", "000.000.000-00", "numeric")}
                   {renderFieldText("CNS", "cns", "text", "000 0000 0000 0000", "numeric")}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">Naturalidade</Label>
+                    <MunicipioCombobox
+                      value={form.naturalidade}
+                      uf={form.naturalidade_uf}
+                      onChange={(cidade, uf) => {
+                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
+                        setDirty(true);
+                      }}
+                      placeholder="Selecione o município de naturalidade"
+                    />
+                  </div>
                 </div>
               </div>
 
