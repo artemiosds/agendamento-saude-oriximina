@@ -11,6 +11,7 @@ import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
+import MunicipioCombobox from "@/components/MunicipioCombobox";
 import { applyPhoneMask, normalizePhone } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
@@ -163,6 +164,8 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
+        naturalidade: data.naturalidade || "",
+        naturalidade_uf: data.naturalidade_uf || "",
         sexo: cd.sexo || "",
         raca_cor: cd.racaCor || cd.raca_cor || "",
         etnia: cd.etnia || "",
@@ -259,6 +262,8 @@ export function ConferirDadosPacienteModal({
         email: form.email,
         endereco: form.endereco,
         municipio: form.municipio,
+        naturalidade: form.naturalidade || "",
+        naturalidade_uf: form.naturalidade_uf || "",
         custom_data: customData,
       };
 
@@ -453,6 +458,18 @@ export function ConferirDadosPacienteModal({
                   {renderFieldSelect("Sexo", "sexo", SEXO_OPTIONS)}
                   {renderFieldText("CPF", "cpf", "text", "000.000.000-00", "numeric")}
                   {renderFieldText("CNS", "cns", "text", "000 0000 0000 0000", "numeric")}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs text-muted-foreground">Naturalidade</Label>
+                    <MunicipioCombobox
+                      value={form.naturalidade}
+                      uf={form.naturalidade_uf}
+                      onChange={(cidade, uf) => {
+                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
+                        setDirty(true);
+                      }}
+                      placeholder="Selecione o município de naturalidade"
+                    />
+                  </div>
                 </div>
               </div>
 

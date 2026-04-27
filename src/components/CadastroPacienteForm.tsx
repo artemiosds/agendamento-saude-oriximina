@@ -17,6 +17,7 @@ import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import { useAuth } from "@/contexts/AuthContext";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
+import MunicipioCombobox from "@/components/MunicipioCombobox";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -95,6 +96,8 @@ export interface PacienteFormData {
   cns: string;
   telefone: string;
   municipio: string;
+  naturalidade: string;
+  naturalidadeUf: string;
   menorIdade: boolean;
   nomeResponsavel: string;
   cpfResponsavel: string;
@@ -135,6 +138,7 @@ export interface PacienteFormData {
 
 export const emptyPacienteForm: PacienteFormData = {
   nome: "", dataNascimento: "", cpf: "", cns: "", telefone: "", municipio: "",
+  naturalidade: "", naturalidadeUf: "",
   menorIdade: false, nomeResponsavel: "", cpfResponsavel: "",
   especialidadeDestino: "", ubsOrigem: "", profissionalSolicitante: "",
   tipoEncaminhamento: "", cid: "", diagnosticoResumido: "", justificativa: "",
@@ -382,6 +386,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                     inputMode="numeric"
                   />
                   {errors.cns && <p className="text-xs text-destructive mt-1">{errors.cns}</p>}
+                </div>
+              )}
+
+              {!H("naturalidade") && (
+                <div className="md:col-span-2">
+                  <Label>{L("naturalidade", "Naturalidade")}</Label>
+                  <MunicipioCombobox
+                    value={form.naturalidade}
+                    uf={form.naturalidadeUf}
+                    onChange={(cidade, uf) => onChange({ ...form, naturalidade: cidade, naturalidadeUf: uf })}
+                    placeholder="Selecione o município de naturalidade"
+                  />
                 </div>
               )}
 
