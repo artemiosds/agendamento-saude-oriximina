@@ -1857,78 +1857,126 @@ const ProntuarioPage: React.FC = () => {
             />
           )}
 
-          {triagem && (
-            <div className="space-y-3 pointer-events-none select-text">
-              {triagem.alergias && triagem.alergias.length > 0 && (
-                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
-                  <strong className="text-destructive">⚠️ ALERGIAS:</strong> {triagem.alergias.join(", ")}
+          {triagem && (() => {
+            const risco = (triagem as any).classificacao_risco as string | undefined;
+            const RISCO_LABEL: Record<string, string> = {
+              nao_urgente: "Não urgente",
+              pouco_urgente: "Pouco urgente",
+              urgente: "Urgente",
+              muito_urgente: "Muito urgente",
+              emergencia: "Emergência",
+            };
+            const RISCO_BG: Record<string, string> = {
+              nao_urgente: "bg-emerald-50 text-emerald-700 border-emerald-200",
+              pouco_urgente: "bg-amber-50 text-amber-700 border-amber-200",
+              urgente: "bg-orange-50 text-orange-700 border-orange-200",
+              muito_urgente: "bg-red-50 text-red-700 border-red-200",
+              emergencia: "bg-red-100 text-red-800 border-red-300",
+            };
+            const vitais: { label: string; value: React.ReactNode }[] = [];
+            if (triagem.peso) vitais.push({ label: "Peso", value: <>{triagem.peso} <span className="text-muted-foreground">kg</span></> });
+            if (triagem.altura) vitais.push({ label: "Altura", value: <>{triagem.altura} <span className="text-muted-foreground">cm</span></> });
+            if (triagem.imc) vitais.push({ label: "IMC", value: <>{triagem.imc} <span className="text-[10px] text-muted-foreground">({classificarIMC(triagem.imc)})</span></> });
+            if (triagem.pressao_arterial) vitais.push({ label: "PA", value: <>{triagem.pressao_arterial} <span className="text-muted-foreground">mmHg</span></> });
+            if (triagem.temperatura) vitais.push({ label: "Temp", value: <>{triagem.temperatura} <span className="text-muted-foreground">°C</span></> });
+            if (triagem.frequencia_cardiaca) vitais.push({ label: "FC", value: <>{triagem.frequencia_cardiaca} <span className="text-muted-foreground">bpm</span></> });
+            if (triagem.saturacao_oxigenio) vitais.push({ label: "SatO₂", value: <>{triagem.saturacao_oxigenio} <span className="text-muted-foreground">%</span></> });
+            if (triagem.glicemia) vitais.push({ label: "Glicemia", value: <>{triagem.glicemia} <span className="text-muted-foreground">mg/dL</span></> });
+
+            return (
+              <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden pointer-events-none select-text">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-3 bg-muted/40 border-b border-border/40">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold font-display text-foreground tracking-wide">
+                        Dados da Triagem
+                      </h3>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                        Somente leitura · atendimento atual
+                      </span>
+                    </div>
+                  </div>
+                  {risco && RISCO_LABEL[risco] && (
+                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${RISCO_BG[risco] || "bg-muted text-muted-foreground border-border"}`}>
+                      {RISCO_LABEL[risco]}
+                    </span>
+                  )}
                 </div>
-              )}
-              <div className="text-sm text-muted-foreground">
-                Triagem realizada por: <strong className="text-foreground">{triagem.tecnico_nome}</strong>
-                {triagem.tecnico_coren && ` | COREN: ${triagem.tecnico_coren}`}
-                {triagem.confirmado_em &&
-                  ` às ${new Date(triagem.confirmado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
+
+                {/* Body */}
+                <div className="px-5 py-4 space-y-3">
+                  {/* Alergias destacadas */}
+                  {triagem.alergias && triagem.alergias.length > 0 && (
+                    <div className="flex items-start gap-2 rounded-lg border-l-4 border-l-destructive bg-destructive/10 p-3">
+                      <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <strong className="text-destructive">Alergias:</strong>{" "}
+                        <span className="text-foreground">{triagem.alergias.join(", ")}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sinais vitais em grade */}
+                  {vitais.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Sinais vitais
+                      </p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {vitais.map((v, i) => (
+                          <div key={i} className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{v.label}</p>
+                            <p className="text-sm font-semibold text-foreground mt-0.5">{v.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Medicamentos em uso */}
+                  {triagem.medicamentos && triagem.medicamentos.length > 0 && (
+                    <div className="text-sm">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        Medicamentos em uso
+                      </p>
+                      <p className="text-foreground">{triagem.medicamentos.join(", ")}</p>
+                    </div>
+                  )}
+
+                  {/* Queixa */}
+                  {triagem.queixa && (
+                    <div className="text-sm">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        Queixa principal
+                      </p>
+                      <p className="text-foreground whitespace-pre-wrap leading-relaxed">{triagem.queixa}</p>
+                    </div>
+                  )}
+
+                  {/* Rodapé: profissional/data */}
+                  {(triagem.tecnico_nome || triagem.confirmado_em) && (
+                    <div className="text-[11px] text-muted-foreground pt-2 border-t border-border/40">
+                      Realizada por{" "}
+                      <strong className="text-foreground">{triagem.tecnico_nome || "—"}</strong>
+                      {triagem.tecnico_coren && ` · COREN ${triagem.tecnico_coren}`}
+                      {triagem.confirmado_em &&
+                        ` · ${new Date(triagem.confirmado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}`}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm bg-muted/50 rounded-lg p-3 border">
-                {triagem.peso && (
-                  <span>
-                    Peso: <strong>{triagem.peso}kg</strong>
-                  </span>
-                )}
-                {triagem.altura && (
-                  <span>
-                    Altura: <strong>{triagem.altura}cm</strong>
-                  </span>
-                )}
-                {triagem.imc && (
-                  <span>
-                    IMC:{" "}
-                    <strong>
-                      {triagem.imc} ({classificarIMC(triagem.imc)})
-                    </strong>
-                  </span>
-                )}
-                {triagem.pressao_arterial && (
-                  <span>
-                    PA: <strong>{triagem.pressao_arterial} mmHg</strong>
-                  </span>
-                )}
-                {triagem.temperatura && (
-                  <span>
-                    Temp: <strong>{triagem.temperatura}°C</strong>
-                  </span>
-                )}
-                {triagem.frequencia_cardiaca && (
-                  <span>
-                    FC: <strong>{triagem.frequencia_cardiaca} bpm</strong>
-                  </span>
-                )}
-                {triagem.saturacao_oxigenio && (
-                  <span>
-                    SatO₂: <strong>{triagem.saturacao_oxigenio}%</strong>
-                  </span>
-                )}
-                {triagem.glicemia && (
-                  <span>
-                    Glicemia: <strong>{triagem.glicemia} mg/dL</strong>
-                  </span>
-                )}
-              </div>
-              {triagem.medicamentos && triagem.medicamentos.length > 0 && (
-                <div className="text-sm">
-                  <strong>Medicamentos em uso:</strong> {triagem.medicamentos.join(", ")}
-                </div>
-              )}
-              {triagem.queixa && (
-                <div className="text-sm">
-                  <strong>Queixa (triagem):</strong> {triagem.queixa}
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
           {form.agendamento_id && !triagem && (
-            <p className="text-xs text-muted-foreground italic">Triagem não realizada para este atendimento.</p>
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 px-5 py-4 text-center">
+              <p className="text-sm text-muted-foreground italic">
+                Nenhuma triagem registrada para este atendimento.
+              </p>
+            </div>
           )}
 
           {patientHistory.length > 0 && (
