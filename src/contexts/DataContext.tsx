@@ -281,6 +281,32 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [queryClient],
   );
 
+  const resolveScopedUnidadeId = useCallback(async () => {
+    if (isGlobalAdmin) return "";
+    if (userUnidadeId) return userUnidadeId;
+
+    const funcionarioEmMemoria = funcionariosRef.current.find(
+      (f) => f.authUserId === authUser?.authUserId || f.id === authUser?.id || f.usuario === authUser?.usuario,
+    );
+    if (funcionarioEmMemoria?.unidadeId) return funcionarioEmMemoria.unidadeId;
+
+    if (!authUser?.authUserId) return "";
+
+    const { data, error } = await supabase
+      .from("funcionarios" as any)
+      .select("unidade_id")
+      .eq("auth_user_id", authUser.authUserId)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error resolving scoped unidade_id for pacientes:", error);
+      return "";
+    }
+
+    return data?.unidade_id || "";
+  }, [authUser?.authUserId, authUser?.id, authUser?.usuario, isGlobalAdmin, userUnidadeId]);
+
   const logAction = useCallback(
     (input: {
       acao: string;
@@ -474,7 +500,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Global admin sees all. Unit-scoped staff (Recepção, Gestão, Master de unidade)
       // load patients strictly by the real unidade_id from their funcionário profile.
       // Recursive pagination to handle >1000 patients
-      if (!isGlobalAdmin && !userUnidadeId) {
+      const scopedUnidadeId = await resolveScopedUnidadeId();
+      if (!isGlobalAdmin && !scopedUnidadeId) {
         setPacientes([]);
         return;
       }
@@ -489,7 +516,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select(columns)
           .order("criado_em", { ascending: false })
           .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+        if (!isGlobalAdmin && scopedUnidadeId) query = query.eq('unidade_id', scopedUnidadeId);
         const { data, error } = await query;
         if (error) {
           console.error("Error loading pacientes:", error);
@@ -551,7 +578,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Error loading pacientes:", err);
     }
-  }, [isGlobalAdmin, userUnidadeId]);
+  }, [isGlobalAdmin, resolveScopedUnidadeId]);
 
   const loadAgendamentos = useCallback(async () => {
     try {
