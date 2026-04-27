@@ -3291,6 +3291,12 @@ const ProntuarioPage: React.FC = () => {
                     <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
                   </div>
                 )}
+                {viewerProntuario.resultado_exame && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resultado de Exame</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.resultado_exame}</p>
+                  </div>
+                )}
               </div>
 
               <Separator className="my-4" />
