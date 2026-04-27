@@ -909,6 +909,7 @@ const ProntuarioPage: React.FC = () => {
         observacoes: Object.keys(especialidadeFields).length > 0
           ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
           : form.observacoes,
+        resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
