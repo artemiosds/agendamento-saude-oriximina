@@ -2732,10 +2732,10 @@ const Tratamentos: React.FC = () => {
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
                   <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
                   <p className="text-sm text-warning">
-                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você. 
-                    Todos serão cancelados automaticamente ao confirmar a alta.
+                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você.
+                    Ao confirmar a alta, essas sessões serão <strong>removidas da agenda</strong> e <strong>não serão contabilizadas como cancelamento</strong>.
                     <br />
-                    <span className="text-xs opacity-80">Agendamentos com outros profissionais não serão afetados.</span>
+                    <span className="text-xs opacity-80">Sessões já realizadas, faltas e agendamentos com outros profissionais não serão afetados.</span>
                   </p>
                 </div>
               )}
