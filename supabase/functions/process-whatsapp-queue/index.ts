@@ -282,34 +282,47 @@ serve(async (req) => {
       const { min, max } = effectiveDelays(cfg);
       await new Promise((r) => setTimeout(r, randomDelay(min, max)));
 
-      const result = await sendEvolution(evoCfg, msg.telefone, msg.mensagem);
+      // Define qual provedor enviar essa mensagem (msg.provider OU provedor ativo)
+      const msgProvider: 'evolution' | 'uazapigo' = (msg.provider === 'uazapigo' || (msg.provider !== 'evolution' && activeProvider === 'uazapigo'))
+        ? 'uazapigo' : 'evolution';
+      const canalLog = msgProvider === 'uazapigo' ? 'whatsapp_uazapigo' : 'whatsapp_evolution';
+
+      const result = msgProvider === 'uazapigo'
+        ? await sendUazapi(evoCfg, msg.telefone, msg.mensagem)
+        : await sendEvolution(evoCfg, msg.telefone, msg.mensagem);
 
       if (result.ok) {
         await supabase.from("whatsapp_queue").update({
           status: "enviado",
+          provider: msgProvider,
           processado_em: new Date().toISOString(),
         }).eq("id", msg.id);
 
         await supabase.from("notification_logs").insert({
           agendamento_id: msg.agendamento_id || "",
           evento: msg.evento,
-          canal: "whatsapp_evolution",
+          canal: canalLog,
+          provider: msgProvider,
           destinatario_telefone: msg.telefone,
           status: "enviado",
-          payload: { queue_id: msg.id, evento: msg.evento, prioridade: msg.prioridade },
+          payload: { queue_id: msg.id, evento: msg.evento, prioridade: msg.prioridade, provider: msgProvider },
           resposta: result.body.substring(0, 500),
         });
 
         // Atualiza last_success_send_at no monitor da conexão
         try {
+          const instKey = msgProvider === 'uazapigo'
+            ? `uazapi:${evoCfg.uazapi_instance}`
+            : evoCfg.evolution_instance_name;
           await supabase
             .from("whatsapp_connection_status")
             .update({ last_success_send_at: new Date().toISOString() })
-            .eq("instance_name", evoCfg.evolution_instance_name);
+            .eq("instance_name", instKey);
         } catch {}
 
         processed++;
         remainingThisMinute--;
+
       } else {
         const novasTentativas = (msg.tentativas ?? 0) + 1;
         const novoStatus = novasTentativas >= 2 ? "erro" : "pendente";
