@@ -304,7 +304,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return "";
     }
 
-    return data?.unidade_id || "";
+    return ((data as { unidade_id?: string } | null)?.unidade_id || "").trim();
   }, [authUser?.authUserId, authUser?.id, authUser?.usuario, isGlobalAdmin, userUnidadeId]);
 
   const logAction = useCallback(
