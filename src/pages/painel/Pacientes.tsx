@@ -507,8 +507,8 @@ const Pacientes: React.FC = () => {
       toast.error(Object.values(newErrors)[0]);
       return;
     }
-    if (!editId && !isGlobalAdminUser && !unidadeIdFuncionario) {
-      toast.error("Usuário sem unidade vinculada. Corrija o cadastro do funcionário antes de cadastrar paciente.");
+    if (!editId && user?.role === "recepcao" && !unidadeIdFuncionario) {
+      toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
       return;
     }
     setErrors({});
@@ -561,11 +561,19 @@ const Pacientes: React.FC = () => {
         atualizado_em: new Date().toISOString(),
         atualizado_por: user?.id || "",
         atualizado_por_nome: user?.nome || "",
+        atualizado_por_usuario: user?.usuario || "",
         motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
     };
 
-    if (!isGlobalAdminUser && unidadeIdFuncionario) {
+    if (user?.role === "recepcao") {
+      if (!unidadeIdFuncionario) {
+        toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
+        setSaving(false);
+        return;
+      }
+      dbFields.unidade_id = unidadeIdFuncionario;
+    } else if (!isGlobalAdminUser && unidadeIdFuncionario) {
       dbFields.unidade_id = unidadeIdFuncionario;
     }
 
@@ -630,19 +638,25 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
-        // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
-        // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
+        if (user?.role === "recepcao" && !unidadeIdFuncionario) {
+          toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
+          setSaving(false);
+          return;
+        }
+
         const insertPayload: any = {
           id,
           ...dbFields,
           criado_em: new Date().toISOString(),
-          unidade_id: unidadeIdFuncionario,
+          unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
           custom_data: {
             ...(dbFields.custom_data || {}),
             criado_por: user?.id || "",
             criado_por_nome: user?.nome || "",
             criado_por_usuario: user?.usuario || "",
             unidade_origem_id: unidadeIdFuncionario,
+            criado_at: new Date().toISOString(),
+            atualizado_at: new Date().toISOString(),
             motivo_alteracao: "Cadastro de paciente pela página Pacientes",
           },
         };
