@@ -10,6 +10,8 @@ export const queryKeys = {
     search: (q: string) => ['pacientes', 'search', q] as const,
     page: (scope: Record<string, string | number | boolean>) => ['pacientes', 'page', scope] as const,
     semUnidade: (scope: Record<string, string | number | boolean>) => ['pacientes', 'sem-unidade', scope] as const,
+    linkedUnidade: (scope: Record<string, string | number | boolean>) => ['pacientes', 'linked-unidade', scope] as const,
+    diagnostics: (scope: Record<string, string | number | boolean>) => ['pacientes', 'diagnostics', scope] as const,
   },
   agendamentos: {
     all: ['agendamentos'] as const,
