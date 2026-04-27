@@ -187,6 +187,18 @@ const ConfigWhatsApp: React.FC = () => {
               .maybeSingle();
             if (persisted) setStatusDetail(persisted as any);
           }
+
+          // UazapiGO
+          const uazTok = (data as any).uazapi_admin_token || '';
+          setOriginalUazToken(uazTok);
+          setUazConfig({
+            uazapi_server_url: (data as any).uazapi_server_url || 'https://free.uazapi.com',
+            uazapi_admin_token: uazTok,
+            uazapi_instance: (data as any).uazapi_instance || '',
+            uazapi_ativo: !!(data as any).uazapi_ativo,
+          });
+          setActiveProvider(((data as any).whatsapp_provider_active === 'uazapigo') ? 'uazapigo' : 'evolution');
+          if (!(data as any).uazapi_instance) setUazStatus('no_instance');
         }
 
         // Load reminder hours from system_config
