@@ -517,7 +517,7 @@ export function ConferirDadosPacienteModal({
               {/* Botão salvar (quando houver alterações) */}
               {dirty && (
                 <div className="flex justify-end pt-1">
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Button size="sm" onClick={() => { handleSave().catch(() => {}); }} disabled={saving}>
                     <Save className="w-3.5 h-3.5 mr-1.5" />
                     {saving ? "Salvando…" : "Salvar alterações"}
                   </Button>
