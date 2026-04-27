@@ -81,3 +81,29 @@ export const whatsappService = {
     }
   },
 };
+
+/** Serviço UazapiGO – espelha o whatsappService para a edge function send-whatsapp-uazapigo. */
+async function invokeUaz<T = any>(body: Record<string, unknown>): Promise<InvokeResult<T>> {
+  try {
+    const { data, error } = await supabase.functions.invoke('send-whatsapp-uazapigo', { body });
+    if (error) console.error('[UazapiGO] Erro:', error);
+    return { data: (data as T) ?? null, error };
+  } catch (err) {
+    console.error('[UazapiGO] Erro:', err);
+    return { data: null, error: err };
+  }
+}
+
+export const uazapigoService = {
+  async getConnectionStatus() {
+    return invokeUaz<{ success?: boolean; connected?: boolean; state?: string; status_detailed?: string; error?: string }>({ action: 'status' });
+  },
+  async createInstance(name: string) {
+    return invokeUaz<{ success?: boolean; instance?: { name: string; id?: string; token?: string; qrcode?: string; status?: string }; error?: string }>({
+      action: 'create_instance', name,
+    });
+  },
+  async sendTest(telefone: string) {
+    return invokeUaz<{ success?: boolean; error?: string }>({ telefone_teste: telefone, tipo: 'teste' });
+  },
+};
