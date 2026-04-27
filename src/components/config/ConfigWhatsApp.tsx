@@ -446,10 +446,23 @@ const ConfigWhatsApp: React.FC = () => {
     switch (status) {
       case 'connected': return <Badge className="bg-success/10 text-success border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Conectado</Badge>;
       case 'disconnected': return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Desconectado</Badge>;
+      case 'qrcode': return <Badge className="bg-yellow-500/10 text-yellow-600 border-0"><AlertCircle className="w-3 h-3 mr-1" /> QR Code</Badge>;
+      case 'connecting': return <Badge className="bg-blue-500/10 text-blue-600 border-0"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Conectando</Badge>;
       case 'error': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Erro</Badge>;
       default: return <Badge variant="outline">Não verificado</Badge>;
     }
   };
+
+  const formatDateTime = (iso?: string) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const maskedApiKey = originalApiKey
+    ? originalApiKey.length <= 8
+      ? '••••••••'
+      : `${originalApiKey.slice(0, 4)}${'•'.repeat(Math.max(8, originalApiKey.length - 8))}${originalApiKey.slice(-4)}`
+    : '';
 
   const templateInfo = TEMPLATE_TYPES.find(t => t.tipo === selectedTemplate);
 
