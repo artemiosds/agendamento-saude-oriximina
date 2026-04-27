@@ -100,7 +100,7 @@ const EncaminhamentoInternoModal: React.FC<Props> = ({ open, onOpenChange, pacie
         `ENCAMINHAMENTO INTERNO`,
         ``,
         `Paciente: ${paciente.nome}`,
-        `CPF: ${paciente.cpf || '—'}    CNS: ${paciente.cns || '—'}`,
+        `CPF: ${paciente.cpf || '—'}    CNS: ${formatCNS(paciente.cns) || '—'}`,
         `Data de Nascimento: ${paciente.data_nascimento || '—'}`,
         ``,
         `Encaminhado de: ${user.nome} (${user.profissao || user.role})`,

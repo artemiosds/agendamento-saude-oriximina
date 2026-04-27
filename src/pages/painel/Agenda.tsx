@@ -2227,7 +2227,7 @@ const Agenda: React.FC = () => {
                               )}
                               {paciente?.cns && (
                                 <p className="text-xs">
-                                  <strong>CNS:</strong> {paciente.cns}
+                                  <strong>CNS:</strong> {formatCNS(paciente.cns)}
                                 </p>
                               )}
                               <p className="text-xs">

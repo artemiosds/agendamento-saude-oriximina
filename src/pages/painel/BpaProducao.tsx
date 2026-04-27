@@ -689,7 +689,7 @@ const BpaProducao: React.FC = () => {
                             {l.origem}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs font-mono">{pac?.cns || '—'}</TableCell>
+                        <TableCell className="text-xs font-mono">{formatCNS(pac?.cns) || '—'}</TableCell>
                         <TableCell className="text-xs font-mono">{pac?.cpf || '—'}</TableCell>
                         <TableCell className={cn("text-xs font-medium whitespace-nowrap", !v.nome && "text-destructive italic")}>
                           {pac?.nome || 'faltando'}

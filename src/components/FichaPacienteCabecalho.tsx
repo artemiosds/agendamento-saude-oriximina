@@ -300,7 +300,7 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
 
             {/* Compact info grid (always visible) */}
             <div className="grid grid-cols-2 gap-3">
-              <InfoField icon={<CreditCard className="w-3.5 h-3.5" />} label="Cartão SUS (CNS)" value={paciente.cns || "—"} mono />
+              <InfoField icon={<CreditCard className="w-3.5 h-3.5" />} label="Cartão SUS (CNS)" value={formatCNS(paciente.cns) || "—"} mono />
               <InfoField icon={<CreditCard className="w-3.5 h-3.5" />} label="CPF" value={paciente.cpf || "—"} mono />
               <InfoField icon={<Activity className="w-3.5 h-3.5" />} label="CID-10" value={cidDisplay} />
               <InfoField icon={<Stethoscope className="w-3.5 h-3.5" />} label="Profissional responsável" value={profissionalNome || "—"} />
@@ -395,7 +395,7 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                   <Label className="text-xs font-medium text-muted-foreground">Cartão SUS (CNS)</Label>
                   <Input
                     value={editData.cns}
-                    onChange={e => { setEditData(d => ({ ...d, cns: e.target.value })); setErrors(er => ({ ...er, cns: "" })); }}
+                    onChange={e => { setEditData(d => ({ ...d, cns: maskCNS(e.target.value) })); setErrors(er => ({ ...er, cns: "" })); }}
                     placeholder="000 0000 0000 0000"
                     className={`mt-1 ${errors.cns ? "border-destructive" : ""}`}
                   />

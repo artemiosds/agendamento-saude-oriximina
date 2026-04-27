@@ -363,7 +363,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="campo campo-full" style="margin-bottom:4px"><b>Nome Completo:</b> <span style="font-size:12px;font-weight:700">${v(data.paciente.nome_completo) || '—'}</span></div>
       <div class="grid-3">
         <div class="campo"><b>CPF:</b> <span>${v(data.paciente.cpf) || '—'}</span></div>
-        <div class="campo"><b>CNS:</b> <span>${v(data.paciente.cns) || '—'}</span></div>
+        <div class="campo"><b>CNS:</b> <span>${formatCNS(data.paciente.cns) || '—'}</span></div>
         <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(data.paciente.data_nascimento)}</span></div>
       </div>
       <div class="grid-4">
@@ -530,7 +530,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
             <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> {data.paciente.nome_completo || '—'}</p>
             <div className="grid grid-cols-3 gap-2 mt-1">
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CPF:</span> {data.paciente.cpf || '—'}</p>
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CNS:</span> {data.paciente.cns || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CNS:</span> {formatCNS(data.paciente.cns) || '—'}</p>
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nasc.:</span> {formatarData(data.paciente.data_nascimento)}</p>
             </div>
             <div className="grid grid-cols-3 gap-2 mt-1">
