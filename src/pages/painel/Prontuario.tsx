@@ -488,31 +488,49 @@ const ProntuarioPage: React.FC = () => {
     const profId = user.id;
     const loadAll = async () => {
       const { procedureService } = await import("@/services/procedureService");
-      const [procsList, medsRes, prefsRes] = await Promise.all([
+      const [procsList, medsRes, prefsRes, sigCfg] = await Promise.all([
         procedureService.getActive(),
         (supabase as any).from("medications").select("*").or(`is_global.eq.true,profissional_id.eq.${profId}`),
         supabase.from("professional_preferences").select("tipo,item_id,desabilitado").eq("profissional_id", profId),
+        procedureService.getSigtapConfig(user?.unidadeId || null),
       ]);
       setProcedimentos(procsList as any as ProcedimentoDB[]);
       if (medsRes.data) setMedications(medsRes.data as MedicationDB[]);
       if (prefsRes.data) setProfPreferences(prefsRes.data as any[]);
+      setSigtapDisponibilizarTodos(!!sigCfg?.disponibilizarTodos);
     };
     loadAll();
-  }, [user?.id]);
+  }, [user?.id, user?.unidadeId]);
+
+  // Realtime: react to changes in system_config so the SIGTAP config flips immediately
+  useEffect(() => {
+    const channel = supabase
+      .channel('prontuario-sigtap-config')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_config' }, async () => {
+        const { procedureService } = await import('@/services/procedureService');
+        const cfg = await procedureService.getSigtapConfig(user?.unidadeId || null);
+        setSigtapDisponibilizarTodos(!!cfg?.disponibilizarTodos);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.unidadeId]);
 
   const filteredProcedimentos = useMemo(() => {
     if (!user) return [];
     const q = procSearch.trim().toLowerCase();
+    const semFiltroProfissao = sigtapDisponibilizarTodos;
     return procedimentos.filter((p) => {
-      if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
-      if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
+      if (!semFiltroProfissao) {
+        if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
+        if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
+      }
       if (q) {
         const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [procedimentos, user, procSearch]);
+  }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
 
   const loadProntuarios = async () => {
     setLoading(true);
