@@ -126,6 +126,32 @@ const mapPacienteRow = (p: any) => ({
   custom_data: p.custom_data || {},
 });
 
+const normalizeUnitId = (value?: string | null) => (value || "").trim();
+
+const fetchAllRows = async (buildQuery: (from: number, to: number) => any, pageSize = 1000) => {
+  const rows: any[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await buildQuery(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return rows;
+};
+
+const fetchPacientesByIds = async (ids: string[]) => {
+  const pacientes: any[] = [];
+  const chunkSize = 200;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { data, error } = await supabase.from("pacientes").select(PACIENTE_COLUMNS).in("id", chunk);
+    if (error) throw error;
+    if (data) pacientes.push(...data);
+  }
+  return pacientes;
+};
+
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
   const {
