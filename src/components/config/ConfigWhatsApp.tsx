@@ -572,6 +572,7 @@ const ConfigWhatsApp: React.FC = () => {
       : `${originalUazToken.slice(0, 4)}${'•'.repeat(Math.max(8, originalUazToken.length - 8))}${originalUazToken.slice(-4)}`
     : '';
 
+  const statusBadge = (status: string) => {
     switch (status) {
       case 'connected': return <Badge className="bg-success/10 text-success border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Conectado</Badge>;
       case 'disconnected': return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Desconectado</Badge>;
