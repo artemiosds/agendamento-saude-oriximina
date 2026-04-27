@@ -135,6 +135,7 @@ const emptyForm = {
   solicitacao_exames: "",
   evolucao: "",
   observacoes: "",
+  resultado_exame: "",
   indicacao_retorno: "",
   motivo_alteracao: "",
   procedimentos_texto: "",
