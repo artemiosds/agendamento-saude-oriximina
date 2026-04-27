@@ -1119,8 +1119,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addPaciente = useCallback(
     async (p: Paciente) => {
-      // Auto-inject unidade_id if not set
-      const unidadeIdToUse = p.unidadeId || userUnidadeId || '';
+      const scopedUnidadeId = await resolveScopedUnidadeId();
+      if (authUser?.role === "recepcao" && !scopedUnidadeId) {
+        throw new Error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do funcionário.");
+      }
+
+      const unidadeIdToUse = authUser?.role === "recepcao"
+        ? scopedUnidadeId
+        : p.unidadeId || scopedUnidadeId || '';
+
       const { error } = await supabase.from("pacientes" as any).insert({
         id: p.id,
         nome: p.nome,
@@ -1145,12 +1152,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [invalidateCache, userUnidadeId],
+    [authUser?.role, invalidateCache, resolveScopedUnidadeId],
   );
 
   const updatePaciente = useCallback(
     async (id: string, data: Partial<Paciente>) => {
       const dbData: any = {};
+      const scopedUnidadeId = await resolveScopedUnidadeId();
       if (data.nome !== undefined) dbData.nome = data.nome;
       if (data.cpf !== undefined) dbData.cpf = data.cpf;
       if (data.cns !== undefined) dbData.cns = data.cns;
@@ -1162,6 +1170,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.observacoes !== undefined) dbData.observacoes = data.observacoes;
       if (data.descricaoClinica !== undefined) dbData.descricao_clinica = data.descricaoClinica;
       if (data.cid !== undefined) dbData.cid = data.cid;
+      if (authUser?.role === "recepcao") {
+        if (!scopedUnidadeId) {
+          throw new Error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do funcionário.");
+        }
+        dbData.unidade_id = scopedUnidadeId;
+      } else if (data.unidadeId !== undefined) {
+        dbData.unidade_id = data.unidadeId;
+      }
+
       const { error } = await supabase
         .from("pacientes" as any)
         .update(dbData)
@@ -1176,7 +1193,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [invalidateCache],
+    [authUser?.role, invalidateCache, resolveScopedUnidadeId],
   );
 
   const addToFila = useCallback(
