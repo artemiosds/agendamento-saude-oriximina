@@ -31,7 +31,7 @@ const menuItems: {
   { to: '/painel/pacientes',        label: 'Pacientes',              icon: Users,              modulo: 'pacientes' },
   { to: '/painel/atendimentos',     label: 'Atendimentos',           icon: ClipboardList,      modulo: 'atendimento' },
   { to: '/painel/tratamentos',      label: 'Gestão de Tratamentos',  icon: Activity,           modulo: 'tratamento' },
-  { to: '/painel/regulacao',        label: 'Regulação CER',          icon: ClipboardListIcon,  modulo: 'encaminhamento' },
+  
   { to: '/painel/prontuario',       label: 'Prontuário',             icon: Stethoscope,        modulo: 'prontuario' },
   { to: '/painel/triagem',          label: 'Triagem',                icon: HeartPulse,         modulo: 'triagem' },
   { to: '/painel/historico-triagem', label: 'Histórico Triagem',      icon: History,            modulo: 'triagem' },

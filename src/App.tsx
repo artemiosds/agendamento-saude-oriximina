@@ -72,7 +72,7 @@ const Auditoria                   = lazyRetry(() => import("./pages/painel/Audit
 const Triagem                     = lazyRetry(() => import("./pages/painel/Triagem"));
 const Bloqueios                   = lazyRetry(() => import("./pages/painel/Bloqueios"));
 const Tratamentos                 = lazyRetry(() => import("./pages/painel/Tratamentos"));
-const Regulacao                   = lazyRetry(() => import("./pages/painel/Regulacao"));
+
 const AvaliacaoEnfermagem         = lazyRetry(() => import("./pages/painel/AvaliacaoEnfermagem"));
 const AvaliacaoMultiprofissional  = lazyRetry(() => import("./pages/painel/AvaliacaoMultiprofissional"));
 const PTSPage                     = lazyRetry(() => import("./pages/painel/PTS"));
@@ -208,7 +208,7 @@ const App = () => (
                     <Route path="historico-triagem" element={<ModuleRoute modulo="triagem"><HistoricoTriagem /></ModuleRoute>} />
                     <Route path="bloqueios" element={<ModuleRoute modulo="agenda"><Bloqueios /></ModuleRoute>} />
                     <Route path="tratamentos" element={<ModuleRoute modulo="tratamento"><Tratamentos /></ModuleRoute>} />
-                    <Route path="regulacao" element={<ModuleRoute modulo="encaminhamento"><Regulacao /></ModuleRoute>} />
+                    
                     <Route path="enfermagem" element={<ModuleRoute modulo="enfermagem"><AvaliacaoEnfermagem /></ModuleRoute>} />
                     <Route path="pts" element={<ModuleRoute modulo="prontuario"><PTSPage /></ModuleRoute>} />
                     <Route path="multiprofissional" element={<ModuleRoute modulo="atendimento"><AvaliacaoMultiprofissional /></ModuleRoute>} />
