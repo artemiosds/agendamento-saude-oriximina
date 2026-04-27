@@ -517,11 +517,37 @@ const ProntuarioPage: React.FC = () => {
     setLoading(true);
     try {
       // All professionals can VIEW all prontuários — edit is restricted in the UI
-      let query = (supabase as any).from("prontuarios").select("*").order("data_atendimento", { ascending: false });
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') query = query.eq("unidade_id", user.unidadeId);
-      const { data, error } = await query;
-      if (data) setProntuarios(data);
-      if (error) console.error("Error loading prontuarios:", error);
+      // Recursive pagination to bypass Supabase's default 1000-row limit
+      const PAGE_SIZE = 1000;
+      const all: any[] = [];
+      let fromIdx = 0;
+      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+      // First fetch exact total count for visibility/debug
+      let countQuery = (supabase as any).from("prontuarios").select("id", { count: "exact", head: true });
+      if (restrictUnit) countQuery = countQuery.eq("unidade_id", user!.unidadeId);
+      const { count: totalCount, error: countErr } = await countQuery;
+      if (countErr) console.error("Error counting prontuarios:", countErr);
+      if (import.meta.env.DEV) console.debug("[Prontuarios] total no banco:", totalCount);
+
+      while (true) {
+        let query = (supabase as any)
+          .from("prontuarios")
+          .select("*")
+          .order("data_atendimento", { ascending: false })
+          .range(fromIdx, fromIdx + PAGE_SIZE - 1);
+        if (restrictUnit) query = query.eq("unidade_id", user!.unidadeId);
+        const { data, error } = await query;
+        if (error) {
+          console.error("Error loading prontuarios:", error);
+          break;
+        }
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        fromIdx += PAGE_SIZE;
+      }
+      if (import.meta.env.DEV) console.debug("[Prontuarios] carregados:", all.length);
+      setProntuarios(all);
     } catch (err) {
       console.error("Error:", err);
     }
