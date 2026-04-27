@@ -383,12 +383,13 @@ const Pacientes: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
+    const qDigits = debouncedSearch.replace(/\D/g, "");
     let list = visiblePacientes.filter(
       (p) =>
         p.nome.toLowerCase().includes(q) ||
         p.cpf.includes(debouncedSearch) ||
         p.telefone.includes(debouncedSearch) ||
-        (p.cns && p.cns.includes(debouncedSearch)),
+        (p.cns && qDigits && (p.cns || "").replace(/\D/g, "").includes(qDigits)),
     );
 
     // Filter by fila
@@ -523,7 +524,7 @@ const Pacientes: React.FC = () => {
     const dbFields: any = {
       nome: form.nome,
       cpf: form.cpf,
-      cns: form.cns,
+      cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
       nome_mae: form.nomeMae,
       telefone: normalizedPhone,
       data_nascimento: form.dataNascimento,
@@ -610,11 +611,12 @@ const Pacientes: React.FC = () => {
           if (cpfMatch && cpfMatch.length > 0) duplicateChecks.push(`CPF já cadastrado: ${cpfMatch[0].nome}`);
         }
 
-        if (form.cns.trim()) {
+        const cnsClean = (form.cns || "").replace(/\D/g, "").slice(0, 15);
+        if (cnsClean) {
           const { data: cnsMatch } = await supabase
             .from("pacientes")
             .select("id, nome")
-            .eq("cns", form.cns.trim())
+            .eq("cns", cnsClean)
             .limit(1);
           if (cnsMatch && cnsMatch.length > 0) duplicateChecks.push(`CNS já cadastrado: ${cnsMatch[0].nome}`);
         }
