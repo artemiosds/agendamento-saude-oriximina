@@ -2676,13 +2676,21 @@ const ProntuarioPage: React.FC = () => {
             )}
 
             {/* Resultado de Exame trazido pelo paciente (transcrição manual) */}
-            <div>
-              <Label>Resultado de Exame</Label>
+            <div className="bg-muted/30 rounded-lg p-4 border space-y-3 mt-2 mb-2">
+              <div className="flex items-start gap-2">
+                <FlaskConical className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <Label className="text-sm font-semibold text-foreground">Resultado de Exame</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Use este campo para registrar exames trazidos pelo paciente ou analisados durante o atendimento.
+                  </p>
+                </div>
+              </div>
               <DebouncedTextarea
-                rows={4}
                 value={form.resultado_exame}
                 onChange={(e) => setForm((p) => ({ ...p, resultado_exame: e.target.value }))}
-                placeholder="Descreva o resultado de exame apresentado pelo paciente..."
+                placeholder="Registre os resultados de exames apresentados pelo paciente, valores relevantes, alterações encontradas e interpretação clínica..."
+                className="min-h-[140px] md:min-h-[160px] bg-background resize-y leading-relaxed"
               />
             </div>
 
