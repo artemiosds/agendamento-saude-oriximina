@@ -2495,23 +2495,42 @@ const ProntuarioPage: React.FC = () => {
                                   {cids.length === 0 ? 'Nenhum CID vinculado.' : 'Nenhum CID sugerido corresponde à busca.'}
                                 </p>
                               ) : (
-                                <div className="flex flex-wrap gap-1">
+                                <div className="flex flex-wrap gap-1.5">
                                   {filteredCids.map((c) => {
                                     const isSel = selCids.includes(c.codigo);
                                     return (
-                                      <Badge
+                                      <button
+                                        type="button"
                                         key={c.codigo}
-                                        variant={isSel ? "default" : "outline"}
-                                        className="cursor-pointer text-[11px] font-normal"
                                         onClick={() => {
                                           setSelectedCidsByProc((m) => ({
                                             ...m,
-                                            [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                            [proc.id]: isSel
+                                              ? (m[proc.id] || []).filter((x) => x !== c.codigo)
+                                              : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                           }));
+                                          // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
+                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                            setSelectedProcIds((prev) => [...prev, proc.id]);
+                                          }
                                         }}
+                                        aria-pressed={isSel}
+                                        title={c.descricao || c.codigo}
+                                        className={
+                                          "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
+                                          (isSel
+                                            ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
+                                            : "bg-background text-foreground border-border hover:bg-muted")
+                                        }
                                       >
-                                        {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
-                                      </Badge>
+                                        {isSel && <CheckCircle className="h-3 w-3 shrink-0" />}
+                                        <span className="font-mono">{c.codigo}</span>
+                                        {c.descricao && (
+                                          <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
+                                            · {c.descricao.slice(0, 36)}
+                                          </span>
+                                        )}
+                                      </button>
                                     );
                                   })}
                                 </div>
@@ -2524,26 +2543,49 @@ const ProntuarioPage: React.FC = () => {
                               {searchResults.length > 0 && (
                                 <>
                                   <p className="text-[11px] font-medium text-muted-foreground mt-2 mb-1">🔎 Outros resultados</p>
-                                  <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
                                     {searchResults
                                       .filter((c) => !cids.some((x) => x.codigo === c.codigo))
                                       .map((c) => {
                                         const isSel = (selectedCidsByProc[proc.id] || []).includes(c.codigo);
                                         return (
-                                          <Badge
+                                          <button
+                                            type="button"
                                             key={c.codigo}
-                                            variant={isSel ? "default" : "secondary"}
-                                            className="cursor-pointer text-[11px] font-normal"
                                             onClick={() => {
-                                              setCidsByProc((m) => ({ ...m, [proc.id]: [...(m[proc.id] || []), c] }));
+                                              setCidsByProc((m) => ({
+                                                ...m,
+                                                [proc.id]: (m[proc.id] || []).some((x) => x.codigo === c.codigo)
+                                                  ? (m[proc.id] || [])
+                                                  : [...(m[proc.id] || []), c],
+                                              }));
                                               setSelectedCidsByProc((m) => ({
                                                 ...m,
-                                                [proc.id]: isSel ? (m[proc.id] || []).filter((x) => x !== c.codigo) : [...(m[proc.id] || []), c.codigo],
+                                                [proc.id]: isSel
+                                                  ? (m[proc.id] || []).filter((x) => x !== c.codigo)
+                                                  : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                               }));
+                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                                setSelectedProcIds((prev) => [...prev, proc.id]);
+                                              }
                                             }}
+                                            aria-pressed={isSel}
+                                            title={c.descricao || c.codigo}
+                                            className={
+                                              "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors " +
+                                              (isSel
+                                                ? "bg-primary text-primary-foreground border-primary shadow-sm hover:bg-primary/90"
+                                                : "bg-secondary text-secondary-foreground border-border hover:bg-muted")
+                                            }
                                           >
-                                            + {c.codigo}{c.descricao ? ` · ${c.descricao.slice(0, 36)}` : ''}
-                                          </Badge>
+                                            {isSel ? <CheckCircle className="h-3 w-3 shrink-0" /> : <Plus className="h-3 w-3 shrink-0" />}
+                                            <span className="font-mono">{c.codigo}</span>
+                                            {c.descricao && (
+                                              <span className={isSel ? "opacity-90" : "text-muted-foreground"}>
+                                                · {c.descricao.slice(0, 36)}
+                                              </span>
+                                            )}
+                                          </button>
                                         );
                                       })}
                                   </div>
