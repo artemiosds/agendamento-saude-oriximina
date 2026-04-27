@@ -184,26 +184,49 @@ const Pacientes: React.FC = () => {
     return map;
   }, [fila]);
 
-  // Profissionais só veem pacientes vinculados aos seus agendamentos
-  // Unit-scoped users (Recepção, Master de unidade, Gestão) veem:
-  //   - pacientes cadastrados na sua unidade (paciente.unidade_id)
-  //   - + pacientes que possuem agendamento na sua unidade (continuidade do cuidado cross-unit)
-  // Admin global (admin.sms) vê tudo.
+  const pacientesQueryScope = useMemo(
+    () => ({
+      unidadeId: unidadeIdFuncionario || "global",
+      role: user?.role || "anon",
+      usuario: user?.usuario || "",
+      search: debouncedSearch,
+      filterFila,
+      sortBy,
+      page: Math.ceil(visibleCount / PAGE_SIZE),
+    }),
+    [unidadeIdFuncionario, user?.role, user?.usuario, debouncedSearch, filterFila, sortBy, visibleCount],
+  );
+
+  useQuery({
+    queryKey: queryKeys.pacientes.page(pacientesQueryScope),
+    queryFn: async () => true,
+    enabled: !!user,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+    refreshPacientes();
+  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario]);
+
+  // Profissionais veem pacientes vinculados aos seus agendamentos.
+  // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
+  // Não filtrar por setor, sala, criado_por, profissional, fila ou agendamento.
   const visiblePacientes = useMemo(() => {
     if (isProfissional && user) {
       const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
-    if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-      const unitPacienteIds = new Set(
-        agendamentos.filter((a) => a.unidadeId === user.unidadeId).map((a) => a.pacienteId),
-      );
-      return pacientes.filter(
-        (p) => p.unidadeId === user.unidadeId || unitPacienteIds.has(p.id),
-      );
+    if (!isGlobalAdminUser && unidadeIdFuncionario) {
+      return pacientes.filter((p) => (p.unidadeId || "") === unidadeIdFuncionario);
     }
     return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user]);
+  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
+
+  const pacientesSemUnidade = useMemo(() => {
+    if (!user || !["master", "gestao"].includes(user.role)) return [];
+    return pacientes.filter((p) => !p.unidadeId);
+  }, [pacientes, user]);
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
