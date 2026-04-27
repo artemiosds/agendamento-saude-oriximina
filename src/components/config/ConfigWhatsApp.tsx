@@ -137,25 +137,38 @@ const ConfigWhatsApp: React.FC = () => {
         const { data } = await supabase.from('clinica_config').select('*').limit(1).maybeSingle();
         if (data) {
           setEvolutionConfigId(data.id);
+          const apiKey = data.evolution_api_key || '';
+          setOriginalApiKey(apiKey);
           setEvolutionConfig({
             nome_clinica: data.nome_clinica || '',
             logo_url: data.logo_url || '',
             telefone: data.telefone || '',
             evolution_base_url: data.evolution_base_url || 'https://api.agendamento-saude-sms-oriximina.site',
-            evolution_api_key: data.evolution_api_key || '',
+            evolution_api_key: apiKey,
             evolution_instance_name: data.evolution_instance_name || '',
           });
-          if (data.evolution_instance_name && data.evolution_api_key) {
+          if (data.evolution_instance_name && apiKey) {
             const [{ data: statusData }, { data: instancesData }] = await Promise.all([
               whatsappService.getConnectionStatus(),
               whatsappService.getInstances(),
             ]);
             if (statusData) {
-              setEvolutionStatus(statusData.connected ? 'connected' : statusData.success ? 'disconnected' : 'error');
+              const detailed = (statusData as any).status_detailed;
+              if (detailed === 'conectado') setEvolutionStatus('connected');
+              else if (detailed === 'qrcode_necessario') setEvolutionStatus('qrcode');
+              else if (detailed === 'conectando') setEvolutionStatus('connecting');
+              else if (statusData.success) setEvolutionStatus('disconnected');
+              else setEvolutionStatus('error');
             }
-            if (instancesData?.instances) {
-              setEvolutionInstances(instancesData.instances);
-            }
+            if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
+
+            // Carrega último status persistido (last_check_at, etc)
+            const { data: persisted } = await supabase
+              .from('whatsapp_connection_status' as any)
+              .select('*')
+              .eq('instance_name', data.evolution_instance_name)
+              .maybeSingle();
+            if (persisted) setStatusDetail(persisted as any);
           }
         }
 
@@ -170,6 +183,29 @@ const ConfigWhatsApp: React.FC = () => {
       setEvolutionLoading(false);
     })();
   }, []);
+
+  // Carrega métricas da fila quando aba Logs ou Conexão é aberta
+  const loadQueueStats = useCallback(async () => {
+    try {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [{ count: pendentes }, { count: enviadas }, { count: falhas }, { count: expiradas }, { count: processando }] = await Promise.all([
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'enviado').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'erro').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'bloqueado').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'processando'),
+      ]);
+      setQueueStats({
+        pendentes: pendentes ?? 0,
+        enviadas_24h: enviadas ?? 0,
+        falhas_24h: falhas ?? 0,
+        expiradas_24h: expiradas ?? 0,
+        processando: processando ?? 0,
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadQueueStats(); }, [loadQueueStats]);
 
   // Load templates
   const loadTemplates = useCallback(async () => {
