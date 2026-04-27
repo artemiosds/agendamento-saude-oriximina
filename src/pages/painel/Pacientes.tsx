@@ -403,7 +403,12 @@ const Pacientes: React.FC = () => {
       is_gestante: form.isGestante,
       is_pne: form.isPne,
       is_autista: form.isAutista,
-      custom_data: form.customData || {},
+      custom_data: {
+        ...(form.customData || {}),
+        atualizado_em: new Date().toISOString(),
+        atualizado_por: user?.id || "",
+        atualizado_por_nome: user?.nome || "",
+      },
     };
 
     try {
@@ -463,15 +468,30 @@ const Pacientes: React.FC = () => {
         const id = `p${Date.now()}`;
         // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
         // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
-        const insertPayload: any = { id, ...dbFields };
-        if (user?.unidadeId) insertPayload.unidade_id = user.unidadeId;
+        const insertPayload: any = {
+          id,
+          ...dbFields,
+          criado_em: new Date().toISOString(),
+          unidade_id: unidadeIdFuncionario,
+          custom_data: {
+            ...(dbFields.custom_data || {}),
+            criado_por: user?.id || "",
+            criado_por_nome: user?.nome || "",
+            criado_por_usuario: user?.usuario || "",
+            unidade_origem_id: unidadeIdFuncionario,
+          },
+        };
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
         Promise.resolve(supabase.from("pacientes").insert(insertPayload))
           .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
           .catch((err) => console.error("Erro ao cadastrar paciente:", err))
-          .finally(() => refreshPacientes());
+          .finally(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            refreshPacientes();
+          });
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch {
