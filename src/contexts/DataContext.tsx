@@ -516,7 +516,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .select(columns)
           .order("criado_em", { ascending: false })
           .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && scopedUnidadeId) query = query.eq('unidade_id', scopedUnidadeId);
+        // Unit-scoped users see patients of their unit + orphan patients (sem unidade vinculada)
+        // so legacy records remain visible until they get assigned. Master/global admin sees all.
+        if (!isGlobalAdmin && scopedUnidadeId) {
+          query = query.or(`unidade_id.eq.${scopedUnidadeId},unidade_id.is.null,unidade_id.eq.`);
+        }
         const { data, error } = await query;
         if (error) {
           console.error("Error loading pacientes:", error);
