@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";

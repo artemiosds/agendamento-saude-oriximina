@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
