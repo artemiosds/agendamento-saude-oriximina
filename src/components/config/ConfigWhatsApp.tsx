@@ -624,6 +624,30 @@ const ConfigWhatsApp: React.FC = () => {
 
         {/* ─── CONEXÃO ─── */}
         <TabsContent value="conexao" className="space-y-4 mt-4">
+          {/* ─── PROVEDOR ATIVO ─── */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2"><Zap className="w-4 h-4" /> Provedor de envio ativo</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Apenas o provedor selecionado envia mensagens. Nunca os dois ao mesmo tempo.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={activeProvider} onValueChange={(v) => switchProvider(v as 'evolution' | 'uazapigo')}>
+                    <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="evolution">Evolution API</SelectItem>
+                      <SelectItem value="uazapigo">UazapiGO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Badge variant={activeProvider === 'uazapigo' ? 'default' : 'secondary'}>
+                    {activeProvider === 'uazapigo' ? 'UazapiGO' : 'Evolution'}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2"><Smartphone className="w-4 h-4" /> Evolution API</h3>
