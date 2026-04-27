@@ -280,72 +280,11 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
   });
 
-  const shouldLoadUnitLinkedPacientes = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
-
-  const linkedPacientesQuery = useQuery({
-    queryKey: queryKeys.pacientes.linkedUnidade({
-      unidadeId: unidadeIdFuncionario || "",
-      role: user?.role || "",
-      usuario: user?.usuario || "",
-    }),
-    enabled: shouldLoadUnitLinkedPacientes,
-    staleTime: 0,
-    queryFn: async () => {
-      const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const [directRows, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
-        fetchAllRows((from, to) =>
-          supabase.from("pacientes").select(PACIENTE_COLUMNS).eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("agendamentos").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("fila_espera").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("prontuarios").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("nursing_evaluations").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("pts").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("treatment_cycles").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-      ]);
-
-      const linkedIds = Array.from(
-        new Set(
-          [
-            ...agendaLinks.map((row) => row.paciente_id),
-            ...filaLinks.map((row) => row.paciente_id),
-            ...prontuarioLinks.map((row) => row.paciente_id),
-            ...nursingLinks.map((row) => row.patient_id),
-            ...ptsLinks.map((row) => row.patient_id),
-            ...treatmentLinks.map((row) => row.patient_id),
-          ].filter(Boolean),
-        ),
-      );
-
-      const linkedRows = linkedIds.length > 0 ? await fetchPacientesByIds(linkedIds) : [];
-      const merged = new Map<string, ReturnType<typeof mapPacienteRow>>();
-
-      [...directRows, ...linkedRows].forEach((row) => {
-        const pacienteUnitId = normalizeUnitId(row.unidade_id);
-        if (pacienteUnitId && pacienteUnitId !== unitId) return;
-        const mapped = mapPacienteRow(row);
-        merged.set(mapped.id, mapped);
-      });
-
-      return Array.from(merged.values());
-    },
-  });
+  const shouldLoadUnitDiagnostics = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
 
   useQuery({
     queryKey: queryKeys.pacientes.diagnostics({ unidadeId: unidadeIdFuncionario || "", role: user?.role || "" }),
-    enabled: shouldLoadUnitLinkedPacientes && funcionarios.length > 0,
+    enabled: shouldLoadUnitDiagnostics && funcionarios.length > 0,
     staleTime: 0,
     queryFn: async () => {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
@@ -420,12 +359,11 @@ const Pacientes: React.FC = () => {
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
-      if (linkedPacientesQuery.data) return linkedPacientesQuery.data;
       const unitId = normalizeUnitId(unidadeIdFuncionario);
       return pacientes.filter((p) => normalizeUnitId(p.unidadeId) === unitId);
     }
     return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario, linkedPacientesQuery.data]);
+  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
 
   const pacientesSemUnidade = useMemo(() => {
     if (!user || !["master", "gestao"].includes(user.role)) return [];
@@ -569,8 +507,8 @@ const Pacientes: React.FC = () => {
       toast.error(Object.values(newErrors)[0]);
       return;
     }
-    if (!editId && !isGlobalAdminUser && !unidadeIdFuncionario) {
-      toast.error("Usuário sem unidade vinculada. Corrija o cadastro do funcionário antes de cadastrar paciente.");
+    if (!editId && user?.role === "recepcao" && !unidadeIdFuncionario) {
+      toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
       return;
     }
     setErrors({});
@@ -623,11 +561,19 @@ const Pacientes: React.FC = () => {
         atualizado_em: new Date().toISOString(),
         atualizado_por: user?.id || "",
         atualizado_por_nome: user?.nome || "",
+        atualizado_por_usuario: user?.usuario || "",
         motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
     };
 
-    if (!isGlobalAdminUser && unidadeIdFuncionario) {
+    if (user?.role === "recepcao") {
+      if (!unidadeIdFuncionario) {
+        toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
+        setSaving(false);
+        return;
+      }
+      dbFields.unidade_id = unidadeIdFuncionario;
+    } else if (!isGlobalAdminUser && unidadeIdFuncionario) {
       dbFields.unidade_id = unidadeIdFuncionario;
     }
 
@@ -692,19 +638,25 @@ const Pacientes: React.FC = () => {
         }
 
         const id = `p${Date.now()}`;
-        // Stamp unit on creation so unit-scoped users (Recepção, Master de unidade, Gestão)
-        // see the patient immediately. Admin global sem unidade fica vazio (visível para todos).
+        if (user?.role === "recepcao" && !unidadeIdFuncionario) {
+          toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
+          setSaving(false);
+          return;
+        }
+
         const insertPayload: any = {
           id,
           ...dbFields,
           criado_em: new Date().toISOString(),
-          unidade_id: unidadeIdFuncionario,
+          unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
           custom_data: {
             ...(dbFields.custom_data || {}),
             criado_por: user?.id || "",
             criado_por_nome: user?.nome || "",
             criado_por_usuario: user?.usuario || "",
             unidade_origem_id: unidadeIdFuncionario,
+            criado_at: new Date().toISOString(),
+            atualizado_at: new Date().toISOString(),
             motivo_alteracao: "Cadastro de paciente pela página Pacientes",
           },
         };
