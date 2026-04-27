@@ -18,6 +18,7 @@ import { useCustomFields } from "@/hooks/useCustomFields";
 import { useAuth } from "@/contexts/AuthContext";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
+import { maskCNS } from "@/lib/cnsUtils";
 
 const ESPECIALIDADES_DESTINO = [
   { value: "fisioterapia", label: "Fisioterapia" },
@@ -75,8 +76,7 @@ const maskCPF = (v: string): string => {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 };
 
-// Máscara CNS (15 dígitos: 000 0000 0000 0000)
-import { maskCNS } from "@/lib/cnsUtils";
+// Máscara CNS (15 dígitos: 000 0000 0000 0000) — ver src/lib/cnsUtils.ts
 
 // Máscara CEP
 const maskCEP = (v: string): string => {
