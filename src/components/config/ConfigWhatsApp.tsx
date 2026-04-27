@@ -20,7 +20,7 @@ import {
   Smartphone, FileText, Zap, Shield
 } from 'lucide-react';
 import ConfigWhatsAppAntiBan from './ConfigWhatsAppAntiBan';
-import { whatsappService } from '@/services/whatsappService';
+import { whatsappService, uazapigoService } from '@/services/whatsappService';
 import { toast } from 'sonner';
 
 const TEMPLATE_TYPES = [
