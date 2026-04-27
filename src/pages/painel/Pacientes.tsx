@@ -292,25 +292,54 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
     queryFn: async () => {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const [agendaLinks, filaLinks] = await Promise.all([
+      const [directRows, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
+        fetchAllRows((from, to) =>
+          supabase.from("pacientes").select(PACIENTE_COLUMNS).eq("unidade_id", unitId).range(from, to),
+        ),
         fetchAllRows((from, to) =>
           supabase.from("agendamentos").select("paciente_id").eq("unidade_id", unitId).range(from, to),
         ),
         fetchAllRows((from, to) =>
           supabase.from("fila_espera").select("paciente_id").eq("unidade_id", unitId).range(from, to),
         ),
+        fetchAllRows((from, to) =>
+          supabase.from("prontuarios").select("paciente_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("nursing_evaluations").select("patient_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("pts").select("patient_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("treatment_cycles").select("patient_id").eq("unit_id", unitId).range(from, to),
+        ),
       ]);
+
       const linkedIds = Array.from(
-        new Set([...agendaLinks, ...filaLinks].map((row) => row.paciente_id).filter(Boolean)),
+        new Set(
+          [
+            ...agendaLinks.map((row) => row.paciente_id),
+            ...filaLinks.map((row) => row.paciente_id),
+            ...prontuarioLinks.map((row) => row.paciente_id),
+            ...nursingLinks.map((row) => row.patient_id),
+            ...ptsLinks.map((row) => row.patient_id),
+            ...treatmentLinks.map((row) => row.patient_id),
+          ].filter(Boolean),
+        ),
       );
-      if (linkedIds.length === 0) return [];
-      const rows = await fetchPacientesByIds(linkedIds);
-      return rows
-        .filter((p) => {
-          const pacienteUnitId = normalizeUnitId(p.unidade_id);
-          return pacienteUnitId === unitId || !pacienteUnitId;
-        })
-        .map(mapPacienteRow);
+
+      const linkedRows = linkedIds.length > 0 ? await fetchPacientesByIds(linkedIds) : [];
+      const merged = new Map<string, ReturnType<typeof mapPacienteRow>>();
+
+      [...directRows, ...linkedRows].forEach((row) => {
+        const pacienteUnitId = normalizeUnitId(row.unidade_id);
+        if (pacienteUnitId && pacienteUnitId !== unitId) return;
+        const mapped = mapPacienteRow(row);
+        merged.set(mapped.id, mapped);
+      });
+
+      return Array.from(merged.values());
     },
   });
 
@@ -320,7 +349,7 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
     queryFn: async () => {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const [allPacientes, agendaLinks, filaLinks] = await Promise.all([
+      const [allPacientes, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
         fetchAllRows((from, to) =>
           supabase.from("pacientes").select("id,unidade_id,custom_data").range(from, to),
         ),
@@ -330,11 +359,32 @@ const Pacientes: React.FC = () => {
         fetchAllRows((from, to) =>
           supabase.from("fila_espera").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
         ),
+        fetchAllRows((from, to) =>
+          supabase.from("prontuarios").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("nursing_evaluations").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("pts").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("treatment_cycles").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
       ]);
       const staffIds = new Set(
         funcionarios.filter((f) => normalizeUnitId(f.unidadeId) === unitId).map((f) => f.id),
       );
-      const linkedIds = new Set([...agendaLinks, ...filaLinks].map((row) => row.paciente_id).filter(Boolean));
+      const linkedIds = new Set(
+        [
+          ...agendaLinks.map((row) => row.paciente_id),
+          ...filaLinks.map((row) => row.paciente_id),
+          ...prontuarioLinks.map((row) => row.paciente_id),
+          ...nursingLinks.map((row) => row.patient_id),
+          ...ptsLinks.map((row) => row.patient_id),
+          ...treatmentLinks.map((row) => row.patient_id),
+        ].filter(Boolean),
+      );
       const semUnidade = allPacientes.filter((p) => !normalizeUnitId(p.unidade_id));
       const diagnostico = {
         masterTotal: allPacientes.length,
@@ -370,16 +420,9 @@ const Pacientes: React.FC = () => {
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
+      if (linkedPacientesQuery.data) return linkedPacientesQuery.data;
       const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const merged = new Map<string, (typeof pacientes)[0]>();
-      pacientes
-        .filter((p) => normalizeUnitId(p.unidadeId) === unitId)
-        .forEach((p) => merged.set(p.id, p));
-      (linkedPacientesQuery.data || []).forEach((p) => {
-        const pacienteUnitId = normalizeUnitId(p.unidadeId);
-        if (pacienteUnitId === unitId || !pacienteUnitId) merged.set(p.id, p);
-      });
-      return Array.from(merged.values());
+      return pacientes.filter((p) => normalizeUnitId(p.unidadeId) === unitId);
     }
     return pacientes;
   }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario, linkedPacientesQuery.data]);
