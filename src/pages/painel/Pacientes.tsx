@@ -280,6 +280,82 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
   });
 
+  const shouldLoadUnitLinkedPacientes = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
+
+  const linkedPacientesQuery = useQuery({
+    queryKey: queryKeys.pacientes.linkedUnidade({
+      unidadeId: unidadeIdFuncionario || "",
+      role: user?.role || "",
+      usuario: user?.usuario || "",
+    }),
+    enabled: shouldLoadUnitLinkedPacientes,
+    staleTime: 0,
+    queryFn: async () => {
+      const unitId = normalizeUnitId(unidadeIdFuncionario);
+      const [agendaLinks, filaLinks] = await Promise.all([
+        fetchAllRows((from, to) =>
+          supabase.from("agendamentos").select("paciente_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("fila_espera").select("paciente_id").eq("unidade_id", unitId).range(from, to),
+        ),
+      ]);
+      const linkedIds = Array.from(
+        new Set([...agendaLinks, ...filaLinks].map((row) => row.paciente_id).filter(Boolean)),
+      );
+      if (linkedIds.length === 0) return [];
+      const rows = await fetchPacientesByIds(linkedIds);
+      return rows
+        .filter((p) => {
+          const pacienteUnitId = normalizeUnitId(p.unidade_id);
+          return pacienteUnitId === unitId || !pacienteUnitId;
+        })
+        .map(mapPacienteRow);
+    },
+  });
+
+  useQuery({
+    queryKey: queryKeys.pacientes.diagnostics({ unidadeId: unidadeIdFuncionario || "", role: user?.role || "" }),
+    enabled: shouldLoadUnitLinkedPacientes && funcionarios.length > 0,
+    staleTime: 0,
+    queryFn: async () => {
+      const unitId = normalizeUnitId(unidadeIdFuncionario);
+      const [allPacientes, agendaLinks, filaLinks] = await Promise.all([
+        fetchAllRows((from, to) =>
+          supabase.from("pacientes").select("id,unidade_id,custom_data").range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("agendamentos").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("fila_espera").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+      ]);
+      const staffIds = new Set(
+        funcionarios.filter((f) => normalizeUnitId(f.unidadeId) === unitId).map((f) => f.id),
+      );
+      const linkedIds = new Set([...agendaLinks, ...filaLinks].map((row) => row.paciente_id).filter(Boolean));
+      const semUnidade = allPacientes.filter((p) => !normalizeUnitId(p.unidade_id));
+      const diagnostico = {
+        masterTotal: allPacientes.length,
+        pacientesComVinculoNaUnidadeRecepcao: linkedIds.size,
+        unidadeIdIgualRecepcao: allPacientes.filter((p) => normalizeUnitId(p.unidade_id) === unitId).length,
+        unidadeIdVazioOuNull: semUnidade.length,
+        unidadeIdDiferente: allPacientes.filter((p) => {
+          const pacienteUnitId = normalizeUnitId(p.unidade_id);
+          return pacienteUnitId && pacienteUnitId !== unitId;
+        }).length,
+        criadosPorUsuariosDaUnidadeSemUnidade: semUnidade.filter((p) => {
+          const customData = p.custom_data || {};
+          return staffIds.has(customData.criado_por) || staffIds.has(customData.atualizado_por) || customData.unidade_origem_id === unitId;
+        }).length,
+        vinculadosFilaAgendaSemUnidadeCadastro: semUnidade.filter((p) => linkedIds.has(p.id)).length,
+      };
+      console.info("[Pacientes][Diagnóstico Recepção]", diagnostico);
+      return diagnostico;
+    },
+  });
+
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
     refreshPacientes();
@@ -294,10 +370,19 @@ const Pacientes: React.FC = () => {
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
-      return pacientes.filter((p) => (p.unidadeId || "") === unidadeIdFuncionario);
+      const unitId = normalizeUnitId(unidadeIdFuncionario);
+      const merged = new Map<string, (typeof pacientes)[0]>();
+      pacientes
+        .filter((p) => normalizeUnitId(p.unidadeId) === unitId)
+        .forEach((p) => merged.set(p.id, p));
+      (linkedPacientesQuery.data || []).forEach((p) => {
+        const pacienteUnitId = normalizeUnitId(p.unidadeId);
+        if (pacienteUnitId === unitId || !pacienteUnitId) merged.set(p.id, p);
+      });
+      return Array.from(merged.values());
     }
     return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
+  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario, linkedPacientesQuery.data]);
 
   const pacientesSemUnidade = useMemo(() => {
     if (!user || !["master", "gestao"].includes(user.role)) return [];
