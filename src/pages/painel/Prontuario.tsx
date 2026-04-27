@@ -677,6 +677,7 @@ const ProntuarioPage: React.FC = () => {
         setSessionRegistrationRequested(false);
         setEditId(null);
         setSelectedProcIds([]);
+        setSelectedCidsByProc({});
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
@@ -767,6 +768,7 @@ const ProntuarioPage: React.FC = () => {
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
+    setSelectedCidsByProc({});
     setEpisodios([]);
     setListaExames([]);
     setListaPrescricao([]);
