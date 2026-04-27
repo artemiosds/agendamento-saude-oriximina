@@ -471,7 +471,107 @@ const ConfigWhatsApp: React.FC = () => {
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
   };
 
-  const statusBadge = (status: string) => {
+  // ─── UazapiGO ──────────────────────────────────────────────
+  const saveUazConfig = async () => {
+    setUazSaving(true);
+    try {
+      const serverUrl = (uazConfig.uazapi_server_url || '').trim().replace(/\/+$/, '');
+      if (serverUrl && !/^https?:\/\//i.test(serverUrl)) {
+        toast.error('Server URL deve começar com http:// ou https://');
+        setUazSaving(false); return;
+      }
+      const tokenToSave = uazConfig.uazapi_admin_token || originalUazToken;
+      const payload: any = {
+        uazapi_server_url: serverUrl,
+        uazapi_admin_token: tokenToSave,
+        uazapi_instance: uazConfig.uazapi_instance || '',
+        uazapi_ativo: uazConfig.uazapi_ativo,
+      };
+      if (evolutionConfigId) {
+        await supabase.from('clinica_config').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
+      } else {
+        const { data } = await supabase.from('clinica_config').insert(payload).select('id').single();
+        if (data) setEvolutionConfigId(data.id);
+      }
+      setOriginalUazToken(tokenToSave);
+      setUazTokenMasked(true);
+      toast.success('Configuração UazapiGO salva.');
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    setUazSaving(false);
+  };
+
+  const checkUazConnection = async () => {
+    if (!uazConfig.uazapi_server_url || !originalUazToken) {
+      toast.error('Preencha Server URL e Admin Token primeiro.');
+      return;
+    }
+    setUazTesting(true);
+    try {
+      const { data } = await uazapigoService.getConnectionStatus();
+      const detailed = (data as any)?.status_detailed;
+      switch (detailed) {
+        case 'conectado': setUazStatus('connected'); toast.success('✅ UazapiGO conectada!'); break;
+        case 'qrcode_necessario': setUazStatus('qrcode'); toast.warning('📱 QR Code necessário no painel UazapiGO.'); break;
+        case 'conectando': setUazStatus('connecting'); toast.info('🔄 Conectando...'); break;
+        case 'desconectado': setUazStatus('disconnected'); toast.warning('Instância desconectada.'); break;
+        case 'admin_token_invalido': setUazStatus('error'); toast.error('❌ Admin Token inválido'); break;
+        case 'instancia_inexistente': setUazStatus('no_instance'); toast.error('❌ Instância não encontrada'); break;
+        case 'server_url_invalida': setUazStatus('error'); toast.error('❌ Server URL inválido'); break;
+        case 'rede_indisponivel': setUazStatus('error'); toast.error('❌ Rede indisponível'); break;
+        default: setUazStatus('error'); toast.error((data as any)?.error || 'Erro ao verificar UazapiGO');
+      }
+    } catch (err: any) { setUazStatus('error'); toast.error(`Erro: ${err.message}`); }
+    setUazTesting(false);
+  };
+
+  const createUazInstance = async () => {
+    if (!uazConfig.uazapi_server_url || !originalUazToken) {
+      toast.error('Configure Server URL e Admin Token para criar instância.');
+      return;
+    }
+    const name = uazConfig.uazapi_instance?.trim() || prompt('Nome da nova instância UazapiGO:') || '';
+    if (!name) return;
+    setUazCreating(true);
+    try {
+      const { data } = await uazapigoService.createInstance(name);
+      const d = data as any;
+      if (d?.success && d?.instance) {
+        setUazConfig(p => ({ ...p, uazapi_instance: d.instance.name }));
+        toast.success(`Instância "${d.instance.name}" criada. Verifique o QR no painel UazapiGO.`);
+        setUazStatus('qrcode');
+      } else {
+        toast.error(d?.error || 'Falha ao criar instância');
+      }
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+    setUazCreating(false);
+  };
+
+  const switchProvider = async (next: 'evolution' | 'uazapigo') => {
+    if (next === 'uazapigo' && !uazConfig.uazapi_ativo) {
+      toast.error('Ative e configure a UazapiGO antes de selecioná-la como provedor.');
+      return;
+    }
+    if (next === 'uazapigo' && (!uazConfig.uazapi_server_url || !originalUazToken || !uazConfig.uazapi_instance)) {
+      toast.error('UazapiGO ainda não está totalmente configurada.');
+      return;
+    }
+    setActiveProvider(next);
+    try {
+      if (evolutionConfigId) {
+        await supabase.from('clinica_config').update({
+          whatsapp_provider_active: next, updated_at: new Date().toISOString(),
+        }).eq('id', evolutionConfigId);
+        toast.success(`Provedor ativo: ${next === 'evolution' ? 'Evolution API' : 'UazapiGO'}`);
+      }
+    } catch (err: any) { toast.error(`Erro: ${err.message}`); }
+  };
+
+  const maskedUazToken = originalUazToken
+    ? originalUazToken.length <= 8
+      ? '••••••••'
+      : `${originalUazToken.slice(0, 4)}${'•'.repeat(Math.max(8, originalUazToken.length - 8))}${originalUazToken.slice(-4)}`
+    : '';
+
     switch (status) {
       case 'connected': return <Badge className="bg-success/10 text-success border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Conectado</Badge>;
       case 'disconnected': return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Desconectado</Badge>;
