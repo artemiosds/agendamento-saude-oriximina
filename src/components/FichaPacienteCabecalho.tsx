@@ -191,7 +191,7 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         nome: editData.nome.trim(),
         data_nascimento: editData.data_nascimento,
         cpf: editData.cpf,
-        cns: editData.cns,
+        cns: (editData.cns || "").replace(/\D/g, "").slice(0, 15),
         cid: editData.cid,
         nome_mae: editData.nome_mae,
         endereco: editData.endereco,
