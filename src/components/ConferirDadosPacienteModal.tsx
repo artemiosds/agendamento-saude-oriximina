@@ -547,7 +547,7 @@ export function ConferirDadosPacienteModal({
                 try {
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
-                  if (dirty) await handleSave();
+                  if (dirty) await handleSave(true);
                   await Promise.resolve(onConfirm());
                   console.log("[ConferirDados] Operação concluída com sucesso");
                   toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos com sucesso!");
