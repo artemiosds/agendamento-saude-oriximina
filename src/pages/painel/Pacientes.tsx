@@ -36,6 +36,8 @@ import { useNavigate } from "react-router-dom";
 import CadastroPacienteForm, { PacienteFormData, emptyPacienteForm } from "@/components/CadastroPacienteForm";
 import { FichaImpressao, FichaPrintMode } from '@/components/FichaImpressao';
 import "@/styles/ficha-impressao.css";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface FichaDados {
   paciente: {
@@ -90,6 +92,7 @@ const Pacientes: React.FC = () => {
     refreshFila,
   } = useData();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { notify } = useWebhookNotify();
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
@@ -102,6 +105,12 @@ const Pacientes: React.FC = () => {
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
   const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
+  const funcionarioLogado = useMemo(
+    () => funcionarios.find((f) => f.id === user?.id || f.authUserId === user?.authUserId || f.usuario === user?.usuario),
+    [funcionarios, user],
+  );
+  const unidadeIdFuncionario = funcionarioLogado?.unidadeId || user?.unidadeId || "";
+  const isGlobalAdminUser = user?.usuario === "admin.sms";
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
