@@ -1642,39 +1642,48 @@ const Tratamentos: React.FC = () => {
       // 2. Update cycle status
       await supabase.from("treatment_cycles").update({ status: "finalizado_alta" }).eq("id", selectedCycle.id);
 
-      // 3. Cancel ONLY future appointments of this professional for this patient
+      // 3. REMOVER (não cancelar) sessões futuras não realizadas deste ciclo
+      // Alta clínica não é cancelamento — sessões futuras são excluídas para
+      // não inflarem o relatório de cancelamentos e liberarem vagas na agenda.
       const today = new Date().toISOString().split("T")[0];
+
+      // 3a. Buscar sessões futuras pendentes/agendadas do ciclo (preserva realizadas/faltas)
+      const { data: futureSessions } = await supabase
+        .from("treatment_sessions")
+        .select("id, appointment_id, scheduled_date, status")
+        .eq("cycle_id", selectedCycle.id)
+        .in("status", ["pendente_agendamento", "agendada"]);
+
+      const sessionIds = (futureSessions || []).map((s: any) => s.id);
+      const linkedApptIds = (futureSessions || [])
+        .map((s: any) => s.appointment_id)
+        .filter((id: any) => !!id);
+
+      // 3b. Buscar agendamentos futuros do paciente com este profissional ainda ativos
       const { data: futureAppts } = await supabase
         .from("agendamentos")
         .select("id")
         .eq("paciente_id", selectedCycle.patient_id)
         .eq("profissional_id", user?.id || "")
         .gt("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado")');
+        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido")');
 
-      const cancelledCount = futureAppts?.length || 0;
+      const apptIdsToDelete = Array.from(
+        new Set([...(linkedApptIds as string[]), ...((futureAppts || []).map((a: any) => a.id))])
+      );
 
-      if (futureAppts && futureAppts.length > 0) {
-        const ids = futureAppts.map((a) => a.id);
-        await supabase
-          .from("agendamentos")
-          .update({ status: "cancelado", observacoes: "Alta pelo profissional" })
-          .in("id", ids);
-
-        // Cancel pending sessions linked to those appointments
-        await supabase
-          .from("treatment_sessions")
-          .update({ status: "cancelada" })
-          .eq("cycle_id", selectedCycle.id)
-          .in("appointment_id", ids);
+      // 3c. Excluir sessões futuras (não realizadas) do ciclo
+      if (sessionIds.length > 0) {
+        await supabase.from("treatment_sessions").delete().in("id", sessionIds);
       }
 
-      // 4. Cancel remaining pending sessions of this cycle
-      await supabase
-        .from("treatment_sessions")
-        .update({ status: "cancelada" })
-        .eq("cycle_id", selectedCycle.id)
-        .in("status", ["pendente_agendamento", "agendada"]);
+      // 3d. Excluir agendamentos futuros vinculados (libera vagas na agenda)
+      if (apptIdsToDelete.length > 0) {
+        await supabase.from("agendamentos").delete().in("id", apptIdsToDelete);
+      }
+
+      const removedCount = apptIdsToDelete.length;
+      const removedSessions = sessionIds.length;
 
       await logAction({
         acao: "alta_paciente",
@@ -1685,13 +1694,15 @@ const Tratamentos: React.FC = () => {
         detalhes: {
           paciente: selectedCycle.patient_id,
           motivo: dischargeForm.reason,
-          agendamentos_cancelados: cancelledCount,
+          sessoes_futuras_removidas: removedSessions,
+          agendamentos_futuros_removidos: removedCount,
+          observacao: "Removidas por alta clínica (não contam como cancelamento)",
         },
       });
 
       toast.success(
-        cancelledCount > 0
-          ? `Alta realizada. ${cancelledCount} agendamento(s) deste profissional cancelado(s).`
+        removedCount > 0 || removedSessions > 0
+          ? `Alta realizada. ${removedSessions} sessão(ões) e ${removedCount} agendamento(s) futuro(s) removido(s) da agenda.`
           : "Alta registrada com sucesso!"
       );
       setDischargeOpen(false);
@@ -2721,10 +2732,10 @@ const Tratamentos: React.FC = () => {
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/30">
                   <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
                   <p className="text-sm text-warning">
-                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você. 
-                    Todos serão cancelados automaticamente ao confirmar a alta.
+                    Este paciente possui <strong>{dischargeFutureCount}</strong> agendamento(s) futuro(s) com você.
+                    Ao confirmar a alta, essas sessões serão <strong>removidas da agenda</strong> e <strong>não serão contabilizadas como cancelamento</strong>.
                     <br />
-                    <span className="text-xs opacity-80">Agendamentos com outros profissionais não serão afetados.</span>
+                    <span className="text-xs opacity-80">Sessões já realizadas, faltas e agendamentos com outros profissionais não serão afetados.</span>
                   </p>
                 </div>
               )}
