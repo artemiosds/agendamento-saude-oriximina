@@ -38,7 +38,7 @@ function randomDelay(minSec: number, maxSec: number) {
 async function getClinicaConfig(supabase: any) {
   const { data } = await supabase
     .from("clinica_config")
-    .select("evolution_base_url, evolution_api_key, evolution_instance_name")
+    .select("evolution_base_url, evolution_api_key, evolution_instance_name, uazapi_server_url, uazapi_admin_token, uazapi_instance, uazapi_ativo, whatsapp_provider_active")
     .limit(1)
     .maybeSingle();
   return data;
@@ -60,6 +60,54 @@ async function sendEvolution(cfg: any, phone: string, message: string) {
     return { ok: false, body: e instanceof Error ? e.message : "fetch_error" };
   }
 }
+
+// ─── UazapiGO ─────────────────────────────────────────
+let _uazapiTokenCache: { name: string; token: string } | null = null;
+async function getUazapiInstanceToken(cfg: any): Promise<{ token: string | null; error?: string }> {
+  if (_uazapiTokenCache && _uazapiTokenCache.name === cfg.uazapi_instance) {
+    return { token: _uazapiTokenCache.token };
+  }
+  const base = (cfg.uazapi_server_url || "").replace(/\/+$/, "");
+  if (!base || !cfg.uazapi_admin_token || !cfg.uazapi_instance) {
+    return { token: null, error: "uazapi_config_incompleta" };
+  }
+  try {
+    const resp = await fetch(`${base}/instance/all`, {
+      headers: { AdminToken: cfg.uazapi_admin_token, Accept: "application/json" },
+    });
+    if (!resp.ok) return { token: null, error: `uazapi_admin_http_${resp.status}` };
+    const data = await resp.json();
+    const list: any[] = Array.isArray(data) ? data : (data?.instances || data?.data || []);
+    const found = list.find((i: any) =>
+      (i?.name && String(i.name).toLowerCase() === cfg.uazapi_instance.toLowerCase()) ||
+      (i?.id && String(i.id) === cfg.uazapi_instance),
+    );
+    const tok = found?.token || found?.instanceToken || found?.apiKey || null;
+    if (!tok) return { token: null, error: "uazapi_instancia_sem_token" };
+    _uazapiTokenCache = { name: cfg.uazapi_instance, token: tok };
+    return { token: tok };
+  } catch (e: any) {
+    return { token: null, error: e?.message || "uazapi_network_error" };
+  }
+}
+
+async function sendUazapi(cfg: any, phone: string, message: string) {
+  const tokRes = await getUazapiInstanceToken(cfg);
+  if (!tokRes.token) return { ok: false, body: tokRes.error || "uazapi_token_nao_resolvido" };
+  const base = (cfg.uazapi_server_url || "").replace(/\/+$/, "");
+  try {
+    const resp = await fetch(`${base}/send/text`, {
+      method: "POST",
+      headers: { token: tokRes.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ number: phone, text: message }),
+    });
+    const body = await resp.text();
+    return { ok: resp.ok, body };
+  } catch (e) {
+    return { ok: false, body: e instanceof Error ? e.message : "fetch_error" };
+  }
+}
+
 
 // Telefone BR válido = 13 dígitos começando em 55
 function isValidPhone(phone: string): boolean {
