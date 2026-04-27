@@ -507,8 +507,25 @@ const ConfigWhatsApp: React.FC = () => {
                   </div>
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><Label>Base URL</Label><Input value={evolutionConfig.evolution_base_url} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value }))} /></div>
-                    <div><Label>API Key</Label><Input type="password" value={evolutionConfig.evolution_api_key} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))} /></div>
+                    <div><Label>Base URL</Label><Input value={evolutionConfig.evolution_base_url} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value.replace(/\/+$/, '') }))} /></div>
+                    <div>
+                      <Label>API Key</Label>
+                      {apiKeyMasked && originalApiKey ? (
+                        <div className="flex gap-2">
+                          <Input value={maskedApiKey} disabled className="font-mono" />
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setApiKeyMasked(false); setEvolutionConfig(p => ({ ...p, evolution_api_key: '' })); }}>
+                            Alterar
+                          </Button>
+                        </div>
+                      ) : (
+                        <Input
+                          type="password"
+                          placeholder={originalApiKey ? 'Digite a nova API Key' : 'Cole a API Key'}
+                          value={evolutionConfig.evolution_api_key}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div>
                     <Label>Instância</Label>
@@ -523,8 +540,8 @@ const ConfigWhatsApp: React.FC = () => {
                       </Select>
                     ) : <Input placeholder="Nome da instância" value={evolutionConfig.evolution_instance_name} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_instance_name: e.target.value }))} />}
                   </div>
-                  <div className="flex gap-2">
-                    <Button className="gradient-primary text-primary-foreground flex-1" disabled={evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button className="gradient-primary text-primary-foreground flex-1 min-w-[120px]" disabled={evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
                       {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
                     </Button>
                     <Button variant="outline" disabled={!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
@@ -533,6 +550,79 @@ const ConfigWhatsApp: React.FC = () => {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Painel de monitoramento e fila */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Shield className="w-4 h-4" /> Monitoramento e Fila
+                </h3>
+                <Button variant="outline" size="sm" disabled={reprocessing} onClick={reprocessQueue}>
+                  {reprocessing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RotateCcw className="w-4 h-4 mr-1" />}
+                  Reprocessar fila agora
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Status atual</div>
+                  <div className="font-medium mt-1">{statusBadge(evolutionStatus)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última verificação</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_check_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Último envio OK</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_success_send_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última conexão</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_connected_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última desconexão</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_disconnected_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Último erro</div>
+                  <div className="font-medium mt-1 text-xs truncate" title={statusDetail.last_error || ''}>
+                    {statusDetail.last_error || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
+                <div className="p-3 rounded-lg bg-yellow-500/10">
+                  <div className="text-2xl font-bold text-yellow-600">{queueStats.pendentes}</div>
+                  <div className="text-xs text-muted-foreground">Pendentes</div>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                  <div className="text-2xl font-bold text-blue-600">{queueStats.processando}</div>
+                  <div className="text-xs text-muted-foreground">Processando</div>
+                </div>
+                <div className="p-3 rounded-lg bg-success/10">
+                  <div className="text-2xl font-bold text-success">{queueStats.enviadas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Enviadas 24h</div>
+                </div>
+                <div className="p-3 rounded-lg bg-destructive/10">
+                  <div className="text-2xl font-bold text-destructive">{queueStats.falhas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Falhas 24h</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted">
+                  <div className="text-2xl font-bold text-muted-foreground">{queueStats.expiradas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Expiradas 24h</div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                ℹ️ Mensagens cujo evento (consulta/sessão) já passou são marcadas como expiradas e <strong>não são reenviadas</strong>, mesmo após reconexão da instância.
+              </p>
             </CardContent>
           </Card>
 
