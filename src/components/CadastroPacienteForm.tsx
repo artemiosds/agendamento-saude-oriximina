@@ -75,11 +75,8 @@ const maskCPF = (v: string): string => {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 };
 
-// Máscara CNS (15 dígitos: 0000 0000 0000 0000)
-const maskCNS = (v: string): string => {
-  const d = (v || "").replace(/\D/g, "").slice(0, 15);
-  return d.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
-};
+// Máscara CNS (15 dígitos: 000 0000 0000 0000)
+import { maskCNS } from "@/lib/cnsUtils";
 
 // Máscara CEP
 const maskCEP = (v: string): string => {
