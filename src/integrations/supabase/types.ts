@@ -1681,6 +1681,7 @@ export type Database = {
       }
       prontuario_procedimentos: {
         Row: {
+          cids_selecionados: string[]
           criado_em: string
           id: string
           observacao: string
@@ -1688,6 +1689,7 @@ export type Database = {
           prontuario_id: string
         }
         Insert: {
+          cids_selecionados?: string[]
           criado_em?: string
           id?: string
           observacao?: string
@@ -1695,6 +1697,7 @@ export type Database = {
           prontuario_id: string
         }
         Update: {
+          cids_selecionados?: string[]
           criado_em?: string
           id?: string
           observacao?: string
