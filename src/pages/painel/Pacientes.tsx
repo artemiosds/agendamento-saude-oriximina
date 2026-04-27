@@ -580,8 +580,13 @@ const Pacientes: React.FC = () => {
         atualizado_em: new Date().toISOString(),
         atualizado_por: user?.id || "",
         atualizado_por_nome: user?.nome || "",
+        motivo_alteracao: "Atualização cadastral pela página Pacientes",
       },
     };
+
+    if (!isGlobalAdminUser && unidadeIdFuncionario) {
+      dbFields.unidade_id = unidadeIdFuncionario;
+    }
 
     try {
       if (editId) {
@@ -591,7 +596,13 @@ const Pacientes: React.FC = () => {
         Promise.resolve(supabase.from("pacientes").update(dbFields).eq("id", editId))
           .then(({ error }) => { if (error) console.error("Erro ao atualizar paciente:", error); })
           .catch((err) => console.error("Erro ao atualizar paciente:", err))
-          .finally(() => refreshPacientes());
+          .finally(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
+            refreshPacientes();
+          });
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
@@ -651,6 +662,7 @@ const Pacientes: React.FC = () => {
             criado_por_nome: user?.nome || "",
             criado_por_usuario: user?.usuario || "",
             unidade_origem_id: unidadeIdFuncionario,
+            motivo_alteracao: "Cadastro de paciente pela página Pacientes",
           },
         };
         // Close dialog immediately (optimistic)
@@ -662,6 +674,8 @@ const Pacientes: React.FC = () => {
           .finally(() => {
             queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
             queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
             refreshPacientes();
           });
         toast.success("Paciente cadastrado com sucesso!");
