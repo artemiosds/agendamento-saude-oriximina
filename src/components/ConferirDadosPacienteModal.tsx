@@ -132,6 +132,7 @@ export function ConferirDadosPacienteModal({
   const [form, setForm] = useState<any>({});
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
+  const { user } = useAuth();
 
   const fetchPaciente = useCallback(async (id: string) => {
     console.log("[ConferirDados] Buscando paciente ID:", id);
