@@ -944,6 +944,7 @@ const ProntuarioPage: React.FC = () => {
             solicitacao_exames: "Solicitação Exames",
             evolucao: "Evolução",
             observacoes: "Observações",
+            resultado_exame: "Resultado de Exame",
             indicacao_retorno: "Indicação Retorno",
             procedimentos_texto: "Procedimentos",
             outro_procedimento: "Outro Procedimento",
