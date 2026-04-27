@@ -2619,6 +2619,54 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_connection_status: {
+        Row: {
+          created_at: string
+          details: Json
+          id: string
+          instance_name: string
+          last_check_at: string | null
+          last_connected_at: string | null
+          last_disconnected_at: string | null
+          last_error: string
+          last_error_at: string | null
+          last_success_send_at: string | null
+          reconnect_attempts: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          id?: string
+          instance_name?: string
+          last_check_at?: string | null
+          last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_error?: string
+          last_error_at?: string | null
+          last_success_send_at?: string | null
+          reconnect_attempts?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          id?: string
+          instance_name?: string
+          last_check_at?: string | null
+          last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_error?: string
+          last_error_at?: string | null
+          last_success_send_at?: string | null
+          reconnect_attempts?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_consents: {
         Row: {
           criado_em: string

@@ -92,7 +92,21 @@ const ConfigWhatsApp: React.FC = () => {
   const [evolutionLoading, setEvolutionLoading] = useState(true);
   const [evolutionSaving, setEvolutionSaving] = useState(false);
   const [evolutionTesting, setEvolutionTesting] = useState(false);
-  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error' | 'qrcode' | 'connecting'>('idle');
+  const [statusDetail, setStatusDetail] = useState<{
+    last_check_at?: string;
+    last_connected_at?: string;
+    last_disconnected_at?: string;
+    last_success_send_at?: string;
+    last_error?: string;
+  }>({});
+  const [apiKeyMasked, setApiKeyMasked] = useState(true);
+  const [originalApiKey, setOriginalApiKey] = useState('');
+  // Métricas da fila
+  const [queueStats, setQueueStats] = useState({
+    pendentes: 0, enviadas_24h: 0, falhas_24h: 0, expiradas_24h: 0, processando: 0,
+  });
+  const [reprocessing, setReprocessing] = useState(false);
 
   // Templates
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
@@ -123,25 +137,38 @@ const ConfigWhatsApp: React.FC = () => {
         const { data } = await supabase.from('clinica_config').select('*').limit(1).maybeSingle();
         if (data) {
           setEvolutionConfigId(data.id);
+          const apiKey = data.evolution_api_key || '';
+          setOriginalApiKey(apiKey);
           setEvolutionConfig({
             nome_clinica: data.nome_clinica || '',
             logo_url: data.logo_url || '',
             telefone: data.telefone || '',
             evolution_base_url: data.evolution_base_url || 'https://api.agendamento-saude-sms-oriximina.site',
-            evolution_api_key: data.evolution_api_key || '',
+            evolution_api_key: apiKey,
             evolution_instance_name: data.evolution_instance_name || '',
           });
-          if (data.evolution_instance_name && data.evolution_api_key) {
+          if (data.evolution_instance_name && apiKey) {
             const [{ data: statusData }, { data: instancesData }] = await Promise.all([
               whatsappService.getConnectionStatus(),
               whatsappService.getInstances(),
             ]);
             if (statusData) {
-              setEvolutionStatus(statusData.connected ? 'connected' : statusData.success ? 'disconnected' : 'error');
+              const detailed = (statusData as any).status_detailed;
+              if (detailed === 'conectado') setEvolutionStatus('connected');
+              else if (detailed === 'qrcode_necessario') setEvolutionStatus('qrcode');
+              else if (detailed === 'conectando') setEvolutionStatus('connecting');
+              else if (statusData.success) setEvolutionStatus('disconnected');
+              else setEvolutionStatus('error');
             }
-            if (instancesData?.instances) {
-              setEvolutionInstances(instancesData.instances);
-            }
+            if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
+
+            // Carrega último status persistido (last_check_at, etc)
+            const { data: persisted } = await supabase
+              .from('whatsapp_connection_status' as any)
+              .select('*')
+              .eq('instance_name', data.evolution_instance_name)
+              .maybeSingle();
+            if (persisted) setStatusDetail(persisted as any);
           }
         }
 
@@ -156,6 +183,29 @@ const ConfigWhatsApp: React.FC = () => {
       setEvolutionLoading(false);
     })();
   }, []);
+
+  // Carrega métricas da fila quando aba Logs ou Conexão é aberta
+  const loadQueueStats = useCallback(async () => {
+    try {
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const [{ count: pendentes }, { count: enviadas }, { count: falhas }, { count: expiradas }, { count: processando }] = await Promise.all([
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'pendente'),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'enviado').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'erro').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'bloqueado').gte('processado_em', dayAgo),
+        supabase.from('whatsapp_queue' as any).select('id', { count: 'exact', head: true }).eq('status', 'processando'),
+      ]);
+      setQueueStats({
+        pendentes: pendentes ?? 0,
+        enviadas_24h: enviadas ?? 0,
+        falhas_24h: falhas ?? 0,
+        expiradas_24h: expiradas ?? 0,
+        processando: processando ?? 0,
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadQueueStats(); }, [loadQueueStats]);
 
   // Load templates
   const loadTemplates = useCallback(async () => {
@@ -233,19 +283,29 @@ const ConfigWhatsApp: React.FC = () => {
   const saveEvolutionConfig = async () => {
     setEvolutionSaving(true);
     try {
+      // Validações básicas
+      const baseUrl = (evolutionConfig.evolution_base_url || '').replace(/\/+$/, '');
+      if (!baseUrl) { toast.error('Base URL é obrigatória'); setEvolutionSaving(false); return; }
+      if (!evolutionConfig.evolution_instance_name) { toast.error('Instância é obrigatória'); setEvolutionSaving(false); return; }
+      const apiKeyToSave = evolutionConfig.evolution_api_key || originalApiKey;
+      if (!apiKeyToSave) { toast.error('API Key é obrigatória'); setEvolutionSaving(false); return; }
+
+      const payload = { ...evolutionConfig, evolution_base_url: baseUrl, evolution_api_key: apiKeyToSave };
       if (evolutionConfigId) {
-        await supabase.from('clinica_config').update({ ...evolutionConfig, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
+        await supabase.from('clinica_config').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
       } else {
-        const { data } = await supabase.from('clinica_config').insert(evolutionConfig).select('id').single();
+        const { data } = await supabase.from('clinica_config').insert(payload).select('id').single();
         if (data) setEvolutionConfigId(data.id);
       }
-      toast.success('Configurações salvas!');
+      setOriginalApiKey(apiKeyToSave);
+      setApiKeyMasked(true);
+      toast.success('Configurações salvas! API Key armazenada com segurança.');
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
     setEvolutionSaving(false);
   };
 
   const checkConnection = async () => {
-    if (!evolutionConfig.evolution_instance_name || !evolutionConfig.evolution_api_key) {
+    if (!evolutionConfig.evolution_instance_name || !originalApiKey) {
       toast.error('Configure a instância e API Key primeiro.');
       return;
     }
@@ -256,12 +316,74 @@ const ConfigWhatsApp: React.FC = () => {
       ]);
       if (statusError) throw statusError;
       if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
-      if (statusData?.success) {
-        const connected = !!statusData.connected;
-        setEvolutionStatus(connected ? 'connected' : 'disconnected');
-        toast[connected ? 'success' : 'warning'](connected ? 'Instância conectada!' : 'Desconectada. Verifique QR Code.');
-      } else { setEvolutionStatus('error'); toast.error(statusData?.error || 'Erro ao verificar.'); }
+
+      const detailed = (statusData as any)?.status_detailed;
+      const errorMsg = statusData?.error;
+
+      // Atualiza painel de detalhes
+      setStatusDetail(prev => ({
+        ...prev,
+        last_check_at: new Date().toISOString(),
+        last_error: errorMsg || '',
+      }));
+
+      switch (detailed) {
+        case 'conectado':
+          setEvolutionStatus('connected');
+          toast.success('✅ Instância conectada!');
+          break;
+        case 'qrcode_necessario':
+          setEvolutionStatus('qrcode');
+          toast.warning('📱 QR Code necessário. Escaneie no painel da Evolution API.');
+          break;
+        case 'conectando':
+          setEvolutionStatus('connecting');
+          toast.info('🔄 Conectando...');
+          break;
+        case 'desconectado':
+          setEvolutionStatus('disconnected');
+          toast.warning('Instância desconectada. Reconecte no painel da Evolution.');
+          break;
+        case 'api_key_invalida':
+          setEvolutionStatus('error');
+          toast.error('❌ API Key inválida');
+          break;
+        case 'instancia_inexistente':
+          setEvolutionStatus('error');
+          toast.error('❌ Instância não encontrada');
+          break;
+        case 'base_url_inacessivel':
+          setEvolutionStatus('error');
+          toast.error('❌ Base URL inacessível');
+          break;
+        default:
+          setEvolutionStatus('error');
+          toast.error(errorMsg || 'Erro ao verificar conexão.');
+      }
+
+      // Recarrega métricas e status persistido
+      loadQueueStats();
+      const { data: persisted } = await supabase
+        .from('whatsapp_connection_status' as any)
+        .select('*')
+        .eq('instance_name', evolutionConfig.evolution_instance_name)
+        .maybeSingle();
+      if (persisted) setStatusDetail(persisted as any);
     } catch { setEvolutionStatus('error'); toast.error('Não foi possível conectar.'); }
+  };
+
+  const reprocessQueue = async () => {
+    setReprocessing(true);
+    try {
+      const { data, error } = await whatsappService.processQueue();
+      if (error) throw error;
+      const d = data as any;
+      toast.success(`Fila processada: ${d?.processed ?? 0} enviadas, ${d?.skipped_past ?? 0} expiradas, ${d?.errors ?? 0} erros`);
+      loadQueueStats();
+    } catch (err: any) {
+      toast.error(`Erro ao processar fila: ${err.message}`);
+    }
+    setReprocessing(false);
   };
 
   const testWhatsApp = async () => {
@@ -324,10 +446,23 @@ const ConfigWhatsApp: React.FC = () => {
     switch (status) {
       case 'connected': return <Badge className="bg-success/10 text-success border-0"><CheckCircle2 className="w-3 h-3 mr-1" /> Conectado</Badge>;
       case 'disconnected': return <Badge variant="secondary"><XCircle className="w-3 h-3 mr-1" /> Desconectado</Badge>;
+      case 'qrcode': return <Badge className="bg-yellow-500/10 text-yellow-600 border-0"><AlertCircle className="w-3 h-3 mr-1" /> QR Code</Badge>;
+      case 'connecting': return <Badge className="bg-blue-500/10 text-blue-600 border-0"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Conectando</Badge>;
       case 'error': return <Badge variant="destructive"><AlertCircle className="w-3 h-3 mr-1" /> Erro</Badge>;
       default: return <Badge variant="outline">Não verificado</Badge>;
     }
   };
+
+  const formatDateTime = (iso?: string) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const maskedApiKey = originalApiKey
+    ? originalApiKey.length <= 8
+      ? '••••••••'
+      : `${originalApiKey.slice(0, 4)}${'•'.repeat(Math.max(8, originalApiKey.length - 8))}${originalApiKey.slice(-4)}`
+    : '';
 
   const templateInfo = TEMPLATE_TYPES.find(t => t.tipo === selectedTemplate);
 
@@ -372,8 +507,25 @@ const ConfigWhatsApp: React.FC = () => {
                   </div>
                   <Separator />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><Label>Base URL</Label><Input value={evolutionConfig.evolution_base_url} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value }))} /></div>
-                    <div><Label>API Key</Label><Input type="password" value={evolutionConfig.evolution_api_key} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))} /></div>
+                    <div><Label>Base URL</Label><Input value={evolutionConfig.evolution_base_url} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_base_url: e.target.value.replace(/\/+$/, '') }))} /></div>
+                    <div>
+                      <Label>API Key</Label>
+                      {apiKeyMasked && originalApiKey ? (
+                        <div className="flex gap-2">
+                          <Input value={maskedApiKey} disabled className="font-mono" />
+                          <Button type="button" variant="outline" size="sm" onClick={() => { setApiKeyMasked(false); setEvolutionConfig(p => ({ ...p, evolution_api_key: '' })); }}>
+                            Alterar
+                          </Button>
+                        </div>
+                      ) : (
+                        <Input
+                          type="password"
+                          placeholder={originalApiKey ? 'Digite a nova API Key' : 'Cole a API Key'}
+                          value={evolutionConfig.evolution_api_key}
+                          onChange={e => setEvolutionConfig(p => ({ ...p, evolution_api_key: e.target.value }))}
+                        />
+                      )}
+                    </div>
                   </div>
                   <div>
                     <Label>Instância</Label>
@@ -388,8 +540,8 @@ const ConfigWhatsApp: React.FC = () => {
                       </Select>
                     ) : <Input placeholder="Nome da instância" value={evolutionConfig.evolution_instance_name} onChange={e => setEvolutionConfig(p => ({ ...p, evolution_instance_name: e.target.value }))} />}
                   </div>
-                  <div className="flex gap-2">
-                    <Button className="gradient-primary text-primary-foreground flex-1" disabled={evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button className="gradient-primary text-primary-foreground flex-1 min-w-[120px]" disabled={evolutionSaving || !evolutionConfig.evolution_instance_name} onClick={saveEvolutionConfig}>
                       {evolutionSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
                     </Button>
                     <Button variant="outline" disabled={!evolutionConfig.evolution_instance_name} onClick={checkConnection}>
@@ -398,6 +550,79 @@ const ConfigWhatsApp: React.FC = () => {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Painel de monitoramento e fila */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Shield className="w-4 h-4" /> Monitoramento e Fila
+                </h3>
+                <Button variant="outline" size="sm" disabled={reprocessing} onClick={reprocessQueue}>
+                  {reprocessing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RotateCcw className="w-4 h-4 mr-1" />}
+                  Reprocessar fila agora
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Status atual</div>
+                  <div className="font-medium mt-1">{statusBadge(evolutionStatus)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última verificação</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_check_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Último envio OK</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_success_send_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última conexão</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_connected_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Última desconexão</div>
+                  <div className="font-medium mt-1 text-xs">{formatDateTime(statusDetail.last_disconnected_at)}</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted/50">
+                  <div className="text-xs text-muted-foreground">Último erro</div>
+                  <div className="font-medium mt-1 text-xs truncate" title={statusDetail.last_error || ''}>
+                    {statusDetail.last_error || '—'}
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-center">
+                <div className="p-3 rounded-lg bg-yellow-500/10">
+                  <div className="text-2xl font-bold text-yellow-600">{queueStats.pendentes}</div>
+                  <div className="text-xs text-muted-foreground">Pendentes</div>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                  <div className="text-2xl font-bold text-blue-600">{queueStats.processando}</div>
+                  <div className="text-xs text-muted-foreground">Processando</div>
+                </div>
+                <div className="p-3 rounded-lg bg-success/10">
+                  <div className="text-2xl font-bold text-success">{queueStats.enviadas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Enviadas 24h</div>
+                </div>
+                <div className="p-3 rounded-lg bg-destructive/10">
+                  <div className="text-2xl font-bold text-destructive">{queueStats.falhas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Falhas 24h</div>
+                </div>
+                <div className="p-3 rounded-lg bg-muted">
+                  <div className="text-2xl font-bold text-muted-foreground">{queueStats.expiradas_24h}</div>
+                  <div className="text-xs text-muted-foreground">Expiradas 24h</div>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                ℹ️ Mensagens cujo evento (consulta/sessão) já passou são marcadas como expiradas e <strong>não são reenviadas</strong>, mesmo após reconexão da instância.
+              </p>
             </CardContent>
           </Card>
 

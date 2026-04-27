@@ -245,6 +245,15 @@ serve(async (req) => {
           payload: { queue_id: msg.id, evento: msg.evento, prioridade: msg.prioridade },
           resposta: result.body.substring(0, 500),
         });
+
+        // Atualiza last_success_send_at no monitor da conexão
+        try {
+          await supabase
+            .from("whatsapp_connection_status")
+            .update({ last_success_send_at: new Date().toISOString() })
+            .eq("instance_name", evoCfg.evolution_instance_name);
+        } catch {}
+
         processed++;
         remainingThisMinute--;
       } else {
