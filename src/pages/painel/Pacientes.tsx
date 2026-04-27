@@ -1179,6 +1179,9 @@ const Pacientes: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{p.cpf || "Sem CPF"}</p>
+                    {p.cns && (
+                      <p className="text-xs text-muted-foreground mt-0.5">CNS: {formatCNS(p.cns)}</p>
+                    )}
                     {naFila && filaEntry && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Entrada: {filaEntry.horaChegada} •{" "}
