@@ -2619,6 +2619,54 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_connection_status: {
+        Row: {
+          created_at: string
+          details: Json
+          id: string
+          instance_name: string
+          last_check_at: string | null
+          last_connected_at: string | null
+          last_disconnected_at: string | null
+          last_error: string
+          last_error_at: string | null
+          last_success_send_at: string | null
+          reconnect_attempts: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          id?: string
+          instance_name?: string
+          last_check_at?: string | null
+          last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_error?: string
+          last_error_at?: string | null
+          last_success_send_at?: string | null
+          reconnect_attempts?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          id?: string
+          instance_name?: string
+          last_check_at?: string | null
+          last_connected_at?: string | null
+          last_disconnected_at?: string | null
+          last_error?: string
+          last_error_at?: string | null
+          last_success_send_at?: string | null
+          reconnect_attempts?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_consents: {
         Row: {
           criado_em: string
@@ -2694,6 +2742,93 @@ export type Database = {
           template_mensagem?: string
           unidade_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_message_queue: {
+        Row: {
+          agendamento_id: string
+          atendimento_id: string
+          created_at: string
+          data_evento: string | null
+          dedup_key: string
+          enviado_em: string | null
+          expirado_em: string | null
+          hora_evento: string
+          id: string
+          max_tentativas: number
+          mensagem: string
+          motivo_expiracao: string
+          paciente_id: string
+          paciente_nome: string
+          payload: Json
+          procedimento_id: string
+          proxima_tentativa_em: string | null
+          sessao_id: string
+          status: string
+          telefone: string
+          tentativas: number
+          tipo_mensagem: string
+          ultimo_erro: string
+          unidade_id: string
+          updated_at: string
+          validade_ate: string | null
+        }
+        Insert: {
+          agendamento_id?: string
+          atendimento_id?: string
+          created_at?: string
+          data_evento?: string | null
+          dedup_key?: string
+          enviado_em?: string | null
+          expirado_em?: string | null
+          hora_evento?: string
+          id?: string
+          max_tentativas?: number
+          mensagem?: string
+          motivo_expiracao?: string
+          paciente_id?: string
+          paciente_nome?: string
+          payload?: Json
+          procedimento_id?: string
+          proxima_tentativa_em?: string | null
+          sessao_id?: string
+          status?: string
+          telefone?: string
+          tentativas?: number
+          tipo_mensagem?: string
+          ultimo_erro?: string
+          unidade_id?: string
+          updated_at?: string
+          validade_ate?: string | null
+        }
+        Update: {
+          agendamento_id?: string
+          atendimento_id?: string
+          created_at?: string
+          data_evento?: string | null
+          dedup_key?: string
+          enviado_em?: string | null
+          expirado_em?: string | null
+          hora_evento?: string
+          id?: string
+          max_tentativas?: number
+          mensagem?: string
+          motivo_expiracao?: string
+          paciente_id?: string
+          paciente_nome?: string
+          payload?: Json
+          procedimento_id?: string
+          proxima_tentativa_em?: string | null
+          sessao_id?: string
+          status?: string
+          telefone?: string
+          tentativas?: number
+          tipo_mensagem?: string
+          ultimo_erro?: string
+          unidade_id?: string
+          updated_at?: string
+          validade_ate?: string | null
         }
         Relationships: []
       }
