@@ -76,6 +76,56 @@ interface FichaDados {
   }>;
 }
 
+const PACIENTE_COLUMNS =
+  "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+
+const mapPacienteRow = (p: any) => ({
+  id: p.id,
+  nome: p.nome,
+  cpf: p.cpf || "",
+  cns: p.cns || "",
+  nomeMae: p.nome_mae || "",
+  telefone: p.telefone || "",
+  dataNascimento: p.data_nascimento || "",
+  email: p.email || "",
+  endereco: p.endereco || "",
+  observacoes: p.observacoes || "",
+  descricaoClinica: p.descricao_clinica || "",
+  cid: p.cid || "",
+  criadoEm: p.criado_em || "",
+  unidadeId: p.unidade_id || "",
+  isGestante: !!p.is_gestante,
+  isPne: !!p.is_pne,
+  isAutista: !!p.is_autista,
+  naturalidade: p.naturalidade || "",
+  naturalidade_uf: p.naturalidade_uf || "",
+  municipio: p.municipio || "",
+  menor_idade: !!p.menor_idade,
+  nome_responsavel: p.nome_responsavel || "",
+  cpf_responsavel: p.cpf_responsavel || "",
+  ubs_origem: p.ubs_origem || "",
+  profissional_solicitante: p.profissional_solicitante || "",
+  tipo_encaminhamento: p.tipo_encaminhamento || "",
+  diagnostico_resumido: p.diagnostico_resumido || "",
+  justificativa: p.justificativa || "",
+  data_encaminhamento: p.data_encaminhamento || "",
+  documento_url: p.documento_url || "",
+  tipo_condicao: p.tipo_condicao || "",
+  mobilidade: p.mobilidade || "",
+  usa_dispositivo: !!p.usa_dispositivo,
+  tipo_dispositivo: p.tipo_dispositivo || "",
+  comunicacao: p.comunicacao || "",
+  comportamento: p.comportamento || "",
+  usa_equipamentos: !!p.usa_equipamentos,
+  equipamentos: p.equipamentos || [],
+  observacao_equipamentos: p.observacao_equipamentos || "",
+  outro_servico_sus: !!p.outro_servico_sus,
+  transporte: p.transporte || "",
+  turno_preferido: p.turno_preferido || "",
+  especialidade_destino: p.especialidade_destino || "",
+  custom_data: p.custom_data || {},
+});
+
 const Pacientes: React.FC = () => {
   const navigate = useNavigate();
   const {
