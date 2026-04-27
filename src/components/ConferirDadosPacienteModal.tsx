@@ -11,10 +11,12 @@ import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
-import { applyPhoneMask } from "@/lib/phoneUtils";
+import { applyPhoneMask, normalizePhone } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { useData } from "@/contexts/DataContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { auditService } from "@/services/auditService";
 
 export interface ConferirDadosPacienteModalProps {
   open: boolean;
@@ -130,6 +132,7 @@ export function ConferirDadosPacienteModal({
   const [form, setForm] = useState<any>({});
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
+  const { user } = useAuth();
 
   const fetchPaciente = useCallback(async (id: string) => {
     console.log("[ConferirDados] Buscando paciente ID:", id);
@@ -211,10 +214,16 @@ export function ConferirDadosPacienteModal({
     setDirty(true);
   };
 
-  const handleSave = async () => {
-    if (!paciente) return;
+  const handleSave = async (silent = false) => {
+    if (!paciente) throw new Error("Paciente não carregado");
     setSaving(true);
     try {
+      // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
+      const telNormalizado = form.telefone ? (normalizePhone(form.telefone) || form.telefone) : "";
+      const telSecNormalizado = form.telefone_secundario
+        ? (normalizePhone(form.telefone_secundario) || form.telefone_secundario)
+        : "";
+
       const customData = {
         ...(paciente.custom_data || {}),
         sexo: form.sexo,
@@ -233,37 +242,73 @@ export function ConferirDadosPacienteModal({
         bairro: form.bairro,
         uf: form.uf,
         cep: form.cep,
-        telefoneSecundario: form.telefone_secundario,
+        telefoneSecundario: telSecNormalizado,
+        // Auditoria de conferência
         data_ultima_validacao_cadastro: new Date().toISOString(),
+        dados_conferidos_em: new Date().toISOString(),
+        dados_conferidos_por: user?.nome || user?.id || "",
       };
+
+      const updatePayload: any = {
+        nome: form.nome,
+        nome_mae: form.nome_mae,
+        data_nascimento: form.data_nascimento || "",
+        cpf: form.cpf,
+        cns: form.cns,
+        telefone: telNormalizado,
+        email: form.email,
+        endereco: form.endereco,
+        municipio: form.municipio,
+        custom_data: customData,
+      };
+
       const { error } = await (supabase as any)
         .from("pacientes")
-        .update({
-          nome: form.nome,
-          nome_mae: form.nome_mae,
-          data_nascimento: form.data_nascimento || null,
-          cpf: form.cpf,
-          cns: form.cns,
-          telefone: form.telefone,
-          email: form.email,
-          endereco: form.endereco,
-          municipio: form.municipio,
-          custom_data: customData,
-        })
+        .update(updatePayload)
         .eq("id", paciente.id);
       if (error) throw error;
-      setPaciente({ ...paciente, ...form, custom_data: customData });
+
+      // Captura diff para auditoria (campos alterados)
+      const camposAlterados: Record<string, { de: any; para: any }> = {};
+      const compareFields: Array<keyof typeof updatePayload> = [
+        "nome", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "endereco", "municipio",
+      ];
+      compareFields.forEach((k) => {
+        const antes = (paciente as any)[k] ?? "";
+        const depois = (updatePayload as any)[k] ?? "";
+        if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
+      });
+
+      setPaciente({ ...paciente, ...updatePayload });
       setDirty(false);
+
       // CRÍTICO: invalidar caches + recarregar contexto global para refletir
       // imediatamente em Paciente, Agenda, Prontuário, Tratamento, PTS, Triagem, BPA.
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.triagem.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
       try { await refreshPacientes(); } catch {}
-      toast.success("Dados atualizados em todo o sistema!");
+
+      // Auditoria (best-effort, não bloqueia fluxo)
+      if (Object.keys(camposAlterados).length > 0) {
+        auditService.log({
+          acao: "atualizar",
+          entidade: "paciente",
+          entidadeId: paciente.id,
+          modulo: "Conferir Dados do Paciente",
+          user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
+          detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
+        }).catch(() => {});
+      }
+
+      if (!silent) toast.success("Dados atualizados em todo o sistema!");
     } catch (e: any) {
-      toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      throw e;
     } finally {
       setSaving(false);
     }
@@ -472,7 +517,7 @@ export function ConferirDadosPacienteModal({
               {/* Botão salvar (quando houver alterações) */}
               {dirty && (
                 <div className="flex justify-end pt-1">
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
+                  <Button size="sm" onClick={() => { handleSave().catch(() => {}); }} disabled={saving}>
                     <Save className="w-3.5 h-3.5 mr-1.5" />
                     {saving ? "Salvando…" : "Salvar alterações"}
                   </Button>
@@ -502,7 +547,7 @@ export function ConferirDadosPacienteModal({
                 try {
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
-                  if (dirty) await handleSave();
+                  if (dirty) await handleSave(true);
                   await Promise.resolve(onConfirm());
                   console.log("[ConferirDados] Operação concluída com sucesso");
                   toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos com sucesso!");
