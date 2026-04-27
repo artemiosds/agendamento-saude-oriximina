@@ -44,6 +44,7 @@ import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
+import ResultadosExames from "@/components/ResultadosExames";
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
@@ -1757,6 +1758,20 @@ const ProntuarioPage: React.FC = () => {
               pacienteNome={queryPacienteNome || ""}
               currentProfissionalId={user?.id}
               unidades={unidades}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {queryPacienteId && (
+        <Card className="shadow-card border-0">
+          <CardContent className="p-4">
+            <ResultadosExames
+              pacienteId={queryPacienteId}
+              pacienteNome={queryPacienteNome || ""}
+              unidadeId={user?.unidadeId || ""}
+              canEdit={canEdit}
+              canDelete={canDelete}
             />
           </CardContent>
         </Card>
