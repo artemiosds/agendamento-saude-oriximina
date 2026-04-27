@@ -707,7 +707,105 @@ const ConfigWhatsApp: React.FC = () => {
             </CardContent>
           </Card>
 
+          {/* ─── UAZAPIGO ─── */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Smartphone className="w-4 h-4" /> UazapiGO
+                  <Badge variant="outline" className="ml-1">Alternativa</Badge>
+                </h3>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="uaz-ativo" className="text-xs">Ativo</Label>
+                  <Switch
+                    id="uaz-ativo"
+                    checked={uazConfig.uazapi_ativo}
+                    onCheckedChange={(v) => setUazConfig(p => ({ ...p, uazapi_ativo: v }))}
+                  />
+                  <span className="ml-2">{statusBadge(uazStatus === 'no_instance' ? 'idle' : uazStatus)}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Server URL</Label>
+                  <Input
+                    placeholder="https://free.uazapi.com"
+                    value={uazConfig.uazapi_server_url}
+                    onChange={e => setUazConfig(p => ({ ...p, uazapi_server_url: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Admin Token</Label>
+                  {uazTokenMasked && originalUazToken ? (
+                    <div className="flex gap-2">
+                      <Input value={maskedUazToken} disabled className="font-mono" />
+                      <Button type="button" variant="outline" size="sm"
+                        onClick={() => { setUazTokenMasked(false); setUazConfig(p => ({ ...p, uazapi_admin_token: '' })); }}>
+                        Alterar
+                      </Button>
+                    </div>
+                  ) : (
+                    <Input
+                      type="password"
+                      placeholder={originalUazToken ? 'Digite o novo Admin Token' : 'Cole o Admin Token'}
+                      value={uazConfig.uazapi_admin_token}
+                      onChange={e => setUazConfig(p => ({ ...p, uazapi_admin_token: e.target.value }))}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label>Nome/ID da Instância</Label>
+                <Input
+                  placeholder="Ex.: clinica-sms (deixe vazio se ainda não criou)"
+                  value={uazConfig.uazapi_instance}
+                  onChange={e => setUazConfig(p => ({ ...p, uazapi_instance: e.target.value }))}
+                />
+                {!uazConfig.uazapi_instance && (
+                  <p className="text-xs text-muted-foreground mt-1">⚠️ Instância não configurada — UazapiGO não enviará mensagens.</p>
+                )}
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  className="gradient-primary text-primary-foreground flex-1 min-w-[120px]"
+                  disabled={uazSaving}
+                  onClick={saveUazConfig}
+                >
+                  {uazSaving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}Salvar
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={uazTesting || !uazConfig.uazapi_server_url || !originalUazToken}
+                  onClick={checkUazConnection}
+                >
+                  {uazTesting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                  Verificar
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={uazCreating || !uazConfig.uazapi_server_url || !originalUazToken}
+                  onClick={createUazInstance}
+                  title={(!uazConfig.uazapi_server_url || !originalUazToken)
+                    ? 'Configure Server URL e Admin Token para criar instância.'
+                    : 'Criar nova instância UazapiGO'}
+                >
+                  {uazCreating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Smartphone className="w-4 h-4 mr-1" />}
+                  Nova Instância UazapiGO
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                ℹ️ A UazapiGO só é usada para envios quando estiver marcada como <strong>Provedor ativo</strong> acima.
+                Admin Token nunca é exibido após salvar.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Painel de monitoramento e fila */}
+
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
