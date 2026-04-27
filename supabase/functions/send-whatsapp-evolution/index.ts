@@ -318,12 +318,73 @@ serve(async (req) => {
     if (body.action === "status") {
       const result = await fetchEvolutionJson(config, `/instance/connectionState/${config.evolution_instance_name}`);
       const state = result.json?.instance?.state || result.json?.state || "unknown";
+
+      // Mapeia status detalhado para diagnóstico claro
+      let statusDetailed: string;
+      let humanError: string | null = null;
+      if (!result.ok) {
+        if (result.status === 401 || result.status === 403) {
+          statusDetailed = "api_key_invalida";
+          humanError = "API Key inválida";
+        } else if (result.status === 404) {
+          statusDetailed = "instancia_inexistente";
+          humanError = "Instância não encontrada na Evolution API";
+        } else if (result.status === 0) {
+          statusDetailed = "base_url_inacessivel";
+          humanError = "Base URL inacessível ou erro de rede";
+        } else {
+          statusDetailed = "erro_servidor";
+          humanError = `Erro do servidor (${result.status})`;
+        }
+      } else {
+        switch (state) {
+          case "open": statusDetailed = "conectado"; break;
+          case "connecting": statusDetailed = "conectando"; break;
+          case "close":
+          case "closed": statusDetailed = "desconectado"; break;
+          case "qrcode": statusDetailed = "qrcode_necessario"; humanError = "QR Code necessário para conectar"; break;
+          default: statusDetailed = "desconhecido";
+        }
+      }
+
+      // Persiste último status conhecido
+      try {
+        const nowIso = new Date().toISOString();
+        const updateFields: any = {
+          status: statusDetailed,
+          last_check_at: nowIso,
+          last_error: humanError || "",
+          last_error_at: humanError ? nowIso : null,
+          details: { raw_state: state, http_status: result.status },
+        };
+        if (statusDetailed === "conectado") updateFields.last_connected_at = nowIso;
+        if (statusDetailed === "desconectado") updateFields.last_disconnected_at = nowIso;
+
+        const { data: existing } = await supabase
+          .from("whatsapp_connection_status")
+          .select("id")
+          .eq("instance_name", config.evolution_instance_name)
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase.from("whatsapp_connection_status").update(updateFields).eq("id", existing.id);
+        } else {
+          await supabase.from("whatsapp_connection_status").insert({
+            instance_name: config.evolution_instance_name,
+            ...updateFields,
+          });
+        }
+      } catch (e) {
+        console.error("[status] persist error:", e);
+      }
+
       return new Response(
         JSON.stringify({
           success: result.ok,
           connected: state === "open",
           state,
-          error: result.ok ? null : result.text || "Erro ao consultar conexão",
+          status_detailed: statusDetailed,
+          error: humanError,
         }),
         { status: 200, headers: corsHeaders },
       );
