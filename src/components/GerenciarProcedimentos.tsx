@@ -97,6 +97,64 @@ const GerenciarProcedimentos: React.FC = () => {
   const [form, setForm] = useState<CustomForm>(emptyForm);
   const [savingCustom, setSavingCustom] = useState(false);
 
+  // SIGTAP global config: disponibilizar todos os procedimentos para todos os profissionais
+  const userUnidadeId = user?.unidadeId || "";
+  const isGlobalAdmin = user?.usuario === 'admin.sms' || (user?.role === 'master' && !user?.unidadeId);
+  const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
+  const [savingSigtapCfg, setSavingSigtapCfg] = useState(false);
+  // Escopo do toggle: global (admin global) ou da unidade do master atual
+  const sigtapScope: 'global' | 'unidade' = isGlobalAdmin ? 'global' : 'unidade';
+
+  const loadSigtapConfig = async () => {
+    try {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
+      const sig = (cfg.config_sigtap || {}) as Record<string, any>;
+      const porUnidade = (sig.por_unidade || {}) as Record<string, { disponibilizarTodos?: boolean }>;
+      if (sigtapScope === 'unidade' && userUnidadeId && porUnidade[userUnidadeId] && typeof porUnidade[userUnidadeId].disponibilizarTodos === 'boolean') {
+        setSigtapDisponibilizarTodos(!!porUnidade[userUnidadeId].disponibilizarTodos);
+      } else {
+        setSigtapDisponibilizarTodos(!!sig.disponibilizarTodos);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar config SIGTAP', e);
+    }
+  };
+
+  const toggleSigtapDisponibilizarTodos = async (next: boolean) => {
+    if (!isMaster) {
+      toast.error('Apenas o perfil Master pode alterar esta configuração');
+      return;
+    }
+    setSavingSigtapCfg(true);
+    const previous = sigtapDisponibilizarTodos;
+    setSigtapDisponibilizarTodos(next); // otimista
+    try {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
+      const sig = { ...(cfg.config_sigtap || {}) } as Record<string, any>;
+      if (sigtapScope === 'unidade' && userUnidadeId) {
+        const porUnidade = { ...(sig.por_unidade || {}) } as Record<string, { disponibilizarTodos?: boolean }>;
+        porUnidade[userUnidadeId] = { ...(porUnidade[userUnidadeId] || {}), disponibilizarTodos: next };
+        sig.por_unidade = porUnidade;
+      } else {
+        sig.disponibilizarTodos = next;
+      }
+      const newCfg = { ...cfg, config_sigtap: sig };
+      const { error } = await supabase.from('system_config').upsert({ id: 'default', configuracoes: newCfg as any, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      toast.success(next ? 'Modo geral ativado: procedimentos liberados para todos.' : 'Modo por especialidade ativado.');
+    } catch (e) {
+      console.error(e);
+      setSigtapDisponibilizarTodos(previous);
+      toast.error('Erro ao salvar configuração. Tente novamente.');
+    } finally {
+      setSavingSigtapCfg(false);
+    }
+  };
+
+  useEffect(() => { loadSigtapConfig(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userUnidadeId, sigtapScope]);
+
   const load = async () => {
     setLoading(true);
     const [procsRes, vincRes] = await Promise.all([
