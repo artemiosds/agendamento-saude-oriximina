@@ -3300,9 +3300,11 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                 )}
                 {viewerProntuario.resultado_exame && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resultado de Exame</p>
-                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.resultado_exame}</p>
+                  <div className="bg-muted/30 rounded-lg p-3 border">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      <FlaskConical className="w-3.5 h-3.5" /> Resultado de Exame
+                    </p>
+                    <p className="text-foreground whitespace-pre-wrap leading-relaxed">{viewerProntuario.resultado_exame}</p>
                   </div>
                 )}
               </div>
