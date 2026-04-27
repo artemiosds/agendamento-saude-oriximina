@@ -133,6 +133,30 @@ export const procedureService = {
     return (await this.getAll()).filter((p) => p.ativo);
   },
 
+  /**
+   * Lê configuração SIGTAP de system_config.configuracoes.config_sigtap.
+   * Suporta override por unidade em config_sigtap.por_unidade[unidadeId].
+   * Retorna { disponibilizarTodos: boolean } resolvido para a unidade informada.
+   */
+  async getSigtapConfig(unidadeId?: string | null): Promise<{ disponibilizarTodos: boolean }> {
+    try {
+      const { data } = await supabase
+        .from('system_config')
+        .select('configuracoes')
+        .eq('id', 'default')
+        .maybeSingle();
+      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
+      const sig = (cfg.config_sigtap || {}) as Record<string, any>;
+      const porUnidade = (sig.por_unidade || {}) as Record<string, { disponibilizarTodos?: boolean }>;
+      if (unidadeId && porUnidade[unidadeId] && typeof porUnidade[unidadeId].disponibilizarTodos === 'boolean') {
+        return { disponibilizarTodos: !!porUnidade[unidadeId].disponibilizarTodos };
+      }
+      return { disponibilizarTodos: !!sig.disponibilizarTodos };
+    } catch {
+      return { disponibilizarTodos: false };
+    }
+  },
+
   async getByProfissao(profissao: string): Promise<ProcedimentoDB[]> {
     const all = await this.getActive();
     if (!profissao) return all;

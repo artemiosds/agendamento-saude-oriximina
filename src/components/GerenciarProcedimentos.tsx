@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, Stethoscope, Users, ChevronDown, Tag, Loader2, Plus, Pencil, Trash2, X } from "lucide-react";
+import { Search, Stethoscope, Users, ChevronDown, Tag, Loader2, Plus, Pencil, Trash2, X, Globe, Lock } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useData } from "@/contexts/DataContext";
@@ -95,6 +96,64 @@ const GerenciarProcedimentos: React.FC = () => {
   const [editingCodigo, setEditingCodigo] = useState<string | null>(null);
   const [form, setForm] = useState<CustomForm>(emptyForm);
   const [savingCustom, setSavingCustom] = useState(false);
+
+  // SIGTAP global config: disponibilizar todos os procedimentos para todos os profissionais
+  const userUnidadeId = user?.unidadeId || "";
+  const isGlobalAdmin = user?.usuario === 'admin.sms' || (user?.role === 'master' && !user?.unidadeId);
+  const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
+  const [savingSigtapCfg, setSavingSigtapCfg] = useState(false);
+  // Escopo do toggle: global (admin global) ou da unidade do master atual
+  const sigtapScope: 'global' | 'unidade' = isGlobalAdmin ? 'global' : 'unidade';
+
+  const loadSigtapConfig = async () => {
+    try {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
+      const sig = (cfg.config_sigtap || {}) as Record<string, any>;
+      const porUnidade = (sig.por_unidade || {}) as Record<string, { disponibilizarTodos?: boolean }>;
+      if (sigtapScope === 'unidade' && userUnidadeId && porUnidade[userUnidadeId] && typeof porUnidade[userUnidadeId].disponibilizarTodos === 'boolean') {
+        setSigtapDisponibilizarTodos(!!porUnidade[userUnidadeId].disponibilizarTodos);
+      } else {
+        setSigtapDisponibilizarTodos(!!sig.disponibilizarTodos);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar config SIGTAP', e);
+    }
+  };
+
+  const toggleSigtapDisponibilizarTodos = async (next: boolean) => {
+    if (!isMaster) {
+      toast.error('Apenas o perfil Master pode alterar esta configuração');
+      return;
+    }
+    setSavingSigtapCfg(true);
+    const previous = sigtapDisponibilizarTodos;
+    setSigtapDisponibilizarTodos(next); // otimista
+    try {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
+      const sig = { ...(cfg.config_sigtap || {}) } as Record<string, any>;
+      if (sigtapScope === 'unidade' && userUnidadeId) {
+        const porUnidade = { ...(sig.por_unidade || {}) } as Record<string, { disponibilizarTodos?: boolean }>;
+        porUnidade[userUnidadeId] = { ...(porUnidade[userUnidadeId] || {}), disponibilizarTodos: next };
+        sig.por_unidade = porUnidade;
+      } else {
+        sig.disponibilizarTodos = next;
+      }
+      const newCfg = { ...cfg, config_sigtap: sig };
+      const { error } = await supabase.from('system_config').upsert({ id: 'default', configuracoes: newCfg as any, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      toast.success(next ? 'Modo geral ativado: procedimentos liberados para todos.' : 'Modo por especialidade ativado.');
+    } catch (e) {
+      console.error(e);
+      setSigtapDisponibilizarTodos(previous);
+      toast.error('Erro ao salvar configuração. Tente novamente.');
+    } finally {
+      setSavingSigtapCfg(false);
+    }
+  };
+
+  useEffect(() => { loadSigtapConfig(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [userUnidadeId, sigtapScope]);
 
   const load = async () => {
     setLoading(true);
@@ -335,6 +394,45 @@ const GerenciarProcedimentos: React.FC = () => {
               <Plus className="w-4 h-4 mr-1" /> Novo Procedimento
             </Button>
           )}
+        </div>
+
+        {/* Disponibilização global vs por especialidade */}
+        <div className={`mb-4 p-4 rounded-lg border ${sigtapDisponibilizarTodos ? 'border-emerald-300 bg-emerald-50/40' : 'border-border bg-muted/30'}`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${sigtapDisponibilizarTodos ? 'bg-emerald-500/15 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>
+              {sigtapDisponibilizarTodos ? <Globe className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Disponibilizar todos os procedimentos SIGTAP para todos os profissionais
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {sigtapDisponibilizarTodos
+                      ? 'Modo geral ativo: todos os procedimentos SIGTAP importados estão disponíveis para todos os profissionais.'
+                      : 'Modo por especialidade ativo: os procedimentos seguem a regra de especialidade/profissão.'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Escopo: <Badge variant="outline" className="ml-1">{sigtapScope === 'global' ? 'Global (todas as unidades)' : 'Esta unidade'}</Badge>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={sigtapDisponibilizarTodos ? 'text-emerald-700 border-emerald-300' : ''}>
+                    {sigtapDisponibilizarTodos ? 'Ativado' : 'Desativado'}
+                  </Badge>
+                  <Switch
+                    checked={sigtapDisponibilizarTodos}
+                    onCheckedChange={toggleSigtapDisponibilizarTodos}
+                    disabled={!isMaster || savingSigtapCfg}
+                  />
+                </div>
+              </div>
+              {!isMaster && (
+                <p className="text-[11px] text-muted-foreground mt-2">Somente o perfil Master pode alterar esta configuração.</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 mb-4">
