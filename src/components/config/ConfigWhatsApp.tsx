@@ -283,19 +283,29 @@ const ConfigWhatsApp: React.FC = () => {
   const saveEvolutionConfig = async () => {
     setEvolutionSaving(true);
     try {
+      // Validações básicas
+      const baseUrl = (evolutionConfig.evolution_base_url || '').replace(/\/+$/, '');
+      if (!baseUrl) { toast.error('Base URL é obrigatória'); setEvolutionSaving(false); return; }
+      if (!evolutionConfig.evolution_instance_name) { toast.error('Instância é obrigatória'); setEvolutionSaving(false); return; }
+      const apiKeyToSave = evolutionConfig.evolution_api_key || originalApiKey;
+      if (!apiKeyToSave) { toast.error('API Key é obrigatória'); setEvolutionSaving(false); return; }
+
+      const payload = { ...evolutionConfig, evolution_base_url: baseUrl, evolution_api_key: apiKeyToSave };
       if (evolutionConfigId) {
-        await supabase.from('clinica_config').update({ ...evolutionConfig, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
+        await supabase.from('clinica_config').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', evolutionConfigId);
       } else {
-        const { data } = await supabase.from('clinica_config').insert(evolutionConfig).select('id').single();
+        const { data } = await supabase.from('clinica_config').insert(payload).select('id').single();
         if (data) setEvolutionConfigId(data.id);
       }
-      toast.success('Configurações salvas!');
+      setOriginalApiKey(apiKeyToSave);
+      setApiKeyMasked(true);
+      toast.success('Configurações salvas! API Key armazenada com segurança.');
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
     setEvolutionSaving(false);
   };
 
   const checkConnection = async () => {
-    if (!evolutionConfig.evolution_instance_name || !evolutionConfig.evolution_api_key) {
+    if (!evolutionConfig.evolution_instance_name || !originalApiKey) {
       toast.error('Configure a instância e API Key primeiro.');
       return;
     }
@@ -306,12 +316,74 @@ const ConfigWhatsApp: React.FC = () => {
       ]);
       if (statusError) throw statusError;
       if (instancesData?.instances) setEvolutionInstances(instancesData.instances);
-      if (statusData?.success) {
-        const connected = !!statusData.connected;
-        setEvolutionStatus(connected ? 'connected' : 'disconnected');
-        toast[connected ? 'success' : 'warning'](connected ? 'Instância conectada!' : 'Desconectada. Verifique QR Code.');
-      } else { setEvolutionStatus('error'); toast.error(statusData?.error || 'Erro ao verificar.'); }
+
+      const detailed = (statusData as any)?.status_detailed;
+      const errorMsg = statusData?.error;
+
+      // Atualiza painel de detalhes
+      setStatusDetail(prev => ({
+        ...prev,
+        last_check_at: new Date().toISOString(),
+        last_error: errorMsg || '',
+      }));
+
+      switch (detailed) {
+        case 'conectado':
+          setEvolutionStatus('connected');
+          toast.success('✅ Instância conectada!');
+          break;
+        case 'qrcode_necessario':
+          setEvolutionStatus('qrcode');
+          toast.warning('📱 QR Code necessário. Escaneie no painel da Evolution API.');
+          break;
+        case 'conectando':
+          setEvolutionStatus('connecting');
+          toast.info('🔄 Conectando...');
+          break;
+        case 'desconectado':
+          setEvolutionStatus('disconnected');
+          toast.warning('Instância desconectada. Reconecte no painel da Evolution.');
+          break;
+        case 'api_key_invalida':
+          setEvolutionStatus('error');
+          toast.error('❌ API Key inválida');
+          break;
+        case 'instancia_inexistente':
+          setEvolutionStatus('error');
+          toast.error('❌ Instância não encontrada');
+          break;
+        case 'base_url_inacessivel':
+          setEvolutionStatus('error');
+          toast.error('❌ Base URL inacessível');
+          break;
+        default:
+          setEvolutionStatus('error');
+          toast.error(errorMsg || 'Erro ao verificar conexão.');
+      }
+
+      // Recarrega métricas e status persistido
+      loadQueueStats();
+      const { data: persisted } = await supabase
+        .from('whatsapp_connection_status' as any)
+        .select('*')
+        .eq('instance_name', evolutionConfig.evolution_instance_name)
+        .maybeSingle();
+      if (persisted) setStatusDetail(persisted as any);
     } catch { setEvolutionStatus('error'); toast.error('Não foi possível conectar.'); }
+  };
+
+  const reprocessQueue = async () => {
+    setReprocessing(true);
+    try {
+      const { data, error } = await whatsappService.processQueue();
+      if (error) throw error;
+      const d = data as any;
+      toast.success(`Fila processada: ${d?.processed ?? 0} enviadas, ${d?.skipped_past ?? 0} expiradas, ${d?.errors ?? 0} erros`);
+      loadQueueStats();
+    } catch (err: any) {
+      toast.error(`Erro ao processar fila: ${err.message}`);
+    }
+    setReprocessing(false);
   };
 
   const testWhatsApp = async () => {
