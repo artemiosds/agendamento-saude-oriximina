@@ -970,7 +970,7 @@ const Pacientes: React.FC = () => {
           <CardContent className="p-3 text-sm text-foreground">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span>
-                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada. Revise o cadastro antes de liberar para a Recepção.
+                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada (visíveis na lista). Edite o cadastro para vinculá-los à unidade correta.
               </span>
               <Badge variant="outline" className="w-fit border-warning/40 text-warning">
                 Verificação Master/Gestão
