@@ -44,7 +44,7 @@ import { HistoricoClinico } from "@/components/HistoricoClinico";
 import { BuscaPaciente } from "@/components/BuscaPaciente";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
-import ResultadosExames from "@/components/ResultadosExames";
+
 import SolicitacaoExames from "@/components/SolicitacaoExames";
 import PrescricaoMedicamentos from "@/components/PrescricaoMedicamentos";
 import CamposEspecialidade from "@/components/CamposEspecialidade";
@@ -135,6 +135,7 @@ const emptyForm = {
   solicitacao_exames: "",
   evolucao: "",
   observacoes: "",
+  resultado_exame: "",
   indicacao_retorno: "",
   motivo_alteracao: "",
   procedimentos_texto: "",
@@ -803,6 +804,7 @@ const ProntuarioPage: React.FC = () => {
       solicitacao_exames: p.solicitacao_exames || "",
       evolucao: p.evolucao || "",
       observacoes: p.observacoes || "",
+      resultado_exame: (p as any).resultado_exame || "",
       indicacao_retorno: p.indicacao_retorno || "",
       motivo_alteracao: "",
       procedimentos_texto: p.procedimentos_texto || "",
@@ -907,6 +909,7 @@ const ProntuarioPage: React.FC = () => {
         observacoes: Object.keys(especialidadeFields).length > 0
           ? JSON.stringify({ especialidade_fields: especialidadeFields, texto: form.observacoes })
           : form.observacoes,
+        resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
         motivo_alteracao: editId ? form.motivo_alteracao : "",
@@ -941,6 +944,7 @@ const ProntuarioPage: React.FC = () => {
             solicitacao_exames: "Solicitação Exames",
             evolucao: "Evolução",
             observacoes: "Observações",
+            resultado_exame: "Resultado de Exame",
             indicacao_retorno: "Indicação Retorno",
             procedimentos_texto: "Procedimentos",
             outro_procedimento: "Outro Procedimento",
@@ -1763,19 +1767,8 @@ const ProntuarioPage: React.FC = () => {
         </Card>
       )}
 
-      {queryPacienteId && (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4">
-            <ResultadosExames
-              pacienteId={queryPacienteId}
-              pacienteNome={queryPacienteNome || ""}
-              unidadeId={user?.unidadeId || ""}
-              canEdit={canEdit}
-              canDelete={canDelete}
-            />
-          </CardContent>
-        </Card>
-      )}
+
+
 
       {queryPacienteId && (
         <Card className="shadow-card border-0">
@@ -2682,18 +2675,16 @@ const ProntuarioPage: React.FC = () => {
             />
             )}
 
-            {/* Resultados de Exames trazidos pelo paciente (transcrição manual) */}
-            {form.paciente_id && (
-              <div className="bg-muted/20 rounded-lg p-3 border">
-                <ResultadosExames
-                  pacienteId={form.paciente_id}
-                  pacienteNome={form.paciente_nome || ""}
-                  unidadeId={user?.unidadeId || ""}
-                  canEdit={canEdit}
-                  canDelete={canDelete}
-                />
-              </div>
-            )}
+            {/* Resultado de Exame trazido pelo paciente (transcrição manual) */}
+            <div>
+              <Label>Resultado de Exame</Label>
+              <DebouncedTextarea
+                rows={4}
+                value={form.resultado_exame}
+                onChange={(e) => setForm((p) => ({ ...p, resultado_exame: e.target.value }))}
+                placeholder="Descreva o resultado de exame apresentado pelo paciente..."
+              />
+            </div>
 
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
@@ -3298,6 +3289,12 @@ const ProntuarioPage: React.FC = () => {
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Exames Solicitados</p>
                     <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.solicitacao_exames}</p>
+                  </div>
+                )}
+                {viewerProntuario.resultado_exame && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Resultado de Exame</p>
+                    <p className="text-foreground whitespace-pre-wrap">{viewerProntuario.resultado_exame}</p>
                   </div>
                 )}
               </div>

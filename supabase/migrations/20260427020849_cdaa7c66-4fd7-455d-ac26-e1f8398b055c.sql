@@ -1,0 +1,1 @@
+ALTER TABLE public.prontuarios ADD COLUMN IF NOT EXISTS resultado_exame text NOT NULL DEFAULT '';

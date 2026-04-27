@@ -1816,6 +1816,7 @@ export type Database = {
           profissional_id: string
           profissional_nome: string
           queixa_principal: string | null
+          resultado_exame: string
           sala_id: string | null
           setor: string | null
           sinais_sintomas: string | null
@@ -1852,6 +1853,7 @@ export type Database = {
           profissional_id: string
           profissional_nome: string
           queixa_principal?: string | null
+          resultado_exame?: string
           sala_id?: string | null
           setor?: string | null
           sinais_sintomas?: string | null
@@ -1888,6 +1890,7 @@ export type Database = {
           profissional_id?: string
           profissional_nome?: string
           queixa_principal?: string | null
+          resultado_exame?: string
           sala_id?: string | null
           setor?: string | null
           sinais_sintomas?: string | null
