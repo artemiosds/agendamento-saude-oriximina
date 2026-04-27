@@ -280,72 +280,11 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
   });
 
-  const shouldLoadUnitLinkedPacientes = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
-
-  const linkedPacientesQuery = useQuery({
-    queryKey: queryKeys.pacientes.linkedUnidade({
-      unidadeId: unidadeIdFuncionario || "",
-      role: user?.role || "",
-      usuario: user?.usuario || "",
-    }),
-    enabled: shouldLoadUnitLinkedPacientes,
-    staleTime: 0,
-    queryFn: async () => {
-      const unitId = normalizeUnitId(unidadeIdFuncionario);
-      const [directRows, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
-        fetchAllRows((from, to) =>
-          supabase.from("pacientes").select(PACIENTE_COLUMNS).eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("agendamentos").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("fila_espera").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("prontuarios").select("paciente_id").eq("unidade_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("nursing_evaluations").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("pts").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-        fetchAllRows((from, to) =>
-          supabase.from("treatment_cycles").select("patient_id").eq("unit_id", unitId).range(from, to),
-        ),
-      ]);
-
-      const linkedIds = Array.from(
-        new Set(
-          [
-            ...agendaLinks.map((row) => row.paciente_id),
-            ...filaLinks.map((row) => row.paciente_id),
-            ...prontuarioLinks.map((row) => row.paciente_id),
-            ...nursingLinks.map((row) => row.patient_id),
-            ...ptsLinks.map((row) => row.patient_id),
-            ...treatmentLinks.map((row) => row.patient_id),
-          ].filter(Boolean),
-        ),
-      );
-
-      const linkedRows = linkedIds.length > 0 ? await fetchPacientesByIds(linkedIds) : [];
-      const merged = new Map<string, ReturnType<typeof mapPacienteRow>>();
-
-      [...directRows, ...linkedRows].forEach((row) => {
-        const pacienteUnitId = normalizeUnitId(row.unidade_id);
-        if (pacienteUnitId && pacienteUnitId !== unitId) return;
-        const mapped = mapPacienteRow(row);
-        merged.set(mapped.id, mapped);
-      });
-
-      return Array.from(merged.values());
-    },
-  });
+  const shouldLoadUnitDiagnostics = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
 
   useQuery({
     queryKey: queryKeys.pacientes.diagnostics({ unidadeId: unidadeIdFuncionario || "", role: user?.role || "" }),
-    enabled: shouldLoadUnitLinkedPacientes && funcionarios.length > 0,
+    enabled: shouldLoadUnitDiagnostics && funcionarios.length > 0,
     staleTime: 0,
     queryFn: async () => {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
@@ -420,12 +359,11 @@ const Pacientes: React.FC = () => {
       return pacientes.filter((p) => myPacienteIds.has(p.id));
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
-      if (linkedPacientesQuery.data) return linkedPacientesQuery.data;
       const unitId = normalizeUnitId(unidadeIdFuncionario);
       return pacientes.filter((p) => normalizeUnitId(p.unidadeId) === unitId);
     }
     return pacientes;
-  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario, linkedPacientesQuery.data]);
+  }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
 
   const pacientesSemUnidade = useMemo(() => {
     if (!user || !["master", "gestao"].includes(user.role)) return [];
