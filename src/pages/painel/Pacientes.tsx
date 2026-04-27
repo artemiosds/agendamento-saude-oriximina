@@ -228,6 +228,13 @@ const Pacientes: React.FC = () => {
     return pacientes.filter((p) => !p.unidadeId);
   }, [pacientes, user]);
 
+  useQuery({
+    queryKey: queryKeys.pacientes.semUnidade({ role: user?.role || "", unidadeId: unidadeIdFuncionario || "global" }),
+    queryFn: async () => pacientesSemUnidade,
+    enabled: !!user && ["master", "gestao"].includes(user.role),
+    staleTime: 0,
+  });
+
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     let list = visiblePacientes.filter(
