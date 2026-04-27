@@ -1767,19 +1767,8 @@ const ProntuarioPage: React.FC = () => {
         </Card>
       )}
 
-      {queryPacienteId && (
-        <Card className="shadow-card border-0">
-          <CardContent className="p-4">
-            <ResultadosExames
-              pacienteId={queryPacienteId}
-              pacienteNome={queryPacienteNome || ""}
-              unidadeId={user?.unidadeId || ""}
-              canEdit={canEdit}
-              canDelete={canDelete}
-            />
-          </CardContent>
-        </Card>
-      )}
+
+
 
       {queryPacienteId && (
         <Card className="shadow-card border-0">
