@@ -360,15 +360,19 @@ const Pacientes: React.FC = () => {
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
-      return pacientes.filter((p) => normalizeUnitId(p.unidadeId) === unitId);
+      // Mostra pacientes da unidade + pacientes sem unidade vinculada (legados/órfãos)
+      // para que a Recepção tenha visibilidade completa e possa revisar/corrigir o cadastro.
+      return pacientes.filter((p) => {
+        const u = normalizeUnitId(p.unidadeId);
+        return !u || u === unitId;
+      });
     }
     return pacientes;
   }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
 
   const pacientesSemUnidade = useMemo(() => {
-    if (!user || !["master", "gestao"].includes(user.role)) return [];
-    return pacientes.filter((p) => !p.unidadeId);
-  }, [pacientes, user]);
+    return visiblePacientes.filter((p) => !p.unidadeId);
+  }, [visiblePacientes]);
 
   useQuery({
     queryKey: queryKeys.pacientes.semUnidade({ role: user?.role || "", unidadeId: unidadeIdFuncionario || "global" }),
@@ -966,7 +970,7 @@ const Pacientes: React.FC = () => {
           <CardContent className="p-3 text-sm text-foreground">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span>
-                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada. Revise o cadastro antes de liberar para a Recepção.
+                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada (visíveis na lista). Edite o cadastro para vinculá-los à unidade correta.
               </span>
               <Badge variant="outline" className="w-fit border-warning/40 text-warning">
                 Verificação Master/Gestão
