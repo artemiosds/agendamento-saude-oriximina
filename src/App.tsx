@@ -91,10 +91,16 @@ const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 1, // 1 minute — avoids repeated requests but stays fresh
-      gcTime: 1000 * 60 * 10,   // 10 minutes garbage collection
+      // PERF: 2min staleTime — many lists (pacientes, funcionários, configs) are stable.
+      // Mutations explicitly invalidate via useInvalidation, so freshness is preserved.
+      staleTime: 1000 * 60 * 2,
+      gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,
+      // After network drop, refetch when reconnecting to avoid stale data
+      refetchOnReconnect: true,
       retry: 1,
+      // Keep previous data visible while refetching to avoid loading flicker on mobile
+      placeholderData: (previousData: unknown) => previousData,
     },
     mutations: {
       retry: 0,

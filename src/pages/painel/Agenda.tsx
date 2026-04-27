@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
+import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -631,6 +632,11 @@ const Agenda: React.FC = () => {
       return null;
     }
   };
+
+  // PERF: anti double-click locks for create / retorno / edit buttons
+  const createLock = useActionLock();
+  const retornoLock = useActionLock();
+  const editLock = useActionLock();
 
   const handleCreate = async () => {
     // Validações rápidas
@@ -1896,11 +1902,11 @@ const Agenda: React.FC = () => {
                     )}
                   </div>
                   <Button
-                    onClick={handleCreate}
+                    onClick={() => createLock.run(handleCreate)}
                     className="w-full gradient-primary text-primary-foreground"
-                    disabled={!newAg.hora || !newAg.pacienteId || !newAg.profissionalId}
+                    disabled={createLock.isLocked || !newAg.hora || !newAg.pacienteId || !newAg.profissionalId}
                   >
-                    Agendar
+                    {createLock.isLocked ? "Agendando..." : "Agendar"}
                   </Button>
                 </div>
               </DialogContent>
@@ -2666,11 +2672,11 @@ const Agenda: React.FC = () => {
                 </div>
               )}
               <Button
-                onClick={handleAgendarRetorno}
-                disabled={!retornoForm.data || !retornoForm.hora}
+                onClick={() => retornoLock.run(handleAgendarRetorno)}
+                disabled={retornoLock.isLocked || !retornoForm.data || !retornoForm.hora}
                 className="w-full gradient-primary text-primary-foreground"
               >
-                Confirmar Retorno
+                {retornoLock.isLocked ? "Confirmando..." : "Confirmar Retorno"}
               </Button>
             </div>
           )}
@@ -2771,11 +2777,11 @@ const Agenda: React.FC = () => {
                 />
               </div>
               <Button
-                onClick={handleSaveEdit}
+                onClick={() => editLock.run(handleSaveEdit)}
                 className="w-full gradient-primary text-primary-foreground"
-                disabled={!editAg.hora || !editAg.profissionalId}
+                disabled={editLock.isLocked || !editAg.hora || !editAg.profissionalId}
               >
-                Salvar Alterações
+                {editLock.isLocked ? "Salvando..." : "Salvar Alterações"}
               </Button>
             </div>
           )}
