@@ -360,7 +360,12 @@ const Pacientes: React.FC = () => {
     }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
-      return pacientes.filter((p) => normalizeUnitId(p.unidadeId) === unitId);
+      // Mostra pacientes da unidade + pacientes sem unidade vinculada (legados/órfãos)
+      // para que a Recepção tenha visibilidade completa e possa revisar/corrigir o cadastro.
+      return pacientes.filter((p) => {
+        const u = normalizeUnitId(p.unidadeId);
+        return !u || u === unitId;
+      });
     }
     return pacientes;
   }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
