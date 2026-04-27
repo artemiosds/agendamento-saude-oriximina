@@ -358,6 +358,10 @@ const Pacientes: React.FC = () => {
       toast.error(Object.values(newErrors)[0]);
       return;
     }
+    if (!editId && !isGlobalAdminUser && !unidadeIdFuncionario) {
+      toast.error("Usuário sem unidade vinculada. Corrija o cadastro do funcionário antes de cadastrar paciente.");
+      return;
+    }
     setErrors({});
     setSaving(true);
 
