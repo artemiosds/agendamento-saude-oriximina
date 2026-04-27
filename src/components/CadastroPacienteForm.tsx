@@ -95,6 +95,8 @@ export interface PacienteFormData {
   cns: string;
   telefone: string;
   municipio: string;
+  naturalidade: string;
+  naturalidadeUf: string;
   menorIdade: boolean;
   nomeResponsavel: string;
   cpfResponsavel: string;
@@ -135,6 +137,7 @@ export interface PacienteFormData {
 
 export const emptyPacienteForm: PacienteFormData = {
   nome: "", dataNascimento: "", cpf: "", cns: "", telefone: "", municipio: "",
+  naturalidade: "", naturalidadeUf: "",
   menorIdade: false, nomeResponsavel: "", cpfResponsavel: "",
   especialidadeDestino: "", ubsOrigem: "", profissionalSolicitante: "",
   tipoEncaminhamento: "", cid: "", diagnosticoResumido: "", justificativa: "",
