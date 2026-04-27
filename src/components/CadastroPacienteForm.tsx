@@ -389,6 +389,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                 </div>
               )}
 
+              {!H("naturalidade") && (
+                <div className="md:col-span-2">
+                  <Label>{L("naturalidade", "Naturalidade")}</Label>
+                  <MunicipioCombobox
+                    value={form.naturalidade}
+                    uf={form.naturalidadeUf}
+                    onChange={(cidade, uf) => onChange({ ...form, naturalidade: cidade, naturalidadeUf: uf })}
+                    placeholder="Selecione o município de naturalidade"
+                  />
+                </div>
+              )}
+
               <div className="flex items-center gap-3 p-2 rounded-md bg-muted/40 md:col-span-2">
                 <Switch
                   id="situacao-rua"
