@@ -163,6 +163,8 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
+        naturalidade: data.naturalidade || "",
+        naturalidade_uf: data.naturalidade_uf || "",
         sexo: cd.sexo || "",
         raca_cor: cd.racaCor || cd.raca_cor || "",
         etnia: cd.etnia || "",
