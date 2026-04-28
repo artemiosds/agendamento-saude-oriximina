@@ -1012,6 +1012,15 @@ const ProntuarioPage: React.FC = () => {
             }
           }
         }
+        // Detecta troca de profissional responsável (registro explícito de auditoria)
+        const prevProfId = previousForm ? (previousForm as any).profissional_id || "" : "";
+        const prevProfNome = previousForm ? (previousForm as any).profissional_nome || "" : "";
+        if (prevProfId && prevProfId !== profIdToSave) {
+          camposAlterados["Profissional Responsável"] = {
+            anterior: prevProfNome.substring(0, 200),
+            novo: profNomeToSave.substring(0, 200),
+          };
+        }
         await logAction({
           acao: "prontuario_editado",
           entidade: "prontuario",
@@ -1023,6 +1032,10 @@ const ProntuarioPage: React.FC = () => {
             paciente_cpf: pac?.cpf || "",
             motivo_alteracao: form.motivo_alteracao,
             campos_alterados: camposAlterados,
+            editado_por_id: user?.id || "",
+            editado_por_nome: user?.nome || "",
+            profissional_responsavel_id: profIdToSave,
+            profissional_responsavel_nome: profNomeToSave,
           },
         });
       } else {
