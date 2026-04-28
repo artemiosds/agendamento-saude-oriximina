@@ -79,12 +79,12 @@ const CarimboConfig: React.FC = () => {
         profissional_id: user!.id, tipo: carimbo.tipo, nome: carimbo.nome,
         conselho: carimbo.conselho, numero_registro: carimbo.numero_registro, uf: carimbo.uf,
         especialidade: carimbo.especialidade, cargo: carimbo.cargo, imagem_url: carimbo.imagem_url,
-        custom_data: carimbo.custom_data,
+        custom_data: carimbo.custom_data as any,
       };
       if (carimbo.id) {
-        await supabase.from('profissionais_carimbo').update(payload).eq('id', carimbo.id);
+        await supabase.from('profissionais_carimbo').update(payload as any).eq('id', carimbo.id);
       } else {
-        await supabase.from('profissionais_carimbo').insert(payload);
+        await supabase.from('profissionais_carimbo').insert(payload as any);
       }
       toast.success('✅ Carimbo salvo com sucesso!');
       loadCarimbo();
