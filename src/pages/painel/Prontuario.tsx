@@ -1369,13 +1369,16 @@ const ProntuarioPage: React.FC = () => {
     let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
+      const profIdSess = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeSess = editId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
+        : (user?.nome || "");
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
-        profissional_id: user?.id || "",
-        profissional_nome: user?.nome || "",
-        unidade_id: user?.unidadeId || "",
-        setor: user?.setor || "",
+        profissional_id: profIdSess,
+        profissional_nome: profNomeSess,
+        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
         agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
