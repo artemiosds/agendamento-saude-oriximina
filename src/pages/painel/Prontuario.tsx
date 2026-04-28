@@ -2099,7 +2099,42 @@ const ProntuarioPage: React.FC = () => {
               </div>
             </div>
 
-            {episodios.length > 0 && (
+            {/* Seletor de Profissional Responsável — somente Master ao editar */}
+            {editId && user?.role === 'master' && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  Profissional Responsável pelo Atendimento *
+                </Label>
+                <Select
+                  value={form.profissional_id || ""}
+                  onValueChange={(v) => {
+                    const f = funcionarios.find((x) => x.id === v);
+                    setForm((p) => ({
+                      ...p,
+                      profissional_id: v,
+                      profissional_nome: f?.nome || p.profissional_nome,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="mt-1 bg-background">
+                    <SelectValue placeholder="Selecione o profissional responsável" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {funcionarios
+                      .filter((f) => f.ativo !== false)
+                      .map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.nome}{f.profissao ? ` — ${f.profissao}` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Como Master, você pode corrigir o profissional responsável. A alteração ficará registrada na auditoria. O autor da edição (você) é gravado separadamente.
+                </p>
+              </div>
+            )}
+
               <div>
                 <Label>Episódio Clínico / Tratamento Ativo</Label>
                 <Select
