@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
+import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useActionLock } from "@/hooks/useActionLock";
 import { isSameDay } from "date-fns";
@@ -2275,6 +2276,30 @@ const Agenda: React.FC = () => {
                         <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", tipoInfo.class)}>
                           {tipoInfo.label}
                         </span>
+                        {(() => {
+                          const riscoRaw = triageMap[ag.id]?.risco;
+                          if (!riscoRaw) return null;
+                          const m = getManchesterBadgeStyle(riscoRaw);
+                          if (m.label === '—') return null;
+                          return (
+                            <span
+                              className={cn(
+                                "text-xs px-2 py-0.5 rounded-full font-semibold border inline-flex items-center gap-1.5",
+                                m.bg,
+                                m.text,
+                                m.pulse && "animate-pulse",
+                              )}
+                              style={{ borderColor: m.color }}
+                              title={`Classificação de risco: ${m.label}`}
+                            >
+                              <span
+                                className="inline-block w-2 h-2 rounded-full"
+                                style={{ backgroundColor: m.color }}
+                              />
+                              Risco {m.label}
+                            </span>
+                          );
+                        })()}
                         <span
                           className={cn(
                             "text-xs px-2.5 py-1 rounded-full font-medium shrink-0",
