@@ -15,6 +15,8 @@ import {
   HeartPulse, Eye, FileDown,
 } from "lucide-react";
 import { downloadFullHistoryPdf } from "@/lib/prontuarioPdf";
+import { openPrintDocument } from "@/lib/printLayout";
+import { Printer } from "lucide-react";
 import { getSpecialtyColors } from "@/lib/specialtyColors";
 
 // ── Types ──────────────────────────────────────────────────
@@ -418,6 +420,34 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
     );
   };
 
+  const handlePrintOfficial = () => {
+    if (filteredEvents.length === 0) return;
+    const rows = [...filteredEvents]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .map((e) => `
+        <tr>
+          <td>${formatDateBR(e.date)}${e.time ? ' ' + e.time : ''}</td>
+          <td>${TYPE_CONFIG[e.type]?.label || e.type}${e.sessionInfo ? ' — ' + e.sessionInfo : ''}</td>
+          <td>${e.professional || '—'}</td>
+          <td>${e.specialty || '—'}</td>
+          <td>${(e.summary || e.queixaPrincipal || e.conduta || '').replace(/</g, '&lt;').slice(0, 400)}</td>
+        </tr>`).join('');
+    const body = `
+      <h2>Histórico Clínico Consolidado</h2>
+      <table>
+        <thead>
+          <tr><th>Data</th><th>Tipo</th><th>Profissional</th><th>Especialidade</th><th>Resumo</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    openPrintDocument(`Histórico Clínico — ${pacienteNome}`, body, {
+      'Paciente': pacienteNome,
+      'Total de eventos': String(filteredEvents.length),
+      'Emitido em': new Date().toLocaleString('pt-BR'),
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] w-full max-h-[95vh] h-[95vh] p-0 gap-0 flex flex-col" aria-describedby={undefined}>
@@ -598,6 +628,16 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
 
         {/* Footer */}
         <div className="px-4 sm:px-6 py-3 border-t bg-card flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrintOfficial}
+            disabled={filteredEvents.length === 0 || loading}
+            className="gap-1.5"
+          >
+            <Printer className="w-4 h-4" />
+            Imprimir Oficial (A4)
+          </Button>
           <Button
             variant="default"
             size="sm"

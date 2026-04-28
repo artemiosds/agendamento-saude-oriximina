@@ -1,38 +1,55 @@
+## Sub-fase 1B — Tela de Modelos + Editor com Variáveis + Aplicação do novo cabeçalho
 
+Continuação direta da Sub-fase 1A (já concluída: cabeçalho 3 logos + carimbo + preview A4 + impressão fiel). Agora vou reformar a tela de Modelos de Documentos, criar um editor com inserção de variáveis dinâmicas, e aplicar o novo cabeçalho institucional nos modais de geração de documento e histórico completo.
 
-## Problema identificado
+### O que será entregue
 
-Na página **Gestão de Tratamentos**, alguns nomes de pacientes aparecem como "—" (traço). A análise mostrou três causas combinadas:
+**1. Tela `ModelosDocumentos.tsx` repaginada (cards + filtros + busca + responsivo)**
+- Layout em cards (substitui lista atual), com badges visuais de tipo (Atestado, Receita, Declaração, Encaminhamento, Relatório), escopo (Global/Unidade/Pessoal) e status (Ativo/Inativo).
+- Barra de filtros: tipo, escopo, perfil permitido, busca por nome.
+- Mobile-first: cards empilham em <640px, grid 2 colunas em md, 3 em lg.
+- Ações por card: Editar, Duplicar, Visualizar (preview A4), Ativar/Desativar, Excluir (com confirmação).
+- Vazio elegante (EmptyState) e skeletons durante carregamento.
 
-1. **Limite de 1000 linhas no carregamento de pacientes** — `loadPacientes` em `DataContext.tsx` faz um único `select()` sem paginação recursiva `.range()`. Acima de 1000 pacientes, os mais antigos ficam de fora do `pacientesMap` usado na lista.
-2. **RPC `get_treatment_cycles_paginated` não retorna o nome do paciente** — devolve apenas `c.*` (colunas de `treatment_cycles`), então não há fallback quando o paciente não está no estado local.
-3. **Renderização sem hook resolver** — a linha `{pac?.nome || "—"}` (linha 3208) não usa o `usePacienteNomeResolver` nem nenhum fallback alternativo, ao contrário de outras telas (Atendimentos, Agenda).
+**2. Editor de modelo profissional (`EditorModeloDocumento.tsx` — novo)**
+- Reaproveita `RichTextEditor` existente.
+- **Botão "Inserir variável"** com dropdown agrupado:
+  - Paciente: `{{paciente.nome}}`, `{{paciente.cpf}}`, `{{paciente.cns}}`, `{{paciente.data_nascimento}}`, `{{paciente.idade}}`, `{{paciente.endereco}}`, `{{paciente.nome_mae}}`
+  - Profissional: `{{profissional.nome}}`, `{{profissional.conselho}}` (ex: CRM-PA 12345), `{{profissional.cbo}}`, `{{profissional.cns}}`, `{{profissional.especialidade}}`
+  - Unidade/Clínica: `{{clinica.nome}}`, `{{clinica.cnes}}`, `{{clinica.endereco}}`, `{{unidade.nome}}`
+  - Atendimento: `{{atendimento.data}}`, `{{atendimento.cid}}`, `{{atendimento.procedimento}}`
+  - Sistema: `{{data.hoje}}`, `{{data.extenso}}`, `{{cidade_uf}}`
+- Toggles: incluir cabeçalho institucional, incluir rodapé, incluir carimbo final, incluir 3 logos.
+- Escopo do modelo: Global / Unidade / Pessoal (respeita RLS existente em `document_templates`).
+- Painel lateral de **Preview A4 ao vivo** usando o mesmo motor de `printLayout.ts`, com dados de exemplo (paciente fictício "JOÃO DA SILVA" etc.).
+- Salva versão anterior em `document_templates.versoes` (até 5 — já é o padrão).
 
-## Correções propostas
+**3. Aplicação do novo cabeçalho/rodapé**
+- `GerarDocumentoModal.tsx`: substitui o header atual pelo bloco oficial (3 logos + bloco institucional + rodapé + carimbo do profissional logado). Usa `documento_config_<unidadeId>` (fallback global) + `funcionarios.custom_data.carimbo`.
+- `HistoricoCompletoModal.tsx`: envolve o conteúdo de impressão com o mesmo cabeçalho oficial e carimbo final do profissional que está imprimindo, sem alterar o conteúdo da timeline.
+- Substituição da função de render é feita via helper já criado em `printLayout.ts` na Sub-fase 1A.
 
-### 1. RPC `get_treatment_cycles_paginated` — incluir nome do paciente
-Nova migração que substitui a função e adiciona `paciente_nome` (do JOIN com `pacientes`) ao JSON retornado por ciclo. Sem alterar parâmetros, contrato ou demais campos — só agrega o nome.
+### Detalhes técnicos
 
-### 2. `Tratamentos.tsx` — usar fallback de nome
-- Adicionar `paciente_nome?: string` na interface `TreatmentCycle`.
-- Na renderização da lista (linha 3208) e nos modais que mostram o nome do paciente do ciclo, usar:
-  ```ts
-  pacientesMap.get(cycle.patient_id)?.nome || cycle.paciente_nome || "Paciente não encontrado"
-  ```
-- Mesmo padrão para `selectedCycle` no painel direito e no modal de PTS (linha 3003).
+- **Sem novas tabelas**: tudo persiste em `document_templates` (já existente). Variáveis ficam embutidas no campo `conteudo` (texto com `{{...}}`); toggles e escopo em campos existentes (`tipo_modelo`, `unidade_id`, `perfis_permitidos`, `blocos_clinicos` JSON).
+- **Resolução de variáveis**: novo helper `src/lib/templateVariables.ts` com função `resolveVariables(template, context)` que substitui `{{...}}` por valores reais no momento de gerar o documento. Não toca no banco.
+- **Preview**: componente `A4Preview` reutilizado da Sub-fase 1A, recebe HTML resolvido com dados mock.
+- **Permissões**: respeita RLS atual de `document_templates` (Master gerencia globais/unidade; profissional gerencia os próprios). UI esconde ações conforme `useAuth` + `usePermissions`.
+- **Mobile**: `backdrop-filter: blur` desabilitado em <768px (regra de memória já aplicada no projeto).
+- **Sem mock data, sem auto-gerar registros, sem novos buckets** — usa `document-logos` e `carimbos` já existentes.
 
-### 3. `DataContext.tsx` — paginação recursiva em `loadPacientes`
-Aplicar o padrão `.range()` já documentado em memória (`mem://architecture/recursive-pagination`) em `loadPacientes`, idêntico ao usado em `patientService.getAll`. Garante que o `pacientesMap` cubra qualquer volume, beneficiando também outras telas (Agenda, Fila, Pacientes, Prontuário).
+### Arquivos afetados
 
-## Resultado esperado
+- editar `src/components/ModelosDocumentos.tsx` (refator visual completo, mantém lógica de save/load)
+- criar `src/components/EditorModeloDocumento.tsx`
+- criar `src/lib/templateVariables.ts`
+- editar `src/components/GerarDocumentoModal.tsx` (aplicar header/footer/carimbo oficiais + resolução de variáveis)
+- editar `src/components/HistoricoCompletoModal.tsx` (envolver impressão com header/carimbo oficiais)
 
-- 100% dos ciclos exibem o nome correto do paciente, mesmo em bases >1000 pacientes ou quando o registro está fora da unidade ativa do usuário.
-- Nenhuma alteração de schema (apenas substituição de função RPC), sem impacto em SIGTAP, BPA ou prontuários.
-- Fallback em três camadas: estado local → snapshot do RPC → mensagem padrão.
+### Fora do escopo desta fase
 
-## Arquivos afetados
+- Editor visual WYSIWYG novo (continuamos com `RichTextEditor` atual).
+- Assinatura digital ICP-Brasil (mantemos hash SHA-256 atual).
+- Novas tabelas ou campos de banco.
 
-- `supabase/migrations/<nova>.sql` (REPLACE FUNCTION)
-- `src/pages/painel/Tratamentos.tsx` (interface + 3 pontos de render)
-- `src/contexts/DataContext.tsx` (paginação recursiva em `loadPacientes`)
-
+Posso seguir com essa entrega?

@@ -337,56 +337,55 @@ const ModelosDocumentos: React.FC = () => {
               <p className="text-xs">Clique em "Novo Modelo" para criar.</p>
             </div>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map(m => {
                 const tipoInfo = TIPO_MODELO_LABELS[m.tipo_modelo] || TIPO_MODELO_LABELS.UNIDADE;
                 const TipoIcon = tipoInfo.icon;
                 return (
                   <div
                     key={m.id}
-                    className={`border rounded-lg p-4 transition-colors ${m.ativo ? 'bg-background hover:bg-muted/20' : 'bg-muted/40 opacity-70'}`}
+                    className={`border rounded-lg p-4 transition-all flex flex-col gap-3 ${m.ativo ? 'bg-background hover:bg-muted/30 hover:shadow-sm' : 'bg-muted/40 opacity-70'}`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-semibold text-sm truncate">{m.nome}</h4>
-                          <Badge variant="outline" className="text-xs shrink-0">{m.tipo}</Badge>
-                          <Badge variant="secondary" className={`text-[10px] gap-1 ${tipoInfo.color}`}>
+                        <h4 className="font-semibold text-sm truncate" title={m.nome}>{m.nome}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                          <Badge variant="outline" className="text-[10px] py-0 px-1.5">{m.tipo}</Badge>
+                          <Badge variant="secondary" className={`text-[10px] gap-1 py-0 px-1.5 ${tipoInfo.color}`}>
                             <TipoIcon className="w-3 h-3" />
                             {tipoInfo.label}
                           </Badge>
-                          {!m.ativo && <Badge variant="secondary" className="text-xs">Inativo</Badge>}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {m.conteudo.replace(/<[^>]*>/g, '').slice(0, 120)}...
-                        </p>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span className="text-[10px] text-muted-foreground">por {m.criado_por_nome || '—'}</span>
-                          <div className="flex gap-1 flex-wrap">
-                            {(m.perfis_permitidos || []).map(p => (
-                              <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0 capitalize">{p}</Badge>
-                            ))}
-                          </div>
+                          {!m.ativo && <Badge variant="secondary" className="text-[10px] py-0 px-1.5">Inativo</Badge>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {canEdit(m) && <Switch checked={m.ativo} onCheckedChange={v => handleToggle(m.id, v)} />}
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(m)} title="Preview">
-                          <Eye className="w-4 h-4" />
+                      {canEdit(m) && <Switch checked={m.ativo} onCheckedChange={v => handleToggle(m.id, v)} />}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground line-clamp-3 flex-1">
+                      {m.conteudo.replace(/<[^>]*>/g, '').slice(0, 160) || '— sem conteúdo —'}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                      <span className="text-[10px] text-muted-foreground truncate" title={m.criado_por_nome}>
+                        {m.criado_por_nome || '—'}
+                      </span>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePreview(m)} title="Pré-visualizar">
+                          <Eye className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePrintPreview(m)} title="Imprimir">
-                          <Printer className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePrintPreview(m)} title="Imprimir A4">
+                          <Printer className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(m)} title="Duplicar">
-                          <Copy className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDuplicate(m)} title="Duplicar">
+                          <Copy className="w-3.5 h-3.5" />
                         </Button>
                         {canEdit(m) && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} title="Editar">
-                              <Pencil className="w-4 h-4" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(m)} title="Editar">
+                              <Pencil className="w-3.5 h-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(m.id)} title="Excluir">
-                              <Trash2 className="w-4 h-4" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(m.id)} title="Excluir">
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </>
                         )}
