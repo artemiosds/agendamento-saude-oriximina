@@ -629,6 +629,16 @@ export const HistoricoCompletoModal: React.FC<Props> = ({
         {/* Footer */}
         <div className="px-4 sm:px-6 py-3 border-t bg-card flex flex-wrap items-center justify-end gap-2 shrink-0">
           <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrintOfficial}
+            disabled={filteredEvents.length === 0 || loading}
+            className="gap-1.5"
+          >
+            <Printer className="w-4 h-4" />
+            Imprimir Oficial (A4)
+          </Button>
+          <Button
             variant="default"
             size="sm"
             onClick={handleGenerateReport}
