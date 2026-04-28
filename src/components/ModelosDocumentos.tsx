@@ -392,6 +392,60 @@ const ModelosDocumentos: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Editor Modal */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              {current?.id ? 'Editar Modelo' : 'Novo Modelo'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {current && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Nome do modelo</Label>
+                  <Input
+                    value={current.nome}
+                    onChange={e => setCurrent({ ...current, nome: e.target.value })}
+                    placeholder="Ex: Atestado padrão CER II"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Tipo de documento</Label>
+                  <Select value={current.tipo} onValueChange={v => setCurrent({ ...current, tipo: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TIPOS_DOCUMENTO.map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] font-bold">Tipo de modelo</Label>
+                  <Select
+                    value={current.tipo_modelo}
+                    onValueChange={v => setCurrent({ ...current, tipo_modelo: v as any })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {isGlobalAdmin && <SelectItem value="GLOBAL">🌐 Global (todas unidades)</SelectItem>}
+                      {(isGlobalAdmin || user?.role === 'master') && <SelectItem value="UNIDADE">🏥 Unidade</SelectItem>}
+                      <SelectItem value="PROFISSIONAL">👤 Pessoal (meu modelo)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
               {/* Rich Editor */}
               <div className="space-y-1.5">
