@@ -36,9 +36,21 @@ const VARIAVEIS_CATEGORIAS = [
     items: [
       { tag: '{{data_atendimento}}', desc: 'Data atendimento' },
       { tag: '{{profissional}}', desc: 'Profissional' },
+      { tag: '{{carimbo_profissional}}', desc: 'Carimbo profissional' },
       { tag: '{{data_hoje}}', desc: 'Data de hoje' },
       { tag: '{{hora_entrada}}', desc: 'Hora entrada' },
       { tag: '{{hora_saida}}', desc: 'Hora saída' },
+    ],
+  },
+  {
+    label: 'Declaração / Comparecimento',
+    items: [
+      { tag: '{{horario_entrada}}', desc: 'Horário entrada' },
+      { tag: '{{horario_saida}}', desc: 'Horário saída' },
+      { tag: '{{finalidade}}', desc: 'Finalidade' },
+      { tag: '{{motivo_falta}}', desc: 'Motivo da falta' },
+      { tag: '{{data_falta}}', desc: 'Data da falta' },
+      { tag: '{{profissional_agendado}}', desc: 'Profissional agendado' },
     ],
   },
   {
