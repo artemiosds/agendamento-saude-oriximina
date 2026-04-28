@@ -121,6 +121,8 @@ const TIPOS_REGISTRO = [
 const emptyForm = {
   paciente_id: "",
   paciente_nome: "",
+  profissional_id: "",
+  profissional_nome: "",
   agendamento_id: "",
   data_atendimento: new Date().toISOString().split("T")[0],
   hora_atendimento: "",
@@ -835,6 +837,8 @@ const ProntuarioPage: React.FC = () => {
     const formData = {
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
+      profissional_id: p.profissional_id || "",
+      profissional_nome: p.profissional_nome || "",
       agendamento_id: p.agendamento_id || "",
       data_atendimento: p.data_atendimento,
       hora_atendimento: p.hora_atendimento || "",
@@ -932,13 +936,19 @@ const ProntuarioPage: React.FC = () => {
         .filter(Boolean)
         .join(", ");
 
+      // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
+      // ao criar, usa o usuário logado.
+      const profIdToSave = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeToSave = editId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
+        : (user?.nome || "");
+
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
-        profissional_id: user?.id || "",
-        profissional_nome: user?.nome || "",
-        unidade_id: user?.unidadeId || "",
-        setor: user?.setor || "",
+        profissional_id: profIdToSave,
+        profissional_nome: profNomeToSave,
+        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
         agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
@@ -1002,6 +1012,15 @@ const ProntuarioPage: React.FC = () => {
             }
           }
         }
+        // Detecta troca de profissional responsável (registro explícito de auditoria)
+        const prevProfId = previousForm ? (previousForm as any).profissional_id || "" : "";
+        const prevProfNome = previousForm ? (previousForm as any).profissional_nome || "" : "";
+        if (prevProfId && prevProfId !== profIdToSave) {
+          camposAlterados["Profissional Responsável"] = {
+            anterior: prevProfNome.substring(0, 200),
+            novo: profNomeToSave.substring(0, 200),
+          };
+        }
         await logAction({
           acao: "prontuario_editado",
           entidade: "prontuario",
@@ -1013,6 +1032,10 @@ const ProntuarioPage: React.FC = () => {
             paciente_cpf: pac?.cpf || "",
             motivo_alteracao: form.motivo_alteracao,
             campos_alterados: camposAlterados,
+            editado_por_id: user?.id || "",
+            editado_por_nome: user?.nome || "",
+            profissional_responsavel_id: profIdToSave,
+            profissional_responsavel_nome: profNomeToSave,
           },
         });
       } else {
@@ -1154,13 +1177,16 @@ const ProntuarioPage: React.FC = () => {
         .map((id) => procedimentos.find((pr) => pr.id === id)?.nome || '')
         .filter(Boolean)
         .join(', ');
+      // Preserva profissional ao editar; usa logado ao criar
+      const isEditing = Boolean(editIdRef.current);
+      const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
+      const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
       const record: any = {
         paciente_id: f.paciente_id,
         paciente_nome: f.paciente_nome,
-        profissional_id: user?.id || '',
-        profissional_nome: user?.nome || '',
-        unidade_id: user?.unidadeId || '',
-        setor: user?.setor || '',
+        profissional_id: profIdAuto,
+        profissional_nome: profNomeAuto,
+        ...(isEditing ? {} : { unidade_id: user?.unidadeId || '', setor: user?.setor || '' }),
         agendamento_id: f.agendamento_id,
         data_atendimento: f.data_atendimento,
         hora_atendimento: f.hora_atendimento,
@@ -1356,13 +1382,16 @@ const ProntuarioPage: React.FC = () => {
     let prontuarioId: string | null = editId;
     try {
       const procTexto = selectedProcIds.map(id => procedimentos.find(pr => pr.id === id)?.nome || "").filter(Boolean).join(", ");
+      const profIdSess = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeSess = editId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdSess)?.nome || user?.nome || "")
+        : (user?.nome || "");
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
-        profissional_id: user?.id || "",
-        profissional_nome: user?.nome || "",
-        unidade_id: user?.unidadeId || "",
-        setor: user?.setor || "",
+        profissional_id: profIdSess,
+        profissional_nome: profNomeSess,
+        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
         agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
@@ -2082,6 +2111,42 @@ const ProntuarioPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Seletor de Profissional Responsável — somente Master ao editar */}
+            {editId && user?.role === 'master' && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <Label className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  Profissional Responsável pelo Atendimento *
+                </Label>
+                <Select
+                  value={form.profissional_id || ""}
+                  onValueChange={(v) => {
+                    const f = funcionarios.find((x) => x.id === v);
+                    setForm((p) => ({
+                      ...p,
+                      profissional_id: v,
+                      profissional_nome: f?.nome || p.profissional_nome,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="mt-1 bg-background">
+                    <SelectValue placeholder="Selecione o profissional responsável" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {funcionarios
+                      .filter((f) => f.ativo !== false)
+                      .map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.nome}{f.profissao ? ` — ${f.profissao}` : ""}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Como Master, você pode corrigir o profissional responsável. A alteração ficará registrada na auditoria. O autor da edição (você) é gravado separadamente.
+                </p>
+              </div>
+            )}
 
             {episodios.length > 0 && (
               <div>
