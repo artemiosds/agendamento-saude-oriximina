@@ -15,6 +15,8 @@ import {
   HeartPulse, Eye, FileDown,
 } from "lucide-react";
 import { downloadFullHistoryPdf } from "@/lib/prontuarioPdf";
+import { openPrintDocument } from "@/lib/printLayout";
+import { Printer } from "lucide-react";
 import { getSpecialtyColors } from "@/lib/specialtyColors";
 
 // ── Types ──────────────────────────────────────────────────
