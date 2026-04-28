@@ -337,7 +337,7 @@ const ModelosDocumentos: React.FC = () => {
               <p className="text-xs">Clique em "Novo Modelo" para criar.</p>
             </div>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map(m => {
                 const tipoInfo = TIPO_MODELO_LABELS[m.tipo_modelo] || TIPO_MODELO_LABELS.UNIDADE;
                 const TipoIcon = tipoInfo.icon;
