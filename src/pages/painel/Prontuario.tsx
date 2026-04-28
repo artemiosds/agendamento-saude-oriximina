@@ -1164,13 +1164,16 @@ const ProntuarioPage: React.FC = () => {
         .map((id) => procedimentos.find((pr) => pr.id === id)?.nome || '')
         .filter(Boolean)
         .join(', ');
+      // Preserva profissional ao editar; usa logado ao criar
+      const isEditing = Boolean(editIdRef.current);
+      const profIdAuto = isEditing ? (f.profissional_id || user?.id || '') : (user?.id || '');
+      const profNomeAuto = isEditing ? (f.profissional_nome || user?.nome || '') : (user?.nome || '');
       const record: any = {
         paciente_id: f.paciente_id,
         paciente_nome: f.paciente_nome,
-        profissional_id: user?.id || '',
-        profissional_nome: user?.nome || '',
-        unidade_id: user?.unidadeId || '',
-        setor: user?.setor || '',
+        profissional_id: profIdAuto,
+        profissional_nome: profNomeAuto,
+        ...(isEditing ? {} : { unidade_id: user?.unidadeId || '', setor: user?.setor || '' }),
         agendamento_id: f.agendamento_id,
         data_atendimento: f.data_atendimento,
         hora_atendimento: f.hora_atendimento,
