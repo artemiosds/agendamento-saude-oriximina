@@ -1591,6 +1591,7 @@ export type Database = {
           cargo: string
           conselho: string
           created_at: string
+          custom_data: Json
           especialidade: string
           id: string
           imagem_url: string
@@ -1605,6 +1606,7 @@ export type Database = {
           cargo?: string
           conselho?: string
           created_at?: string
+          custom_data?: Json
           especialidade?: string
           id?: string
           imagem_url?: string
@@ -1619,6 +1621,7 @@ export type Database = {
           cargo?: string
           conselho?: string
           created_at?: string
+          custom_data?: Json
           especialidade?: string
           id?: string
           imagem_url?: string
