@@ -936,11 +936,18 @@ const ProntuarioPage: React.FC = () => {
         .filter(Boolean)
         .join(", ");
 
+      // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
+      // ao criar, usa o usuário logado.
+      const profIdToSave = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeToSave = editId
+        ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
+        : (user?.nome || "");
+
       const record: any = {
         paciente_id: form.paciente_id || `manual_${Date.now()}`,
         paciente_nome: form.paciente_nome,
-        profissional_id: user?.id || "",
-        profissional_nome: user?.nome || "",
+        profissional_id: profIdToSave,
+        profissional_nome: profNomeToSave,
         unidade_id: user?.unidadeId || "",
         setor: user?.setor || "",
         agendamento_id: form.agendamento_id,
