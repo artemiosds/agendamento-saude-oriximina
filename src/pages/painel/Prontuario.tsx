@@ -2135,6 +2135,7 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+            {episodios.length > 0 && (
               <div>
                 <Label>Episódio Clínico / Tratamento Ativo</Label>
                 <Select
