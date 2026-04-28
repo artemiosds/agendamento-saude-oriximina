@@ -837,6 +837,8 @@ const ProntuarioPage: React.FC = () => {
     const formData = {
       paciente_id: p.paciente_id,
       paciente_nome: p.paciente_nome,
+      profissional_id: p.profissional_id || "",
+      profissional_nome: p.profissional_nome || "",
       agendamento_id: p.agendamento_id || "",
       data_atendimento: p.data_atendimento,
       hora_atendimento: p.hora_atendimento || "",
