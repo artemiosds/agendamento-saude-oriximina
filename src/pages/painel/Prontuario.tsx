@@ -121,6 +121,8 @@ const TIPOS_REGISTRO = [
 const emptyForm = {
   paciente_id: "",
   paciente_nome: "",
+  profissional_id: "",
+  profissional_nome: "",
   agendamento_id: "",
   data_atendimento: new Date().toISOString().split("T")[0],
   hora_atendimento: "",
