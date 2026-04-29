@@ -505,9 +505,26 @@ const Agenda: React.FC = () => {
       return CONCLUIDO_STATUSES.has(status);
     };
 
-    // Hora de chegada com fallback para hora agendada
-    const getChegada = (ag: any): string => {
-      return arrivalMap[ag.id] || ag.horaChegada || ag.hora || "";
+    // "Apto p/ Atendimento" — sobe ao topo dentro do grupo
+    const isApto = (ag: any): boolean => {
+      return String(ag.status || "").toLowerCase() === "apto_atendimento";
+    };
+
+    // Peso por idade — idosos (≥60) e crianças (<12) têm prioridade legal
+    const getPesoIdade = (ag: any): number => {
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      const nasc = (pac as any)?.dataNascimento || (pac as any)?.data_nascimento;
+      if (!nasc) return 3;
+      try {
+        const idade = calcularIdade(nasc);
+        if (typeof idade !== "number" || isNaN(idade)) return 3;
+        if (idade >= 80) return 1; // idoso ≥80 (prioridade especial — Lei 13.466/2017)
+        if (idade >= 60) return 2; // idoso
+        if (idade < 12) return 2;  // criança
+        return 3;
+      } catch {
+        return 3;
+      }
     };
 
     const base = agendamentos
@@ -528,14 +545,27 @@ const Agenda: React.FC = () => {
         const groupB = getTurnoSortGroup(b);
         if (groupA !== groupB) return groupA - groupB;
 
-        // 2) Dentro do mesmo bloco (turno), os atendimentos CONCLUÍDOS descem
-        //    automaticamente para o final do próprio grupo. Demais status
-        //    (apto_atendimento, confirmado, em_atendimento, etc.) não são afetados.
+        // 2) Concluídos sempre descem para o final do próprio grupo.
         const concluidoA = isConcluido(a) ? 1 : 0;
         const concluidoB = isConcluido(b) ? 1 : 0;
         if (concluidoA !== concluidoB) return concluidoA - concluidoB;
 
-        // 3) Mantém ordem interna estável pela hora agendada.
+        // 3) "Apto p/ Atendimento" sobe ao topo do grupo (acima dos demais status).
+        const aptoA = isApto(a) ? 0 : 1;
+        const aptoB = isApto(b) ? 0 : 1;
+        if (aptoA !== aptoB) return aptoA - aptoB;
+
+        // 4) Classificação de risco Manchester (vermelho → azul → sem classificação).
+        const riscoA = getPesoClassificacaoRisco(a);
+        const riscoB = getPesoClassificacaoRisco(b);
+        if (riscoA !== riscoB) return riscoA - riscoB;
+
+        // 5) Prioridade por idade (≥80 → ≥60/<12 → demais).
+        const idadeA = getPesoIdade(a);
+        const idadeB = getPesoIdade(b);
+        if (idadeA !== idadeB) return idadeA - idadeB;
+
+        // 6) Mantém ordem interna estável pela hora agendada.
         return horaToMin(a.hora) - horaToMin(b.hora);
       });
 
