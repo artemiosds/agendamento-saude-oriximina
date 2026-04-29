@@ -298,6 +298,13 @@ const Agenda: React.FC = () => {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
+  // ── Horário atual (atualiza a cada 60s) para reordenação dinâmica da fila ──
+  const [nowMinutes, setNowMinutes] = useState<number>(() => nowMinutesInBrazil());
+  React.useEffect(() => {
+    const id = setInterval(() => setNowMinutes(nowMinutesInBrazil()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // EDIÇÃO de agendamento
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editAg, setEditAg] = useState<{
