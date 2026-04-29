@@ -569,24 +569,26 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Bucket combinado (status + turno)
-        const bucketA = getBucket(a);
-        const bucketB = getBucket(b);
+        // 1. Grupo de turno/status: impede misturar manhã e tarde.
+        const groupA = getTurnoSortGroup(a);
+        const groupB = getTurnoSortGroup(b);
+        if (groupA !== groupB) return groupA - groupB;
 
-        // EXCEÇÃO CLÍNICA: risco grave (vermelho/laranja) PENDENTE de turno passado
-        // sobe para "Pendências urgentes" (5), logo após ativos (0) e antes do turno atual (10).
+        // 2. Dentro do mesmo bloco: classificação de risco (Manchester)
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
-        const isPendentePassadoUrgenteA = isToday && bucketA > 10 && bucketA < 100 && riscoA <= 2;
-        const isPendentePassadoUrgenteB = isToday && bucketB > 10 && bucketB < 100 && riscoB <= 2;
-        const effA = isPendentePassadoUrgenteA ? 5 : bucketA;
-        const effB = isPendentePassadoUrgenteB ? 5 : bucketB;
-        if (effA !== effB) return effA - effB;
-
-        // 2. Dentro do bucket: classificação de risco (Manchester)
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 3. Desempate: prioridade legal/idade
+        // 3. Paciente apto/presente antes do apenas confirmado/pendente, sempre dentro do bloco.
+        const prontidaoA = getProntidaoPeso(a);
+        const prontidaoB = getProntidaoPeso(b);
+        if (prontidaoA !== prontidaoB) return prontidaoA - prontidaoB;
+
+        const isCheckedA = CHECKED_IN_STATUSES.has(String(a.status || "").toLowerCase());
+        const isCheckedB = CHECKED_IN_STATUSES.has(String(b.status || "").toLowerCase());
+        if (isCheckedA !== isCheckedB) return isCheckedA ? -1 : 1;
+
+        // 4. Desempate: prioridade legal/idade
         const pacA = pacientes.find((p) => p.id === a.pacienteId);
         const pacB = pacientes.find((p) => p.id === b.pacienteId);
         const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
@@ -594,10 +596,9 @@ const Agenda: React.FC = () => {
         const idadePrioA = getPrioridadeIdade(pacA, ageA);
         const idadePrioB = getPrioridadeIdade(pacB, ageB);
         if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
+        if (ageA !== ageB) return ageB - ageA;
 
-        // 4. Desempate: ordem de chegada (para presentes) ou horário agendado
-        const isCheckedA = CHECKED_IN_STATUSES.has(a.status);
-        const isCheckedB = CHECKED_IN_STATUSES.has(b.status);
+        // 5. Desempate: ordem de chegada (para presentes) ou horário agendado
         const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
         const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
