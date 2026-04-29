@@ -486,10 +486,11 @@ const Agenda: React.FC = () => {
     const ATIVO_STATUSES = new Set([
       "em_atendimento", "chamado",
     ]);
-    // Status "apto para atendimento" (chegou/triado/aguardando profissional)
-    const APTO_STATUSES = new Set([
-      "aguardando_atendimento", "apto_atendimento", "aguardando_enfermagem",
-      "confirmado", "chegou", "triagem_concluida", "aguardando_profissional",
+    // Status realmente aptos/presentes para ordenar dentro do bloco do turno.
+    // "confirmado" é apenas confirmação do agendamento; não deve segurar manhã no topo.
+    const PRONTO_ATENDIMENTO_STATUSES = new Set([
+      "em_atendimento", "chamado", "apto_atendimento", "aguardando_atendimento",
+      "triagem_concluida", "aguardando_profissional",
     ]);
 
     // Converte "HH:MM" → minutos
@@ -504,62 +505,46 @@ const Agenda: React.FC = () => {
     const isToday = selectedDate === todayLocalStr();
 
     // ── TURNOS ──
-    // Manhã: 00:00–11:59 | Tarde: 12:00–17:59 | Noite: 18:00–23:59
-    const getTurno = (ag: any): 0 | 1 | 2 => {
-      const min = horaToMin(ag.hora);
+    // Agrupa por bloco antes de qualquer prioridade interna: manhã, tarde, noite.
+    const getTurnoFromMinutes = (min: number): 0 | 1 | 2 => {
       if (min < 12 * 60) return 0;
       if (min < 18 * 60) return 1;
       return 2;
     };
 
-    const turnoAtual: 0 | 1 | 2 =
-      nowMinutes < 12 * 60 ? 0 : nowMinutes < 18 * 60 ? 1 : 2;
+    const getTurno = (ag: any): 0 | 1 | 2 => getTurnoFromMinutes(horaToMin(ag.hora));
 
-    // Categoria de status (estilo PEC)
-    // 0: Em atendimento/chamado (sempre topo)
-    // 1: Apto para atendimento (chegou, triado, confirmado)
-    // 2: Pendente (agendado, sem chegada confirmada ainda)
-    // 3: Concluído/finalizado (desce)
-    // 4: Cancelado/falta/excluído (fim absoluto)
+    // O bloco da tarde só assume o topo no início real da tarde configurada.
+    const TARDE_INICIO_MIN = 13 * 60 + 30;
+    const NOITE_INICIO_MIN = 18 * 60;
+    const turnoAtual: 0 | 1 | 2 = nowMinutes >= NOITE_INICIO_MIN ? 2 : nowMinutes >= TARDE_INICIO_MIN ? 1 : 0;
+
+    // Categoria final: concluídos e descartados descem para o final absoluto.
     const getStatusCat = (ag: any): number => {
       const status = String(ag.status || "").toLowerCase();
-      if (DESCARTADO_STATUSES.has(status)) return 4;
-      if (CONCLUIDO_STATUSES.has(status)) return 3;
+      if (DESCARTADO_STATUSES.has(status)) return 5;
+      if (CONCLUIDO_STATUSES.has(status)) return 4;
+      return 1;
+    };
+
+    const getProntidaoPeso = (ag: any): number => {
+      const status = String(ag.status || "").toLowerCase();
       if (ATIVO_STATUSES.has(status)) return 0;
-      if (APTO_STATUSES.has(status)) return 1;
-      return 2;
+      if (PRONTO_ATENDIMENTO_STATUSES.has(status)) return 1;
+      if (CHECKED_IN_STATUSES.has(status) || status === "chegou") return 2;
+      if (status === "confirmado") return 3;
+      return 4;
     };
 
-    // Posição relativa do agendamento no tempo (apenas hoje)
-    // 0: turno atual e horário ainda não passou (ou passou há <15min) → "agora/próximo"
-    // 1: turno futuro
-    // 2: turno atual MAS horário já passado (>15min) → pendente atrasado
-    // 3: turno passado (manhã quando já é tarde, etc.)
-    const getTempoPos = (ag: any): number => {
-      if (!isToday) return 0;
-      const t = getTurno(ag);
-      const min = horaToMin(ag.hora);
-      const aindaNaoPassou = min + 15 >= nowMinutes;
-      if (t === turnoAtual) return aindaNaoPassou ? 0 : 2;
-      if (t > turnoAtual) return 1;
-      return 3;
-    };
-
-    // Bucket combinado estilo PEC. Quanto menor, mais alto na lista.
-    // Faixas:
-    //   0       → Em atendimento (sempre no topo)
-    //   10..13  → Aptos: turno atual agora/próximo > futuro > atual atrasado > turno passado
-    //   20..23  → Pendentes (não confirmados)
-    //   100..103→ Concluídos
-    //   999     → Cancelados/faltas
-    const getBucket = (ag: any): number => {
+    // Regra principal: primeiro agrupa por turno; só depois aplica risco/prioridades internas.
+    const getTurnoSortGroup = (ag: any): number => {
       const cat = getStatusCat(ag);
-      if (cat === 4) return 999;
-      if (cat === 0) return 0;
-      const tempo = getTempoPos(ag);
-      if (cat === 1) return 10 + tempo;
-      if (cat === 2) return 20 + tempo;
-      return 100 + tempo;
+      if (cat >= 4) return cat;
+      const turno = getTurno(ag);
+      if (!isToday) return turno + 1;
+      if (turno === turnoAtual) return 1;
+      if (turno > turnoAtual) return 2;
+      return 3;
     };
 
     // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
@@ -584,24 +569,26 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Bucket combinado (status + turno)
-        const bucketA = getBucket(a);
-        const bucketB = getBucket(b);
+        // 1. Grupo de turno/status: impede misturar manhã e tarde.
+        const groupA = getTurnoSortGroup(a);
+        const groupB = getTurnoSortGroup(b);
+        if (groupA !== groupB) return groupA - groupB;
 
-        // EXCEÇÃO CLÍNICA: risco grave (vermelho/laranja) PENDENTE de turno passado
-        // sobe para "Pendências urgentes" (5), logo após ativos (0) e antes do turno atual (10).
+        // 2. Dentro do mesmo bloco: classificação de risco (Manchester)
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
-        const isPendentePassadoUrgenteA = isToday && bucketA > 10 && bucketA < 100 && riscoA <= 2;
-        const isPendentePassadoUrgenteB = isToday && bucketB > 10 && bucketB < 100 && riscoB <= 2;
-        const effA = isPendentePassadoUrgenteA ? 5 : bucketA;
-        const effB = isPendentePassadoUrgenteB ? 5 : bucketB;
-        if (effA !== effB) return effA - effB;
-
-        // 2. Dentro do bucket: classificação de risco (Manchester)
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 3. Desempate: prioridade legal/idade
+        // 3. Paciente apto/presente antes do apenas confirmado/pendente, sempre dentro do bloco.
+        const prontidaoA = getProntidaoPeso(a);
+        const prontidaoB = getProntidaoPeso(b);
+        if (prontidaoA !== prontidaoB) return prontidaoA - prontidaoB;
+
+        const isCheckedA = CHECKED_IN_STATUSES.has(String(a.status || "").toLowerCase());
+        const isCheckedB = CHECKED_IN_STATUSES.has(String(b.status || "").toLowerCase());
+        if (isCheckedA !== isCheckedB) return isCheckedA ? -1 : 1;
+
+        // 4. Desempate: prioridade legal/idade
         const pacA = pacientes.find((p) => p.id === a.pacienteId);
         const pacB = pacientes.find((p) => p.id === b.pacienteId);
         const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
@@ -609,10 +596,9 @@ const Agenda: React.FC = () => {
         const idadePrioA = getPrioridadeIdade(pacA, ageA);
         const idadePrioB = getPrioridadeIdade(pacB, ageB);
         if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
+        if (ageA !== ageB) return ageB - ageA;
 
-        // 4. Desempate: ordem de chegada (para presentes) ou horário agendado
-        const isCheckedA = CHECKED_IN_STATUSES.has(a.status);
-        const isCheckedB = CHECKED_IN_STATUSES.has(b.status);
+        // 5. Desempate: ordem de chegada (para presentes) ou horário agendado
         const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
         const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
