@@ -476,11 +476,47 @@ const Agenda: React.FC = () => {
       return age;
     };
 
-    // Shift: morning (<12:00) vs afternoon (>=12:00)
-    const getShift = (hora: string): number => hora < "12:00" ? 0 : 1;
+    // Status que indicam atendimento finalizado/encerrado (vão para o final)
+    const CONCLUIDO_STATUSES = new Set([
+      "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
+    ]);
+    // Status descartados (cancelado/falta) — final absoluto
+    const DESCARTADO_STATUSES = new Set(["cancelado", "falta", "faltou", "excluido"]);
+    // Status ativos (em curso AGORA): paciente sendo chamado/atendido
+    const ATIVO_STATUSES = new Set([
+      "em_atendimento", "chamado", "aguardando_atendimento", "apto_atendimento", "aguardando_enfermagem",
+    ]);
+
+    // Converte "HH:MM" → minutos
+    const horaToMin = (h: string): number => {
+      if (!h || typeof h !== "string") return 0;
+      const [hh, mm] = h.split(":").map((n) => parseInt(n, 10));
+      return (hh || 0) * 60 + (mm || 0);
+    };
+
+    // Só aplica reordenação dinâmica por horário no DIA DE HOJE.
+    // Para datas passadas/futuras, mantém ordem cronológica simples.
+    const isToday = selectedDate === todayLocalStr();
+
+    // Bucket dinâmico baseado no horário atual + status
+    // 0: Ativos (em atendimento/chamado/aguardando agora)
+    // 1: Próximos / atuais (horário >= agora, ainda não concluídos)
+    // 2: Passados ainda não concluídos (horário < agora, status pendente)
+    // 3: Concluídos
+    // 4: Cancelados/Faltas
+    const getBucket = (ag: any): number => {
+      const status = String(ag.status || "").toLowerCase();
+      if (DESCARTADO_STATUSES.has(status)) return 4;
+      if (CONCLUIDO_STATUSES.has(status)) return 3;
+      if (ATIVO_STATUSES.has(status)) return 0;
+      if (!isToday) return 1; // datas não-hoje: tudo no bucket "normal"
+      const min = horaToMin(ag.hora);
+      // Tolerância de 15min: agendamentos que começaram há menos de 15min ainda contam como "atual"
+      if (min + 15 >= nowMinutes) return 1;
+      return 2;
+    };
 
     // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
-    // Menor = maior prioridade
     const getPrioridadeIdade = (pac: (typeof pacientes)[0] | undefined, age: number): number => {
       if (!pac) return 4;
       if ((pac as any).isGestante || (pac as any).isPne || (pac as any).isAutista) return 1;
@@ -502,28 +538,22 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Separar por turno (manhã antes de tarde)
-        const shiftA = getShift(a.hora);
-        const shiftB = getShift(b.hora);
-        if (shiftA !== shiftB) return shiftA - shiftB;
+        // 1. Bucket dinâmico (ativos > atuais/futuros > passados pendentes > concluídos > cancelados)
+        const bucketA = getBucket(a);
+        const bucketB = getBucket(b);
 
-        // 2. Concluídos vão para o fim do próprio turno
-        const concA = a.status === "concluido" ? 1 : 0;
-        const concB = b.status === "concluido" ? 1 : 0;
-        if (concA !== concB) return concA - concB;
-
-        // 3. Pacientes presentes (check-in feito) vêm antes dos não-checados,
-        //    para que a fila ativa fique no topo. Dentro de cada grupo aplicamos risco.
-        const checkedA = CHECKED_IN_STATUSES.has(a.status) ? 0 : 1;
-        const checkedB = CHECKED_IN_STATUSES.has(b.status) ? 0 : 1;
-        if (checkedA !== checkedB) return checkedA - checkedB;
-
-        // 4. CRITÉRIO PRINCIPAL: classificação de risco (Manchester)
+        // EXCEÇÃO CLÍNICA: risco grave (vermelho/laranja) em bucket "passado pendente" (2)
+        // sobe para o nível de "atual" (1) — prioridade clínica preserva regra de risco.
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
+        const effA = (bucketA === 2 && riscoA <= 2) ? 1 : bucketA;
+        const effB = (bucketB === 2 && riscoB <= 2) ? 1 : bucketB;
+        if (effA !== effB) return effA - effB;
+
+        // 2. Dentro do bucket: classificação de risco (Manchester)
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 5. Desempate: prioridade legal/idade
+        // 3. Desempate: prioridade legal/idade
         const pacA = pacientes.find((p) => p.id === a.pacienteId);
         const pacB = pacientes.find((p) => p.id === b.pacienteId);
         const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
@@ -532,9 +562,9 @@ const Agenda: React.FC = () => {
         const idadePrioB = getPrioridadeIdade(pacB, ageB);
         if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
 
-        // 6. Desempate: ordem de chegada (para checked-in) ou horário agendado
-        const isCheckedA = checkedA === 0;
-        const isCheckedB = checkedB === 0;
+        // 4. Desempate: ordem de chegada (para presentes) ou horário agendado
+        const isCheckedA = CHECKED_IN_STATUSES.has(a.status);
+        const isCheckedB = CHECKED_IN_STATUSES.has(b.status);
         const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
         const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
