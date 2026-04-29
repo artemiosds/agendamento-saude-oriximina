@@ -2603,6 +2603,7 @@ const Agenda: React.FC = () => {
                       </div>
                     </CardContent>
                   </Card>
+                  </React.Fragment>
                 );
               })
             )}
