@@ -514,9 +514,19 @@ const Agenda: React.FC = () => {
 
     const getTurno = (ag: any): 0 | 1 | 2 => getTurnoFromMinutes(horaToMin(ag.hora));
 
-    // O bloco da tarde só assume o topo no início real da tarde configurada.
-    const TARDE_INICIO_MIN = 13 * 60 + 30;
+    // O bloco da tarde só assume o topo no início real da tarde configurada para a lista atual.
     const NOITE_INICIO_MIN = 18 * 60;
+    const TARDE_INICIO_PADRAO_MIN = 13 * 60 + 30;
+    const tardeInicioConfigurado = agendamentos.reduce((menor, ag) => {
+      if (ag.data !== selectedDate) return menor;
+      if (filterUnit !== "all" && ag.unidadeId !== filterUnit) return menor;
+      if (filterProf !== "all" && ag.profissionalId !== filterProf) return menor;
+      if (isProfissional && user && ag.profissionalId !== user.id) return menor;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return menor;
+      const min = horaToMin(ag.hora);
+      return min >= 12 * 60 && min < NOITE_INICIO_MIN ? Math.min(menor, min) : menor;
+    }, Number.POSITIVE_INFINITY);
+    const TARDE_INICIO_MIN = Number.isFinite(tardeInicioConfigurado) ? tardeInicioConfigurado : TARDE_INICIO_PADRAO_MIN;
     const turnoAtual: 0 | 1 | 2 = nowMinutes >= NOITE_INICIO_MIN ? 2 : nowMinutes >= TARDE_INICIO_MIN ? 1 : 0;
 
     // Categoria final: concluídos e descartados descem para o final absoluto.
