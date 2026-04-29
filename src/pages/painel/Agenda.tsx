@@ -574,21 +574,28 @@ const Agenda: React.FC = () => {
         const groupB = getTurnoSortGroup(b);
         if (groupA !== groupB) return groupA - groupB;
 
-        // 2. Dentro do mesmo bloco: classificação de risco (Manchester)
+        // 2. Dentro do mesmo bloco: atendimento em curso sempre no topo.
+        const statusA = String(a.status || "").toLowerCase();
+        const statusB = String(b.status || "").toLowerCase();
+        const ativoA = ATIVO_STATUSES.has(statusA);
+        const ativoB = ATIVO_STATUSES.has(statusB);
+        if (ativoA !== ativoB) return ativoA ? -1 : 1;
+
+        // 3. Dentro do mesmo bloco: classificação de risco (Manchester)
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 3. Paciente apto/presente antes do apenas confirmado/pendente, sempre dentro do bloco.
+        // 4. Paciente apto/presente antes do apenas confirmado/pendente, sempre dentro do bloco.
         const prontidaoA = getProntidaoPeso(a);
         const prontidaoB = getProntidaoPeso(b);
         if (prontidaoA !== prontidaoB) return prontidaoA - prontidaoB;
 
-        const isCheckedA = CHECKED_IN_STATUSES.has(String(a.status || "").toLowerCase());
-        const isCheckedB = CHECKED_IN_STATUSES.has(String(b.status || "").toLowerCase());
+        const isCheckedA = CHECKED_IN_STATUSES.has(statusA);
+        const isCheckedB = CHECKED_IN_STATUSES.has(statusB);
         if (isCheckedA !== isCheckedB) return isCheckedA ? -1 : 1;
 
-        // 4. Desempate: prioridade legal/idade
+        // 5. Desempate: prioridade legal/idade
         const pacA = pacientes.find((p) => p.id === a.pacienteId);
         const pacB = pacientes.find((p) => p.id === b.pacienteId);
         const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
@@ -598,7 +605,7 @@ const Agenda: React.FC = () => {
         if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
         if (ageA !== ageB) return ageB - ageA;
 
-        // 5. Desempate: ordem de chegada (para presentes) ou horário agendado
+        // 6. Desempate: ordem de chegada (para presentes) ou horário agendado
         const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
         const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
         return ha.localeCompare(hb);
