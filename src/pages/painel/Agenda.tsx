@@ -558,6 +558,29 @@ const Agenda: React.FC = () => {
     [filtered],
   );
 
+  // Quando a tarde já entrou, marcar visualmente o início do bloco "Pendentes da manhã"
+  // (primeiro item da manhã que ainda não foi concluído).
+  const idxPendentesManha = React.useMemo(() => {
+    const isToday = selectedDate === todayLocalStr();
+    const TARDE_INICIO_PADRAO_MIN = 13 * 60 + 30;
+    const tardeInicio = agendamentos.reduce((menor, ag) => {
+      if (ag.data !== selectedDate) return menor;
+      const [hh, mm] = (ag.hora || "").split(":").map((n) => parseInt(n, 10));
+      const min = (hh || 0) * 60 + (mm || 0);
+      return min >= 12 * 60 ? Math.min(menor, min) : menor;
+    }, Number.POSITIVE_INFINITY);
+    const tardeInicioMin = Number.isFinite(tardeInicio) ? tardeInicio : TARDE_INICIO_PADRAO_MIN;
+    if (!isToday || nowMinutes < tardeInicioMin) return -1;
+    const CONCLUIDO = new Set(["concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado"]);
+    return filtered.findIndex((ag) => {
+      const [hh, mm] = (ag.hora || "").split(":").map((n) => parseInt(n, 10));
+      const min = (hh || 0) * 60 + (mm || 0);
+      const isManha = min < 12 * 60;
+      const concluido = CONCLUIDO.has(String(ag.status || "").toLowerCase());
+      return isManha && !concluido;
+    });
+  }, [filtered, agendamentos, selectedDate, nowMinutes]);
+
   React.useEffect(() => {
     const pacienteIds = filteredPacienteKey.split(",").filter(Boolean);
     if (pacienteIds.length === 0) {
