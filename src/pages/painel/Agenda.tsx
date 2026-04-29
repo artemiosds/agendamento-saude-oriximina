@@ -514,6 +514,11 @@ const Agenda: React.FC = () => {
 
     const getTurno = (ag: any): 0 | 1 | 2 => getTurnoFromMinutes(horaToMin(ag.hora));
 
+    // O bloco da tarde só assume o topo no início real da tarde configurada.
+    const TARDE_INICIO_MIN = 13 * 60 + 30;
+    const NOITE_INICIO_MIN = 18 * 60;
+    const turnoAtual: 0 | 1 | 2 = nowMinutes >= NOITE_INICIO_MIN ? 2 : nowMinutes >= TARDE_INICIO_MIN ? 1 : 0;
+
     // Categoria final: concluídos e descartados descem para o final absoluto.
     const getStatusCat = (ag: any): number => {
       const status = String(ag.status || "").toLowerCase();
@@ -529,6 +534,17 @@ const Agenda: React.FC = () => {
       if (CHECKED_IN_STATUSES.has(status) || status === "chegou") return 2;
       if (status === "confirmado") return 3;
       return 4;
+    };
+
+    // Regra principal: primeiro agrupa por turno; só depois aplica risco/prioridades internas.
+    const getTurnoSortGroup = (ag: any): number => {
+      const cat = getStatusCat(ag);
+      if (cat >= 4) return cat;
+      const turno = getTurno(ag);
+      if (!isToday) return turno + 1;
+      if (turno === turnoAtual) return 1;
+      if (turno > turnoAtual) return 2;
+      return 3;
     };
 
     // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
