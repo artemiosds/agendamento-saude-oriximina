@@ -498,22 +498,57 @@ const Agenda: React.FC = () => {
     // Para datas passadas/futuras, mantém ordem cronológica simples.
     const isToday = selectedDate === todayLocalStr();
 
-    // Bucket dinâmico baseado no horário atual + status
-    // 0: Ativos (em atendimento/chamado/aguardando agora)
-    // 1: Próximos / atuais (horário >= agora, ainda não concluídos)
-    // 2: Passados ainda não concluídos (horário < agora, status pendente)
-    // 3: Concluídos
-    // 4: Cancelados/Faltas
-    const getBucket = (ag: any): number => {
-      const status = String(ag.status || "").toLowerCase();
-      if (DESCARTADO_STATUSES.has(status)) return 4;
-      if (CONCLUIDO_STATUSES.has(status)) return 3;
-      if (ATIVO_STATUSES.has(status)) return 0;
-      if (!isToday) return 1; // datas não-hoje: tudo no bucket "normal"
+    // ── TURNOS ──
+    // Manhã: 00:00–11:59 | Tarde: 12:00–17:59 | Noite: 18:00–23:59
+    // Cada agendamento pertence a um turno fixo (pelo seu horário agendado).
+    const getTurno = (ag: any): 0 | 1 | 2 => {
       const min = horaToMin(ag.hora);
-      // Tolerância de 15min: agendamentos que começaram há menos de 15min ainda contam como "atual"
-      if (min + 15 >= nowMinutes) return 1;
-      return 2;
+      if (min < 12 * 60) return 0; // manhã
+      if (min < 18 * 60) return 1; // tarde
+      return 2; // noite
+    };
+
+    // Turno atual baseado em nowMinutes (define qual bloco sobe primeiro hoje)
+    const turnoAtual: 0 | 1 | 2 =
+      nowMinutes < 12 * 60 ? 0 : nowMinutes < 18 * 60 ? 1 : 2;
+
+    // Status buckets (independentes de turno)
+    // 0: Ativos (em atendimento / chamado)
+    // 1: Pendentes (aguardando atendimento)
+    // 2: Concluídos
+    // 3: Cancelados/Faltas (sempre por último)
+    const getStatusBucket = (ag: any): number => {
+      const status = String(ag.status || "").toLowerCase();
+      if (DESCARTADO_STATUSES.has(status)) return 3;
+      if (CONCLUIDO_STATUSES.has(status)) return 2;
+      if (ATIVO_STATUSES.has(status)) return 0;
+      return 1;
+    };
+
+    // Ordem do TURNO no dia: turno atual primeiro, depois futuros, depois passados.
+    // Apenas no dia de hoje. Em outros dias, ordem cronológica natural (manhã→tarde→noite).
+    const getTurnoOrder = (ag: any): number => {
+      const t = getTurno(ag);
+      if (!isToday) return t;
+      if (t === turnoAtual) return 0;
+      // Turno futuro vem antes de turno passado
+      if (t > turnoAtual) return 1 + (t - turnoAtual); // 1 ou 2
+      // Turno passado vai para o final
+      return 10 + (turnoAtual - t); // 11 ou 12
+    };
+
+    // Bucket combinado: prioriza status global crítico (ativos sempre no topo do seu turno),
+    // depois ordena por turno, depois pendentes/concluídos dentro do turno.
+    const getBucket = (ag: any): number => {
+      const statusB = getStatusBucket(ag);
+      // Cancelados/faltas: sempre no fim absoluto
+      if (statusB === 3) return 999;
+      // Ativos: sempre no topo absoluto, independente de turno
+      if (statusB === 0) return 0;
+      const turnoOrd = getTurnoOrder(ag);
+      // Pendentes: 10..29 ; Concluídos: 100..299 (sempre abaixo dos pendentes do mesmo turno)
+      if (statusB === 1) return 10 + turnoOrd;
+      return 100 + turnoOrd; // concluídos
     };
 
     // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
