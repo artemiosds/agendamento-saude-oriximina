@@ -2195,7 +2195,7 @@ const Agenda: React.FC = () => {
                 </CardContent>
               </Card>
             ) : (
-              filtered.map((ag) => {
+              filtered.map((ag, idx) => {
                 const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
