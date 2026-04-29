@@ -573,16 +573,18 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Bucket dinâmico (ativos > atuais/futuros > passados pendentes > concluídos > cancelados)
+        // 1. Bucket combinado (status + turno)
         const bucketA = getBucket(a);
         const bucketB = getBucket(b);
 
-        // EXCEÇÃO CLÍNICA: risco grave (vermelho/laranja) em bucket "passado pendente" (2)
-        // sobe para o nível de "atual" (1) — prioridade clínica preserva regra de risco.
+        // EXCEÇÃO CLÍNICA: risco grave (vermelho/laranja) PENDENTE de turno passado
+        // sobe para "Pendências urgentes" (5), logo após ativos (0) e antes do turno atual (10).
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
-        const effA = (bucketA === 2 && riscoA <= 2) ? 1 : bucketA;
-        const effB = (bucketB === 2 && riscoB <= 2) ? 1 : bucketB;
+        const isPendentePassadoUrgenteA = isToday && bucketA > 10 && bucketA < 100 && riscoA <= 2;
+        const isPendentePassadoUrgenteB = isToday && bucketB > 10 && bucketB < 100 && riscoB <= 2;
+        const effA = isPendentePassadoUrgenteA ? 5 : bucketA;
+        const effB = isPendentePassadoUrgenteB ? 5 : bucketB;
         if (effA !== effB) return effA - effB;
 
         // 2. Dentro do bucket: classificação de risco (Manchester)
