@@ -523,23 +523,15 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Bloco de turno (manhã/tarde) — invertido quando entra a tarde.
+        // ÚNICA REGRA: trocar a posição dos blocos manhã/tarde quando entrar a tarde.
+        // A ordem INTERNA de cada bloco permanece exatamente como está (por hora agendada),
+        // sem reordenar por status, classificação de risco, idade ou chegada.
         const groupA = getTurnoSortGroup(a);
         const groupB = getTurnoSortGroup(b);
         if (groupA !== groupB) return groupA - groupB;
 
-        // 2. Concluído desce para o final do próprio grupo.
-        const concluidoA = isConcluido(a) ? 1 : 0;
-        const concluidoB = isConcluido(b) ? 1 : 0;
-        if (concluidoA !== concluidoB) return concluidoA - concluidoB;
-
-        // 3. Classificação de risco Manchester (vermelho → azul → sem).
-        const riscoA = getPesoClassificacaoRisco(a);
-        const riscoB = getPesoClassificacaoRisco(b);
-        if (riscoA !== riscoB) return riscoA - riscoB;
-
-        // 4. Hora de chegada ascendente (fallback: hora agendada).
-        return getChegada(a).localeCompare(getChegada(b));
+        // Mantém ordem interna estável pela hora agendada (comportamento original do bloco).
+        return horaToMin(a.hora) - horaToMin(b.hora);
       });
 
     if (!debouncedSearch) return base;
