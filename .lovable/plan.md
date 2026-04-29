@@ -1,55 +1,55 @@
-## Sub-fase 1B — Tela de Modelos + Editor com Variáveis + Aplicação do novo cabeçalho
+## Objetivo
 
-Continuação direta da Sub-fase 1A (já concluída: cabeçalho 3 logos + carimbo + preview A4 + impressão fiel). Agora vou reformar a tela de Modelos de Documentos, criar um editor com inserção de variáveis dinâmicas, e aplicar o novo cabeçalho institucional nos modais de geração de documento e histórico completo.
+Refinar a ordenação visual da Agenda do Profissional em `src/pages/painel/Agenda.tsx` para seguir EXATAMENTE as regras pedidas, sem mexer em banco de dados, agendamento, cancelamento ou confirmação.
 
-### O que será entregue
+## Regras de ordenação (final)
 
-**1. Tela `ModelosDocumentos.tsx` repaginada (cards + filtros + busca + responsivo)**
-- Layout em cards (substitui lista atual), com badges visuais de tipo (Atestado, Receita, Declaração, Encaminhamento, Relatório), escopo (Global/Unidade/Pessoal) e status (Ativo/Inativo).
-- Barra de filtros: tipo, escopo, perfil permitido, busca por nome.
-- Mobile-first: cards empilham em <640px, grid 2 colunas em md, 3 em lg.
-- Ações por card: Editar, Duplicar, Visualizar (preview A4), Ativar/Desativar, Excluir (com confirmação).
-- Vazio elegante (EmptyState) e skeletons durante carregamento.
+Dois blocos de turno: **Manhã** (< 12:00) e **Tarde** (≥ 12:00, considerando o início real configurado no dia, com fallback 13:30; noite entra junto da tarde).
 
-**2. Editor de modelo profissional (`EditorModeloDocumento.tsx` — novo)**
-- Reaproveita `RichTextEditor` existente.
-- **Botão "Inserir variável"** com dropdown agrupado:
-  - Paciente: `{{paciente.nome}}`, `{{paciente.cpf}}`, `{{paciente.cns}}`, `{{paciente.data_nascimento}}`, `{{paciente.idade}}`, `{{paciente.endereco}}`, `{{paciente.nome_mae}}`
-  - Profissional: `{{profissional.nome}}`, `{{profissional.conselho}}` (ex: CRM-PA 12345), `{{profissional.cbo}}`, `{{profissional.cns}}`, `{{profissional.especialidade}}`
-  - Unidade/Clínica: `{{clinica.nome}}`, `{{clinica.cnes}}`, `{{clinica.endereco}}`, `{{unidade.nome}}`
-  - Atendimento: `{{atendimento.data}}`, `{{atendimento.cid}}`, `{{atendimento.procedimento}}`
-  - Sistema: `{{data.hoje}}`, `{{data.extenso}}`, `{{cidade_uf}}`
-- Toggles: incluir cabeçalho institucional, incluir rodapé, incluir carimbo final, incluir 3 logos.
-- Escopo do modelo: Global / Unidade / Pessoal (respeita RLS existente em `document_templates`).
-- Painel lateral de **Preview A4 ao vivo** usando o mesmo motor de `printLayout.ts`, com dados de exemplo (paciente fictício "JOÃO DA SILVA" etc.).
-- Salva versão anterior em `document_templates.versoes` (até 5 — já é o padrão).
+Ordem dos blocos:
+- **Antes do início da tarde:** Manhã → Tarde
+- **A partir do início da tarde:** Tarde → Manhã (manhã desce inteira para baixo, como "pendentes da manhã")
 
-**3. Aplicação do novo cabeçalho/rodapé**
-- `GerarDocumentoModal.tsx`: substitui o header atual pelo bloco oficial (3 logos + bloco institucional + rodapé + carimbo do profissional logado). Usa `documento_config_<unidadeId>` (fallback global) + `funcionarios.custom_data.carimbo`.
-- `HistoricoCompletoModal.tsx`: envolve o conteúdo de impressão com o mesmo cabeçalho oficial e carimbo final do profissional que está imprimindo, sem alterar o conteúdo da timeline.
-- Substituição da função de render é feita via helper já criado em `printLayout.ts` na Sub-fase 1A.
+Dentro de cada bloco, ordenação ÚNICA e nesta sequência exata:
+1. **Não-concluído** vem antes de **Concluído** (concluído sempre desce ao final do próprio grupo).
+2. **Classificação de risco Manchester**: vermelho → laranja → amarelo → verde → azul → sem classificação.
+3. **Hora de chegada** (ascendente): usa `arrivalMap[id] || horaChegada`; se não houver chegada registrada, usa a hora agendada como fallback.
 
-### Detalhes técnicos
+Status `confirmado`, `cancelado`, `apto_atendimento`, `em_atendimento`, `chamado` etc. NÃO afetam a ordem — só `concluido/finalizado/atendido/...` desce. Cancelado/falta seguem a mesma regra (não descem por status, apenas pela hora de chegada/agendada dentro do grupo, conforme pedido: "apenas concluído desce para o final do grupo").
 
-- **Sem novas tabelas**: tudo persiste em `document_templates` (já existente). Variáveis ficam embutidas no campo `conteudo` (texto com `{{...}}`); toggles e escopo em campos existentes (`tipo_modelo`, `unidade_id`, `perfis_permitidos`, `blocos_clinicos` JSON).
-- **Resolução de variáveis**: novo helper `src/lib/templateVariables.ts` com função `resolveVariables(template, context)` que substitui `{{...}}` por valores reais no momento de gerar o documento. Não toca no banco.
-- **Preview**: componente `A4Preview` reutilizado da Sub-fase 1A, recebe HTML resolvido com dados mock.
-- **Permissões**: respeita RLS atual de `document_templates` (Master gerencia globais/unidade; profissional gerencia os próprios). UI esconde ações conforme `useAuth` + `usePermissions`.
-- **Mobile**: `backdrop-filter: blur` desabilitado em <768px (regra de memória já aplicada no projeto).
-- **Sem mock data, sem auto-gerar registros, sem novos buckets** — usa `document-logos` e `carimbos` já existentes.
+## Mudanças no código
 
-### Arquivos afetados
+Arquivo único: `src/pages/painel/Agenda.tsx`, dentro do `useMemo` `filtered` (linhas ~437–634). Nenhuma outra parte do arquivo é tocada.
 
-- editar `src/components/ModelosDocumentos.tsx` (refator visual completo, mantém lógica de save/load)
-- criar `src/components/EditorModeloDocumento.tsx`
-- criar `src/lib/templateVariables.ts`
-- editar `src/components/GerarDocumentoModal.tsx` (aplicar header/footer/carimbo oficiais + resolução de variáveis)
-- editar `src/components/HistoricoCompletoModal.tsx` (envolver impressão com header/carimbo oficiais)
+1. **Simplificar `getTurnoSortGroup`** para retornar apenas 2 buckets de turno (manhã/tarde), respeitando o turno atual quando `isToday`:
+   - Calcula `turno` do agendamento: `min < 12*60 ? 'manha' : 'tarde'`.
+   - Se hora atual ≥ `TARDE_INICIO_MIN` e for hoje → tarde = 0, manhã = 1.
+   - Caso contrário → manhã = 0, tarde = 1.
+   - Mantém `TARDE_INICIO_MIN` dinâmico já existente (menor horário ≥12:00 do dia, fallback 13:30).
 
-### Fora do escopo desta fase
+2. **Substituir o comparador `.sort(...)`** por exatamente três critérios, na ordem:
+   ```
+   a) bloco de turno (manhã/tarde conforme regra acima)
+   b) concluído desce: CONCLUIDO_STATUSES → 1, demais → 0
+   c) peso Manchester (1..6)
+   d) hora de chegada asc (arrivalMap[id] || horaChegada || hora agendada)
+   ```
+   Remover os critérios atuais de "ativo no topo", "prontidão", "checked-in", "prioridade legal/idade" do comparador (eles violam a especificação que pede só risco + chegada). Risco vermelho continuará no topo automaticamente; gestante/PNE/autista deixam de subir por idade — conforme pedido explícito do usuário ("apenas classificação de risco e hora de chegada"). Manter `getPesoClassificacaoRisco`, remover funções não usadas (`getProntidaoPeso`, `getPrioridadeIdade`, `calcAge`) para manter o arquivo limpo.
 
-- Editor visual WYSIWYG novo (continuamos com `RichTextEditor` atual).
-- Assinatura digital ICP-Brasil (mantemos hash SHA-256 atual).
-- Novas tabelas ou campos de banco.
+3. **Label "Pendentes da manhã"** na renderização (linha ~2255):
+   - Antes do `.map`, derivar `idxPrimeiroPendenteManha` quando `isToday && nowMinutes >= TARDE_INICIO_MIN` — o primeiro item cujo turno é manhã e que não está concluído.
+   - No render, ao alcançar esse índice, inserir um separador visual (div com label "Pendentes da manhã") imediatamente acima do card. Pequeno componente inline, sem novos arquivos.
 
-Posso seguir com essa entrega?
+4. **Realtime** — já está ativo via assinaturas existentes (`agendamentos`, `fila_espera`, etc.) que disparam refetch + re-render. O `useMemo` depende de `agendamentos`, `arrivalMap`, `triageMap`, `nowMinutes` (atualizado a cada 60s) — a transição manhã→tarde e o "concluído desce" acontecem automaticamente. Nada a alterar aqui.
+
+## O que NÃO muda
+
+- Schema do banco, RLS, Edge Functions.
+- Filtros por unidade/profissional, busca, isolamento `useUnidadeFilter`/`admin.sms`.
+- Cards, ações (iniciar atendimento, cancelar, confirmar chegada, etc.).
+- Lógica de triagem, fila, prontuário, tratamento.
+- Outros `useMemo` da página.
+
+## Arquivos editados
+
+- `src/pages/painel/Agenda.tsx` — apenas dentro do `useMemo` `filtered` e um separador visual no `.map` da lista.
