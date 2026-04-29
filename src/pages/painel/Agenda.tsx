@@ -546,7 +546,8 @@ const Agenda: React.FC = () => {
       return 4;
     };
 
-    // Regra principal: primeiro agrupa por turno; só depois aplica risco/prioridades internas.
+    // Regra principal: primeiro agrupa por bloco de turno/status; só depois aplica risco/prioridades internas.
+    // Hoje: turno atual → turno futuro → turno passado → concluídos → cancelados/faltosos.
     const getTurnoSortGroup = (ag: any): number => {
       const cat = getStatusCat(ag);
       if (cat >= 4) return cat;
