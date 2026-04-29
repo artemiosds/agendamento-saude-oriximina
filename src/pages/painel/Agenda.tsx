@@ -486,10 +486,11 @@ const Agenda: React.FC = () => {
     const ATIVO_STATUSES = new Set([
       "em_atendimento", "chamado",
     ]);
-    // Status "apto para atendimento" (chegou/triado/aguardando profissional)
-    const APTO_STATUSES = new Set([
-      "aguardando_atendimento", "apto_atendimento", "aguardando_enfermagem",
-      "confirmado", "chegou", "triagem_concluida", "aguardando_profissional",
+    // Status realmente aptos/presentes para ordenar dentro do bloco do turno.
+    // "confirmado" é apenas confirmação do agendamento; não deve segurar manhã no topo.
+    const PRONTO_ATENDIMENTO_STATUSES = new Set([
+      "em_atendimento", "chamado", "apto_atendimento", "aguardando_atendimento",
+      "triagem_concluida", "aguardando_profissional",
     ]);
 
     // Converte "HH:MM" → minutos
@@ -504,62 +505,30 @@ const Agenda: React.FC = () => {
     const isToday = selectedDate === todayLocalStr();
 
     // ── TURNOS ──
-    // Manhã: 00:00–11:59 | Tarde: 12:00–17:59 | Noite: 18:00–23:59
-    const getTurno = (ag: any): 0 | 1 | 2 => {
-      const min = horaToMin(ag.hora);
+    // Agrupa por bloco antes de qualquer prioridade interna: manhã, tarde, noite.
+    const getTurnoFromMinutes = (min: number): 0 | 1 | 2 => {
       if (min < 12 * 60) return 0;
       if (min < 18 * 60) return 1;
       return 2;
     };
 
-    const turnoAtual: 0 | 1 | 2 =
-      nowMinutes < 12 * 60 ? 0 : nowMinutes < 18 * 60 ? 1 : 2;
+    const getTurno = (ag: any): 0 | 1 | 2 => getTurnoFromMinutes(horaToMin(ag.hora));
 
-    // Categoria de status (estilo PEC)
-    // 0: Em atendimento/chamado (sempre topo)
-    // 1: Apto para atendimento (chegou, triado, confirmado)
-    // 2: Pendente (agendado, sem chegada confirmada ainda)
-    // 3: Concluído/finalizado (desce)
-    // 4: Cancelado/falta/excluído (fim absoluto)
+    // Categoria final: concluídos e descartados descem para o final absoluto.
     const getStatusCat = (ag: any): number => {
       const status = String(ag.status || "").toLowerCase();
-      if (DESCARTADO_STATUSES.has(status)) return 4;
-      if (CONCLUIDO_STATUSES.has(status)) return 3;
+      if (DESCARTADO_STATUSES.has(status)) return 5;
+      if (CONCLUIDO_STATUSES.has(status)) return 4;
+      return 1;
+    };
+
+    const getProntidaoPeso = (ag: any): number => {
+      const status = String(ag.status || "").toLowerCase();
       if (ATIVO_STATUSES.has(status)) return 0;
-      if (APTO_STATUSES.has(status)) return 1;
-      return 2;
-    };
-
-    // Posição relativa do agendamento no tempo (apenas hoje)
-    // 0: turno atual e horário ainda não passou (ou passou há <15min) → "agora/próximo"
-    // 1: turno futuro
-    // 2: turno atual MAS horário já passado (>15min) → pendente atrasado
-    // 3: turno passado (manhã quando já é tarde, etc.)
-    const getTempoPos = (ag: any): number => {
-      if (!isToday) return 0;
-      const t = getTurno(ag);
-      const min = horaToMin(ag.hora);
-      const aindaNaoPassou = min + 15 >= nowMinutes;
-      if (t === turnoAtual) return aindaNaoPassou ? 0 : 2;
-      if (t > turnoAtual) return 1;
-      return 3;
-    };
-
-    // Bucket combinado estilo PEC. Quanto menor, mais alto na lista.
-    // Faixas:
-    //   0       → Em atendimento (sempre no topo)
-    //   10..13  → Aptos: turno atual agora/próximo > futuro > atual atrasado > turno passado
-    //   20..23  → Pendentes (não confirmados)
-    //   100..103→ Concluídos
-    //   999     → Cancelados/faltas
-    const getBucket = (ag: any): number => {
-      const cat = getStatusCat(ag);
-      if (cat === 4) return 999;
-      if (cat === 0) return 0;
-      const tempo = getTempoPos(ag);
-      if (cat === 1) return 10 + tempo;
-      if (cat === 2) return 20 + tempo;
-      return 100 + tempo;
+      if (PRONTO_ATENDIMENTO_STATUSES.has(status)) return 1;
+      if (CHECKED_IN_STATUSES.has(status) || status === "chegou") return 2;
+      if (status === "confirmado") return 3;
+      return 4;
     };
 
     // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
