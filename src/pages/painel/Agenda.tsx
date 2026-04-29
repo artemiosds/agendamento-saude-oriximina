@@ -435,12 +435,6 @@ const Agenda: React.FC = () => {
   }, [profissionais, filterUnit]);
 
   const filtered = useMemo(() => {
-    // Statuses that indicate the patient is physically present
-    const CHECKED_IN_STATUSES = new Set([
-      "confirmado_chegada", "aguardando_triagem", "aguardando_atendimento",
-      "em_atendimento", "aguardando_enfermagem", "apto_atendimento",
-    ]);
-
     // Peso da classificação de risco (Manchester) — menor = mais urgente
     // 1=Vermelho, 2=Laranja, 3=Amarelo, 4=Verde, 5=Azul, 6=Sem classificação
     const getPesoClassificacaoRisco = (ag: any): number => {
@@ -464,33 +458,9 @@ const Agenda: React.FC = () => {
       return 6;
     };
 
-    const calcAge = (dob: string): number => {
-      if (!dob) return 0;
-      const parts = dob.includes("/") ? dob.split("/").reverse().join("-") : dob;
-      const birth = new Date(parts + "T12:00:00");
-      if (isNaN(birth.getTime())) return 0;
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-      return age;
-    };
-
-    // Status que indicam atendimento finalizado/encerrado (vão para o final)
+    // Status que indicam atendimento finalizado/encerrado (vão para o final do grupo)
     const CONCLUIDO_STATUSES = new Set([
       "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
-    ]);
-    // Status descartados (cancelado/falta) — final absoluto
-    const DESCARTADO_STATUSES = new Set(["cancelado", "falta", "faltou", "excluido"]);
-    // Status ativos (em curso AGORA): paciente sendo chamado/atendido
-    const ATIVO_STATUSES = new Set([
-      "em_atendimento", "chamado",
-    ]);
-    // Status realmente aptos/presentes para ordenar dentro do bloco do turno.
-    // "confirmado" é apenas confirmação do agendamento; não deve segurar manhã no topo.
-    const PRONTO_ATENDIMENTO_STATUSES = new Set([
-      "em_atendimento", "chamado", "apto_atendimento", "aguardando_atendimento",
-      "triagem_concluida", "aguardando_profissional",
     ]);
 
     // Converte "HH:MM" → minutos
@@ -501,21 +471,14 @@ const Agenda: React.FC = () => {
     };
 
     // Só aplica reordenação dinâmica por horário no DIA DE HOJE.
-    // Para datas passadas/futuras, mantém ordem cronológica simples.
     const isToday = selectedDate === todayLocalStr();
 
     // ── TURNOS ──
-    // Agrupa por bloco antes de qualquer prioridade interna: manhã, tarde, noite.
-    const getTurnoFromMinutes = (min: number): 0 | 1 | 2 => {
-      if (min < 12 * 60) return 0;
-      if (min < 18 * 60) return 1;
-      return 2;
-    };
+    // Apenas dois blocos: manhã (< 12:00) e tarde (≥ 12:00). Noite cai junto da tarde.
+    const getTurno = (ag: any): 0 | 1 => (horaToMin(ag.hora) < 12 * 60 ? 0 : 1);
 
-    const getTurno = (ag: any): 0 | 1 | 2 => getTurnoFromMinutes(horaToMin(ag.hora));
-
-    // O bloco da tarde só assume o topo no início real da tarde configurada para a lista atual.
-    const NOITE_INICIO_MIN = 18 * 60;
+    // O bloco da tarde só assume o topo quando entrar de fato o turno da tarde
+    // (usa o menor horário ≥ 12:00 configurado no dia, ou 13:30 como fallback).
     const TARDE_INICIO_PADRAO_MIN = 13 * 60 + 30;
     const tardeInicioConfigurado = agendamentos.reduce((menor, ag) => {
       if (ag.data !== selectedDate) return menor;
@@ -524,47 +487,27 @@ const Agenda: React.FC = () => {
       if (isProfissional && user && ag.profissionalId !== user.id) return menor;
       if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return menor;
       const min = horaToMin(ag.hora);
-      return min >= 12 * 60 && min < NOITE_INICIO_MIN ? Math.min(menor, min) : menor;
+      return min >= 12 * 60 ? Math.min(menor, min) : menor;
     }, Number.POSITIVE_INFINITY);
     const TARDE_INICIO_MIN = Number.isFinite(tardeInicioConfigurado) ? tardeInicioConfigurado : TARDE_INICIO_PADRAO_MIN;
-    const turnoAtual: 0 | 1 | 2 = nowMinutes >= NOITE_INICIO_MIN ? 2 : nowMinutes >= TARDE_INICIO_MIN ? 1 : 0;
 
-    // Categoria final: concluídos e descartados descem para o final absoluto.
-    const getStatusCat = (ag: any): number => {
-      const status = String(ag.status || "").toLowerCase();
-      if (DESCARTADO_STATUSES.has(status)) return 5;
-      if (CONCLUIDO_STATUSES.has(status)) return 4;
-      return 1;
-    };
-
-    const getProntidaoPeso = (ag: any): number => {
-      const status = String(ag.status || "").toLowerCase();
-      if (ATIVO_STATUSES.has(status)) return 0;
-      if (PRONTO_ATENDIMENTO_STATUSES.has(status)) return 1;
-      if (CHECKED_IN_STATUSES.has(status) || status === "chegou") return 2;
-      if (status === "confirmado") return 3;
-      return 4;
-    };
-
-    // Regra principal: primeiro agrupa por bloco de turno/status; só depois aplica risco/prioridades internas.
-    // Hoje: turno atual → turno futuro → turno passado → concluídos → cancelados/faltosos.
+    // Quando hoje e já é a tarde, inverte: tarde sobe (0), manhã desce (1).
+    const tardeAtiva = isToday && nowMinutes >= TARDE_INICIO_MIN;
     const getTurnoSortGroup = (ag: any): number => {
-      const cat = getStatusCat(ag);
-      if (cat >= 4) return cat;
-      const turno = getTurno(ag);
-      if (!isToday) return turno + 1;
-      if (turno === turnoAtual) return 1;
-      if (turno > turnoAtual) return 2;
-      return 3;
+      const t = getTurno(ag);
+      if (!isToday) return t;
+      if (tardeAtiva) return t === 1 ? 0 : 1;
+      return t;
     };
 
-    // Prioridade legal/idade existente (gestante/PNE/autista > idoso > criança)
-    const getPrioridadeIdade = (pac: (typeof pacientes)[0] | undefined, age: number): number => {
-      if (!pac) return 4;
-      if ((pac as any).isGestante || (pac as any).isPne || (pac as any).isAutista) return 1;
-      if (age >= 60) return 2;
-      if (age > 0 && age <= 12) return 3;
-      return 4;
+    const isConcluido = (ag: any): boolean => {
+      const status = String(ag.status || "").toLowerCase();
+      return CONCLUIDO_STATUSES.has(status);
+    };
+
+    // Hora de chegada com fallback para hora agendada
+    const getChegada = (ag: any): string => {
+      return arrivalMap[ag.id] || ag.horaChegada || ag.hora || "";
     };
 
     const base = agendamentos
@@ -580,46 +523,23 @@ const Agenda: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        // 1. Grupo de turno/status: impede misturar manhã e tarde.
+        // 1. Bloco de turno (manhã/tarde) — invertido quando entra a tarde.
         const groupA = getTurnoSortGroup(a);
         const groupB = getTurnoSortGroup(b);
         if (groupA !== groupB) return groupA - groupB;
 
-        // 2. Dentro do mesmo bloco: atendimento em curso sempre no topo.
-        const statusA = String(a.status || "").toLowerCase();
-        const statusB = String(b.status || "").toLowerCase();
-        const ativoA = ATIVO_STATUSES.has(statusA);
-        const ativoB = ATIVO_STATUSES.has(statusB);
-        if (ativoA !== ativoB) return ativoA ? -1 : 1;
+        // 2. Concluído desce para o final do próprio grupo.
+        const concluidoA = isConcluido(a) ? 1 : 0;
+        const concluidoB = isConcluido(b) ? 1 : 0;
+        if (concluidoA !== concluidoB) return concluidoA - concluidoB;
 
-        // 3. Dentro do mesmo bloco: classificação de risco (Manchester)
+        // 3. Classificação de risco Manchester (vermelho → azul → sem).
         const riscoA = getPesoClassificacaoRisco(a);
         const riscoB = getPesoClassificacaoRisco(b);
         if (riscoA !== riscoB) return riscoA - riscoB;
 
-        // 4. Paciente apto/presente antes do apenas confirmado/pendente, sempre dentro do bloco.
-        const prontidaoA = getProntidaoPeso(a);
-        const prontidaoB = getProntidaoPeso(b);
-        if (prontidaoA !== prontidaoB) return prontidaoA - prontidaoB;
-
-        const isCheckedA = CHECKED_IN_STATUSES.has(statusA);
-        const isCheckedB = CHECKED_IN_STATUSES.has(statusB);
-        if (isCheckedA !== isCheckedB) return isCheckedA ? -1 : 1;
-
-        // 5. Desempate: prioridade legal/idade
-        const pacA = pacientes.find((p) => p.id === a.pacienteId);
-        const pacB = pacientes.find((p) => p.id === b.pacienteId);
-        const ageA = pacA ? calcAge(pacA.dataNascimento) : 0;
-        const ageB = pacB ? calcAge(pacB.dataNascimento) : 0;
-        const idadePrioA = getPrioridadeIdade(pacA, ageA);
-        const idadePrioB = getPrioridadeIdade(pacB, ageB);
-        if (idadePrioA !== idadePrioB) return idadePrioA - idadePrioB;
-        if (ageA !== ageB) return ageB - ageA;
-
-        // 6. Desempate: ordem de chegada (para presentes) ou horário agendado
-        const ha = isCheckedA ? (arrivalMap[a.id] || a.horaChegada || a.hora) : a.hora;
-        const hb = isCheckedB ? (arrivalMap[b.id] || b.horaChegada || b.hora) : b.hora;
-        return ha.localeCompare(hb);
+        // 4. Hora de chegada ascendente (fallback: hora agendada).
+        return getChegada(a).localeCompare(getChegada(b));
       });
 
     if (!debouncedSearch) return base;
