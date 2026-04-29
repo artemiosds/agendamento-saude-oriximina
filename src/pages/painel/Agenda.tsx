@@ -2225,15 +2225,23 @@ const Agenda: React.FC = () => {
                 };
 
                 return (
-                  <Card
-                    key={ag.id}
-                    className={cn(
-                      "shadow-card border-0 border-l-4",
-                      typeColorBar[ag.tipo] || "border-l-muted",
-                      isEmAtendimento && "ring-2 ring-primary/50",
-                      ehPendenteOnline && "ring-1 ring-warning/40",
+                  <React.Fragment key={ag.id}>
+                    {idx === idxPendentesManha && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 mt-2 mb-1 rounded-md bg-amber-50 dark:bg-amber-950/30 border-l-4 border-amber-500">
+                        <Clock className="w-3.5 h-3.5 text-amber-700 dark:text-amber-300" />
+                        <span className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                          Pendentes da manhã
+                        </span>
+                      </div>
                     )}
-                  >
+                    <Card
+                      className={cn(
+                        "shadow-card border-0 border-l-4",
+                        typeColorBar[ag.tipo] || "border-l-muted",
+                        isEmAtendimento && "ring-2 ring-primary/50",
+                        ehPendenteOnline && "ring-1 ring-warning/40",
+                      )}
+                    >
                     <CardContent className="p-3 sm:p-4 space-y-2">
                       <div className="flex items-start gap-3">
                         <span className="text-lg font-mono font-bold text-primary w-14 shrink-0">{ag.hora}</span>
