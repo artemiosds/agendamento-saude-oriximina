@@ -238,9 +238,12 @@ export function ConferirDadosPacienteModal({
         etniaOutra: form.etnia_outra,
         nacionalidade: form.nacionalidade,
         paisNascimento: form.pais_nascimento,
-        // Tipo de logradouro DNE: salvar código + descrição
+        // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
         tipoLogradouroDne: form.tipo_logradouro_dne,
         tipoLogradouroCodigo: form.tipo_logradouro_codigo,
+        tipoLogradouro: form.tipo_logradouro_dne,
+        // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
+        logradouro: form.logradouro,
         numero: form.numero,
         complemento: form.complemento,
         bairro: form.bairro,
@@ -261,7 +264,8 @@ export function ConferirDadosPacienteModal({
         cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
         telefone: telNormalizado,
         email: form.email,
-        endereco: form.endereco,
+        // Não sobrescrever endereço legado: preserva o valor atual do paciente.
+        endereco: paciente.endereco || "",
         municipio: form.municipio,
         naturalidade: form.naturalidade || "",
         naturalidade_uf: form.naturalidade_uf || "",
