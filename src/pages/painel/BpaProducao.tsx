@@ -444,44 +444,120 @@ const BpaProducao: React.FC = () => {
     }
   };
 
-  // --- Exportação CSV organizada ---
-  const exportCsv = () => {
+  // --- Exportação XLSX BPA-I (3 abas: BPA-I, Pendências, Resumo) ---
+  const exportXlsx = () => {
     if (linhasFiltradas.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
-    const header = [
-      'Seq','Origem','CNS Paciente','CPF Paciente','Nome','Data Nascimento','Sexo','Municipio',
-      'Data Atendimento','Procedimento','SIGTAP','QTD','CID','Carater','Raca/Cor','Etnia','Nacionalidade',
-      'Profissional','CBO','CNS Profissional','CNES','INE','Status','Pendencias',
-    ];
-    const rows = linhasFiltradas.map((l, idx) => {
-      const pac = pacMap[l.paciente_id] || {} as PacienteInfo;
-      const prof = profMap[l.profissional_id] || {} as ProfInfo;
+
+    const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
+    const uniNome = unidades.find((u: any) => u.id === uniId)?.nome || (unidadeFiltro === 'all' ? 'Todas' : '—');
+    const competenciaFmt = fmtCompetencia(competencia);
+
+    type LinhaExport = {
+      seq: number; l: LinhaBPA; pac: PacienteInfo; prof: ProfInfo;
+      cnes: string; ine: string; v: ValidationFlags; ok: boolean; pend: string[];
+    };
+    const exportRows: LinhaExport[] = linhasFiltradas.map((l, idx) => {
+      const pac = (pacMap[l.paciente_id] || {}) as PacienteInfo;
+      const prof = (profMap[l.profissional_id] || {}) as ProfInfo;
       const v = validateRow(l);
       const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
       const pend: string[] = [];
-      if (!v.nome) pend.push('Nome');
-      if (!v.identificacao) pend.push('CNS/CPF');
-      if (!v.dataNasc) pend.push('Data Nasc');
-      if (!v.cbo) pend.push('CBO');
-      if (!v.sigtap) pend.push('SIGTAP');
-      if (l.pendenciaTriagemSigtap) pend.push('SIGTAP triagem não configurado');
+      if (!v.nome) pend.push('Nome do paciente');
+      if (!v.identificacao) pend.push('CNS ou CPF');
+      if (!v.dataNasc) pend.push('Data de nascimento');
+      if (!pac?.sexo) pend.push('Sexo');
+      if (!pac?.municipio) pend.push('Município de residência');
+      if (!v.cbo) pend.push('CBO do profissional');
+      if (!v.sigtap) pend.push('Procedimento SIGTAP');
       const cnes = getCnesFromUnidade(l.unidade_id);
       const ine = getIneFromUnidade(l.unidade_id);
-      return [
-        idx + 1, l.origem, pac.cns || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        pac.sexo || '', pac.municipio || '', l.data, l.procedimento_nome, l.codigo_sigtap, l.qtd,
-        l.cid, l.carater, pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        l.profissional_nome, prof.cbo || '', prof.cns || '', cnes, ine,
-        ok ? 'OK' : 'PENDENTE', pend.join('; '),
-      ].map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';');
+      if (!cnes) pend.push('CNES da unidade');
+      if (l.pendenciaTriagemSigtap) pend.push('SIGTAP da triagem não configurado');
+      return { seq: idx + 1, l, pac, prof, cnes, ine, v, ok, pend };
     });
-    const csv = '\uFEFF' + [header.join(';'), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `BPA_Producao_${competencia}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success('Planilha exportada');
+
+    // ── Aba BPA-I ─────────────────────────────────────────────
+    const bpaHeader = [
+      'Seq','CNS Paciente','CPF Paciente','Nome','Dt.Nasc','Sexo','Munic.Residência',
+      'Dt.Atendimento','Procedimento','SIGTAP','QTD','CID','Car.Atend.','Num.Autorização',
+      'Raça/Cor','Etnia','Nacionalidade','CEP','Cód.Logradouro','Endereço','Número','Complemento','Bairro',
+      'Telefone','E-mail','CNES','CNS Profissional','Nome Profissional','CBO','Código INE',
+      'Competência','Folha','Unidade','Origem','Prontuário ID','Status Validação',
+    ];
+    const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => [
+      seq, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
+      pac.sexo || '', pac.municipio || '', l.data, l.procedimento_nome, l.codigo_sigtap || '',
+      l.qtd, l.cid || '', l.carater || '01', '',
+      pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
+      pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
+      pac.telefone || '', pac.email || '',
+      cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
+      competenciaFmt, folha, uniNome, l.origem, l.prontuario_id, ok ? 'OK' : 'PENDENTE',
+    ]);
+    const wsBpa = XLSX.utils.aoa_to_sheet([bpaHeader, ...bpaRows]);
+    wsBpa['!cols'] = bpaHeader.map((h) => ({ wch: Math.max(10, Math.min(28, h.length + 4)) }));
+    wsBpa['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: bpaRows.length, c: bpaHeader.length - 1 } }) };
+
+    // ── Aba Pendências ────────────────────────────────────────
+    const pendHeader = ['Seq','Paciente','CNS','CPF','Profissional','CBO','Procedimento','SIGTAP','Data','Origem','Pendências'];
+    const pendList = exportRows.filter((r) => !r.ok);
+    const pendRows = pendList.map(({ seq, l, pac, prof, pend }) => [
+      seq, pac.nome || '—', formatCNS(pac.cns) || '', pac.cpf || '',
+      l.profissional_nome, prof.cbo || '', l.procedimento_nome, l.codigo_sigtap || '',
+      l.data, l.origem, pend.join('; '),
+    ]);
+    const wsPend = XLSX.utils.aoa_to_sheet([pendHeader, ...pendRows]);
+    wsPend['!cols'] = pendHeader.map((h) => ({ wch: Math.max(10, h.length + 4) }));
+    if (pendRows.length) {
+      wsPend['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: pendRows.length, c: pendHeader.length - 1 } }) };
+    }
+
+    // ── Aba Resumo ────────────────────────────────────────────
+    const totalValidos = exportRows.filter((r) => r.ok).length;
+    const totalPendentes = exportRows.length - totalValidos;
+    const porProfissional = new Map<string, number>();
+    const porProcedimento = new Map<string, number>();
+    const porUnidade = new Map<string, number>();
+    exportRows.forEach(({ l }) => {
+      porProfissional.set(l.profissional_nome || '—', (porProfissional.get(l.profissional_nome || '—') || 0) + 1);
+      const pk = `${l.codigo_sigtap || '—'} ${l.procedimento_nome}`;
+      porProcedimento.set(pk, (porProcedimento.get(pk) || 0) + 1);
+      const uNome = unidades.find((u: any) => u.id === l.unidade_id)?.nome || l.unidade_id || '—';
+      porUnidade.set(uNome, (porUnidade.get(uNome) || 0) + 1);
+    });
+    const resumoAoa: any[][] = [
+      ['Resumo da Produção BPA-I'],
+      [],
+      ['Competência', competenciaFmt],
+      ['Unidade', uniNome],
+      ['Data de geração', new Date().toLocaleString('pt-BR')],
+      [],
+      ['Total de linhas', exportRows.length],
+      ['Válidas', totalValidos],
+      ['Pendentes', totalPendentes],
+      [],
+      ['Por Profissional'],
+      ['Profissional', 'Linhas'],
+      ...[...porProfissional.entries()].sort((a, b) => b[1] - a[1]),
+      [],
+      ['Por Procedimento'],
+      ['SIGTAP / Procedimento', 'Linhas'],
+      ...[...porProcedimento.entries()].sort((a, b) => b[1] - a[1]),
+      [],
+      ['Por Unidade'],
+      ['Unidade', 'Linhas'],
+      ...[...porUnidade.entries()].sort((a, b) => b[1] - a[1]),
+    ];
+    const wsResumo = XLSX.utils.aoa_to_sheet(resumoAoa);
+    wsResumo['!cols'] = [{ wch: 50 }, { wch: 16 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsBpa, 'BPA-I');
+    XLSX.utils.book_append_sheet(wb, wsPend, 'Pendências');
+    XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+
+    XLSX.writeFile(wb, `BPA-I_${competencia}.xlsx`);
+    toast.success(`Planilha BPA-I exportada — ${totalValidos} válidas, ${totalPendentes} pendentes.`);
   };
 
   const unidadesOptions = unidades.filter((u) => u.ativo !== false);
