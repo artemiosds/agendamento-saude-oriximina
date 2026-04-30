@@ -204,7 +204,7 @@ export function ConferirDadosPacienteModal({
     return isCadastroIncompleto({
       sexo: form.sexo,
       telefone: form.telefone,
-      endereco: form.endereco,
+      endereco: form.logradouro || form.endereco,
       municipio: form.municipio,
       cpf: form.cpf,
       cns: form.cns,
