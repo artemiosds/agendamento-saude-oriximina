@@ -92,7 +92,7 @@ function isCadastroIncompleto(p: any): { incompleto: boolean; faltando: string[]
   if (!p?.sexo) faltando.push("Sexo");
   if (!p?.municipio) faltando.push("Município");
   if (!p?.telefone) faltando.push("Telefone");
-  if (!p?.endereco) faltando.push("Endereço");
+  if (!p?.logradouro && !p?.endereco) faltando.push("Endereço");
   return { incompleto: faltando.length > 0, faltando };
 }
 
@@ -172,8 +172,9 @@ export function ConferirDadosPacienteModal({
         etnia_outra: cd.etniaOutra || "",
         nacionalidade: cd.nacionalidade || "brasileiro",
         pais_nascimento: cd.paisNascimento || "",
-        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || "",
+        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || cd.tipoLogradouro || "",
         tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
+        logradouro: cd.logradouro || "",
         numero: cd.numero || "",
         complemento: cd.complemento || "",
         bairro: cd.bairro || "",
@@ -203,7 +204,7 @@ export function ConferirDadosPacienteModal({
     return isCadastroIncompleto({
       sexo: form.sexo,
       telefone: form.telefone,
-      endereco: form.endereco,
+      endereco: form.logradouro || form.endereco,
       municipio: form.municipio,
       cpf: form.cpf,
       cns: form.cns,
@@ -237,9 +238,12 @@ export function ConferirDadosPacienteModal({
         etniaOutra: form.etnia_outra,
         nacionalidade: form.nacionalidade,
         paisNascimento: form.pais_nascimento,
-        // Tipo de logradouro DNE: salvar código + descrição
+        // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
         tipoLogradouroDne: form.tipo_logradouro_dne,
         tipoLogradouroCodigo: form.tipo_logradouro_codigo,
+        tipoLogradouro: form.tipo_logradouro_dne,
+        // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
+        logradouro: form.logradouro,
         numero: form.numero,
         complemento: form.complemento,
         bairro: form.bairro,
@@ -260,7 +264,8 @@ export function ConferirDadosPacienteModal({
         cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
         telefone: telNormalizado,
         email: form.email,
-        endereco: form.endereco,
+        // Não sobrescrever endereço legado: preserva o valor atual do paciente.
+        endereco: paciente.endereco || "",
         municipio: form.municipio,
         naturalidade: form.naturalidade || "",
         naturalidade_uf: form.naturalidade_uf || "",
@@ -509,7 +514,7 @@ export function ConferirDadosPacienteModal({
                       }}
                     />
                   </div>
-                  {renderFieldText("Logradouro", "endereco")}
+                  {renderFieldText("Logradouro", "logradouro")}
                   {renderFieldText("Número", "numero", "text", undefined, "numeric")}
                   {renderFieldText("Complemento", "complemento")}
                   {renderFieldText("Bairro", "bairro")}
