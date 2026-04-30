@@ -576,8 +576,8 @@ const BpaProducao: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCsv} className="gap-2">
-            <FileSpreadsheet className="w-4 h-4" /> Exportar CSV
+          <Button variant="outline" onClick={exportXlsx} className="gap-2">
+            <FileSpreadsheet className="w-4 h-4" /> Exportar XLSX BPA-I
           </Button>
           <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2">
             <Download className="w-4 h-4" /> Gerar BPA
