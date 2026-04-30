@@ -92,7 +92,7 @@ function isCadastroIncompleto(p: any): { incompleto: boolean; faltando: string[]
   if (!p?.sexo) faltando.push("Sexo");
   if (!p?.municipio) faltando.push("Município");
   if (!p?.telefone) faltando.push("Telefone");
-  if (!p?.endereco) faltando.push("Endereço");
+  if (!p?.logradouro && !p?.endereco) faltando.push("Endereço");
   return { incompleto: faltando.length > 0, faltando };
 }
 
