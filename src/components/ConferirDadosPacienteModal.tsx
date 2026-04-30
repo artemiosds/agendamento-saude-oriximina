@@ -514,7 +514,7 @@ export function ConferirDadosPacienteModal({
                       }}
                     />
                   </div>
-                  {renderFieldText("Logradouro", "endereco")}
+                  {renderFieldText("Logradouro", "logradouro")}
                   {renderFieldText("Número", "numero", "text", undefined, "numeric")}
                   {renderFieldText("Complemento", "complemento")}
                   {renderFieldText("Bairro", "bairro")}
