@@ -2565,7 +2565,14 @@ const ProntuarioPage: React.FC = () => {
                       size="sm"
                       className="h-auto py-1 text-xs"
                       onClick={() => {
-                        if (!selectedProcIds.includes(h.id)) setSelectedProcIds((prev) => [...prev, h.id]);
+                        if (!selectedProcIds.includes(h.id)) {
+                          setSelectedProcIds((prev) => [...prev, h.id]);
+                          setProcDetails(prev => ({ ...prev, [h.id]: { quantidade: 1, observacao: "" } }));
+                          setExpandedProcId(h.id);
+                          loadCidsForProc(h.id);
+                        } else {
+                          setExpandedProcId(h.id);
+                        }
                       }}
                     >
                       <Clock className="h-3 w-3 mr-1" /> {h.nome}
