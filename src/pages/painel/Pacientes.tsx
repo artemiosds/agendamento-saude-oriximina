@@ -918,20 +918,8 @@ const Pacientes: React.FC = () => {
       registro: user?.numeroConselho || "",
     });
 
-    // E) EVOLUÇÕES CLÍNICAS — prontuários reais
-    const evolucionesPromise = supabase
-      .from("prontuarios")
-      .select("data_atendimento, profissional_nome, soap_subjetivo, soap_objetivo, observacoes")
-      .eq("paciente_id", pacienteId)
-      .order("data_atendimento", { ascending: false })
-      .limit(5)
-      .then(({ data }) => {
-        return (data || []).map((p) => ({
-          data: p.data_atendimento || "",
-          observacao: p.soap_subjetivo || p.observacoes || "",
-          profissional: p.profissional_nome || "",
-        }));
-      });
+    // E) EVOLUÇÕES CLÍNICAS — Sempre limpas para a ficha de impressão
+    const evolucionesPromise = Promise.resolve([]);
 
     // Executar todas as buscas em paralelo
     const [pacienteResult, dadosClinicos, sinaisVitais, profissional, evoluciones] = await Promise.all([
