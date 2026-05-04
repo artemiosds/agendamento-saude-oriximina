@@ -297,14 +297,14 @@ export async function printFichaPaciente(data: FichaPacienteData): Promise<void>
 <body>
 
   <!-- HEADER -->
-  <div class="header">
-    <img src="${logoLeft}" alt="Logo SMS Oriximiná" />
+  <div class="header" style="${config.mostrarLinhaDivisoria ? 'border-bottom: 3px solid #0c4a6e;' : 'border-bottom: none;'}">
+    <img src="${logoLeft}" alt="Logo" />
     <div class="header-center">
-      <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-      <h2>Centro Especializado em Reabilitação Nível II &mdash; CER II</h2>
+      <h1 style="font-family: ${config.tipografia.fonte}">${config.linha1}</h1>
+      <h2 style="font-family: ${config.tipografia.fonte}">${config.linha2}</h2>
       <div class="tipo">Ficha de Atendimento do Paciente</div>
     </div>
-    <img src="${logoRight}" alt="Logo CER II" style="max-height:54px;max-width:100px;object-fit:contain;" />
+    <img src="${logoRight}" alt="Logo" style="max-height:54px;max-width:100px;object-fit:contain;" />
     <div class="header-right">
       <div><b>Prontuário:</b> ${data.paciente.id}</div>
       <div><b>Emissão:</b> ${dataAtual} — ${horaAtual}</div>
