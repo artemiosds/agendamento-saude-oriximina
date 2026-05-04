@@ -734,6 +734,7 @@ const ProntuarioPage: React.FC = () => {
         setEditId(null);
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
+        setProcDetails({});
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
