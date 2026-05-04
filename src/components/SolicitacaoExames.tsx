@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, X, Printer, Ban, FlaskConical } from "lucide-react";
+import { Search, Plus, X, Printer, Ban, FlaskConical, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { openPrintDocument } from "@/lib/printLayout";
+import { loadDocumentConfig, type DocumentConfig } from "@/lib/printLayout";
+import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerFallback from '@/assets/logo-cer-ii.png';
 
 interface ExamType {
   id: string;
