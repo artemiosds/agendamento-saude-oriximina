@@ -1,13 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Printer, X } from 'lucide-react';
-import { openPrintDocument } from '@/lib/printLayout';
+import { Printer, X, Loader2 } from 'lucide-react';
+import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import type { EncaminhamentoData } from '@/services/encaminhamentoService';
 import { marcarComoLido } from '@/services/encaminhamentoService';
+import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
+import logoCerFallback from '@/assets/logo-cer-ii.png';
 
 interface Props {
   open: boolean;
