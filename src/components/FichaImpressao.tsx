@@ -13,9 +13,30 @@ interface FichaData {
     data_nascimento: string;
     nome_mae: string;
     telefone: string;
+    telefone_secundario?: string;
+    email?: string;
     endereco?: string;
     responsavel?: string;
     sexo?: string;
+    naturalidade?: string;
+    nacionalidade?: string;
+    raca_cor?: string;
+    situacao_rua?: boolean;
+    menor_idade?: boolean;
+    parentesco_responsavel?: string;
+    observacoes_cadastrais?: string;
+    informacoes_adicionais?: string;
+    origem_cadastro?: string;
+    unidade_vinculada?: string;
+    // New structured address fields
+    tipo_logradouro?: string;
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    municipio?: string;
+    uf?: string;
+    cep?: string;
   };
   dadosClinicos: {
     numero_prontuario: string;
