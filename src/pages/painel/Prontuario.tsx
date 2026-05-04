@@ -1063,6 +1063,8 @@ const ProntuarioPage: React.FC = () => {
             prontuario_id: prontuarioId,
             procedimento_id: pid,
             cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
           }));
           await (supabase as any).from("prontuario_procedimentos").insert(links);
         }
