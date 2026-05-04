@@ -938,7 +938,9 @@ const ProntuarioPage: React.FC = () => {
       const procTexto = selectedProcIds
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          return p?.nome || "";
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
         })
         .filter(Boolean)
         .join(", ");
