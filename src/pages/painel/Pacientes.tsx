@@ -818,11 +818,14 @@ const Pacientes: React.FC = () => {
     // A) PACIENTE
     const pacientePromise = supabase
       .from("pacientes")
-      .select("nome, cpf, cns, data_nascimento, nome_mae, telefone, endereco, cid")
+      .select("*")
       .eq("id", pacienteId)
       .single()
       .then(({ data, error }) => {
         if (error || !data) throw new Error("Paciente não encontrado");
+        
+        const cd = data.custom_data || {};
+        
         return {
           paciente: {
             nome_completo: data.nome || "",
@@ -831,7 +834,30 @@ const Pacientes: React.FC = () => {
             data_nascimento: data.data_nascimento || "",
             nome_mae: data.nome_mae || "",
             telefone: data.telefone || "",
+            telefone_secundario: cd.telefone_secundario || "",
+            email: data.email || "",
             endereco: data.endereco || "",
+            responsavel: data.nome_responsavel || "",
+            sexo: cd.sexo || "",
+            naturalidade: data.naturalidade || "",
+            nacionalidade: cd.nacionalidade || "BRASILEIRA",
+            raca_cor: cd.raca_cor || "",
+            situacao_rua: !!cd.situacao_rua,
+            menor_idade: !!data.menor_idade,
+            parentesco_responsavel: cd.parentesco_responsavel || "",
+            observacoes_cadastrais: data.observacoes || "",
+            informacoes_adicionais: cd.informacoes_adicionais || "",
+            origem_cadastro: cd.origem_cadastro || "",
+            unidade_vinculada: (unidades.find(u => u.id === data.unidade_id)?.nome) || "",
+            // Address mapping
+            tipo_logradouro: cd.tipoLogradouro || cd.tipo_logradouro || "",
+            logradouro: cd.logradouro || "",
+            numero: cd.numero || "",
+            complemento: cd.complemento || "",
+            bairro: cd.bairro || "",
+            municipio: data.municipio || cd.municipio || "",
+            uf: cd.uf || "",
+            cep: cd.cep || "",
           },
           cid: data.cid || "",
         };
@@ -861,7 +887,7 @@ const Pacientes: React.FC = () => {
     // C) SINAIS VITAIS — último registro de triagem
     const sinaisVitaisPromise = (supabase as any)
       .from("triage_records")
-      .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura")
+      .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura, frequencia_respiratoria, glicemia")
       .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
       .order("criado_em", { ascending: false })
       .limit(1)
@@ -874,6 +900,8 @@ const Pacientes: React.FC = () => {
           saturacao: triagem?.saturacao_oxigenio ? String(triagem.saturacao_oxigenio) : "",
           peso: triagem?.peso ? String(triagem.peso) : "",
           altura: triagem?.altura ? String(triagem.altura) : "",
+          frequencia_respiratoria: triagem?.frequencia_respiratoria ? String(triagem.frequencia_respiratoria) : "",
+          glicemia: triagem?.glicemia ? String(triagem.glicemia) : "",
         };
       });
 
@@ -884,7 +912,7 @@ const Pacientes: React.FC = () => {
       registro: user?.numeroConselho || "",
     });
 
-    // E) EVOLUÇÕES CLÍNICAS — prontuários reais (não agendamentos)
+    // E) EVOLUÇÕES CLÍNICAS — prontuários reais
     const evolucionesPromise = supabase
       .from("prontuarios")
       .select("data_atendimento, profissional_nome, soap_subjetivo, soap_objetivo, observacoes")
@@ -915,7 +943,7 @@ const Pacientes: React.FC = () => {
       profissional,
       evoluciones,
     };
-  }, [unidades, user]);
+  }, [unidades, user, agendamentos]);
 
   // Abrir ficha de impressão
   const handleOpenFicha = async (p: (typeof pacientes)[0], mode: FichaPrintMode = 'completa') => {
