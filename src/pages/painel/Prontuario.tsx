@@ -2785,9 +2785,13 @@ const ProntuarioPage: React.FC = () => {
                                                   ? (m[proc.id] || []).filter((x) => x !== c.codigo)
                                                   : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                               }));
-                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
-                                                setSelectedProcIds((prev) => [...prev, proc.id]);
-                                              }
+                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                            setSelectedProcIds((prev) => [...prev, proc.id]);
+                                            setProcDetails(prev => ({
+                                              ...prev,
+                                              [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                            }));
+                                          }
                                             }}
                                             aria-pressed={isSel}
                                             title={c.descricao || c.codigo}
