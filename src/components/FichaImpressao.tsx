@@ -328,14 +328,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     const idade = calcIdade(data.paciente.data_nascimento);
     const p = data.paciente;
 
-    const evolucaoHTML = !somentePessoais && data.evoluciones.length > 0
-      ? data.evoluciones.map(evo => `
-        <div class="evo-item">
-          <div class="evo-meta">${formatarData(evo.data)} &mdash; ${v(evo.profissional) || '—'}</div>
-          <div class="evo-text">${v(evo.observacao) || '—'}</div>
-        </div>
-      `).join('')
-      : '';
+    const evolucaoHTML = '';
 
     const formatBool = (val?: boolean) => val ? 'SIM' : 'NÃO';
 
@@ -364,7 +357,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     <div class="header-right">
       <div><b>Data:</b> ${dataAtual}</div>
       <div><b>Hora:</b> ${horaAtual}</div>
-      <div><b>Prontuário:</b> ${v(data.dadosClinicos.numero_prontuario) || '____________'}</div>
+      <div><b>Prontuário:</b> ________________</div>
     </div>
   </div>
 
@@ -451,8 +444,8 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="grid-4">
         <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || '—'}</span></div>
         <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || '—'}</span></div>
-        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || '—'}</span></div>
-        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || '—'}</span></div>
+        <div class="campo"><b>Profissional:</b> <span>—</span></div>
+        <div class="campo"><b>Especialidade:</b> <span>—</span></div>
       </div>
       <div class="grid-2">
         <div class="campo"><b>Unidade:</b> <span>${v(data.dadosClinicos.unidade_atendimento) || '—'}</span></div>
@@ -526,8 +519,8 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     </div>
     <div class="assinatura-bloco">
       <div class="assinatura-traco"></div>
-      <div class="assinatura-nome">${!somentePessoais ? (v(data.profissional.nome) || 'Profissional Responsável') : 'Responsável pelo Cadastro'}</div>
-      <p class="assinatura-label">${!somentePessoais ? (v(data.profissional.registro) || 'Registro Profissional') : 'Assinatura'}</p>
+      <div class="assinatura-nome">${!somentePessoais ? 'Profissional Responsável' : 'Responsável pelo Cadastro'}</div>
+      <p class="assinatura-label">${!somentePessoais ? 'Registro Profissional' : 'Assinatura'}</p>
     </div>
   </div>
 
@@ -649,16 +642,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
               <div className="border rounded p-3 bg-slate-50/30">
                 <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">6. Avaliação Clínica</h3>
                 <p className="text-[10px] text-muted-foreground italic">Campos em branco para preenchimento manual no PDF/Impressão</p>
-                {data.evoluciones.length > 0 && (
-                  <div className="mt-2 pt-2 border-t">
-                    <p className="text-[9px] font-bold uppercase text-[#0c4a6e] mb-1">Últimas Evoluções:</p>
-                    {data.evoluciones.map((evo, i) => (
-                      <div key={i} className="mb-1 text-[10px]">
-                        <span className="font-bold text-muted-foreground">{formatarData(evo.data)}:</span> {evo.observacao}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* Evoluções antigas removidas da ficha */}
               </div>
             </>
           )}
