@@ -144,7 +144,7 @@ const GerarDocumentoModal: React.FC<Props> = ({ open, onOpenChange, paciente, pr
       .replace(/\{\{profissional\}\}/g, profissional?.nome || '—')
       .replace(/\{\{cid\}\}/g, paciente?.cid || '—')
       .replace(/\{\{especialidade\}\}/g, paciente?.especialidade_destino || '—')
-      .replace(/\{\{unidade\}\}/g, unidade || 'CER II Oriximiná')
+      .replace(/\{\{unidade\}\}/g, docConfig?.linha2 || docConfig?.linha1 || unidade || 'CER II Oriximiná')
       .replace(/\{\{data_hoje\}\}/g, hoje);
 
     // Extended variables from campos (datas yyyy-mm-dd → dd/mm/yyyy)
