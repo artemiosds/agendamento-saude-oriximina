@@ -234,12 +234,12 @@ const ModelosDocumentos: React.FC = () => {
   };
 
   const handlePreview = (m: DocumentTemplate) => {
-    setPreviewHtml(substituirVariaveis(m.conteudo));
+    setPreviewHtml(substituirVariaveis(m.conteudo, config || undefined));
     setPreviewOpen(true);
   };
 
   const handlePrintPreview = (m: DocumentTemplate) => {
-    const html = substituirVariaveis(m.conteudo);
+    const html = substituirVariaveis(m.conteudo, config || undefined);
     const body = `
       <div class="content-block" style="margin-top:20px;">
         <div style="font-size:14px;line-height:1.8;">${html}</div>
