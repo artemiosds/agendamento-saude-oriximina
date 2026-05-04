@@ -328,14 +328,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     const idade = calcIdade(data.paciente.data_nascimento);
     const p = data.paciente;
 
-    const evolucaoHTML = !somentePessoais && data.evoluciones.length > 0
-      ? data.evoluciones.map(evo => `
-        <div class="evo-item">
-          <div class="evo-meta">${formatarData(evo.data)} &mdash; ${v(evo.profissional) || '—'}</div>
-          <div class="evo-text">${v(evo.observacao) || '—'}</div>
-        </div>
-      `).join('')
-      : '';
+    const evolucaoHTML = '';
 
     const formatBool = (val?: boolean) => val ? 'SIM' : 'NÃO';
 
