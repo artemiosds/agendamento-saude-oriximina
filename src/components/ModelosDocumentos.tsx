@@ -115,8 +115,12 @@ const ModelosDocumentos: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterTipo, setFilterTipo] = useState('todos');
   const [filterTipoModelo, setFilterTipoModelo] = useState('todos');
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
 
-  useEffect(() => { loadModelos(); }, []);
+  useEffect(() => { 
+    loadModelos(); 
+    loadDocumentConfig().then(setConfig);
+  }, []);
 
   const loadModelos = async () => {
     setLoading(true);
