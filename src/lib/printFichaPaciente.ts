@@ -1,3 +1,4 @@
+import { loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS } from './printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
 
@@ -35,11 +36,6 @@ interface FichaPacienteData {
   }>;
 }
 
-const resolveLogoUrl = (src: string): string => {
-  if (src.startsWith('http') || src.startsWith('/')) return src;
-  return src;
-};
-
 const formatarData = (data: string): string => {
   if (!data) return '—';
   try {
@@ -63,9 +59,10 @@ const calcularIdade = (dataNascimento: string): string => {
   return `${age} anos`;
 };
 
-export function printFichaPaciente(data: FichaPacienteData): void {
-    const logoLeft = resolveLogoUrl(logoSmsFallback);
-    const logoRight = resolveLogoUrl(logoCerFallback);
+export async function printFichaPaciente(data: FichaPacienteData): Promise<void> {
+  const config = await loadDocumentConfig();
+  const logoLeft = config.logoEsquerda || logoSmsFallback;
+  const logoRight = config.logoDireita || logoCerFallback;
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
 
