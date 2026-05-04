@@ -2628,12 +2628,52 @@ const ProntuarioPage: React.FC = () => {
                             )}
                           </div>
                           {isExpanded && (
-                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10">
+                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10 space-y-3">
                               {proc.especialidade && (
-                                <p className="text-[11px] text-muted-foreground mb-2">{proc.especialidade}</p>
+                                <p className="text-[11px] text-muted-foreground">{proc.especialidade}</p>
                               )}
-                              {/* Lupa unificada de CIDs */}
-                              <div className="relative mb-2">
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Quantidade</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={procDetails[proc.id]?.quantidade || 1}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 1;
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { observacao: "" }), quantidade: val }
+                                      }));
+                                    }}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Observação do Procedimento</Label>
+                                  <Input
+                                    value={procDetails[proc.id]?.observacao || ""}
+                                    onChange={(e) => {
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { quantidade: 1 }), observacao: e.target.value }
+                                      }));
+                                    }}
+                                    placeholder="Ex: Lado direito, observação clínica..."
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              {!isCustom && !proc.id.includes('.') && (
+                                <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                  <p className="text-[10px] text-amber-700">Procedimento sem SIGTAP não será validado para produção BPA-I.</p>
+                                </div>
+                              )}
+
+                              <div className="relative">
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                                 <Input
                                   value={cidSearchByProc[proc.id] || ''}
