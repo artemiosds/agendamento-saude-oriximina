@@ -825,6 +825,7 @@ const ProntuarioPage: React.FC = () => {
     setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
     setSelectedCidsByProc({});
+    setProcDetails({});
     setEpisodios([]);
     setListaExames([]);
     setListaPrescricao([]);
