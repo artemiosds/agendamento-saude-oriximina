@@ -2608,10 +2608,16 @@ const ProntuarioPage: React.FC = () => {
                               id={`proc-${proc.id}`}
                               checked={checked}
                               onClick={(e) => e.stopPropagation()}
-                              onCheckedChange={(c) => {
-                                setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
-                                if (c) loadCidsForProc(proc.id);
-                              }}
+                                onCheckedChange={(c) => {
+                                  setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
+                                  if (c) {
+                                    loadCidsForProc(proc.id);
+                                    setProcDetails(prev => ({
+                                      ...prev,
+                                      [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                    }));
+                                  }
+                                }}
                             />
                             <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? '' : '-rotate-90'}`} />
                             {isCustom
