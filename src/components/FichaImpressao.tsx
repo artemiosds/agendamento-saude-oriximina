@@ -519,8 +519,8 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     </div>
     <div class="assinatura-bloco">
       <div class="assinatura-traco"></div>
-      <div class="assinatura-nome">${!somentePessoais ? (v(data.profissional.nome) || 'Profissional Responsável') : 'Responsável pelo Cadastro'}</div>
-      <p class="assinatura-label">${!somentePessoais ? (v(data.profissional.registro) || 'Registro Profissional') : 'Assinatura'}</p>
+      <div class="assinatura-nome">${!somentePessoais ? 'Profissional Responsável' : 'Responsável pelo Cadastro'}</div>
+      <p class="assinatura-label">${!somentePessoais ? 'Registro Profissional' : 'Assinatura'}</p>
     </div>
   </div>
 
