@@ -824,7 +824,7 @@ const Pacientes: React.FC = () => {
       .then(({ data, error }) => {
         if (error || !data) throw new Error("Paciente não encontrado");
         
-        const cd = data.custom_data || {};
+        const cd = (data.custom_data || {}) as Record<string, any>;
         
         return {
           paciente: {
