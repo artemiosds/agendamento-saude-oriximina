@@ -2850,6 +2850,8 @@ const ProntuarioPage: React.FC = () => {
                 const list = await procedureService.getActive();
                 setProcedimentos(list as any);
                 setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+                setProcDetails(prev => ({ ...prev, [codigo]: { quantidade: 1, observacao: "" } }));
+                setExpandedProcId(codigo); // Auto-expand to show details/CIDs
               }}
             />
 
