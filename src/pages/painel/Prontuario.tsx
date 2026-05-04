@@ -246,6 +246,7 @@ const ProntuarioPage: React.FC = () => {
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
+  const [procDetails, setProcDetails] = useState<Record<string, { quantidade: number; observacao: string }>>({});
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
   const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
