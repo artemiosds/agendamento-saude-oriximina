@@ -65,7 +65,7 @@ const TIPO_MODELO_LABELS = {
   PROFISSIONAL: { label: 'Pessoal', icon: UserIcon, color: 'text-orange-600' },
 };
 
-const substituirVariaveis = (conteudo: string): string => {
+const substituirVariaveis = (conteudo: string, config?: DocumentConfig): string => {
   const hoje = new Date().toLocaleDateString('pt-BR');
   return conteudo
     .replace(/\{\{nome_paciente\}\}/g, 'João da Silva')
@@ -76,7 +76,7 @@ const substituirVariaveis = (conteudo: string): string => {
     .replace(/\{\{profissional\}\}/g, 'Dr. Maria Santos')
     .replace(/\{\{cid\}\}/g, 'F84.0')
     .replace(/\{\{especialidade\}\}/g, 'Fisioterapia')
-    .replace(/\{\{unidade\}\}/g, 'CER II Oriximiná')
+    .replace(/\{\{unidade\}\}/g, config?.linha2 || config?.linha1 || 'CER II Oriximiná')
     .replace(/\{\{data_hoje\}\}/g, hoje)
     .replace(/\{\{dias_afastamento\}\}/g, '3')
     .replace(/\{\{data_inicio\}\}/g, hoje)
