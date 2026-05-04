@@ -444,8 +444,8 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       <div class="grid-4">
         <div class="campo"><b>Tipo:</b> <span>${v(data.dadosClinicos.tipo_atendimento) || '—'}</span></div>
         <div class="campo"><b>CID:</b> <span>${v(data.dadosClinicos.cid) || '—'}</span></div>
-        <div class="campo"><b>Profissional:</b> <span>${v(data.profissional.nome) || '—'}</span></div>
-        <div class="campo"><b>Especialidade:</b> <span>${v(data.dadosClinicos.especialidade) || v(data.profissional.cargo) || '—'}</span></div>
+        <div class="campo"><b>Profissional:</b> <span>—</span></div>
+        <div class="campo"><b>Especialidade:</b> <span>—</span></div>
       </div>
       <div class="grid-2">
         <div class="campo"><b>Unidade:</b> <span>${v(data.dadosClinicos.unidade_atendimento) || '—'}</span></div>
