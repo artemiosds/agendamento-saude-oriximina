@@ -1183,7 +1183,12 @@ const ProntuarioPage: React.FC = () => {
     setAutosaveStatus('saving');
     try {
       const procTexto = selectedProcIds
-        .map((id) => procedimentos.find((pr) => pr.id === id)?.nome || '')
+        .map((id) => {
+          const p = procedimentos.find((pr) => pr.id === id);
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
+        })
         .filter(Boolean)
         .join(', ');
       // Preserva profissional ao editar; usa logado ao criar
