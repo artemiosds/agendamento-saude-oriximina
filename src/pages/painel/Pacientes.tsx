@@ -47,6 +47,29 @@ interface FichaDados {
     data_nascimento: string;
     nome_mae: string;
     telefone: string;
+    telefone_secundario?: string;
+    email?: string;
+    endereco?: string;
+    responsavel?: string;
+    sexo?: string;
+    naturalidade?: string;
+    nacionalidade?: string;
+    raca_cor?: string;
+    situacao_rua?: boolean;
+    menor_idade?: boolean;
+    parentesco_responsavel?: string;
+    observacoes_cadastrais?: string;
+    informacoes_adicionais?: string;
+    origem_cadastro?: string;
+    unidade_vinculada?: string;
+    tipo_logradouro?: string;
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    municipio?: string;
+    uf?: string;
+    cep?: string;
   };
   dadosClinicos: {
     numero_prontuario: string;
@@ -55,6 +78,8 @@ interface FichaDados {
     unidade_origem: string;
     unidade_atendimento: string;
     data_atendimento: string;
+    especialidade?: string;
+    encaminhamento?: string;
   };
   sinaisVitais: {
     pressao_arterial: string;
@@ -63,6 +88,8 @@ interface FichaDados {
     saturacao: string;
     peso: string;
     altura: string;
+    glicemia?: string;
+    frequencia_respiratoria?: string;
   };
   profissional: {
     nome: string;
