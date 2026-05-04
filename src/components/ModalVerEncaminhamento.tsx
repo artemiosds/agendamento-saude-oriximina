@@ -80,9 +80,15 @@ const ModalVerEncaminhamento: React.FC<Props> = ({ open, onOpenChange, encaminha
         <div className="space-y-4">
           {/* Document preview */}
           <div className="border rounded-lg p-5 bg-white">
+            <div className="flex items-center gap-3 mb-3 border-b pb-3">
+              <img src={config?.logoEsquerda || logoSmsFallback} alt="Logo" className="w-10 h-10 object-contain" />
+              <div className="flex-1 text-center">
+                <h3 className="font-bold text-[11px] uppercase text-primary leading-tight">{config?.linha1 || 'Secretaria Municipal de Saúde de Oriximiná'}</h3>
+                <p className="text-[10px] text-muted-foreground font-semibold leading-tight">{config?.linha2 || 'CER II — Centro Especializado em Reabilitação'}</p>
+              </div>
+              <img src={config?.logoDireita || logoCerFallback} alt="Logo" className="w-10 h-10 object-contain" />
+            </div>
             <div className="text-center mb-3">
-              <h3 className="font-bold text-sm uppercase text-primary">Secretaria Municipal de Saúde de Oriximiná</h3>
-              <p className="text-xs text-muted-foreground">CER II — Centro Especializado em Reabilitação</p>
               <p className="text-xs font-semibold mt-1 uppercase">{encaminhamento.tipo_documento || 'Encaminhamento'}</p>
               <p className="text-xs text-muted-foreground">{dataFormatada}</p>
             </div>
