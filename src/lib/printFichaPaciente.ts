@@ -1,3 +1,4 @@
+import { loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS } from './printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
 
@@ -35,11 +36,6 @@ interface FichaPacienteData {
   }>;
 }
 
-const resolveLogoUrl = (src: string): string => {
-  if (src.startsWith('http') || src.startsWith('/')) return src;
-  return src;
-};
-
 const formatarData = (data: string): string => {
   if (!data) return '—';
   try {
@@ -63,9 +59,10 @@ const calcularIdade = (dataNascimento: string): string => {
   return `${age} anos`;
 };
 
-export function printFichaPaciente(data: FichaPacienteData): void {
-    const logoLeft = resolveLogoUrl(logoSmsFallback);
-    const logoRight = resolveLogoUrl(logoCerFallback);
+export async function printFichaPaciente(data: FichaPacienteData): Promise<void> {
+  const config = await loadDocumentConfig();
+  const logoLeft = config.logoEsquerda || logoSmsFallback;
+  const logoRight = config.logoDireita || logoCerFallback;
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
 
@@ -300,14 +297,14 @@ export function printFichaPaciente(data: FichaPacienteData): void {
 <body>
 
   <!-- HEADER -->
-  <div class="header">
-    <img src="${logoLeft}" alt="Logo SMS Oriximiná" />
+  <div class="header" style="${config.mostrarLinhaDivisoria ? 'border-bottom: 3px solid #0c4a6e;' : 'border-bottom: none;'}">
+    <img src="${logoLeft}" alt="Logo" />
     <div class="header-center">
-      <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-      <h2>Centro Especializado em Reabilitação Nível II &mdash; CER II</h2>
+      <h1 style="font-family: ${config.tipografia.fonte}">${config.linha1}</h1>
+      <h2 style="font-family: ${config.tipografia.fonte}">${config.linha2}</h2>
       <div class="tipo">Ficha de Atendimento do Paciente</div>
     </div>
-    <img src="${logoRight}" alt="Logo CER II" style="max-height:54px;max-width:100px;object-fit:contain;" />
+    <img src="${logoRight}" alt="Logo" style="max-height:54px;max-width:100px;object-fit:contain;" />
     <div class="header-right">
       <div><b>Prontuário:</b> ${data.paciente.id}</div>
       <div><b>Emissão:</b> ${dataAtual} — ${horaAtual}</div>
@@ -425,7 +422,10 @@ export function printFichaPaciente(data: FichaPacienteData): void {
 
   <!-- RODAPÉ -->
   <div class="rodape">
-    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
+    ${config.linha1}${config.linha2 ? ' &mdash; ' + config.linha2 : ''}
+    ${config.rodapeTexto ? ' &mdash; ' + config.rodapeTexto : ''}
+    <br/>
+    Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
   </div>
 
 </body>

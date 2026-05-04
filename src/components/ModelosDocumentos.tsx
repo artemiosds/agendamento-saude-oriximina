@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { FileText, Plus, Pencil, Trash2, Eye, Copy, Loader2, Printer, Search, Globe, Building2, UserIcon, Filter } from 'lucide-react';
-import { openPrintDocument } from '@/lib/printLayout';
+import { openPrintDocument, loadDocumentConfig, type DocumentConfig } from '@/lib/printLayout';
 
 const RichTextEditor = lazy(() => import('@/components/editor/RichTextEditor'));
 
@@ -65,7 +65,7 @@ const TIPO_MODELO_LABELS = {
   PROFISSIONAL: { label: 'Pessoal', icon: UserIcon, color: 'text-orange-600' },
 };
 
-const substituirVariaveis = (conteudo: string): string => {
+const substituirVariaveis = (conteudo: string, config?: DocumentConfig): string => {
   const hoje = new Date().toLocaleDateString('pt-BR');
   return conteudo
     .replace(/\{\{nome_paciente\}\}/g, 'João da Silva')
@@ -76,7 +76,7 @@ const substituirVariaveis = (conteudo: string): string => {
     .replace(/\{\{profissional\}\}/g, 'Dr. Maria Santos')
     .replace(/\{\{cid\}\}/g, 'F84.0')
     .replace(/\{\{especialidade\}\}/g, 'Fisioterapia')
-    .replace(/\{\{unidade\}\}/g, 'CER II Oriximiná')
+    .replace(/\{\{unidade\}\}/g, config?.linha2 || config?.linha1 || 'CER II Oriximiná')
     .replace(/\{\{data_hoje\}\}/g, hoje)
     .replace(/\{\{dias_afastamento\}\}/g, '3')
     .replace(/\{\{data_inicio\}\}/g, hoje)
@@ -115,8 +115,12 @@ const ModelosDocumentos: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterTipo, setFilterTipo] = useState('todos');
   const [filterTipoModelo, setFilterTipoModelo] = useState('todos');
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
 
-  useEffect(() => { loadModelos(); }, []);
+  useEffect(() => { 
+    loadModelos(); 
+    loadDocumentConfig().then(setConfig);
+  }, []);
 
   const loadModelos = async () => {
     setLoading(true);
@@ -230,12 +234,12 @@ const ModelosDocumentos: React.FC = () => {
   };
 
   const handlePreview = (m: DocumentTemplate) => {
-    setPreviewHtml(substituirVariaveis(m.conteudo));
+    setPreviewHtml(substituirVariaveis(m.conteudo, config || undefined));
     setPreviewOpen(true);
   };
 
   const handlePrintPreview = (m: DocumentTemplate) => {
-    const html = substituirVariaveis(m.conteudo);
+    const html = substituirVariaveis(m.conteudo, config || undefined);
     const body = `
       <div class="content-block" style="margin-top:20px;">
         <div style="font-size:14px;line-height:1.8;">${html}</div>
