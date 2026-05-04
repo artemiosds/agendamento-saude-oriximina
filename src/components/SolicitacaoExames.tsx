@@ -74,8 +74,11 @@ const SolicitacaoExames: React.FC<SolicitacaoExamesProps> = ({
   const [savingNew, setSavingNew] = useState(false);
   const [selectedForDisable, setSelectedForDisable] = useState<Set<string>>(new Set());
 
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
+
   // Load all exam types + preferences once
   useEffect(() => {
+    loadDocumentConfig().then(setConfig);
     const load = async () => {
       const [{ data: types }, { data: prefs }] = await Promise.all([
         supabase.from("exam_types").select("*").eq("ativo", true),
