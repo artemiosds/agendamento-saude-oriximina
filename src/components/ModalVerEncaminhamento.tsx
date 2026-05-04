@@ -20,8 +20,12 @@ interface Props {
 
 const ModalVerEncaminhamento: React.FC<Props> = ({ open, onOpenChange, encaminhamento, onStatusChange }) => {
   const { user } = useAuth();
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
 
   useEffect(() => {
+    if (open) {
+      loadDocumentConfig().then(setConfig);
+    }
     if (open && encaminhamento && encaminhamento.status === 'recebido') {
       marcarComoLido(encaminhamento).then((ok) => {
         if (ok && onStatusChange) onStatusChange();
