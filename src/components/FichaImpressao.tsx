@@ -319,10 +319,23 @@ const PRINT_CSS = `
 `;
 
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'completa', onPrintComplete }) => {
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
+  const [loading, setLoading] = useState(false);
   const somentePessoais = mode === 'dados_pessoais';
+
+  useEffect(() => {
+    loadDocumentConfig().then(setConfig);
+  }, []);
+
   const buildHTML = useCallback(() => {
-    const logoLeft = resolveLogoUrl(logoSmsFallback);
-    const logoRight = resolveLogoUrl(logoCerFallback);
+    if (!config) return '';
+    
+    const logoLeft = config.logoEsquerda || (logoSmsFallback as string);
+    const logoRight = config.logoDireita || (logoCerFallback as string);
+    const logoCentral = config.mostrarLogoCentral && config.logoCentral 
+      ? `<img src="${config.logoCentral}" alt="Logo Central" style="max-height:50px;max-width:150px;object-fit:contain;margin-bottom:4px;" />` 
+      : '';
+    
     const now = new Date();
     const dataAtual = formatarData(now.toISOString());
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -343,17 +356,20 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
 <body>
 
   <!-- CABEÇALHO -->
-  <div class="header">
+  <div class="header" style="${config.mostrarLinhaDivisoria ? 'border-bottom: 2px solid #0c4a6e;' : 'border-bottom: none;'}">
     <div class="header-logo">
-      <img src="${logoLeft}" alt="Logo SMS Oriximiná" />
+      <img src="${logoLeft}" alt="Logo Esquerda" />
     </div>
     <div class="header-center">
-      <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-      <h2>Centro Especializado em Reabilitação Nível II &mdash; CER II</h2>
+      ${logoCentral}
+      <h1 style="font-family: ${config.tipografia.fonte}">${config.linha1}</h1>
+      <h2 style="font-family: ${config.tipografia.fonte}">${config.linha2}</h2>
+      ${config.linha3 ? `<div style="font-size: 9px; color: #475569; text-transform: uppercase; font-weight: 600;">${config.linha3}</div>` : ''}
+      ${config.linha4 ? `<div style="font-size: 8.5px; color: #64748b;">${config.linha4}</div>` : ''}
       <div class="ficha-tipo">${somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO CLÍNICO'}</div>
     </div>
     <div class="header-logo">
-      <img src="${logoRight}" alt="Logo CER II" style="max-height:50px;max-width:90px;object-fit:contain;" />
+      <img src="${logoRight}" alt="Logo Direita" style="max-height:50px;max-width:90px;object-fit:contain;" />
     </div>
     <div class="header-right">
       <div><b>Data:</b> ${dataAtual}</div>
