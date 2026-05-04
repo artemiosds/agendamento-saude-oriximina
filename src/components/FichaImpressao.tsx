@@ -584,69 +584,84 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   return (
     <div className="flex flex-col items-center gap-6 py-4">
       <div className="w-full border rounded-lg bg-white p-6 shadow-sm max-h-[60vh] overflow-y-auto">
-        <div className="text-center mb-3 border-b-2 border-foreground/20 pb-3">
-          <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h2>
+        <div className="text-center mb-3 border-b-2 border-[#0c4a6e] pb-3">
+          <h2 className="text-xs font-bold uppercase tracking-wide text-[#0c4a6e]">SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h2>
           <p className="text-[10px] uppercase font-bold text-muted-foreground">CENTRO ESPECIALIZADO EM REABILITAÇÃO II - CER II</p>
-          <p className="text-[10px] uppercase text-muted-foreground">{somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO / PRONTUÁRIO'}</p>
+          <p className="text-[10px] uppercase font-extrabold text-[#0c4a6e] mt-1">{somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO CLÍNICO'}</p>
         </div>
 
         <div className="space-y-3 text-sm">
-          <div className="border rounded p-3">
-            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Dados do Paciente</h3>
-            <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> {data.paciente.nome_completo || '—'}</p>
-            <div className="grid grid-cols-3 gap-2 mt-1">
+          {/* IDENTIFICAÇÃO */}
+          <div className="border rounded p-3 bg-slate-50/30">
+            <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">1. Identificação</h3>
+            <p className="mb-1"><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> <span className="font-bold">{data.paciente.nome_completo || '—'}</span></p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CPF:</span> {data.paciente.cpf || '—'}</p>
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CNS:</span> {formatCNS(data.paciente.cns) || '—'}</p>
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Nasc.:</span> {formatarData(data.paciente.data_nascimento)}</p>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mt-1">
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Idade:</span> {idade}</p>
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tel.:</span> {data.paciente.telefone || '—'}</p>
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Resp.:</span> {data.paciente.responsavel || data.paciente.nome_mae || '—'}</p>
             </div>
           </div>
 
-          <div className="border rounded p-3">
-            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Atendimento</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tipo:</span> {somentePessoais ? '___' : (data.dadosClinicos.tipo_atendimento || '—')}</p>
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CID:</span> {somentePessoais ? '___' : (data.dadosClinicos.cid || '—')}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mt-1">
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Profissional:</span> {somentePessoais ? '___' : (data.profissional.nome || '—')}</p>
-              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Especialidade:</span> {somentePessoais ? '___' : (data.dadosClinicos.especialidade || data.profissional.cargo || '—')}</p>
+          {/* ENDEREÇO */}
+          <div className="border rounded p-3 bg-slate-50/30">
+            <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">2. Endereço</h3>
+            <p className="mb-1"><span className="text-[9px] font-bold uppercase text-muted-foreground">Logradouro:</span> {data.paciente.logradouro || data.paciente.endereco || '—'}</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Bairro:</span> {data.paciente.bairro || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Município/UF:</span> {data.paciente.municipio || '—'} / {data.paciente.uf || '—'}</p>
             </div>
           </div>
 
-          <div className="border rounded p-3">
-            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Triagem / Sinais Vitais</h3>
-            <div className="grid grid-cols-4 gap-2 text-xs">
-              <p><strong>PA:</strong> {somentePessoais ? '___' : (data.sinaisVitais.pressao_arterial || '—')}</p>
-              <p><strong>FC:</strong> {somentePessoais ? '___' : (data.sinaisVitais.frequencia_cardiaca || '—')}</p>
-              <p><strong>Temp:</strong> {somentePessoais ? '___' : (data.sinaisVitais.temperatura || '—')}</p>
-              <p><strong>SpO₂:</strong> {somentePessoais ? '___' : (data.sinaisVitais.saturacao || '—')}</p>
-              <p><strong>Peso:</strong> {somentePessoais ? '___' : (data.sinaisVitais.peso || '—')}</p>
-              <p><strong>Altura:</strong> {somentePessoais ? '___' : (data.sinaisVitais.altura || '—')}</p>
-              <p><strong>Glicemia:</strong> {somentePessoais ? '___' : (data.sinaisVitais.glicemia || '—')}</p>
-              <p><strong>FR:</strong> {somentePessoais ? '___' : (data.sinaisVitais.frequencia_respiratoria || '—')}</p>
+          {/* CONTATO */}
+          <div className="border rounded p-3 bg-slate-50/30">
+            <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">3. Contato</h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Telefone:</span> {data.paciente.telefone || '—'}</p>
+              <p><span className="text-[9px] font-bold uppercase text-muted-foreground">E-mail:</span> {data.paciente.email || '—'}</p>
             </div>
           </div>
 
-          <div className="border rounded p-3">
-            <h3 className="text-[10px] font-bold uppercase text-primary-foreground bg-primary -mx-3 -mt-3 px-3 py-1 rounded-t mb-2">Evolução Clínica</h3>
-            {somentePessoais ? (
-              <p className="text-xs text-muted-foreground italic">Em branco para preenchimento manual</p>
-            ) : data.evoluciones.length > 0 ? (
-              data.evoluciones.map((evo, i) => (
-                <div key={i} className="border-b last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                  <p className="text-xs text-muted-foreground">{formatarData(evo.data)} — {evo.profissional || '—'}</p>
-                  <p className="text-xs">{evo.observacao || '—'}</p>
+          {!somentePessoais && (
+            <>
+              <div className="border rounded p-3 bg-slate-50/30">
+                <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">4. Atendimento</h3>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">Tipo:</span> {data.dadosClinicos.tipo_atendimento || '—'}</p>
+                  <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CID:</span> {data.dadosClinicos.cid || '—'}</p>
                 </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground italic">Sem registros</p>
-            )}
-          </div>
+              </div>
+
+              <div className="border rounded p-3 bg-slate-50/30">
+                <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">5. Triagem / Sinais Vitais</h3>
+                <div className="grid grid-cols-4 gap-2 text-[10px]">
+                  <p><strong>PA:</strong> {data.sinaisVitais.pressao_arterial || '—'}</p>
+                  <p><strong>FC:</strong> {data.sinaisVitais.frequencia_cardiaca || '—'}</p>
+                  <p><strong>FR:</strong> {data.sinaisVitais.frequencia_respiratoria || '—'}</p>
+                  <p><strong>Temp:</strong> {data.sinaisVitais.temperatura || '—'}</p>
+                  <p><strong>SpO₂:</strong> {data.sinaisVitais.saturacao || '—'}</p>
+                  <p><strong>Peso:</strong> {data.sinaisVitais.peso || '—'}</p>
+                  <p><strong>Altura:</strong> {data.sinaisVitais.altura || '—'}</p>
+                  <p><strong>Glicemia:</strong> {data.sinaisVitais.glicemia || '—'}</p>
+                </div>
+              </div>
+
+              <div className="border rounded p-3 bg-slate-50/30">
+                <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">6. Avaliação Clínica</h3>
+                <p className="text-[10px] text-muted-foreground italic">Campos em branco para preenchimento manual no PDF/Impressão</p>
+                {data.evoluciones.length > 0 && (
+                  <div className="mt-2 pt-2 border-t">
+                    <p className="text-[9px] font-bold uppercase text-[#0c4a6e] mb-1">Últimas Evoluções:</p>
+                    {data.evoluciones.map((evo, i) => (
+                      <div key={i} className="mb-1 text-[10px]">
+                        <span className="font-bold text-muted-foreground">{formatarData(evo.data)}:</span> {evo.observacao}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
