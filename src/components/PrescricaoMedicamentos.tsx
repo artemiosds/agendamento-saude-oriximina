@@ -175,6 +175,13 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
 
   const handlePrint = () => {
     if (value.length === 0) { toast.error("Nenhum medicamento na lista."); return; }
+    if (!config) { toast.error("Carregando configurações..."); return; }
+
+    const logoLeft = config.logoEsquerda || logoSmsFallback;
+    const logoRight = config.logoDireita || logoCerFallback;
+    const logoCentral = config.mostrarLogoCentral && config.logoCentral 
+      ? `<div style="text-align:center;margin-bottom:8px;"><img src="${config.logoCentral}" style="max-height:50px;max-width:150px;object-fit:contain;" /></div>` 
+      : '';
 
     const rows = value.map((m, i) =>
       `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px dotted #999;">
@@ -193,11 +200,14 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
 <style>
   @page { size: A5 portrait; margin: 12mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Times New Roman', Georgia, serif; color: #000; background: #fff; font-size: 11pt; }
-  .header { text-align: center; margin-bottom: 16px; border-bottom: 2px solid #000; padding-bottom: 10px; }
-  .header h1 { font-size: 12pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-  .header h2 { font-size: 10pt; font-weight: bold; margin-top: 2px; }
-  .header h3 { font-size: 11pt; font-weight: bold; margin-top: 8px; text-decoration: underline; }
+  body { font-family: '${config.tipografia.fonte}', 'Times New Roman', Georgia, serif; color: #000; background: #fff; font-size: 11pt; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: ${config.mostrarLinhaDivisoria ? '2px solid #000' : 'none'}; padding-bottom: 10px; gap: 10px; }
+  .header-logo { width: 50px; height: 50px; object-fit: contain; }
+  .header-content { flex: 1; text-align: center; }
+  .header h1 { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .header h2 { font-size: 9pt; font-weight: bold; margin-top: 2px; }
+  .title-area { text-align: center; margin-bottom: 15px; }
+  .title-area h3 { font-size: 11pt; font-weight: bold; text-decoration: underline; text-transform: uppercase; }
   .info { margin: 10px 0; font-size: 10pt; }
   .info p { margin: 3px 0; }
   .info span.label { font-weight: bold; }
@@ -207,8 +217,16 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
   @media print { body { -webkit-print-color-adjust: exact; } }
 </style></head><body>
 <div class="header">
-  <h1>Secretaria Municipal de Saúde de Oriximiná</h1>
-  <h2>Centro Especializado em Reabilitação Nível II</h2>
+  <img src="${logoLeft}" class="header-logo" />
+  <div class="header-content">
+    ${logoCentral}
+    <h1>${config.linha1}</h1>
+    <h2>${config.linha2}</h2>
+    ${config.linha3 ? `<div style="font-size: 8pt; color: #444;">${config.linha3}</div>` : ''}
+  </div>
+  <img src="${logoRight}" class="header-logo" />
+</div>
+<div class="title-area">
   <h3>Receituário Médico</h3>
 </div>
 <div class="info">
@@ -222,6 +240,9 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
   <p>${profissionalNome || ''}</p>
   <p>${conselhoStr}</p>
   <div class="signature">Assinatura / Carimbo</div>
+</div>
+<div style="text-align:center; font-size:7pt; color:#888; margin-top:10px;">
+  ${config.rodapeEndereco || ''}
 </div>
 </body></html>`;
 
