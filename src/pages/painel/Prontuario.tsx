@@ -648,20 +648,26 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarioProcedimentos = async (prontuarioId: string) => {
     const { data } = await (supabase as any)
       .from("prontuario_procedimentos")
-      .select("procedimento_id, cids_selecionados")
+      .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
     if (data) {
       setSelectedProcIds(data.map((d: any) => d.procedimento_id));
       const cidsMap: Record<string, string[]> = {};
+      const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       data.forEach((d: any) => {
         cidsMap[d.procedimento_id] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
+        detailsMap[d.procedimento_id] = {
+          quantidade: d.quantidade || 1,
+          observacao: d.observacao || ""
+        };
       });
       setSelectedCidsByProc(cidsMap);
-      // Pre-load CID catalog for each procedure so the user sees them highlighted
+      setProcDetails(detailsMap);
       data.forEach((d: any) => loadCidsForProc(d.procedimento_id));
     } else {
       setSelectedProcIds([]);
       setSelectedCidsByProc({});
+      setProcDetails({});
     }
   };
 
