@@ -642,16 +642,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
               <div className="border rounded p-3 bg-slate-50/30">
                 <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">6. Avaliação Clínica</h3>
                 <p className="text-[10px] text-muted-foreground italic">Campos em branco para preenchimento manual no PDF/Impressão</p>
-                {data.evoluciones.length > 0 && (
-                  <div className="mt-2 pt-2 border-t">
-                    <p className="text-[9px] font-bold uppercase text-[#0c4a6e] mb-1">Últimas Evoluções:</p>
-                    {data.evoluciones.map((evo, i) => (
-                      <div key={i} className="mb-1 text-[10px]">
-                        <span className="font-bold text-muted-foreground">{formatarData(evo.data)}:</span> {evo.observacao}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* Evoluções antigas removidas da ficha */}
               </div>
             </>
           )}
