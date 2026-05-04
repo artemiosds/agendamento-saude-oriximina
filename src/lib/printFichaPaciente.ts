@@ -422,7 +422,10 @@ export async function printFichaPaciente(data: FichaPacienteData): Promise<void>
 
   <!-- RODAPÉ -->
   <div class="rodape">
-    SMS Oriximiná &mdash; CER II &mdash; Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
+    ${config.linha1}${config.linha2 ? ' &mdash; ' + config.linha2 : ''}
+    ${config.rodapeTexto ? ' &mdash; ' + config.rodapeTexto : ''}
+    <br/>
+    Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
   </div>
 
 </body>
