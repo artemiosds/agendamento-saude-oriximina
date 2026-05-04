@@ -113,174 +113,169 @@ const resolveLogoUrl = (src: string): string => {
 
 const PRINT_CSS = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page { size: A4 portrait; margin: 10mm 12mm 14mm 12mm; }
+  @page { size: A4 portrait; margin: 8mm 10mm 10mm 10mm; }
   body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 11px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10.5px;
     color: #1a1a1a;
-    line-height: 1.45;
+    line-height: 1.4;
     padding: 0;
     width: 100%;
+    background: #fff;
   }
 
   /* ===== HEADER ===== */
   .header {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding-bottom: 8px;
-    margin-bottom: 6px;
-    border-bottom: 3px solid #0c4a6e;
+    gap: 12px;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #0c4a6e;
   }
   .header-logo img {
-    width: 54px;
-    height: 54px;
+    width: 50px;
+    height: 50px;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: 4px;
   }
   .header-center {
     flex: 1;
     text-align: center;
   }
   .header-center h1 {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
     color: #0c4a6e;
     margin: 0;
   }
   .header-center h2 {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     color: #334155;
-    margin: 2px 0 0;
+    margin: 1px 0 0;
   }
   .header-center .ficha-tipo {
-    font-size: 10px;
-    font-weight: 600;
+    font-size: 11px;
+    font-weight: 800;
     text-transform: uppercase;
-    color: #64748b;
+    color: #0c4a6e;
+    margin-top: 3px;
     letter-spacing: 0.5px;
-    margin-top: 2px;
   }
   .header-right {
     text-align: right;
-    font-size: 10px;
+    font-size: 9.5px;
     color: #475569;
-    line-height: 1.7;
-    min-width: 130px;
+    line-height: 1.6;
+    min-width: 120px;
   }
   .header-right b { color: #1e293b; }
 
   /* ===== SECTIONS ===== */
   .bloco {
-    margin-top: 7px;
-    border: 1px solid #94a3b8;
+    margin-top: 6px;
+    border: 1px solid #cbd5e1;
     border-radius: 4px;
     overflow: hidden;
     page-break-inside: avoid;
   }
   .bloco-titulo {
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 9px;
+    font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    background: linear-gradient(135deg, #0c4a6e, #0369a1);
-    color: #fff;
-    padding: 5px 12px;
+    letter-spacing: 0.5px;
+    background: #f1f5f9;
+    color: #0c4a6e;
+    padding: 4px 10px;
+    border-bottom: 1px solid #cbd5e1;
     margin: 0;
   }
   .bloco-body {
-    padding: 8px 12px;
+    padding: 6px 10px;
   }
 
   /* ===== FIELD GRIDS ===== */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px 14px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 10px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 12px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px 6px; }
 
-  .campo { margin-bottom: 2px; font-size: 11px; }
+  .campo { margin-bottom: 1px; display: flex; align-items: baseline; gap: 4px; overflow: hidden; }
   .campo b {
-    font-size: 8.5px;
-    text-transform: uppercase;
-    color: #475569;
-    font-weight: 700;
-    letter-spacing: 0.2px;
-    margin-right: 4px;
-  }
-  .campo span { color: #0f172a; font-weight: 500; }
-  .campo-full { grid-column: 1 / -1; }
-
-  /* ===== VITALS TABLE ===== */
-  .vitais-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 4px;
-  }
-  .vitais-table td {
-    border: 1px solid #cbd5e1;
-    padding: 6px 10px;
-    font-size: 11px;
-    text-align: center;
-    background: #f8fafc;
-  }
-  .vitais-table td b {
-    display: block;
     font-size: 8px;
     text-transform: uppercase;
     color: #64748b;
     font-weight: 700;
-    margin-bottom: 2px;
+    white-space: nowrap;
   }
-  .vitais-table td span {
-    font-weight: 600;
-    color: #0f172a;
-    font-size: 12px;
-  }
+  .campo span { color: #0f172a; font-weight: 600; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .campo-full { grid-column: 1 / -1; }
 
-  /* ===== EVOLUTION LINES ===== */
-  .evo-area {
-    min-height: 180px;
-    position: relative;
+  /* ===== CLINICAL AREAS ===== */
+  .manual-area {
+    margin-top: 4px;
   }
-  .evo-line {
-    border-bottom: 1px solid #cbd5e1;
-    height: 26px;
-    line-height: 26px;
-    padding: 0 4px;
-    font-size: 11px;
-  }
-  .evo-line:nth-child(odd) { background: #fafbfc; }
-
-  .evo-item {
-    border-bottom: 1px solid #e2e8f0;
-    padding: 6px 4px;
-  }
-  .evo-item:last-child { border-bottom: none; }
-  .evo-meta { font-size: 9px; color: #64748b; font-weight: 600; }
-  .evo-text { font-size: 11px; margin-top: 3px; color: #1e293b; line-height: 1.5; }
-
-  /* ===== CONDUTA ===== */
-  .conduta-campo {
-    margin-bottom: 3px;
-  }
-  .conduta-campo b {
-    font-size: 9px;
+  .manual-label {
+    font-size: 8.5px;
+    font-weight: 800;
     text-transform: uppercase;
     color: #475569;
-    font-weight: 700;
+    margin-bottom: 2px;
   }
-  .conduta-linha {
-    border-bottom: 1px solid #cbd5e1;
-    min-height: 24px;
+  .manual-lines {
+    border-bottom: 1px solid #e2e8f0;
+    min-height: 20px;
+    margin-bottom: 6px;
+  }
+  .manual-lines-lg {
+    min-height: 60px;
+    background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
+    background-size: 100% 20px;
     margin-bottom: 8px;
   }
 
+  /* ===== VITALS TABLE ===== */
+  .vitais-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .vital-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    text-align: center;
+    background: #f8fafc;
+  }
+  .vital-item b {
+    display: block;
+    font-size: 7.5px;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 1px;
+  }
+  .vital-item span {
+    font-weight: 700;
+    font-size: 11px;
+    color: #0f172a;
+  }
+
+  /* ===== EVOLUTION ITEMS ===== */
+  .evo-item {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 4px 0;
+  }
+  .evo-item:last-child { border-bottom: none; }
+  .evo-meta { font-size: 8.5px; color: #64748b; font-weight: 700; margin-bottom: 1px; }
+  .evo-text { font-size: 9.5px; color: #1e293b; line-height: 1.3; }
+
   /* ===== SIGNATURE ===== */
   .assinatura-area {
-    margin-top: 28px;
+    margin-top: 15px;
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -288,39 +283,31 @@ const PRINT_CSS = `
   }
   .assinatura-bloco {
     text-align: center;
-    width: 240px;
+    width: 200px;
   }
   .assinatura-traco {
     border-top: 1px solid #1e293b;
-    padding-top: 24px;
+    padding-top: 18px;
   }
   .assinatura-label {
-    font-size: 9px;
+    font-size: 8.5px;
     color: #64748b;
-    margin: 2px 0 0;
+    margin-top: 2px;
   }
   .assinatura-nome {
-    font-size: 10px;
-    font-weight: 600;
+    font-size: 9.5px;
+    font-weight: 700;
     color: #1e293b;
   }
 
-  .assinatura-data {
-    text-align: left;
-    font-size: 10px;
-    color: #475569;
-  }
-  .assinatura-data b { color: #1e293b; }
-
   /* ===== FOOTER ===== */
   .rodape {
-    margin-top: 14px;
-    padding-top: 5px;
-    border-top: 1px solid #cbd5e1;
+    margin-top: 10px;
+    padding-top: 4px;
+    border-top: 1px solid #e2e8f0;
     text-align: center;
     font-size: 8px;
     color: #94a3b8;
-    letter-spacing: 0.3px;
   }
 
   @media print {
