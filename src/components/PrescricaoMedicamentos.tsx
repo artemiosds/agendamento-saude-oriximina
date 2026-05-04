@@ -74,8 +74,10 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
   const [newMed, setNewMed] = useState({ nome: "", principio_ativo: "", classe_terapeutica: CLASSES[0], apresentacao: "", dosagem_padrao: "", via_padrao: "oral" });
   const [savingNew, setSavingNew] = useState(false);
   const [selectedForDisable, setSelectedForDisable] = useState<Set<string>>(new Set());
+  const [config, setConfig] = useState<DocumentConfig | null>(null);
 
   useEffect(() => {
+    loadDocumentConfig().then(setConfig);
     const load = async () => {
       const [{ data: meds }, { data: prefs }] = await Promise.all([
         (supabase as any).from("medications").select("*").eq("ativo", true),
