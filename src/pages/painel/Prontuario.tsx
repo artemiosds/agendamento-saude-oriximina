@@ -246,6 +246,7 @@ const ProntuarioPage: React.FC = () => {
   const [procedimentos, setProcedimentos] = useState<ProcedimentoDB[]>([]);
   const [sigtapDisponibilizarTodos, setSigtapDisponibilizarTodos] = useState<boolean>(false);
   const [selectedProcIds, setSelectedProcIds] = useState<string[]>([]);
+  const [procDetails, setProcDetails] = useState<Record<string, { quantidade: number; observacao: string }>>({});
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
   const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
@@ -647,20 +648,26 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarioProcedimentos = async (prontuarioId: string) => {
     const { data } = await (supabase as any)
       .from("prontuario_procedimentos")
-      .select("procedimento_id, cids_selecionados")
+      .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
     if (data) {
       setSelectedProcIds(data.map((d: any) => d.procedimento_id));
       const cidsMap: Record<string, string[]> = {};
+      const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       data.forEach((d: any) => {
         cidsMap[d.procedimento_id] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
+        detailsMap[d.procedimento_id] = {
+          quantidade: d.quantidade || 1,
+          observacao: d.observacao || ""
+        };
       });
       setSelectedCidsByProc(cidsMap);
-      // Pre-load CID catalog for each procedure so the user sees them highlighted
+      setProcDetails(detailsMap);
       data.forEach((d: any) => loadCidsForProc(d.procedimento_id));
     } else {
       setSelectedProcIds([]);
       setSelectedCidsByProc({});
+      setProcDetails({});
     }
   };
 
@@ -727,6 +734,7 @@ const ProntuarioPage: React.FC = () => {
         setEditId(null);
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
+        setProcDetails({});
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
@@ -818,6 +826,7 @@ const ProntuarioPage: React.FC = () => {
     setSessionRegistrationRequested(false);
     setSelectedProcIds([]);
     setSelectedCidsByProc({});
+    setProcDetails({});
     setEpisodios([]);
     setListaExames([]);
     setListaPrescricao([]);
@@ -931,7 +940,9 @@ const ProntuarioPage: React.FC = () => {
       const procTexto = selectedProcIds
         .map((id) => {
           const p = procedimentos.find((pr) => pr.id === id);
-          return p?.nome || "";
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
         })
         .filter(Boolean)
         .join(", ");
@@ -1056,6 +1067,8 @@ const ProntuarioPage: React.FC = () => {
             prontuario_id: prontuarioId,
             procedimento_id: pid,
             cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
           }));
           await (supabase as any).from("prontuario_procedimentos").insert(links);
         }
@@ -1174,7 +1187,12 @@ const ProntuarioPage: React.FC = () => {
     setAutosaveStatus('saving');
     try {
       const procTexto = selectedProcIds
-        .map((id) => procedimentos.find((pr) => pr.id === id)?.nome || '')
+        .map((id) => {
+          const p = procedimentos.find((pr) => pr.id === id);
+          const detail = procDetails[id];
+          const qtdStr = detail && detail.quantidade > 1 ? ` (${detail.quantidade}x)` : '';
+          return p ? `${p.nome}${qtdStr}` : '';
+        })
         .filter(Boolean)
         .join(', ');
       // Preserva profissional ao editar; usa logado ao criar
@@ -2547,7 +2565,14 @@ const ProntuarioPage: React.FC = () => {
                       size="sm"
                       className="h-auto py-1 text-xs"
                       onClick={() => {
-                        if (!selectedProcIds.includes(h.id)) setSelectedProcIds((prev) => [...prev, h.id]);
+                        if (!selectedProcIds.includes(h.id)) {
+                          setSelectedProcIds((prev) => [...prev, h.id]);
+                          setProcDetails(prev => ({ ...prev, [h.id]: { quantidade: 1, observacao: "" } }));
+                          setExpandedProcId(h.id);
+                          loadCidsForProc(h.id);
+                        } else {
+                          setExpandedProcId(h.id);
+                        }
                       }}
                     >
                       <Clock className="h-3 w-3 mr-1" /> {h.nome}
@@ -2563,11 +2588,9 @@ const ProntuarioPage: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Procedimentos Realizados</Label>
-                  {user?.role === 'master' && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
-                      <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
-                    </Button>
-                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
+                    <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
+                  </Button>
                 </div>
                 <div className="relative mb-2">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -2601,10 +2624,16 @@ const ProntuarioPage: React.FC = () => {
                               id={`proc-${proc.id}`}
                               checked={checked}
                               onClick={(e) => e.stopPropagation()}
-                              onCheckedChange={(c) => {
-                                setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
-                                if (c) loadCidsForProc(proc.id);
-                              }}
+                                onCheckedChange={(c) => {
+                                  setSelectedProcIds((prev) => c ? [...prev, proc.id] : prev.filter((id) => id !== proc.id));
+                                  if (c) {
+                                    loadCidsForProc(proc.id);
+                                    setProcDetails(prev => ({
+                                      ...prev,
+                                      [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                    }));
+                                  }
+                                }}
                             />
                             <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0 ${isExpanded ? '' : '-rotate-90'}`} />
                             {isCustom
@@ -2621,12 +2650,52 @@ const ProntuarioPage: React.FC = () => {
                             )}
                           </div>
                           {isExpanded && (
-                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10">
+                            <div className="px-3 pb-3 pt-1 border-t bg-muted/10 space-y-3">
                               {proc.especialidade && (
-                                <p className="text-[11px] text-muted-foreground mb-2">{proc.especialidade}</p>
+                                <p className="text-[11px] text-muted-foreground">{proc.especialidade}</p>
                               )}
-                              {/* Lupa unificada de CIDs */}
-                              <div className="relative mb-2">
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Quantidade</Label>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={procDetails[proc.id]?.quantidade || 1}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value) || 1;
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { observacao: "" }), quantidade: val }
+                                      }));
+                                    }}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] uppercase text-muted-foreground">Observação do Procedimento</Label>
+                                  <Input
+                                    value={procDetails[proc.id]?.observacao || ""}
+                                    onChange={(e) => {
+                                      setProcDetails(prev => ({
+                                        ...prev,
+                                        [proc.id]: { ...(prev[proc.id] || { quantidade: 1 }), observacao: e.target.value }
+                                      }));
+                                    }}
+                                    placeholder="Ex: Lado direito, observação clínica..."
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+
+                              {!isCustom && !proc.id.includes('.') && (
+                                <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                  <p className="text-[10px] text-amber-700">Procedimento sem SIGTAP não será validado para produção BPA-I.</p>
+                                </div>
+                              )}
+
+                              <div className="relative">
                                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                                 <Input
                                   value={cidSearchByProc[proc.id] || ''}
@@ -2673,9 +2742,13 @@ const ProntuarioPage: React.FC = () => {
                                               : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                           }));
                                           // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
-                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
-                                            setSelectedProcIds((prev) => [...prev, proc.id]);
-                                          }
+                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                                setSelectedProcIds((prev) => [...prev, proc.id]);
+                                                setProcDetails(prev => ({
+                                                  ...prev,
+                                                  [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                                }));
+                                              }
                                         }}
                                         aria-pressed={isSel}
                                         title={c.descricao || c.codigo}
@@ -2728,9 +2801,13 @@ const ProntuarioPage: React.FC = () => {
                                                   ? (m[proc.id] || []).filter((x) => x !== c.codigo)
                                                   : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                               }));
-                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
-                                                setSelectedProcIds((prev) => [...prev, proc.id]);
-                                              }
+                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                            setSelectedProcIds((prev) => [...prev, proc.id]);
+                                            setProcDetails(prev => ({
+                                              ...prev,
+                                              [proc.id]: prev[proc.id] || { quantidade: 1, observacao: "" }
+                                            }));
+                                          }
                                             }}
                                             aria-pressed={isSel}
                                             title={c.descricao || c.codigo}
@@ -2780,6 +2857,8 @@ const ProntuarioPage: React.FC = () => {
                 const list = await procedureService.getActive();
                 setProcedimentos(list as any);
                 setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+                setProcDetails(prev => ({ ...prev, [codigo]: { quantidade: 1, observacao: "" } }));
+                setExpandedProcId(codigo); // Auto-expand to show details/CIDs
               }}
             />
 
