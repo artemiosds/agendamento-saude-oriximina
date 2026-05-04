@@ -357,7 +357,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
     <div class="header-right">
       <div><b>Data:</b> ${dataAtual}</div>
       <div><b>Hora:</b> ${horaAtual}</div>
-      <div><b>Prontuário:</b> ${v(data.dadosClinicos.numero_prontuario) || '____________'}</div>
+      <div><b>Prontuário:</b> ________________</div>
     </div>
   </div>
 
