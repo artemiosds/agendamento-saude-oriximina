@@ -2572,11 +2572,9 @@ const ProntuarioPage: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Procedimentos Realizados</Label>
-                  {user?.role === 'master' && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
-                      <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
-                    </Button>
-                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={() => setNovoProcOpen(true)}>
+                    <Plus className="h-3 w-3 mr-1" /> Novo Procedimento
+                  </Button>
                 </div>
                 <div className="relative mb-2">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
