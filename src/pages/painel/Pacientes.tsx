@@ -890,47 +890,26 @@ const Pacientes: React.FC = () => {
         };
       });
 
-    // B) DADOS CLÍNICOS — agendamento do dia atual (ou mais recente se não houver hoje)
-    const today = new Date().toISOString().split("T")[0];
-    const dadosClinicosPromise = supabase
-      .from("agendamentos")
-      .select("id, tipo, data, unidade_id, profissional_id")
-      .eq("paciente_id", pacienteId)
-      .order("data", { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        const todayAg = data?.find((a) => a.data === today);
-        const lastAg = todayAg || data?.[0];
-        const unidade = lastAg?.unidade_id ? unidades.find((u) => u.id === lastAg.unidade_id) : null;
-        return {
-          numero_prontuario: pacienteId,
-          tipo_atendimento: lastAg?.tipo || "",
-          unidade_origem: "",
-          unidade_atendimento: unidade?.nome || "",
-          data_atendimento: lastAg?.data || "",
-        };
-      });
+    // B) DADOS CLÍNICOS — Sempre limpos para a ficha de impressão
+    const dadosClinicosPromise = Promise.resolve({
+      numero_prontuario: pacienteId,
+      tipo_atendimento: "",
+      unidade_origem: "",
+      unidade_atendimento: "",
+      data_atendimento: "",
+    });
 
-    // C) SINAIS VITAIS — último registro de triagem
-    const sinaisVitaisPromise = (supabase as any)
-      .from("triage_records")
-      .select("pressao_arterial, frequencia_cardiaca, temperatura, saturacao_oxigenio, peso, altura, frequencia_respiratoria, glicemia")
-      .in("agendamento_id", agendamentos.filter(a => a.pacienteId === pacienteId).map(a => a.id))
-      .order("criado_em", { ascending: false })
-      .limit(1)
-      .then(({ data }: any) => {
-        const triagem = data?.[0];
-        return {
-          pressao_arterial: triagem?.pressao_arterial || "",
-          frequencia_cardiaca: triagem?.frequencia_cardiaca ? String(triagem.frequencia_cardiaca) : "",
-          temperatura: triagem?.temperatura ? String(triagem.temperatura) : "",
-          saturacao: triagem?.saturacao_oxigenio ? String(triagem.saturacao_oxigenio) : "",
-          peso: triagem?.peso ? String(triagem.peso) : "",
-          altura: triagem?.altura ? String(triagem.altura) : "",
-          frequencia_respiratoria: triagem?.frequencia_respiratoria ? String(triagem.frequencia_respiratoria) : "",
-          glicemia: triagem?.glicemia ? String(triagem.glicemia) : "",
-        };
-      });
+    // C) SINAIS VITAIS — Sempre limpos para a ficha de impressão
+    const sinaisVitaisPromise = Promise.resolve({
+      pressao_arterial: "",
+      frequencia_cardiaca: "",
+      temperatura: "",
+      saturacao: "",
+      peso: "",
+      altura: "",
+      frequencia_respiratoria: "",
+      glicemia: "",
+    });
 
     // D) PROFISSIONAL LOGADO
     const profissionalPromise = Promise.resolve({
