@@ -1783,6 +1783,7 @@ export type Database = {
           observacao: string
           procedimento_id: string
           prontuario_id: string
+          quantidade: number | null
         }
         Insert: {
           cids_selecionados?: string[]
@@ -1791,6 +1792,7 @@ export type Database = {
           observacao?: string
           procedimento_id: string
           prontuario_id: string
+          quantidade?: number | null
         }
         Update: {
           cids_selecionados?: string[]
@@ -1799,6 +1801,7 @@ export type Database = {
           observacao?: string
           procedimento_id?: string
           prontuario_id?: string
+          quantidade?: number | null
         }
         Relationships: [
           {
