@@ -13,7 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, History, ListChecks } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,7 +92,8 @@ const statusLabels: Record<string, string> = {
   aguardando_atendimento: "Aguard. Atendimento",
   aguardando_enfermagem: "Aguard. Enfermagem",
   apto_agendamento: "Apto p/ Agendamento",
-  apto_atendimento: "Apto p/ Atendimento", // NOVO
+  apto_atendimento: "Apto p/ Atendimento",
+  pendente_revisao: "Pendente de Revisão",
   aguardando_multiprofissional: "Aguard. Multiprofissional",
   indeferido: "Indeferido",
 };
@@ -109,7 +112,8 @@ const statusBadgeClass: Record<string, string> = {
   aguardando_atendimento: "bg-emerald-500/10 text-emerald-600",
   aguardando_enfermagem: "bg-orange-500/10 text-orange-600",
   apto_agendamento: "bg-success/10 text-success",
-  apto_atendimento: "bg-green-500/10 text-green-600", // NOVO
+  apto_atendimento: "bg-green-500/10 text-green-600",
+  pendente_revisao: "bg-warning/10 text-warning border border-warning/20",
   aguardando_multiprofissional: "bg-purple-500/10 text-purple-600",
   indeferido: "bg-destructive/10 text-destructive",
 };
@@ -287,8 +291,9 @@ const Agenda: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [agendamentos, selectedDate]);
 
-  // NOVO: aba pendentes / agenda
-  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
+  // NOVO: aba pendentes / agenda / pendencias_revisao
+  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
+  const [pendenciasDialogOpen, setPendenciasDialogOpen] = useState(false);
 
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
@@ -364,6 +369,41 @@ const Agenda: React.FC = () => {
 
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
+
+  // Memo para agendamentos pendentes (Requirement 5-10)
+  const agendamentosPendentesRevisao = React.useMemo(() => {
+    const today = todayLocalStr();
+    const currentMonthStr = today.substring(0, 7); // "YYYY-MM" (Req 7)
+    const nowMin = nowMinutesInBrazil();
+    
+    return agendamentos.filter(ag => {
+      // Regra de permissão: profissional vê só os seus, Master vê todos (Req 6)
+      if (isProfissional && ag.profissionalId !== user?.id) return false;
+      // Universal unit isolation
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
+
+      // Recorte temporal: passado dentro do mês atual (Req 7 & 8)
+      if (!ag.data.startsWith(currentMonthStr)) return false;
+      
+      const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
+      const agMin = hh * 60 + mm;
+      const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
+      
+      if (!isPast) return false;
+
+      const pendenteStatuses = [
+        "confirmado", "aguardando", "confirmado_chegada", "chegada_confirmada", 
+        "apto_atendimento", "chamado", "em_atendimento", "triagem_concluida",
+        "aguardando_atendimento", "aguardando_triagem"
+      ];
+      const concluidoStatuses = [
+        "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
+        "faltou", "cancelado", "excluido"
+      ];
+
+      return pendenteStatuses.includes(ag.status) && !concluidoStatuses.includes(ag.status);
+    });
+  }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
@@ -990,6 +1030,12 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
+    // Regra de permissão profissional para marcar falta (Req 1 & 3)
+    if (isProfissional && newStatus === "falta" && ag.profissionalId !== user?.id) {
+      toast.error("Você só pode registrar falta em pacientes vinculados à sua agenda.");
+      return;
+    }
+
     // Intercept "falta" — open modal with justification
     if (newStatus === "falta") {
       setFaltaTarget(ag);
@@ -1389,6 +1435,7 @@ const Agenda: React.FC = () => {
         documento: dados.documento || "",
         descricao: dados.descricao || "",
         anexo_url: dados.anexoUrl || "",
+        origem: "agenda_profissional_acao_falta"
       },
     });
 
@@ -1699,45 +1746,73 @@ const Agenda: React.FC = () => {
             {isProfissional ? "Pacientes confirmados para atendimento" : "Gerenciar agendamentos"}
           </p>
         </div>
-        {!isProfissional && (
-          <div className="flex gap-2 flex-wrap">
-            {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
-            {(user?.role === "master" || user?.role === "recepcao") && (
-              <AgendaNotificacoesMassa
-                agendamentos={agendamentos}
-                pacientes={pacientes}
-                unidades={unidades}
-                selectedDate={selectedDate}
-                userUnidadeId={user?.unidadeId || ""}
-                userUsuario={user?.usuario || ""}
-              />
-            )}
-            {/* NOVO: botão Pendentes Online com badge */}
-            {canAprovar && agendamentosPendentesOnline.length > 0 && (
-              <Button
-                variant={abaAtiva === "pendentes" ? "default" : "outline"}
-                onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                Pendentes Online
-                <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
-                  {agendamentosPendentesOnline.length}
-                </span>
-              </Button>
-            )}
-            <Dialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) setPacientesConferidos(new Set());
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button className="gradient-primary text-primary-foreground">
-                  <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
+        
+        <div className="flex flex-col gap-2">
+          {/* Lembrete de Pendências (Req 5 & 9) */}
+          {(isMaster || isProfissional) && agendamentosPendentesRevisao.length > 0 && (
+            <Alert className="bg-warning/5 border-warning/20 animate-in fade-in slide-in-from-top-4 duration-500">
+              <AlertCircle className="h-4 w-4 text-warning" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                <div className="pr-4">
+                  <AlertTitle className="text-sm font-semibold text-warning-foreground">Pendências de agenda</AlertTitle>
+                  <AlertDescription className="text-xs text-muted-foreground">
+                    Existem {agendamentosPendentesRevisao.length} pacientes sem conclusão no período. Revise agora.
+                  </AlertDescription>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 border-warning/30 hover:bg-warning/10 text-warning-foreground text-xs shrink-0"
+                  onClick={() => setPendenciasDialogOpen(true)}
+                >
+                  <ListChecks className="w-3.5 h-3.5 mr-1" />
+                  Ver pendências
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              </div>
+            </Alert>
+          )}
+
+          <div className="flex gap-2 flex-wrap justify-end">
+            {!isProfissional && (
+              <>
+                {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+                {(user?.role === "master" || user?.role === "recepcao") && (
+                  <AgendaNotificacoesMassa
+                    agendamentos={agendamentos}
+                    pacientes={pacientes}
+                    unidades={unidades}
+                    selectedDate={selectedDate}
+                    userUnidadeId={user?.unidadeId || ""}
+                    userUsuario={user?.usuario || ""}
+                  />
+                )}
+                {/* NOVO: botão Pendentes Online com badge */}
+                {canAprovar && agendamentosPendentesOnline.length > 0 && (
+                  <Button
+                    variant={abaAtiva === "pendentes" ? "default" : "outline"}
+                    onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
+                  >
+                    <Bell className="w-4 h-4 mr-2" />
+                    Pendentes Online
+                    <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
+                      {agendamentosPendentesOnline.length}
+                    </span>
+                  </Button>
+                )}
+                
+                <Dialog
+                  open={dialogOpen}
+                  onOpenChange={(open) => {
+                    setDialogOpen(open);
+                    if (!open) setPacientesConferidos(new Set());
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button className="gradient-primary text-primary-foreground">
+                      <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="font-display">Novo Agendamento</DialogTitle>
                 </DialogHeader>
@@ -1972,8 +2047,10 @@ const Agenda: React.FC = () => {
                 </div>
               </DialogContent>
             </Dialog>
-          </div>
+          </>
         )}
+      </div>
+    </div>
       </div>
 
       {/* NOVO: Painel de aprovação */}
@@ -2567,11 +2644,17 @@ const Agenda: React.FC = () => {
                             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                           </Button>
                         )}
-                        {!isProfissional &&
+                        {(isMaster || isProfissional) &&
                           ag.status !== "cancelado" &&
                           ag.status !== "concluido" &&
                           !ehPendenteOnline &&
-                          statusActions.map((sa) => (
+                          statusActions.filter(sa => {
+                            // Se for profissional, só mostra ação de "falta" para a própria agenda
+                            if (isProfissional) {
+                              return sa.key === "falta" && ag.profissionalId === user?.id;
+                            }
+                            return true;
+                          }).map((sa) => (
                             <Button
                               key={sa.key}
                               size="sm"
@@ -2634,6 +2717,17 @@ const Agenda: React.FC = () => {
                 );
               })
             )}
+          </div>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-2 py-3 px-4 bg-muted/30 rounded-xl border border-dashed text-[10px] text-muted-foreground mt-4">
+            <span className="font-semibold uppercase tracking-wider opacity-70">Legenda:</span>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-success" /> Confirmado</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Chegou</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500" /> Apto p/ Atendimento</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-primary" /> Em Atendimento</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-info" /> Concluído</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-destructive" /> Falta / Cancelado</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-warning" /> Pendente de Revisão</div>
           </div>
         </>
       )}
@@ -3038,6 +3132,93 @@ const Agenda: React.FC = () => {
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}
       />
+      {/* Modal de Pendências de Revisão (Req 9 & 10) */}
+      <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display">
+              <ListChecks className="w-5 h-5 text-warning" />
+              Pendências de Agenda
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {agendamentosPendentesRevisao.length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-success/40" />
+                <p className="text-muted-foreground">Nenhuma pendência encontrada.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {agendamentosPendentesRevisao.map(ag => (
+                  <div key={ag.id} className="flex items-center justify-between p-3 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{ag.pacienteNome}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span>{new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR')} às {ag.hora}</span>
+                        <span>•</span>
+                        <span className="truncate">{ag.profissionalNome}</span>
+                      </div>
+                      <div className="mt-1">
+                        <StatusBadge
+                          label={statusLabels[ag.status] || ag.status}
+                          className={statusBadgeClass[ag.status]}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleStatusChange(ag.id, "falta")}
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Marcar Falta</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                            onClick={() => {
+                              setDetalheAg(ag);
+                              setDetalheOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Ver Detalhes</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-success hover:bg-success/10"
+                            onClick={() => handleIniciarAtendimento(ag)}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Iniciar Atendimento</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendenciasDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
