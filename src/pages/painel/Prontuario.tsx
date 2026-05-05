@@ -652,7 +652,7 @@ const ProntuarioPage: React.FC = () => {
       .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
     
-    if (data) {
+    if (data && data.length > 0) {
       const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
@@ -660,7 +660,7 @@ const ProntuarioPage: React.FC = () => {
       data.forEach((d: any) => {
         // Find the procedure by its UUID (database id)
         const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
-        const displayId = proc ? proc.id : d.procedimento_id; // Fallback to uuid if not found in current list
+        const displayId = proc ? proc.id : d.procedimento_id;
         
         ids.push(displayId);
         cidsMap[displayId] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
@@ -669,7 +669,9 @@ const ProntuarioPage: React.FC = () => {
           observacao: d.observacao || ""
         };
         
-        if (proc) loadCidsForProc(proc.id);
+        if (proc) {
+          loadCidsForProc(proc.id);
+        }
       });
       
       setSelectedProcIds(ids);
@@ -853,6 +855,12 @@ const ProntuarioPage: React.FC = () => {
     setEditId(p.id);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
+    
+    // Clear state before loading
+    setSelectedProcIds([]);
+    setSelectedCidsByProc({});
+    setProcDetails({});
+
     loadProntuarioProcedimentos(p.id);
     loadEpisodios(p.paciente_id);
     const formData = {
@@ -1073,21 +1081,41 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-        if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map((pid) => {
-            const proc = procedimentos.find(p => p.id === pid);
-            return {
-              prontuario_id: prontuarioId,
-              procedimento_id: proc?.uuid || pid, // Use UUID if found
-              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-              quantidade: procDetails[pid]?.quantidade || 1,
-              observacao: procDetails[pid]?.observacao || "",
-            };
-          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
-          
-          if (links.length > 0) {
-            await (supabase as any).from("prontuario_procedimentos").insert(links);
+        // First, fetch current procedures to avoid unnecessary deletion if no changes
+        const { data: existingProcs } = await (supabase as any)
+          .from("prontuario_procedimentos")
+          .select("procedimento_id, quantidade, observacao, cids_selecionados")
+          .eq("prontuario_id", prontuarioId);
+
+        // Prepare the new list of links to insert
+        const linksToInsert = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontuarioId,
+            procedimento_id: proc?.uuid || pid, // Use UUID if found
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
+
+        // Simple strategy: delete and re-insert if different
+        // We compare existing vs new to see if we need to do anything
+        const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
+          procedimento_id: l.procedimento_id,
+          quantidade: l.quantidade,
+          observacao: l.observacao,
+          cids_selecionados: l.cids_selecionados
+        })));
+
+        if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          if (linksToInsert.length > 0) {
+            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(linksToInsert);
+            if (insertError) {
+              console.error("Erro ao inserir procedimentos do prontuário:", insertError);
+              throw new Error("Não foi possível salvar os procedimentos do prontuário.");
+            }
           }
         }
       }
@@ -1155,6 +1183,8 @@ const ProntuarioPage: React.FC = () => {
         // Session registered: update editId to the saved prontuário so user can continue editing
         if (prontuarioId) {
           setEditId(prontuarioId);
+          // Refresh procedures for the newly saved record
+          loadProntuarioProcedimentos(prontuarioId);
         }
         // Keep SOAP fields intact so user can still view/edit the prontuário
       }
@@ -1264,22 +1294,21 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
+        const links = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontId,
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+        
+        // Use a single transaction (delete + insert)
         await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map((pid) => {
-            const proc = procedimentos.find(p => p.id === pid);
-            return {
-              prontuario_id: prontId,
-              procedimento_id: proc?.uuid || pid,
-              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-              quantidade: procDetails[pid]?.quantidade || 1,
-              observacao: procDetails[pid]?.observacao || "",
-            };
-          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-          
-          if (links.length > 0) {
-            await (supabase as any).from("prontuario_procedimentos").insert(links);
-          }
+        if (links.length > 0) {
+          await (supabase as any).from("prontuario_procedimentos").insert(links);
         }
       }
       setAutosaveStatus('saved');
