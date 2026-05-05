@@ -96,6 +96,7 @@ interface ProntuarioDB {
 }
 
 interface ProcedimentoDB {
+  uuid: string;
   id: string;
   nome: string;
   profissao: string;
