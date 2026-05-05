@@ -9,8 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle } from "lucide-react";
+import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle, History } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
+import PatientReferralHistory from "@/components/Pacientes/PatientReferralHistory";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
@@ -686,128 +687,81 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </p>
             </div>
 
-            {/* Encaminhamento (preservado) */}
-            <div className="space-y-3 border-t pt-3">
+            {/* Encaminhamento (UBS) - Histórico e Anexos */}
+            <div className="space-y-4 border-t pt-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                 <Building2 className="w-4 h-4" /> Encaminhamento (UBS)
               </div>
 
-              <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
-                <Label className="text-base font-semibold text-primary">Especialidade Destino</Label>
-                <p className="text-xs text-muted-foreground mb-2">Define todo o fluxo do paciente no sistema</p>
-                <Select value={form.especialidadeDestino || ""} onValueChange={(v) => set("especialidadeDestino", v)}>
-                  <SelectTrigger className="border-primary/30">
-                    <SelectValue placeholder="Selecione a especialidade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ESPECIALIDADES_DESTINO.map((e) => (
-                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.especialidadeDestino && (
-                  <p className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>
+              {isEdit && pacienteId ? (
+                <PatientReferralHistory 
+                  patientId={pacienteId} 
+                  patientData={form}
+                  unidadeId={user?.unidadeId}
+                  professionalId={user?.id}
+                />
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
+                    <Label className="text-base font-semibold text-primary">Especialidade Destino</Label>
+                    <p className="text-xs text-muted-foreground mb-2">Define o fluxo inicial do paciente. Após o cadastro, você poderá adicionar múltiplos encaminhamentos e anexos no histórico.</p>
+                    <Select value={form.especialidadeDestino || ""} onValueChange={(v) => set("especialidadeDestino", v)}>
+                      <SelectTrigger className="border-primary/30">
+                        <SelectValue placeholder="Selecione a especialidade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ESPECIALIDADES_DESTINO.map((e) => (
+                          <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.especialidadeDestino && (
+                      <p className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label>UBS origem</Label>
+                      <Select value={form.ubsOrigem || ""} onValueChange={(v) => set("ubsOrigem", v)}>
+                        <SelectTrigger><SelectValue placeholder="Selecione a UBS" /></SelectTrigger>
+                        <SelectContent>
+                          {UBS_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Profissional solicitante</Label>
+                      <Input
+                        value={form.profissionalSolicitante}
+                        onChange={(e) => set("profissionalSolicitante", sanitizeUpper(e.target.value))}
+                        placeholder="NOME DO PROFISSIONAL"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
+                    <History className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                    <p className="text-sm text-muted-foreground">
+                      Conclua o cadastro para habilitar o <b>Histórico Completo de Encaminhamentos</b> e o <b>Gerenciamento de Anexos</b> por encaminhamento.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Patient Attachment Manager (Global) */}
+              <div className="space-y-3 border-t pt-3">
+                <Label className="text-base font-semibold">Documentação Geral do Paciente</Label>
+                {isEdit && pacienteId ? (
+                  <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
+                ) : (
+                  <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
+                    <FileIcon className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                    <p className="text-sm text-muted-foreground">
+                      Salve o cadastro básico primeiro para anexar documentos gerais (RG, CPF, Comprovantes).
+                    </p>
+                  </div>
                 )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label>UBS origem</Label>
-                  <Select value={form.ubsOrigem || ""} onValueChange={(v) => set("ubsOrigem", v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a UBS" /></SelectTrigger>
-                    <SelectContent>
-                      {UBS_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {errors.ubsOrigem && <p className="text-xs text-destructive mt-1">{errors.ubsOrigem}</p>}
-                </div>
-                <div>
-                  <Label>Profissional solicitante</Label>
-                  <Input
-                    value={form.profissionalSolicitante}
-                    onChange={(e) => set("profissionalSolicitante", sanitizeUpper(e.target.value))}
-                    placeholder="NOME DO PROFISSIONAL"
-                  />
-                </div>
-                <div>
-                  <Label>Tipo encaminhamento</Label>
-                  <Select value={form.tipoEncaminhamento || ""} onValueChange={(v) => set("tipoEncaminhamento", v)}>
-                    <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ubs">UBS</SelectItem>
-                      <SelectItem value="hospital">Hospital</SelectItem>
-                      <SelectItem value="caps">CAPS</SelectItem>
-                      <SelectItem value="espontaneo">Espontâneo</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>CID-10</Label>
-                  <Input value={form.cid} onChange={(e) => set("cid", e.target.value.toUpperCase())} placeholder="Ex: G80.0" />
-                  {errors.cid && <p className="text-xs text-destructive mt-1">{errors.cid}</p>}
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Diagnóstico resumido</Label>
-                  <Input
-                    value={form.diagnosticoResumido}
-                    onChange={(e) => set("diagnosticoResumido", e.target.value)}
-                    placeholder="Resumo em uma linha"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label>Justificativa</Label>
-                  <Textarea
-                    value={form.justificativa}
-                    onChange={(e) => set("justificativa", e.target.value)}
-                    placeholder="Justificativa clínica para encaminhamento"
-                    className="min-h-[60px]"
-                  />
-                  {errors.justificativa && <p className="text-xs text-destructive mt-1">{errors.justificativa}</p>}
-                </div>
-                <div>
-                  <Label>Data encaminhamento</Label>
-                  <Input
-                    type="date"
-                    value={form.dataEncaminhamento}
-                    onChange={(e) => set("dataEncaminhamento", e.target.value)}
-                  />
-                </div>
-                <div className="md:col-span-2 space-y-3">
-                  <Label className="text-base font-semibold">Documentação e Anexos</Label>
-                  {isEdit && pacienteId ? (
-                    <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
-                  ) : (
-                    <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
-                      <FileIcon className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-                      <p className="text-sm text-muted-foreground">
-                        Salve o cadastro básico do paciente primeiro para poder anexar múltiplos documentos (RG, CPF, Laudos, etc).
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Legado: mantendo para compatibilidade se já existir algo em documentoUrl */}
-                  {form.documentoUrl && (
-                    <div className="flex items-center justify-between p-2 rounded border bg-amber-50 border-amber-200">
-                      <div className="flex items-center gap-2 text-xs text-amber-800">
-                        <AlertCircle className="w-4 h-4" />
-                        <span>Existe um documento de encaminhamento legado vinculado a este cadastro.</span>
-                      </div>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        className="h-7 text-xs text-amber-800 hover:bg-amber-100"
-                        onClick={() => {
-                          supabase.storage.from("sms").createSignedUrl(form.documentoUrl, 60).then(({ data }) => {
-                            if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-                          });
-                        }}
-                      >
-                        <Eye className="w-3.5 h-3.5 mr-1" /> Ver legado
-                      </Button>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
 
