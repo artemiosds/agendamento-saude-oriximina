@@ -525,8 +525,15 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {/* Contato */}
+              {/* Documentos e Anexos */}
               <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <Paperclip className="w-4 h-4 text-primary" />Documentos e Anexos
+                </div>
+                <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
+              </div>
+
+              {/* Botão salvar (quando houver alterações) */}
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
                   <Phone className="w-4 h-4 text-primary" />Contato
                 </div>
