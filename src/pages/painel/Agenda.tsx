@@ -92,7 +92,8 @@ const statusLabels: Record<string, string> = {
   aguardando_atendimento: "Aguard. Atendimento",
   aguardando_enfermagem: "Aguard. Enfermagem",
   apto_agendamento: "Apto p/ Agendamento",
-  apto_atendimento: "Apto p/ Atendimento", // NOVO
+  apto_atendimento: "Apto p/ Atendimento",
+  pendente_revisao: "Pendente de Revisão",
   aguardando_multiprofissional: "Aguard. Multiprofissional",
   indeferido: "Indeferido",
 };
@@ -111,7 +112,8 @@ const statusBadgeClass: Record<string, string> = {
   aguardando_atendimento: "bg-emerald-500/10 text-emerald-600",
   aguardando_enfermagem: "bg-orange-500/10 text-orange-600",
   apto_agendamento: "bg-success/10 text-success",
-  apto_atendimento: "bg-green-500/10 text-green-600", // NOVO
+  apto_atendimento: "bg-green-500/10 text-green-600",
+  pendente_revisao: "bg-warning/10 text-warning border border-warning/20",
   aguardando_multiprofissional: "bg-purple-500/10 text-purple-600",
   indeferido: "bg-destructive/10 text-destructive",
 };
