@@ -1297,6 +1297,80 @@ export type Database = {
           },
         ]
       }
+      patient_documents: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          descricao: string | null
+          id: string
+          mime_type: string | null
+          nome_arquivo: string
+          nome_original: string | null
+          origem: string | null
+          paciente_id: string
+          storage_bucket: string | null
+          storage_path: string
+          tamanho_bytes: number | null
+          tipo_documento: string | null
+          unidade_id: string | null
+          updated_at: string | null
+          uploaded_by: string | null
+          url_publica: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          descricao?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo: string
+          nome_original?: string | null
+          origem?: string | null
+          paciente_id: string
+          storage_bucket?: string | null
+          storage_path: string
+          tamanho_bytes?: number | null
+          tipo_documento?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+          url_publica?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          descricao?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo?: string
+          nome_original?: string | null
+          origem?: string | null
+          paciente_id?: string
+          storage_bucket?: string | null
+          storage_path?: string
+          tamanho_bytes?: number | null
+          tipo_documento?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+          url_publica?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_documents_paciente_id_fkey"
+            columns: ["paciente_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_evaluations: {
         Row: {
           clinical_notes: string
