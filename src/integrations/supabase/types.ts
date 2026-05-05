@@ -1430,6 +1430,68 @@ export type Database = {
           },
         ]
       }
+      patient_referrals: {
+        Row: {
+          cid: string | null
+          created_at: string | null
+          data_encaminhamento: string | null
+          diagnostico_resumido: string | null
+          especialidade_destino: string
+          id: string
+          justificativa: string | null
+          patient_id: string
+          professional_id: string | null
+          profissional_solicitante: string | null
+          status: string | null
+          tipo_encaminhamento: string | null
+          ubs_origem: string | null
+          unidade_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cid?: string | null
+          created_at?: string | null
+          data_encaminhamento?: string | null
+          diagnostico_resumido?: string | null
+          especialidade_destino: string
+          id?: string
+          justificativa?: string | null
+          patient_id: string
+          professional_id?: string | null
+          profissional_solicitante?: string | null
+          status?: string | null
+          tipo_encaminhamento?: string | null
+          ubs_origem?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cid?: string | null
+          created_at?: string | null
+          data_encaminhamento?: string | null
+          diagnostico_resumido?: string | null
+          especialidade_destino?: string
+          id?: string
+          justificativa?: string | null
+          patient_id?: string
+          professional_id?: string | null
+          profissional_solicitante?: string | null
+          status?: string | null
+          tipo_encaminhamento?: string | null
+          ubs_origem?: string | null
+          unidade_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_referrals_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_regulation: {
         Row: {
           cid_code: string
@@ -2202,6 +2264,44 @@ export type Database = {
             columns: ["profissional_externo_id"]
             isOneToOne: false
             referencedRelation: "profissionais_externos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_attachments: {
+        Row: {
+          created_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          referral_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          referral_id: string
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          referral_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_attachments_referral_id_fkey"
+            columns: ["referral_id"]
+            isOneToOne: false
+            referencedRelation: "patient_referrals"
             referencedColumns: ["id"]
           },
         ]
