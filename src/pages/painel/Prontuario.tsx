@@ -1290,7 +1290,7 @@ const ProntuarioPage: React.FC = () => {
     } finally {
       autosaveInFlightRef.current = false;
     }
-  }, [user, selectedProcIds, procedimentos]);
+  }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
 
   // Debounced trigger watching form changes while dialog is open
   useEffect(() => {
