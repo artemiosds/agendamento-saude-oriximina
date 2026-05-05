@@ -2,7 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Mantém a interface usada por Tratamentos/Regulação/Prontuário
 export interface ProcedimentoDB {
-  id: string;          // codigo SIGTAP ou CUSTOM-xxx
+  uuid: string;        // Real DB primary key (UUID)
+  id: string;          // identifier used in UI/Logic (codigo SIGTAP or CUSTOM-xxx or UUID)
   nome: string;
   descricao: string;
   profissao: string;   // nome da profissão (Fisioterapeuta, Psicólogo, ...)
