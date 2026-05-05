@@ -1741,16 +1741,17 @@ const Agenda: React.FC = () => {
             {isProfissional ? "Pacientes confirmados para atendimento" : "Gerenciar agendamentos"}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        
+        <div className="flex flex-col gap-2">
           {/* Lembrete de Pendências (Req 5 & 9) */}
           {(isMaster || isProfissional) && agendamentosPendentesRevisao.length > 0 && (
-            <Alert className="mb-4 bg-warning/5 border-warning/20 animate-in fade-in slide-in-from-top-4 duration-500">
+            <Alert className="bg-warning/5 border-warning/20 animate-in fade-in slide-in-from-top-4 duration-500">
               <AlertCircle className="h-4 w-4 text-warning" />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
-                <div>
+                <div className="pr-4">
                   <AlertTitle className="text-sm font-semibold text-warning-foreground">Pendências de agenda</AlertTitle>
                   <AlertDescription className="text-xs text-muted-foreground">
-                    Existem {agendamentosPendentesRevisao.length} pacientes que ainda estão sem conclusão. Revise para marcar falta ou concluir.
+                    Existem {agendamentosPendentesRevisao.length} pacientes sem conclusão no período. Revise agora.
                   </AlertDescription>
                 </div>
                 <Button 
@@ -1766,47 +1767,47 @@ const Agenda: React.FC = () => {
             </Alert>
           )}
 
-          {!isProfissional && (
-            <div className="flex gap-2 flex-wrap">
-              {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
-              {(user?.role === "master" || user?.role === "recepcao") && (
-                <AgendaNotificacoesMassa
-                  agendamentos={agendamentos}
-                  pacientes={pacientes}
-                  unidades={unidades}
-                  selectedDate={selectedDate}
-                  userUnidadeId={user?.unidadeId || ""}
-                  userUsuario={user?.usuario || ""}
-                />
-              )}
-              {/* NOVO: botão Pendentes Online com badge */}
-              {canAprovar && agendamentosPendentesOnline.length > 0 && (
-                <Button
-                  variant={abaAtiva === "pendentes" ? "default" : "outline"}
-                  onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
+          <div className="flex gap-2 flex-wrap justify-end">
+            {!isProfissional && (
+              <>
+                {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+                {(user?.role === "master" || user?.role === "recepcao") && (
+                  <AgendaNotificacoesMassa
+                    agendamentos={agendamentos}
+                    pacientes={pacientes}
+                    unidades={unidades}
+                    selectedDate={selectedDate}
+                    userUnidadeId={user?.unidadeId || ""}
+                    userUsuario={user?.usuario || ""}
+                  />
+                )}
+                {/* NOVO: botão Pendentes Online com badge */}
+                {canAprovar && agendamentosPendentesOnline.length > 0 && (
+                  <Button
+                    variant={abaAtiva === "pendentes" ? "default" : "outline"}
+                    onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
+                  >
+                    <Bell className="w-4 h-4 mr-2" />
+                    Pendentes Online
+                    <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
+                      {agendamentosPendentesOnline.length}
+                    </span>
+                  </Button>
+                )}
+                
+                <Dialog
+                  open={dialogOpen}
+                  onOpenChange={(open) => {
+                    setDialogOpen(open);
+                    if (!open) setPacientesConferidos(new Set());
+                  }}
                 >
-                  <Bell className="w-4 h-4 mr-2" />
-                  Pendentes Online
-                  <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
-                    {agendamentosPendentesOnline.length}
-                  </span>
-                </Button>
-              )}
-            </div>
-          )}
-            <Dialog
-              open={dialogOpen}
-              onOpenChange={(open) => {
-                setDialogOpen(open);
-                if (!open) setPacientesConferidos(new Set());
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button className="gradient-primary text-primary-foreground">
-                  <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+                  <DialogTrigger asChild>
+                    <Button className="gradient-primary text-primary-foreground">
+                      <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="font-display">Novo Agendamento</DialogTitle>
                 </DialogHeader>
@@ -2041,8 +2042,10 @@ const Agenda: React.FC = () => {
                 </div>
               </DialogContent>
             </Dialog>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* NOVO: Painel de aprovação */}
