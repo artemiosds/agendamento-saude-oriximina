@@ -293,38 +293,6 @@ const Agenda: React.FC = () => {
   const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
   const [pendenciasDialogOpen, setPendenciasDialogOpen] = useState(false);
 
-  // Memo para agendamentos pendentes (Requirement 5-10)
-  const agendamentosPendentesRevisao = React.useMemo(() => {
-    const today = todayLocalStr();
-    const nowMin = nowMinutesInBrazil();
-    
-    return agendamentos.filter(ag => {
-      // Regra de permissão: profissional vê só os seus, Master vê todos (Req 6)
-      if (isProfissional && ag.profissionalId !== user?.id) return false;
-      // Universal unit isolation
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
-
-      // Recorte temporal: passado (Req 7 & 8)
-      const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
-      const agMin = hh * 60 + mm;
-      const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
-      
-      if (!isPast) return false;
-
-      const pendenteStatuses = [
-        "confirmado", "aguardando", "confirmado_chegada", "chegada_confirmada", 
-        "apto_atendimento", "chamado", "em_atendimento", "triagem_concluida",
-        "aguardando_atendimento", "aguardando_triagem"
-      ];
-      const concluidoStatuses = [
-        "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
-        "faltou", "cancelado", "excluido"
-      ];
-
-      return pendenteStatuses.includes(ag.status) && !concluidoStatuses.includes(ag.status);
-    });
-  }, [agendamentos, user, isProfissional, nowMinutes]);
-
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -399,6 +367,38 @@ const Agenda: React.FC = () => {
 
   const { isMaster, unidadesVisiveis, profissionaisVisiveis, salasVisiveis, showUnitSelector } = useUnidadeFilter();
   const isProfissional = user?.role === "profissional";
+
+  // Memo para agendamentos pendentes (Requirement 5-10)
+  const agendamentosPendentesRevisao = React.useMemo(() => {
+    const today = todayLocalStr();
+    const nowMin = nowMinutesInBrazil();
+    
+    return agendamentos.filter(ag => {
+      // Regra de permissão: profissional vê só os seus, Master vê todos (Req 6)
+      if (isProfissional && ag.profissionalId !== user?.id) return false;
+      // Universal unit isolation
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
+
+      // Recorte temporal: passado (Req 7 & 8)
+      const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
+      const agMin = hh * 60 + mm;
+      const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
+      
+      if (!isPast) return false;
+
+      const pendenteStatuses = [
+        "confirmado", "aguardando", "confirmado_chegada", "chegada_confirmada", 
+        "apto_atendimento", "chamado", "em_atendimento", "triagem_concluida",
+        "aguardando_atendimento", "aguardando_triagem"
+      ];
+      const concluidoStatuses = [
+        "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
+        "faltou", "cancelado", "excluido"
+      ];
+
+      return pendenteStatuses.includes(ag.status) && !concluidoStatuses.includes(ag.status);
+    });
+  }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
   const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
@@ -2042,10 +2042,10 @@ const Agenda: React.FC = () => {
                 </div>
               </DialogContent>
             </Dialog>
-              </>
-            )}
-          </div>
-        </div>
+          </>
+        )}
+      </div>
+    </div>
       </div>
 
       {/* NOVO: Painel de aprovação */}
