@@ -56,6 +56,21 @@ export async function createPatientReferral(referral: Omit<PatientReferral, 'id'
     throw error;
   }
 
+  // Update main patient record for compatibility
+  await supabase
+    .from('pacientes')
+    .update({
+      especialidade_destino: referral.especialidade_destino,
+      ubs_origem: referral.ubs_origem,
+      profissional_solicitante: referral.profissional_solicitante,
+      tipo_encaminhamento: referral.tipo_encaminhamento,
+      cid: referral.cid,
+      diagnostico_resumido: referral.diagnostico_resumido,
+      justificativa: referral.justificativa,
+      data_encaminhamento: referral.data_encaminhamento
+    })
+    .eq('id', referral.patient_id);
+
   return data as PatientReferral;
 }
 
@@ -70,6 +85,23 @@ export async function updatePatientReferral(id: string, updates: Partial<Patient
   if (error) {
     console.error('Error updating patient referral:', error);
     throw error;
+  }
+
+  // If status is active, update patient record
+  if (data.status === 'ativo' && data.patient_id) {
+    await supabase
+      .from('pacientes')
+      .update({
+        especialidade_destino: data.especialidade_destino,
+        ubs_origem: data.ubs_origem,
+        profissional_solicitante: data.profissional_solicitante,
+        tipo_encaminhamento: data.tipo_encaminhamento,
+        cid: data.cid,
+        diagnostico_resumido: data.diagnostico_resumido,
+        justificativa: data.justificativa,
+        data_encaminhamento: data.data_encaminhamento
+      })
+      .eq('id', data.patient_id);
   }
 
   return data as PatientReferral;
