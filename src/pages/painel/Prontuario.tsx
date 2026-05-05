@@ -1075,14 +1075,20 @@ const ProntuarioPage: React.FC = () => {
       if (prontuarioId) {
         await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
         if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map((pid) => ({
-            prontuario_id: prontuarioId,
-            procedimento_id: pid,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
-          }));
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+          const links = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            return {
+              prontuario_id: prontuarioId,
+              procedimento_id: proc?.uuid || pid, // Use UUID if found
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
+          
+          if (links.length > 0) {
+            await (supabase as any).from("prontuario_procedimentos").insert(links);
+          }
         }
       }
 
