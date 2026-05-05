@@ -1017,6 +1017,7 @@ const Pacientes: React.FC = () => {
             <DialogTitle className="font-display">{editId ? "Editar" : "Cadastrar"} Paciente</DialogTitle>
           </DialogHeader>
           <CadastroPacienteForm
+            pacienteId={editId}
             form={form}
             onChange={setForm}
             onSave={handleSave}
