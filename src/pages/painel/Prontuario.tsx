@@ -820,7 +820,8 @@ const ProntuarioPage: React.FC = () => {
         .limit(50);
       const seen = new Map<string, { id: string; nome: string; ultima: string }>();
       (data || []).forEach((r: any) => {
-        const proc = procedimentos.find((p) => p.id === r.procedimento_id);
+        // Find by UUID
+        const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
           const dt = r.prontuarios?.data_atendimento || '';
           const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
