@@ -2646,9 +2646,49 @@ const ProntuarioPage: React.FC = () => {
                     className="pl-7 h-8 text-sm"
                   />
                 </div>
+                {/* Display selected procedures first */}
+                {selectedProcIds.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-2 bg-primary/5 rounded-lg p-2 border border-primary/20">
+                    <Label className="text-[10px] uppercase text-primary mb-1">Selecionados</Label>
+                    {selectedProcIds.map(id => {
+                      const proc = procedimentos.find(p => p.id === id);
+                      if (!proc) return null;
+                      
+                      // Check if it's already in the filtered list to avoid duplication if user wants
+                      // But for now, showing it here is enough.
+                      const isExpanded = expandedProcId === proc.id;
+                      const selCids = selectedCidsByProc[proc.id] || [];
+                      
+                      return (
+                        <div key={`sel-${proc.id}`} className="rounded-md border bg-background border-primary/40 p-1.5 flex items-center gap-2">
+                           <Checkbox
+                              id={`sel-proc-${proc.id}`}
+                              checked={true}
+                              onCheckedChange={(c) => {
+                                if (!c) setSelectedProcIds((prev) => prev.filter((pid) => pid !== id));
+                              }}
+                            />
+                            <div className="flex-1 truncate cursor-pointer" onClick={() => toggleExpandProc(proc.id)}>
+                              <span className="text-sm">
+                                <span className="font-mono text-[10px] text-muted-foreground mr-2">{proc.id}</span>
+                                {proc.nome}
+                              </span>
+                            </div>
+                            {selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                            </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {filteredProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
-                    {filteredProcedimentos.map((proc) => {
+                    {filteredProcedimentos.filter(p => !selectedProcIds.includes(p.id)).map((proc) => {
                       const checked = selectedProcIds.includes(proc.id);
                       const cids = cidsByProc[proc.id] || [];
                       const selCids = selectedCidsByProc[proc.id] || [];
