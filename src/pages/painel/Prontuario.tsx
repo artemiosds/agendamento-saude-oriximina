@@ -650,20 +650,30 @@ const ProntuarioPage: React.FC = () => {
       .from("prontuario_procedimentos")
       .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
+    
     if (data) {
-      setSelectedProcIds(data.map((d: any) => d.procedimento_id));
+      const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
+      
       data.forEach((d: any) => {
-        cidsMap[d.procedimento_id] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
-        detailsMap[d.procedimento_id] = {
+        // Find the procedure by its UUID (database id)
+        const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
+        const displayId = proc ? proc.id : d.procedimento_id; // Fallback to uuid if not found in current list
+        
+        ids.push(displayId);
+        cidsMap[displayId] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
+        detailsMap[displayId] = {
           quantidade: d.quantidade || 1,
           observacao: d.observacao || ""
         };
+        
+        if (proc) loadCidsForProc(proc.id);
       });
+      
+      setSelectedProcIds(ids);
       setSelectedCidsByProc(cidsMap);
       setProcDetails(detailsMap);
-      data.forEach((d: any) => loadCidsForProc(d.procedimento_id));
     } else {
       setSelectedProcIds([]);
       setSelectedCidsByProc({});
