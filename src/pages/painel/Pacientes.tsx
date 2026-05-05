@@ -1434,6 +1434,10 @@ const Pacientes: React.FC = () => {
                 <PCampo label="Notas" valor={detalhePaciente.observacoes} />
               </PSecao>
             )}
+
+            <PSecao titulo="Documentos e Anexos">
+              <PatientAttachmentManager pacienteId={detalhePaciente.id} unidadeId={detalhePaciente.unidadeId} />
+            </PSecao>
           </PacienteDetalheModal>
         );
       })()}
