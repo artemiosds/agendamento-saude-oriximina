@@ -373,6 +373,7 @@ const Agenda: React.FC = () => {
   // Memo para agendamentos pendentes (Requirement 5-10)
   const agendamentosPendentesRevisao = React.useMemo(() => {
     const today = todayLocalStr();
+    const currentMonthStr = today.substring(0, 7); // "YYYY-MM" (Req 7)
     const nowMin = nowMinutesInBrazil();
     
     return agendamentos.filter(ag => {
@@ -381,7 +382,9 @@ const Agenda: React.FC = () => {
       // Universal unit isolation
       if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
 
-      // Recorte temporal: passado (Req 7 & 8)
+      // Recorte temporal: passado dentro do mês atual (Req 7 & 8)
+      if (!ag.data.startsWith(currentMonthStr)) return false;
+      
       const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
       const agMin = hh * 60 + mm;
       const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
