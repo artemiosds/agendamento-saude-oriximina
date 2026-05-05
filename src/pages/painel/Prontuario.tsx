@@ -1281,6 +1281,10 @@ const ProntuarioPage: React.FC = () => {
       ob: form.observacoes, ir: form.indicacao_retorno, op: form.outro_procedimento,
       pt: form.procedimentos_texto, ep: form.episodio_id, tr: form.tipo_registro,
       da: form.data_atendimento, ho: form.hora_atendimento,
+      // Include selected procedures in hash to trigger autosave
+      sp: selectedProcIds,
+      pd: procDetails,
+      sc: selectedCidsByProc,
     });
     if (hash === lastAutosaveHashRef.current) return;
     lastAutosaveHashRef.current = hash;
