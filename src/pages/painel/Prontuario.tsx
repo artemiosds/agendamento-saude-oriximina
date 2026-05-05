@@ -1284,22 +1284,21 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
+        const links = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontId,
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+        
+        // Use a single transaction (delete + insert)
         await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map((pid) => {
-            const proc = procedimentos.find(p => p.id === pid);
-            return {
-              prontuario_id: prontId,
-              procedimento_id: proc?.uuid || pid,
-              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-              quantidade: procDetails[pid]?.quantidade || 1,
-              observacao: procDetails[pid]?.observacao || "",
-            };
-          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-          
-          if (links.length > 0) {
-            await (supabase as any).from("prontuario_procedimentos").insert(links);
-          }
+        if (links.length > 0) {
+          await (supabase as any).from("prontuario_procedimentos").insert(links);
         }
       }
       setAutosaveStatus('saved');
