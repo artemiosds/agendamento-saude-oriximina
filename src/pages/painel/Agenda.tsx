@@ -13,7 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, History, ListChecks } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -287,8 +289,41 @@ const Agenda: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, [agendamentos, selectedDate]);
 
-  // NOVO: aba pendentes / agenda
-  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes">("agenda");
+  // NOVO: aba pendentes / agenda / pendencias_revisao
+  const [abaAtiva, setAbaAtiva] = useState<"agenda" | "pendentes" | "pendencias_revisao">("agenda");
+  const [pendenciasDialogOpen, setPendenciasDialogOpen] = useState(false);
+
+  // Memo para agendamentos pendentes (Requirement 5-10)
+  const agendamentosPendentesRevisao = React.useMemo(() => {
+    const today = todayLocalStr();
+    const nowMin = nowMinutesInBrazil();
+    
+    return agendamentos.filter(ag => {
+      // Regra de permissão: profissional vê só os seus, Master vê todos (Req 6)
+      if (isProfissional && ag.profissionalId !== user?.id) return false;
+      // Universal unit isolation
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && ag.unidadeId !== user.unidadeId) return false;
+
+      // Recorte temporal: passado (Req 7 & 8)
+      const [hh, mm] = (ag.hora || "00:00").split(":").map(Number);
+      const agMin = hh * 60 + mm;
+      const isPast = ag.data < today || (ag.data === today && agMin < nowMin);
+      
+      if (!isPast) return false;
+
+      const pendenteStatuses = [
+        "confirmado", "aguardando", "confirmado_chegada", "chegada_confirmada", 
+        "apto_atendimento", "chamado", "em_atendimento", "triagem_concluida",
+        "aguardando_atendimento", "aguardando_triagem"
+      ];
+      const concluidoStatuses = [
+        "concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado",
+        "faltou", "cancelado", "excluido"
+      ];
+
+      return pendenteStatuses.includes(ag.status) && !concluidoStatuses.includes(ag.status);
+    });
+  }, [agendamentos, user, isProfissional, nowMinutes]);
 
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
@@ -990,6 +1025,12 @@ const Agenda: React.FC = () => {
     const ag = agendamentos.find((a) => a.id === agId);
     if (!ag) return;
 
+    // Regra de permissão profissional para marcar falta (Req 1 & 3)
+    if (isProfissional && newStatus === "falta" && ag.profissionalId !== user?.id) {
+      toast.error("Você só pode registrar falta em pacientes vinculados à sua agenda.");
+      return;
+    }
+
     // Intercept "falta" — open modal with justification
     if (newStatus === "falta") {
       setFaltaTarget(ag);
@@ -1389,6 +1430,7 @@ const Agenda: React.FC = () => {
         documento: dados.documento || "",
         descricao: dados.descricao || "",
         anexo_url: dados.anexoUrl || "",
+        origem: "agenda_profissional_acao_falta"
       },
     });
 
@@ -1699,32 +1741,59 @@ const Agenda: React.FC = () => {
             {isProfissional ? "Pacientes confirmados para atendimento" : "Gerenciar agendamentos"}
           </p>
         </div>
-        {!isProfissional && (
-          <div className="flex gap-2 flex-wrap">
-            {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
-            {(user?.role === "master" || user?.role === "recepcao") && (
-              <AgendaNotificacoesMassa
-                agendamentos={agendamentos}
-                pacientes={pacientes}
-                unidades={unidades}
-                selectedDate={selectedDate}
-                userUnidadeId={user?.unidadeId || ""}
-                userUsuario={user?.usuario || ""}
-              />
-            )}
-            {/* NOVO: botão Pendentes Online com badge */}
-            {canAprovar && agendamentosPendentesOnline.length > 0 && (
-              <Button
-                variant={abaAtiva === "pendentes" ? "default" : "outline"}
-                onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
-              >
-                <Bell className="w-4 h-4 mr-2" />
-                Pendentes Online
-                <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
-                  {agendamentosPendentesOnline.length}
-                </span>
-              </Button>
-            )}
+        <div className="flex gap-2 flex-wrap">
+          {/* Lembrete de Pendências (Req 5 & 9) */}
+          {(isMaster || isProfissional) && agendamentosPendentesRevisao.length > 0 && (
+            <Alert className="mb-4 bg-warning/5 border-warning/20 animate-in fade-in slide-in-from-top-4 duration-500">
+              <AlertCircle className="h-4 w-4 text-warning" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+                <div>
+                  <AlertTitle className="text-sm font-semibold text-warning-foreground">Pendências de agenda</AlertTitle>
+                  <AlertDescription className="text-xs text-muted-foreground">
+                    Existem {agendamentosPendentesRevisao.length} pacientes que ainda estão sem conclusão. Revise para marcar falta ou concluir.
+                  </AlertDescription>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 border-warning/30 hover:bg-warning/10 text-warning-foreground text-xs shrink-0"
+                  onClick={() => setPendenciasDialogOpen(true)}
+                >
+                  <ListChecks className="w-3.5 h-3.5 mr-1" />
+                  Ver pendências
+                </Button>
+              </div>
+            </Alert>
+          )}
+
+          {!isProfissional && (
+            <div className="flex gap-2 flex-wrap">
+              {/* Botão de disparo em massa — apenas MASTER e RECEPCAO */}
+              {(user?.role === "master" || user?.role === "recepcao") && (
+                <AgendaNotificacoesMassa
+                  agendamentos={agendamentos}
+                  pacientes={pacientes}
+                  unidades={unidades}
+                  selectedDate={selectedDate}
+                  userUnidadeId={user?.unidadeId || ""}
+                  userUsuario={user?.usuario || ""}
+                />
+              )}
+              {/* NOVO: botão Pendentes Online com badge */}
+              {canAprovar && agendamentosPendentesOnline.length > 0 && (
+                <Button
+                  variant={abaAtiva === "pendentes" ? "default" : "outline"}
+                  onClick={() => setAbaAtiva(abaAtiva === "pendentes" ? "agenda" : "pendentes")}
+                >
+                  <Bell className="w-4 h-4 mr-2" />
+                  Pendentes Online
+                  <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold rounded-full bg-destructive text-destructive-foreground">
+                    {agendamentosPendentesOnline.length}
+                  </span>
+                </Button>
+              )}
+            </div>
+          )}
             <Dialog
               open={dialogOpen}
               onOpenChange={(open) => {
@@ -2567,11 +2636,17 @@ const Agenda: React.FC = () => {
                             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                           </Button>
                         )}
-                        {!isProfissional &&
+                        {(isMaster || isProfissional) &&
                           ag.status !== "cancelado" &&
                           ag.status !== "concluido" &&
                           !ehPendenteOnline &&
-                          statusActions.map((sa) => (
+                          statusActions.filter(sa => {
+                            // Se for profissional, só mostra ação de "falta" para a própria agenda
+                            if (isProfissional) {
+                              return sa.key === "falta" && ag.profissionalId === user?.id;
+                            }
+                            return true;
+                          }).map((sa) => (
                             <Button
                               key={sa.key}
                               size="sm"
