@@ -9,7 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2 } from "lucide-react";
+import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle } from "lucide-react";
+import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
@@ -149,6 +150,7 @@ export const emptyPacienteForm: PacienteFormData = {
 };
 
 interface Props {
+  pacienteId?: string | null;
   form: PacienteFormData;
   onChange: (form: PacienteFormData) => void;
   onSave: () => void;
@@ -157,7 +159,7 @@ interface Props {
   errors: Record<string, string>;
 }
 
-const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving, isEdit, errors }) => {
+const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const setCustom = (key: string, value: any) =>
     onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
@@ -771,19 +773,40 @@ const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving,
                     onChange={(e) => set("dataEncaminhamento", e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label>Documento</Label>
-                  <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-md border border-input bg-background text-sm hover:bg-accent transition-colors">
-                    <Upload className="w-4 h-4" />
-                    {uploading ? "Enviando..." : form.documentoUrl ? "Arquivo enviado ✓" : "Enviar arquivo"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={handleFileUpload}
-                      disabled={uploading}
-                    />
-                  </label>
+                <div className="md:col-span-2 space-y-3">
+                  <Label className="text-base font-semibold">Documentação e Anexos</Label>
+                  {isEdit && pacienteId ? (
+                    <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
+                  ) : (
+                    <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
+                      <FileIcon className="w-10 h-10 text-muted-foreground/30 mx-auto" />
+                      <p className="text-sm text-muted-foreground">
+                        Salve o cadastro básico do paciente primeiro para poder anexar múltiplos documentos (RG, CPF, Laudos, etc).
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Legado: mantendo para compatibilidade se já existir algo em documentoUrl */}
+                  {form.documentoUrl && (
+                    <div className="flex items-center justify-between p-2 rounded border bg-amber-50 border-amber-200">
+                      <div className="flex items-center gap-2 text-xs text-amber-800">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Existe um documento de encaminhamento legado vinculado a este cadastro.</span>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="h-7 text-xs text-amber-800 hover:bg-amber-100"
+                        onClick={() => {
+                          supabase.storage.from("sms").createSignedUrl(form.documentoUrl, 60).then(({ data }) => {
+                            if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                          });
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5 mr-1" /> Ver legado
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

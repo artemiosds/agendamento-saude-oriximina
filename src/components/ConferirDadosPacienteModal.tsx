@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope, Paperclip } from "lucide-react";
+import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
@@ -524,8 +525,15 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {/* Contato */}
+              {/* Documentos e Anexos */}
               <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
+                  <Paperclip className="w-4 h-4 text-primary" />Documentos e Anexos
+                </div>
+                <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
+              </div>
+
+              {/* Botão salvar (quando houver alterações) */}
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground border-b pb-1.5 mb-3">
                   <Phone className="w-4 h-4 text-primary" />Contato
                 </div>
