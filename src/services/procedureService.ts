@@ -2,7 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Mantém a interface usada por Tratamentos/Regulação/Prontuário
 export interface ProcedimentoDB {
-  id: string;          // codigo SIGTAP ou CUSTOM-xxx
+  uuid: string;        // Real DB primary key (UUID)
+  id: string;          // identifier used in UI/Logic (codigo SIGTAP or CUSTOM-xxx or UUID)
   nome: string;
   descricao: string;
   profissao: string;   // nome da profissão (Fisioterapeuta, Psicólogo, ...)
@@ -79,13 +80,17 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
 async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string, string[]> }> {
-  const [{ data: sigtap }, { data: vinc }] = await Promise.all([
+  const [{ data: sigtap }, { data: legacy }, { data: vinc }] = await Promise.all([
     (supabase as any)
       .from('sigtap_procedimentos')
       .select('*')
       .eq('ativo', true)
       .order('especialidade')
       .order('nome'),
+    (supabase as any)
+      .from('procedimentos')
+      .select('*')
+      .eq('ativo', true),
     (supabase as any).from('procedimento_profissionais').select('procedimento_codigo, profissional_id'),
   ]);
 
@@ -100,6 +105,7 @@ async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string,
     const profsLinkados = links.get(p.codigo) || [];
     const profissaoNome = SIGTAP_ESPECIALIDADE_TO_PROFISSAO[p.especialidade]?.[0] || p.especialidade || '';
     return {
+      uuid: p.id,
       id: p.codigo,
       nome: p.nome,
       descricao: p.descricao || '',
@@ -114,6 +120,27 @@ async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string,
       origem: (p.origem || 'SIGTAP') as 'SIGTAP' | 'PERSONALIZADO',
       valor: p.valor ?? null,
     };
+  });
+
+  // Merge legacy procedures if they are not already in sigtap
+  (legacy || []).forEach((p: any) => {
+    const exists = procs.some(existing => existing.id === (p.codigo_sigtap || p.id));
+    if (!exists) {
+      procs.push({
+        uuid: p.id,
+        id: p.codigo_sigtap || p.id,
+        nome: p.nome,
+        descricao: p.descricao || '',
+        profissao: p.profissao || '',
+        especialidade: p.especialidade || '',
+        profissional_id: null,
+        profissionais_ids: p.profissionais_ids || [],
+        ativo: p.ativo,
+        criado_em: p.criado_em,
+        atualizado_em: p.atualizado_em,
+        origem: 'PERSONALIZADO',
+      });
+    }
   });
 
   return { procs, links };

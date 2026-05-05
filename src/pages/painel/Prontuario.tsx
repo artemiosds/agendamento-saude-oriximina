@@ -96,6 +96,7 @@ interface ProntuarioDB {
 }
 
 interface ProcedimentoDB {
+  uuid: string;
   id: string;
   nome: string;
   profissao: string;
@@ -650,20 +651,30 @@ const ProntuarioPage: React.FC = () => {
       .from("prontuario_procedimentos")
       .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
+    
     if (data) {
-      setSelectedProcIds(data.map((d: any) => d.procedimento_id));
+      const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
+      
       data.forEach((d: any) => {
-        cidsMap[d.procedimento_id] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
-        detailsMap[d.procedimento_id] = {
+        // Find the procedure by its UUID (database id)
+        const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
+        const displayId = proc ? proc.id : d.procedimento_id; // Fallback to uuid if not found in current list
+        
+        ids.push(displayId);
+        cidsMap[displayId] = Array.isArray(d.cids_selecionados) ? d.cids_selecionados : [];
+        detailsMap[displayId] = {
           quantidade: d.quantidade || 1,
           observacao: d.observacao || ""
         };
+        
+        if (proc) loadCidsForProc(proc.id);
       });
+      
+      setSelectedProcIds(ids);
       setSelectedCidsByProc(cidsMap);
       setProcDetails(detailsMap);
-      data.forEach((d: any) => loadCidsForProc(d.procedimento_id));
     } else {
       setSelectedProcIds([]);
       setSelectedCidsByProc({});
@@ -809,7 +820,8 @@ const ProntuarioPage: React.FC = () => {
         .limit(50);
       const seen = new Map<string, { id: string; nome: string; ultima: string }>();
       (data || []).forEach((r: any) => {
-        const proc = procedimentos.find((p) => p.id === r.procedimento_id);
+        // Find by UUID
+        const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
           const dt = r.prontuarios?.data_atendimento || '';
           const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
@@ -1063,14 +1075,20 @@ const ProntuarioPage: React.FC = () => {
       if (prontuarioId) {
         await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
         if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map((pid) => ({
-            prontuario_id: prontuarioId,
-            procedimento_id: pid,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
-          }));
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+          const links = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            return {
+              prontuario_id: prontuarioId,
+              procedimento_id: proc?.uuid || pid, // Use UUID if found
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
+          
+          if (links.length > 0) {
+            await (supabase as any).from("prontuario_procedimentos").insert(links);
+          }
         }
       }
 
@@ -1226,8 +1244,9 @@ const ProntuarioPage: React.FC = () => {
       };
       if (f.episodio_id && f.episodio_id !== 'no_episode') record.episodio_id = f.episodio_id;
 
-      if (editIdRef.current) {
-        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', editIdRef.current);
+      let prontId = editIdRef.current;
+      if (prontId) {
+        const { error } = await (supabase as any).from('prontuarios').update(record).eq('id', prontId);
         if (error) throw error;
       } else {
         const { data: inserted, error } = await (supabase as any)
@@ -1237,8 +1256,30 @@ const ProntuarioPage: React.FC = () => {
           .single();
         if (error) throw error;
         if (inserted?.id) {
-          setEditId(inserted.id);
-          editIdRef.current = inserted.id;
+          prontId = inserted.id;
+          setEditId(prontId);
+          editIdRef.current = prontId;
+        }
+      }
+
+      // Autosave procedures to junction table
+      if (prontId) {
+        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+        if (selectedProcIds.length > 0) {
+          const links = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            return {
+              prontuario_id: prontId,
+              procedimento_id: proc?.uuid || pid,
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+          
+          if (links.length > 0) {
+            await (supabase as any).from("prontuario_procedimentos").insert(links);
+          }
         }
       }
       setAutosaveStatus('saved');
@@ -1249,7 +1290,7 @@ const ProntuarioPage: React.FC = () => {
     } finally {
       autosaveInFlightRef.current = false;
     }
-  }, [user, selectedProcIds, procedimentos]);
+  }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
 
   // Debounced trigger watching form changes while dialog is open
   useEffect(() => {
@@ -1263,6 +1304,10 @@ const ProntuarioPage: React.FC = () => {
       ob: form.observacoes, ir: form.indicacao_retorno, op: form.outro_procedimento,
       pt: form.procedimentos_texto, ep: form.episodio_id, tr: form.tipo_registro,
       da: form.data_atendimento, ho: form.hora_atendimento,
+      // Include selected procedures in hash to trigger autosave
+      sp: selectedProcIds,
+      pd: procDetails,
+      sc: selectedCidsByProc,
     });
     if (hash === lastAutosaveHashRef.current) return;
     lastAutosaveHashRef.current = hash;
@@ -2601,9 +2646,49 @@ const ProntuarioPage: React.FC = () => {
                     className="pl-7 h-8 text-sm"
                   />
                 </div>
+                {/* Display selected procedures first */}
+                {selectedProcIds.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-2 bg-primary/5 rounded-lg p-2 border border-primary/20">
+                    <Label className="text-[10px] uppercase text-primary mb-1">Selecionados</Label>
+                    {selectedProcIds.map(id => {
+                      const proc = procedimentos.find(p => p.id === id);
+                      if (!proc) return null;
+                      
+                      // Check if it's already in the filtered list to avoid duplication if user wants
+                      // But for now, showing it here is enough.
+                      const isExpanded = expandedProcId === proc.id;
+                      const selCids = selectedCidsByProc[proc.id] || [];
+                      
+                      return (
+                        <div key={`sel-${proc.id}`} className="rounded-md border bg-background border-primary/40 p-1.5 flex items-center gap-2">
+                           <Checkbox
+                              id={`sel-proc-${proc.id}`}
+                              checked={true}
+                              onCheckedChange={(c) => {
+                                if (!c) setSelectedProcIds((prev) => prev.filter((pid) => pid !== id));
+                              }}
+                            />
+                            <div className="flex-1 truncate cursor-pointer" onClick={() => toggleExpandProc(proc.id)}>
+                              <span className="text-sm">
+                                <span className="font-mono text-[10px] text-muted-foreground mr-2">{proc.id}</span>
+                                {proc.nome}
+                              </span>
+                            </div>
+                            {selCids.length > 0 && (
+                              <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                            </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {filteredProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
-                    {filteredProcedimentos.map((proc) => {
+                    {filteredProcedimentos.filter(p => !selectedProcIds.includes(p.id)).map((proc) => {
                       const checked = selectedProcIds.includes(proc.id);
                       const cids = cidsByProc[proc.id] || [];
                       const selCids = selectedCidsByProc[proc.id] || [];
