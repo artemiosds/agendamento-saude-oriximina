@@ -855,6 +855,12 @@ const ProntuarioPage: React.FC = () => {
     setEditId(p.id);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
+    
+    // Clear state before loading
+    setSelectedProcIds([]);
+    setSelectedCidsByProc({});
+    setProcDetails({});
+
     loadProntuarioProcedimentos(p.id);
     loadEpisodios(p.paciente_id);
     const formData = {
