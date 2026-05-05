@@ -2713,6 +2713,17 @@ const Agenda: React.FC = () => {
               })
             )}
           </div>
+
+          <div className="flex flex-wrap gap-x-4 gap-y-2 py-3 px-4 bg-muted/30 rounded-xl border border-dashed text-[10px] text-muted-foreground mt-4">
+            <span className="font-semibold uppercase tracking-wider opacity-70">Legenda:</span>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-success" /> Confirmado</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Chegou</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500" /> Apto p/ Atendimento</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-primary" /> Em Atendimento</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-info" /> Concluído</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-destructive" /> Falta / Cancelado</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-warning" /> Pendente de Revisão</div>
+          </div>
         </>
       )}
 
@@ -3117,6 +3128,94 @@ const Agenda: React.FC = () => {
         onConfirm={conferenciaModal.onConfirm}
       />
     </div>
+
+      {/* Modal de Pendências de Revisão (Req 9 & 10) */}
+      <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-display">
+              <ListChecks className="w-5 h-5 text-warning" />
+              Pendências de Agenda
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {agendamentosPendentesRevisao.length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-success/40" />
+                <p className="text-muted-foreground">Nenhuma pendência encontrada.</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {agendamentosPendentesRevisao.map(ag => (
+                  <div key={ag.id} className="flex items-center justify-between p-3 rounded-xl border bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{ag.pacienteNome}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        <span>{new Date(ag.data + 'T12:00:00').toLocaleDateString('pt-BR')} às {ag.hora}</span>
+                        <span>•</span>
+                        <span className="truncate">{ag.profissionalNome}</span>
+                      </div>
+                      <div className="mt-1">
+                        <StatusBadge
+                          label={statusLabels[ag.status] || ag.status}
+                          className={statusBadgeClass[ag.status]}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleStatusChange(ag.id, "falta")}
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Marcar Falta</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                            onClick={() => {
+                              setDetalheAg(ag);
+                              setDetalheOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Ver Detalhes</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-8 w-8 p-0 text-success hover:bg-success/10"
+                            onClick={() => handleIniciarAtendimento(ag)}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Iniciar Atendimento</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendenciasDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
   );
 };
 
