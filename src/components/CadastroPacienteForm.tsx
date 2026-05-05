@@ -150,6 +150,7 @@ export const emptyPacienteForm: PacienteFormData = {
 };
 
 interface Props {
+  pacienteId?: string | null;
   form: PacienteFormData;
   onChange: (form: PacienteFormData) => void;
   onSave: () => void;
@@ -158,7 +159,7 @@ interface Props {
   errors: Record<string, string>;
 }
 
-const CadastroPacienteForm: React.FC<Props> = ({ form, onChange, onSave, saving, isEdit, errors }) => {
+const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
   const setCustom = (key: string, value: any) =>
     onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
