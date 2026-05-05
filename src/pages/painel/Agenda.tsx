@@ -3127,8 +3127,6 @@ const Agenda: React.FC = () => {
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}
       />
-    </div>
-
       {/* Modal de Pendências de Revisão (Req 9 & 10) */}
       <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -3216,6 +3214,7 @@ const Agenda: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
   );
 };
 
