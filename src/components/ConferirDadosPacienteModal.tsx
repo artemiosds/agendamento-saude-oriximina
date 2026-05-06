@@ -300,7 +300,6 @@ export function ConferirDadosPacienteModal({
         if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
       });
 
-      setPaciente({ ...paciente, ...updatePayload });
       setDirty(false);
 
       // CRÍTICO: invalidar caches + recarregar contexto global para refletir
