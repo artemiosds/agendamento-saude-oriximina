@@ -45,6 +45,7 @@ export interface ModulePermission {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 type PermissionsMap = Record<ModuleName, ModulePermission>;
@@ -52,7 +53,7 @@ type PermissionsMap = Record<ModuleName, ModulePermission>;
 interface PermissionsContextType {
   permissions: PermissionsMap | null;
   loading: boolean;
-  can: (modulo: ModuleName, action: keyof ModulePermission) => boolean;
+  can: (modulo: ModuleName, action: string) => boolean;
   reload: () => Promise<void>;
 }
 
