@@ -175,6 +175,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
   const L = (name: string, fallback: string) => getNativeLabel(name, fallback);
   const H = (name: string) => isNativeHidden(name);
 
+  // Ref to PatientReferralHistory so the parent can flush pending referrals after patient creation
+  const referralRef = useRef<PatientReferralHistoryHandle>(null);
+  useEffect(() => {
+    (window as any).__patientReferralRef = referralRef;
+    return () => { if ((window as any).__patientReferralRef === referralRef) (window as any).__patientReferralRef = null; };
+  }, []);
+
   // ---- MIGRAÇÃO: legado endereço string -> logradouro estruturado ----
   const migratedRef = useRef(false);
   useEffect(() => {
