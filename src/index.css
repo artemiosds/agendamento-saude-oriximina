@@ -337,20 +337,103 @@ select:focus-visible,
 /* ─── CUSTOM SCROLLBAR ─────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.15);
+  background: hsl(var(--muted-foreground) / 0.18);
   border-radius: 999px;
   transition: background 0.2s ease;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: hsl(var(--muted-foreground) / 0.35);
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+}
+
+/* ─── RESPONSIVE PATTERNS ──────────────────────────────────── */
+
+/* Safe area for iOS notch / Android nav bar */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-top    { padding-top: env(safe-area-inset-top); }
+
+/* Modal layout: sticky header + scrollable body + sticky footer */
+.modal-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 900px);
+}
+.modal-shell > .modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.5rem;
+}
+.modal-shell > .modal-footer {
+  position: sticky;
+  bottom: 0;
+  background: hsl(var(--background));
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.75rem 0;
+  margin-top: 0.5rem;
+  z-index: 1;
+}
+
+/* Mobile-first: full-screen-ish bottom sheet for big dialogs */
+@media (max-width: 640px) {
+  .modal-shell {
+    max-height: calc(100dvh - 2rem);
+  }
+  .modal-shell > .modal-footer {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Responsive table wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
+.table-responsive table {
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+/* Filter bar: stacked on mobile, inline on desktop */
+.filter-bar {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) {
+  .filter-bar {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+@media (min-width: 1024px) {
+  .filter-bar {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Hide scrollbar visually but keep scrollable (for tab strips) */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ─── TOUCH DEVICE OPTIMIZATIONS ───────────────────────────── */
 
