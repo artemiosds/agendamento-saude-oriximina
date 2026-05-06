@@ -302,10 +302,13 @@ const BpaProducao: React.FC = () => {
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
     const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
     const exigeSigtap = l.origem === 'triagem' ? true : !isCboMedico(cbo);
+    // Para médicos, se não tiver SIGTAP, consideramos OK pois o sistema usará o código de consulta genérica (0301010072)
+    const sigtapOk = sigtap.length === 10 || (isCboMedico(cbo) && !sigtap);
+    
     return {
       identificacao: cns.length === 15 || cpf.length === 11,
       cbo: cbo.length > 0,
-      sigtap: !exigeSigtap || sigtap.length === 10,
+      sigtap: sigtapOk,
       nome: !!(pac?.nome && pac.nome.trim().length > 0),
       dataNasc: !!(pac?.data_nascimento && pac.data_nascimento.trim().length > 0),
     };
