@@ -321,9 +321,10 @@ const Funcionarios: React.FC = () => {
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle className="font-display">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
-              <div className="space-y-3">
+            <DialogContent className="max-w-lg p-0 overflow-hidden">
+              <div className="modal-shell">
+                <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0"><DialogTitle className="font-display pr-6">{editId ? 'Editar' : 'Cadastrar'} Funcionário</DialogTitle></DialogHeader>
+                <div className="modal-body px-4 sm:px-6 py-4 space-y-3">
                 <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Usuário *</Label><Input value={form.usuario} onChange={e => setForm(p => ({ ...p, usuario: e.target.value }))} /></div>
