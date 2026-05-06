@@ -3,17 +3,34 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type ModuleName =
-  | 'pacientes'
-  | 'encaminhamento'
-  | 'fila'
-  | 'triagem'
-  | 'enfermagem'
+  | 'dashboard'
   | 'agenda'
-  | 'atendimento'
+  | 'fila_espera'
+  | 'pacientes'
+  | 'atendimentos'
+  | 'gestao_tratamentos'
   | 'prontuario'
-  | 'tratamento'
+  | 'triagem'
+  | 'historico_triagem'
+  | 'avaliacao_enfermagem'
+  | 'pts'
+  | 'avaliacao_multi'
+  | 'relatorio_alta'
+  | 'encaminhamentos'
+  | 'encaminhamentos_externos'
+  | 'arquivo_digital'
   | 'relatorios'
-  | 'usuarios';
+  | 'bpa_producao'
+  | 'funcionarios'
+  | 'unidades_salas'
+  | 'disponibilidade'
+  | 'feriados_bloqueios'
+  | 'logs_auditoria'
+  | 'configuracoes'
+  | 'permissoes'
+  | 'assinatura_eletronica'
+  | 'modelos_documentos'
+  | 'sistema';
 
 export interface ModulePermission {
   can_view: boolean;
@@ -21,6 +38,13 @@ export interface ModulePermission {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print: boolean;
+  can_export: boolean;
+  can_attach: boolean;
+  can_sign: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_configure: boolean;
 }
 
 type PermissionsMap = Record<ModuleName, ModulePermission>;
@@ -32,116 +56,48 @@ interface PermissionsContextType {
   reload: () => Promise<void>;
 }
 
-const ALL_MODULES: ModuleName[] = [
-  'pacientes', 'encaminhamento', 'fila', 'triagem', 'enfermagem',
-  'agenda', 'atendimento', 'prontuario', 'tratamento', 'relatorios', 'usuarios',
+export const ALL_MODULES: ModuleName[] = [
+  'dashboard', 'agenda', 'fila_espera', 'pacientes', 'atendimentos', 
+  'gestao_tratamentos', 'prontuario', 'triagem', 'historico_triagem', 
+  'avaliacao_enfermagem', 'pts', 'avaliacao_multi', 'relatorio_alta', 
+  'encaminhamentos', 'encaminhamentos_externos', 'arquivo_digital', 
+  'relatorios', 'bpa_producao', 'funcionarios', 'unidades_salas', 
+  'disponibilidade', 'feriados_bloqueios', 'logs_auditoria', 
+  'configuracoes', 'permissoes', 'assinatura_eletronica', 
+  'modelos_documentos', 'sistema'
 ];
 
-const defaultPerm: ModulePermission = {
-  can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
+export const ALL_ACTIONS: (keyof ModulePermission)[] = [
+  'can_view', 'can_create', 'can_edit', 'can_delete', 'can_execute',
+  'can_print', 'can_export', 'can_attach', 'can_sign', 'can_approve', 
+  'can_cancel', 'can_configure'
+];
+
+export const defaultPerm: ModulePermission = {
+  can_view: false, can_create: false, can_edit: false, can_delete: false, 
+  can_execute: false, can_print: false, can_export: false, can_attach: false,
+  can_sign: false, can_approve: false, can_cancel: false, can_configure: false
 };
 
-const fullPerm: ModulePermission = {
-  can_view: true, can_create: true, can_edit: true, can_delete: true, can_execute: true,
+export const fullPerm: ModulePermission = {
+  can_view: true, can_create: true, can_edit: true, can_delete: true, 
+  can_execute: true, can_print: true, can_export: true, can_attach: true,
+  can_sign: true, can_approve: true, can_cancel: true, can_configure: true
 };
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
   gestor: {
-    pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: true,  can_execute: true  },
-    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    tratamento:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    relatorios:     { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: true  },
-    usuarios:       { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
-  },
-  coordenador: {
-    pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    encaminhamento: { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: true,  can_execute: true  },
-    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    tratamento:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    relatorios:     { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: true  },
-    usuarios:       { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
-  },
-  profissional: {
-    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    encaminhamento: { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    triagem:        { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    enfermagem:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: true  },
-    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    tratamento:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-  },
-  recepcao: {
-    pacientes:      { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
-    encaminhamento: { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    enfermagem:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    agenda:         { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    atendimento:    { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    prontuario:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    tratamento:     { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-  },
-  tecnico_enfermagem: {
-    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    atendimento:    { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    prontuario:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-  },
-  tecnico: {
-    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    atendimento:    { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    prontuario:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-  },
-  enfermagem: {
-    pacientes:      { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    encaminhamento: { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    fila:           { can_view: true,  can_create: false, can_edit: true,  can_delete: false, can_execute: true  },
-    triagem:        { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    enfermagem:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    agenda:         { can_view: true,  can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    atendimento:    { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: true  },
-    prontuario:     { can_view: true,  can_create: true,  can_edit: true,  can_delete: false, can_execute: false },
-    tratamento:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    relatorios:     { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
-    usuarios:       { can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false },
+    dashboard: { ...fullPerm },
+    pacientes: { ...fullPerm, can_delete: false },
+    agenda: { ...fullPerm },
   },
 };
 
 function buildFullMap(partial: Partial<PermissionsMap>): PermissionsMap {
   const map = {} as PermissionsMap;
-  ALL_MODULES.forEach((m) => { map[m] = partial[m] ?? { ...defaultPerm }; });
+  ALL_MODULES.forEach((m) => { 
+    map[m] = partial[m] ? { ...defaultPerm, ...partial[m] } : { ...defaultPerm }; 
+  });
   return map;
 }
 
@@ -168,20 +124,10 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setLoading(true);
 
     try {
-      // AuthContext já buscou o role da tabela 'funcionarios' — usar diretamente
       const role = (user.role || '').toLowerCase().trim();
+      const isGlobalAdmin = user.usuario === 'admin.sms' || (role === 'master' && !user.unidadeId);
 
-      // role resolved from AuthContext
-
-      if (!role) {
-        console.warn('[Permissions] Role vazio');
-        setPermissions(buildFullMap({}));
-        setLoading(false);
-        return;
-      }
-
-      // Master tem tudo
-      if (role === 'master') {
+      if (isGlobalAdmin) {
         const full = {} as PermissionsMap;
         ALL_MODULES.forEach((m) => { full[m] = { ...fullPerm }; });
         setPermissions(full);
@@ -191,92 +137,62 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const unidadeId = user.unidadeId || '';
 
-      // Buscar permissões de perfil (unidade específica + global como fallback)
-      const { data: perfilData, error: perfilErr } = await (supabase as any)
-        .from('permissoes')
-        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
-        .eq('perfil', role)
-        .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
+      const [perfilRes, userRes] = await Promise.all([
+        supabase.from('permissoes').select('*').eq('perfil', role).in('unidade_id', [unidadeId, '']),
+        supabase.from('permissoes_usuario').select('*').eq('user_id', user.id).in('unidade_id', [unidadeId, ''])
+      ]);
 
-      if (perfilErr) {
-        console.error('[Permissions] Erro perfil:', perfilErr);
-        setPermissions(buildFullMap(DEFAULT_PERMISSIONS_BY_ROLE[role] ?? {}));
-        setLoading(false);
-        return;
-      }
-
-      // Buscar overrides do usuário
-      const { data: userOverrides } = await (supabase as any)
-        .from('permissoes_usuario')
-        .select('modulo, can_view, can_create, can_edit, can_delete, can_execute, unidade_id')
-        .eq('user_id', user.id)
-        .in('unidade_id', unidadeId ? [unidadeId, ''] : ['']);
-
-      // Sem dados de perfil — semear defaults globais (unidade_id='')
-      if (!perfilData || perfilData.length === 0) {
-        const defaults = DEFAULT_PERMISSIONS_BY_ROLE[role];
-        if (defaults) {
-          const inserts = ALL_MODULES.map((m) => ({
-            perfil: role,
-            modulo: m,
-            unidade_id: '',
-            ...(defaults[m] ?? defaultPerm),
-          }));
-          await (supabase as any)
-            .from('permissoes')
-            .upsert(inserts, { onConflict: 'perfil,modulo,unidade_id' });
-        }
-      }
-
-      // Montar mapa: prioridade = override usuário (unidade > global) > perfil (unidade > global)
       const map: Partial<PermissionsMap> = {};
       ALL_MODULES.forEach((m) => {
-        // perfil global
-        const pGlob = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === '');
-        // perfil unidade
-        const pUnid = (perfilData || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
-        // user global / unidade
-        const uGlob = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === '');
-        const uUnid = (userOverrides || []).find((r: any) => r.modulo === m && r.unidade_id === unidadeId && unidadeId);
+        const pUnid = perfilRes.data?.find(r => r.modulo === m && r.unidade_id === unidadeId);
+        const pGlob = perfilRes.data?.find(r => r.modulo === m && r.unidade_id === '');
+        const activeProfile = pUnid || pGlob;
 
-        const pick = uUnid || uGlob || pUnid || pGlob;
-        if (pick) {
+        const uUnid = userRes.data?.find(r => r.modulo === m && r.unidade_id === unidadeId);
+        const uGlob = userRes.data?.find(r => r.modulo === m && r.unidade_id === '');
+        const activeIndividual = uUnid || uGlob;
+
+        const source = activeIndividual || activeProfile;
+
+        if (source) {
           map[m] = {
-            can_view: pick.can_view ?? false,
-            can_create: pick.can_create ?? false,
-            can_edit: pick.can_edit ?? false,
-            can_delete: pick.can_delete ?? false,
-            can_execute: pick.can_execute ?? false,
+            can_view: source.can_view ?? false,
+            can_create: source.can_create ?? false,
+            can_edit: source.can_edit ?? false,
+            can_delete: source.can_delete ?? false,
+            can_execute: source.can_execute ?? false,
+            can_print: source.can_print ?? false,
+            can_export: source.can_export ?? false,
+            can_attach: source.can_attach ?? false,
+            can_sign: source.can_sign ?? false,
+            can_approve: source.can_approve ?? false,
+            can_cancel: source.can_cancel ?? false,
+            can_configure: source.can_configure ?? false,
           };
         } else {
-          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) ?? defaultPerm;
+          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) || { ...defaultPerm };
         }
       });
+
       setPermissions(buildFullMap(map));
-
     } catch (err) {
-      console.error('[Permissions] Erro inesperado:', err);
+      console.error('[Permissions] Error:', err);
       setPermissions(buildFullMap({}));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.unidadeId, user?.usuario]);
 
   useEffect(() => {
     loadPermissions();
   }, [loadPermissions]);
 
-  // Realtime: reage a mudanças em perfil OU overrides do usuário
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
-      .channel(`permissoes-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => {
-        loadPermissions();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, () => {
-        loadPermissions();
-      })
+      .channel(`perm-realtime-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => loadPermissions())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, () => loadPermissions())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, loadPermissions]);

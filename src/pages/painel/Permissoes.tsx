@@ -23,29 +23,63 @@ const PERFIL_LABELS: Record<string, string> = {
 };
 
 const MODULOS: ModuleName[] = [
-  "pacientes", "encaminhamento", "fila", "triagem", "enfermagem",
-  "agenda", "atendimento", "prontuario", "tratamento", "relatorios", "usuarios",
+  "dashboard", "agenda", "fila_espera", "pacientes", "atendimentos", 
+  "gestao_tratamentos", "prontuario", "triagem", "historico_triagem", 
+  "avaliacao_enfermagem", "pts", "avaliacao_multi", "relatorio_alta", 
+  "encaminhamentos", "encaminhamentos_externos", "arquivo_digital", 
+  "relatorios", "bpa_producao", "funcionarios", "unidades_salas", 
+  "disponibilidade", "feriados_bloqueios", "logs_auditoria", 
+  "configuracoes", "permissoes", "assinatura_eletronica", 
+  "modelos_documentos", "sistema"
 ];
 const MODULO_LABELS: Record<ModuleName, string> = {
-  pacientes: "Pacientes",
-  encaminhamento: "Encaminhamento",
-  fila: "Fila de Espera",
-  triagem: "Triagem",
-  enfermagem: "Enfermagem",
+  dashboard: "Dashboard",
   agenda: "Agenda",
-  atendimento: "Atendimento",
+  fila_espera: "Fila de Espera",
+  pacientes: "Pacientes",
+  atendimentos: "Atendimentos",
+  gestao_tratamentos: "Gestão de Tratamentos",
   prontuario: "Prontuário",
-  tratamento: "Tratamento",
+  triagem: "Triagem",
+  historico_triagem: "Histórico Triagem",
+  avaliacao_enfermagem: "Avaliação Enfermagem",
+  pts: "PTS",
+  avaliacao_multi: "Avaliação Multi",
+  relatorio_alta: "Relatório de Alta",
+  encaminhamentos: "Encaminhamentos",
+  encaminhamentos_externos: "Encaminhamentos Externos",
+  arquivo_digital: "Arquivo Digital",
   relatorios: "Relatórios",
-  usuarios: "Usuários",
+  bpa_producao: "BPA-Produção",
+  funcionarios: "Funcionários",
+  unidades_salas: "Unidades/Salas",
+  disponibilidade: "Disponibilidade",
+  feriados_bloqueios: "Feriados/Bloqueios",
+  logs_auditoria: "Logs & Auditoria",
+  configuracoes: "Configurações",
+  permissoes: "Permissões",
+  assinatura_eletronica: "Assinatura Eletrônica",
+  modelos_documentos: "Modelos Documentos",
+  sistema: "Sistema",
 };
-const ACTIONS: (keyof ModulePermission)[] = ["can_view", "can_create", "can_edit", "can_delete", "can_execute"];
+const ACTIONS: (keyof ModulePermission)[] = [
+  "can_view", "can_create", "can_edit", "can_delete", "can_execute",
+  "can_print", "can_export", "can_attach", "can_sign", "can_approve", 
+  "can_cancel", "can_configure"
+];
 const ACTION_LABELS: Record<keyof ModulePermission, string> = {
   can_view: "Visualizar",
   can_create: "Criar",
   can_edit: "Editar",
   can_delete: "Excluir",
   can_execute: "Executar",
+  can_print: "Imprimir",
+  can_export: "Exportar",
+  can_attach: "Anexar",
+  can_sign: "Assinar",
+  can_approve: "Aprovar",
+  can_cancel: "Cancelar",
+  can_configure: "Configurar",
 };
 
 interface PermRow {
@@ -58,6 +92,13 @@ interface PermRow {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print: boolean;
+  can_export: boolean;
+  can_attach: boolean;
+  can_sign: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_configure: boolean;
 }
 
 interface UserPermRow {
@@ -70,6 +111,13 @@ interface UserPermRow {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print: boolean;
+  can_export: boolean;
+  can_attach: boolean;
+  can_sign: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_configure: boolean;
 }
 
 interface UnidadeOption { id: string; nome: string; }
@@ -196,7 +244,9 @@ const Permissoes: React.FC = () => {
     const baseRow: PermRow = existing
       ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
       : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
-          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false };
+          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
+          can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
+          can_cancel: false, can_configure: false };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
     const key = `perfil-${modulo}-${action}`;
@@ -214,7 +264,10 @@ const Permissoes: React.FC = () => {
       .upsert(
         { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
           can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
+          can_delete: updated.can_delete, can_execute: updated.can_execute,
+          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
+          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
+          can_configure: updated.can_configure },
         { onConflict: "perfil,modulo,unidade_id" }
       );
 
@@ -254,6 +307,10 @@ const Permissoes: React.FC = () => {
         can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
         can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
         can_execute: ref?.can_execute ?? false,
+        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
+        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
+        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
+        can_configure: ref?.can_configure ?? false,
       };
     }
     const newVal = !base[action];
@@ -272,7 +329,10 @@ const Permissoes: React.FC = () => {
       .upsert(
         { user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
           can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
+          can_delete: updated.can_delete, can_execute: updated.can_execute,
+          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
+          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
+          can_configure: updated.can_configure },
         { onConflict: "user_id,modulo,unidade_id" }
       );
 
@@ -378,19 +438,21 @@ const Permissoes: React.FC = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 py-2">
                         {ACTIONS.map((action) => {
                           const k = `perfil-${modulo}-${action}`;
                           const isLoading = saving === k;
                           return (
-                            <label key={action} className="flex items-center gap-2 cursor-pointer">
-                              <Switch
-                                checked={!!row?.[action]}
-                                onCheckedChange={() => togglePerfil(modulo, action)}
-                                disabled={isLoading}
-                              />
-                              <span className="text-sm">{ACTION_LABELS[action]}</span>
-                              {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                            <label key={action} className="flex flex-col gap-1 cursor-pointer group">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={!!row?.[action]}
+                                  onCheckedChange={() => togglePerfil(modulo, action)}
+                                  disabled={isLoading}
+                                />
+                                <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
+                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                              </div>
                             </label>
                           );
                         })}
@@ -447,6 +509,47 @@ const Permissoes: React.FC = () => {
                   <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserRows([]); }}>Trocar</Button>
                 </div>
               )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary" /> Permissões Efetivas (Resumo)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span>Ver Agenda:</span>
+                      <span className={getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Criar Agendamento:</span>
+                      <span className={getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Ver Pacientes:</span>
+                      <span className={getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Ver Prontuário:</span>
+                      <span className={getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase leading-relaxed">
+                    <strong>DICA MASTER:</strong> As permissões individuais (exceções) sobrescrevem as permissões do perfil.<br/>
+                    Se o botão "Herda do perfil" estiver visível, o sistema usará a regra padrão do cargo do usuário.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -457,7 +560,11 @@ const Permissoes: React.FC = () => {
               <Accordion type="multiple" className="space-y-2">
                 {MODULOS.map((modulo) => {
                   const override = getUserRow(modulo);
-                  const activeCount = override ? ACTIONS.filter((a) => override[a]).length : 0;
+                  const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+                  
+                  const activeCount = override ? ACTIONS.filter((a) => override[a]).length : (profile ? ACTIONS.filter(a => profile[a]).length : 0);
+                  
                   return (
                     <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                       <AccordionTrigger className="hover:no-underline">
@@ -465,41 +572,70 @@ const Permissoes: React.FC = () => {
                           <span className="font-medium">{MODULO_LABELS[modulo]}</span>
                           {override ? (
                             <>
-                              <Badge variant="default">{activeCount}/5</Badge>
-                              <Badge variant="secondary" className="text-xs">Exceção ativa</Badge>
+                              <Badge variant="default">{activeCount}/{ACTIONS.length}</Badge>
+                              <Badge variant="secondary" className="text-[10px]">Exceção Individual</Badge>
                             </>
                           ) : (
-                            <Badge variant="outline" className="text-xs">Herda do perfil</Badge>
+                            <>
+                              <Badge variant="outline">{activeCount}/{ACTIONS.length}</Badge>
+                              <Badge variant="outline" className="text-[10px] opacity-60">Herda do Perfil</Badge>
+                            </>
                           )}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
+                        <div className="flex justify-end mb-2">
+                          {override && (
+                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
+                              <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
+                            </Button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-2 border-t">
                           {ACTIONS.map((action) => {
                             const k = `user-${modulo}-${action}`;
                             const isLoading = saving === k;
+                            const isAllowedByProfile = !!profile?.[action];
+                            const isAllowedByOverride = !!override?.[action];
+                            const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+
                             return (
-                              <label key={action} className="flex items-center gap-2 cursor-pointer">
-                                <Switch
-                                  checked={!!override?.[action]}
-                                  onCheckedChange={() => toggleUser(modulo, action)}
-                                  disabled={isLoading}
-                                />
-                                <span className="text-sm">{ACTION_LABELS[action]}</span>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                              </label>
+                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                  <Switch
+                                    checked={finalValue}
+                                    onCheckedChange={() => toggleUser(modulo, action)}
+                                    disabled={isLoading}
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1 mt-1">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
+                                    <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                      {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                    </span>
+                                  </div>
+                                  {override && (
+                                    <div className="flex items-center justify-between text-[10px]">
+                                      <span>Individual:</span>
+                                      <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                        {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
+                                    <span className="font-bold">RESULTADO:</span>
+                                    <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
+                                      {finalValue ? "PERMITIDO" : "NEGADO"}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                              </div>
                             );
                           })}
                         </div>
-                        {override && (
-                          <div className="pt-2 border-t mt-2">
-                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)}
-                              disabled={saving === `user-reset-${modulo}`}>
-                              {saving === `user-reset-${modulo}` ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
-                              Remover exceção (voltar ao perfil)
-                            </Button>
-                          </div>
-                        )}
                       </AccordionContent>
                     </AccordionItem>
                   );

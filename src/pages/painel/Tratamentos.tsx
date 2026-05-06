@@ -290,9 +290,9 @@ const Tratamentos: React.FC = () => {
   const [dischargeFutureCount, setDischargeFutureCount] = useState(0);
   const [dischargeLoading, setDischargeLoading] = useState(false);
 
-  const canManageFull = can('tratamento', 'can_delete');
+  const canManageFull = can('gestao_tratamentos', 'can_delete');
   const isProfissional = user?.role === "profissional";
-  const canAgendarSessao = can('tratamento', 'can_execute');
+  const canAgendarSessao = can('gestao_tratamentos', 'can_execute');
 
   // Total of cycles (server-side count)
   const [totalCycles, setTotalCycles] = useState(0);

@@ -206,7 +206,7 @@ const Pacientes: React.FC = () => {
   const isProfissional = user?.role === "profissional";
   const canDelete = can("pacientes", "can_delete");
   const canImportCSV = can("pacientes", "can_create");
-  const canAddToFila = can("fila", "can_create");
+  const canAddToFila = can("fila_espera", "can_create");
   const canCreate = can("pacientes", "can_create");
   const canEdit = can("pacientes", "can_edit");
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
