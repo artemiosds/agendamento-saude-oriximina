@@ -450,21 +450,24 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
               ✅ Selecionado: <strong>{formatDateBR(selectedDate)}</strong> às <strong>{selectedHora}</strong>
             </div>
           )}
+          </div>
 
-          {/* Action button */}
-          <Button
-            onClick={handleConfirm}
-            className="w-full gradient-primary text-primary-foreground"
-            disabled={!selectedDate || !selectedHora || saving}
-          >
-            {saving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>
-            ) : isAlreadyScheduled && mode === 'agendar' ? (
-              <><CalendarClock className="w-4 h-4 mr-2" /> Remarcar</>
-            ) : (
-              <><Calendar className="w-4 h-4 mr-2" /> {mode === 'remarcar' ? 'Confirmar Remarcação' : 'Confirmar Agendamento'}</>
-            )}
-          </Button>
+          {/* Action button — fixed footer */}
+          <div className="modal-footer px-4 sm:px-6">
+            <Button
+              onClick={handleConfirm}
+              className="w-full gradient-primary text-primary-foreground"
+              disabled={!selectedDate || !selectedHora || saving}
+            >
+              {saving ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>
+              ) : isAlreadyScheduled && mode === 'agendar' ? (
+                <><CalendarClock className="w-4 h-4 mr-2" /> Remarcar</>
+              ) : (
+                <><Calendar className="w-4 h-4 mr-2" /> {mode === 'remarcar' ? 'Confirmar Remarcação' : 'Confirmar Agendamento'}</>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
