@@ -507,9 +507,12 @@ const Permissoes: React.FC = () => {
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Selecione uma unidade para continuar.</CardContent></Card>
       ) : (
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="perfil">Permissões por Perfil</TabsTrigger>
-          <TabsTrigger value="individual">Permissões Individuais</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="perfil">Por Perfil</TabsTrigger>
+          <TabsTrigger value="individual">Individual / Exceção</TabsTrigger>
+          <TabsTrigger value="diagnostico" className="gap-2">
+            <Zap className="w-3 h-3" /> Auto-Discovery
+          </TabsTrigger>
         </TabsList>
 
         {/* ===== ABA PERFIL ===== */}
