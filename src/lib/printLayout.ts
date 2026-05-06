@@ -477,15 +477,13 @@ export async function docCarimboFor(profissionalId: string, fallback?: { nome?: 
   return docCarimbo(c, fallback);
 }
 
-/** Open a print window with full institutional layout */
+/** Open a print window with full institutional layout (uses hidden iframe to avoid popup blockers) */
 export async function openPrintDocument(title: string, body: string, meta?: Record<string, string>): Promise<void> {
   const config = await loadDocumentConfig();
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
   const metaHtml = meta ? docMeta(meta) : '';
   const css = buildInstitutionalCSS(config);
 
-  printWindow.document.write(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -500,7 +498,73 @@ export async function openPrintDocument(title: string, body: string, meta?: Reco
   </div>
   ${docFooter(config)}
 </body>
-</html>`);
-  printWindow.document.close();
-  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+</html>`;
+
+  printViaIframe(html);
 }
+
+/** Reliable print using a hidden iframe (no popup blocker issues). Exported for reuse. */
+export function printViaIframe(html: string): void {
+  try {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    const cleanup = () => {
+      try { document.body.removeChild(iframe); } catch {}
+    };
+
+    // Wait for images/fonts to load before printing
+    const triggerPrint = () => {
+      try {
+        const win = iframe.contentWindow;
+        if (!win) { cleanup(); return; }
+        win.focus();
+        win.print();
+        // Cleanup after print dialog closes (afterprint may not fire on all browsers)
+        const afterprint = () => { cleanup(); win.removeEventListener('afterprint', afterprint); };
+        win.addEventListener('afterprint', afterprint);
+        setTimeout(cleanup, 60_000);
+      } catch {
+        cleanup();
+      }
+    };
+
+    const win = iframe.contentWindow;
+    const imgs = Array.from(doc.images || []);
+    if (imgs.length === 0) {
+      setTimeout(triggerPrint, 300);
+      return;
+    }
+    let pending = imgs.length;
+    const done = () => { if (--pending <= 0) setTimeout(triggerPrint, 150); };
+    imgs.forEach(img => {
+      if ((img as HTMLImageElement).complete) { done(); }
+      else {
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      }
+    });
+    // Safety fallback if some image hangs
+    setTimeout(triggerPrint, 4000);
+  } catch (err) {
+    console.error('[printViaIframe] erro:', err);
+  }
+}
+
