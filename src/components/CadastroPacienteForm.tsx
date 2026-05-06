@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle, History } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
-import PatientReferralHistory from "@/components/Pacientes/PatientReferralHistory";
+import PatientReferralHistory, { type PatientReferralHistoryHandle } from "@/components/Pacientes/PatientReferralHistory";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
@@ -174,6 +174,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
   const { resolved: customConfig, getNativeLabel, isNativeHidden } = useCustomFields("paciente", user?.unidadeId);
   const L = (name: string, fallback: string) => getNativeLabel(name, fallback);
   const H = (name: string) => isNativeHidden(name);
+
+  // Ref to PatientReferralHistory so the parent can flush pending referrals after patient creation
+  const referralRef = useRef<PatientReferralHistoryHandle>(null);
+  useEffect(() => {
+    (window as any).__patientReferralRef = referralRef;
+    return () => { if ((window as any).__patientReferralRef === referralRef) (window as any).__patientReferralRef = null; };
+  }, []);
 
   // ---- MIGRAÇÃO: legado endereço string -> logradouro estruturado ----
   const migratedRef = useRef(false);
@@ -693,72 +700,24 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                 <Building2 className="w-4 h-4" /> Encaminhamento (UBS)
               </div>
 
-              {isEdit && pacienteId ? (
-                <PatientReferralHistory 
-                  patientId={pacienteId} 
-                  patientData={form}
-                  unidadeId={user?.unidadeId}
-                  professionalId={user?.id}
-                />
-              ) : (
-                <div className="space-y-3">
-                  <div className="p-4 rounded-lg border-2 border-primary/30 bg-primary/5">
-                    <Label className="text-base font-semibold text-primary">Especialidade Destino</Label>
-                    <p className="text-xs text-muted-foreground mb-2">Define o fluxo inicial do paciente. Após o cadastro, você poderá adicionar múltiplos encaminhamentos e anexos no histórico.</p>
-                    <Select value={form.especialidadeDestino || ""} onValueChange={(v) => set("especialidadeDestino", v)}>
-                      <SelectTrigger className="border-primary/30">
-                        <SelectValue placeholder="Selecione a especialidade" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ESPECIALIDADES_DESTINO.map((e) => (
-                          <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.especialidadeDestino && (
-                      <p className="text-xs text-destructive mt-1">{errors.especialidadeDestino}</p>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <Label>UBS origem</Label>
-                      <Select value={form.ubsOrigem || ""} onValueChange={(v) => set("ubsOrigem", v)}>
-                        <SelectTrigger><SelectValue placeholder="Selecione a UBS" /></SelectTrigger>
-                        <SelectContent>
-                          {UBS_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>Profissional solicitante</Label>
-                      <Input
-                        value={form.profissionalSolicitante}
-                        onChange={(e) => set("profissionalSolicitante", sanitizeUpper(e.target.value))}
-                        placeholder="NOME DO PROFISSIONAL"
-                      />
-                    </div>
-                  </div>
+              <PatientReferralHistory
+                ref={referralRef}
+                patientId={isEdit ? pacienteId : null}
+                patientData={form}
+                unidadeId={user?.unidadeId}
+                professionalId={user?.id}
+              />
 
-                  <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
-                    <History className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-                    <p className="text-sm text-muted-foreground">
-                      Conclua o cadastro para habilitar o <b>Histórico Completo de Encaminhamentos</b> e o <b>Gerenciamento de Anexos</b> por encaminhamento.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Patient Attachment Manager (Global) */}
+              {/* Patient Attachment Manager (Documentação Geral) */}
               <div className="space-y-3 border-t pt-3">
                 <Label className="text-base font-semibold">Documentação Geral do Paciente</Label>
                 {isEdit && pacienteId ? (
                   <PatientAttachmentManager pacienteId={pacienteId} unidadeId={user?.unidadeId} />
                 ) : (
-                  <div className="p-6 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-2">
-                    <FileIcon className="w-10 h-10 text-muted-foreground/30 mx-auto" />
-                    <p className="text-sm text-muted-foreground">
-                      Salve o cadastro básico primeiro para anexar documentos gerais (RG, CPF, Comprovantes).
+                  <div className="p-4 border-2 border-dashed rounded-lg bg-muted/50 text-center space-y-1">
+                    <FileIcon className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+                    <p className="text-xs text-muted-foreground">
+                      Documentação geral (RG, CPF, comprovantes) ficará disponível após salvar o cadastro. Anexos de encaminhamento podem ser adicionados acima e serão enviados automaticamente.
                     </p>
                   </div>
                 )}
