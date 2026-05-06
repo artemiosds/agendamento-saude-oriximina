@@ -20,6 +20,7 @@ import { listarEncaminhamentos, type EncaminhamentoData } from '@/services/encam
 import { openPrintDocument } from '@/lib/printLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { EmptyState, LoadingState } from '@/components/EmptyState';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -282,9 +283,9 @@ const Encaminhamentos: React.FC = () => {
           </Card>
 
           {loadingRecebidos ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            <Card><CardContent className="p-0"><LoadingState label="Carregando encaminhamentos..." /></CardContent></Card>
           ) : paginatedRec.length === 0 ? (
-            <Card><CardContent className="flex flex-col items-center justify-center py-12"><ClipboardList className="w-12 h-12 text-muted-foreground/40 mb-3" /><p className="text-muted-foreground text-sm">Nenhum encaminhamento encontrado</p></CardContent></Card>
+            <Card><CardContent className="p-0"><EmptyState icon={<ClipboardList className="w-8 h-8 text-muted-foreground/50" />} title="Nenhum encaminhamento" description="Não há encaminhamentos recebidos no momento." /></CardContent></Card>
           ) : (
             paginatedRec.map(enc => {
               const dt = new Date(enc.data_geracao);
@@ -351,7 +352,7 @@ const Encaminhamentos: React.FC = () => {
           </Card>
 
           {loadingEnviados ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            <Card><CardContent className="p-0"><LoadingState label="Carregando enviados..." /></CardContent></Card>
           ) : (
             <Card>
               <CardContent className="p-0">
