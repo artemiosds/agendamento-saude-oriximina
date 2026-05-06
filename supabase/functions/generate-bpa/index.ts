@@ -125,39 +125,52 @@ Deno.serve(async (req) => {
     const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
     const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
 
-    // 1. Prontuários do período (somente finalizados — todos no schema atual já são finalizados ao salvar)
+    // 1. Carrega configurações e dados do período
     let prontQuery = supabase
       .from('prontuarios')
       .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
       .gte('data_atendimento', dataInicio)
       .lte('data_atendimento', dataFim)
       .order('data_atendimento', { ascending: true });
+    
     if (unidadeId) prontQuery = prontQuery.eq('unidade_id', unidadeId);
 
-    const { data: prontuarios, error: prontErr } = await prontQuery;
+    const [{ data: configData }, { data: prontuarios, error: prontErr }] = await Promise.all([
+      supabase.from('system_config').select('configuracoes').limit(1).maybeSingle(),
+      prontQuery
+    ]);
+
+    const cfg = configData?.configuracoes || {};
+    const triagemSigtapPadrao = String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, '');
+
     if (prontErr) throw prontErr;
     const prots = prontuarios || [];
 
-    if (prots.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Nenhum prontuário encontrado no período' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
+    // 2. Triagens do período
+    const { data: triagens } = await supabase
+      .from('triage_records')
+      .select('id, agendamento_id, tecnico_id, criado_em')
+      .gte('criado_em', `${dataInicio}T00:00:00`)
+      .lte('criado_em', `${dataFim}T23:59:59`);
 
-    // 2. Procedimentos vinculados aos prontuários
+    const agsIds = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
+    const { data: agsData } = agsIds.length
+      ? await supabase
+          .from('agendamentos')
+          .select('id, paciente_id, paciente_nome, unidade_id, data')
+          .in('id', agsIds)
+      : { data: [] as any[] };
+    const agsMap = new Map(agsData.map((a: any) => [a.id, a]));
+
+    // 3. Procedimentos vinculados aos prontuários
     const prontIds = prots.map((p: any) => p.id);
-    const { data: vincs } = await supabase
-      .from('prontuario_procedimentos')
-      .select('prontuario_id, procedimento_id')
-      .in('prontuario_id', prontIds);
+    const { data: vincs } = prontIds.length 
+      ? await supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds)
+      : { data: [] };
 
     const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
     const { data: procsData } = procIds.length
-      ? await supabase
-          .from('procedimentos')
-          .select('id, nome, codigo_sigtap')
-          .in('id', procIds)
+      ? await supabase.from('procedimentos').select('id, nome, codigo_sigtap').in('id', procIds)
       : { data: [] as any[] };
     const procMap = new Map((procsData || []).map((p: any) => [p.id, p]));
 
@@ -168,55 +181,120 @@ Deno.serve(async (req) => {
       vincsByProntuario.set(v.prontuario_id, arr);
     });
 
-    // 3. Pacientes / Profissionais / Unidades
-    const pacIds = [...new Set(prots.map((p: any) => p.paciente_id).filter(Boolean))];
-    const profIds = [...new Set(prots.map((p: any) => p.profissional_id).filter(Boolean))];
-    const uniIds = [...new Set(prots.map((p: any) => p.unidade_id).filter(Boolean))];
+    // 4. Pacientes / Profissionais / Unidades
+    const pacIds = new Set<string>();
+    const profIds = new Set<string>();
+    const uniIds = new Set<string>();
+
+    prots.forEach((p: any) => {
+      if (p.paciente_id) pacIds.add(p.paciente_id);
+      if (p.profissional_id) profIds.add(p.profissional_id);
+      if (p.unidade_id) uniIds.add(p.unidade_id);
+    });
+    
+    (triagens || []).forEach((t: any) => {
+      const ag = agsMap.get(t.agendamento_id);
+      if (ag) {
+        if (ag.paciente_id) pacIds.add(ag.paciente_id);
+        if (ag.unidade_id) uniIds.add(ag.unidade_id);
+      }
+      if (t.tecnico_id) profIds.add(t.tecnico_id);
+    });
 
     const [{ data: pacs }, { data: profs }, { data: unis }] = await Promise.all([
-      pacIds.length
-        ? supabase.from('pacientes').select('id, nome, cpf, cns, data_nascimento, custom_data').in('id', pacIds)
-        : Promise.resolve({ data: [] }),
-      profIds.length
-        ? supabase.from('funcionarios').select('id, nome, custom_data').in('id', profIds)
-        : Promise.resolve({ data: [] }),
-      uniIds.length
-        ? supabase.from('unidades').select('id, nome, custom_data').in('id', uniIds)
-        : Promise.resolve({ data: [] }),
+      pacIds.size ? supabase.from('pacientes').select('*').in('id', Array.from(pacIds)) : Promise.resolve({ data: [] }),
+      profIds.size ? supabase.from('funcionarios').select('*').in('id', Array.from(profIds)) : Promise.resolve({ data: [] }),
+      uniIds.size ? supabase.from('unidades').select('*').in('id', Array.from(uniIds)) : Promise.resolve({ data: [] }),
     ]);
 
-    const pacMap = new Map((pacs || []).map((p: any) => [p.id, p]));
-    const profMap = new Map((profs || []).map((f: any) => [f.id, f]));
-    const uniMap = new Map((unis || []).map((u: any) => [u.id, u]));
+    const patientMap = new Map((pacs || []).map((p: any) => [p.id, p]));
+    const employeeMap = new Map((profs || []).map((f: any) => [f.id, f]));
+    const unitMap = new Map((unis || []).map((u: any) => [u.id, u]));
 
-    // 4. Geração das linhas BPA-I (tipo 03)
+    // 5. Geração das linhas BPA-I (tipo 03)
     const linhasBpa: string[] = [];
     const pendentes: PendingItem[] = [];
     let totalAtendimentos = 0;
     let folha = 1;
     let seq = 0;
 
-    // Itens a processar: 1 por (prontuario, procedimento) — para médico sem proc, 1 linha "consulta"
-    type Item = { pront: any; vinc: any | null };
+    // Itens a processar: Prontuários e Triagens
+    type Item = { 
+      id: string; 
+      paciente_id: string; 
+      paciente_nome: string; 
+      profissional_id: string; 
+      profissional_nome: string; 
+      data: string; 
+      unidade_id: string; 
+      proc: any | null; 
+      origem: 'prontuario' | 'triagem' 
+    };
     const items: Item[] = [];
+
+    // Adiciona prontuários
     for (const pront of prots as any[]) {
       const procsDoProntuario = vincsByProntuario.get(pront.id) || [];
       if (procsDoProntuario.length === 0) {
-        items.push({ pront, vinc: null });
+        items.push({ 
+          id: pront.id, 
+          paciente_id: pront.paciente_id, 
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id, 
+          profissional_nome: pront.profissional_nome, 
+          data: pront.data_atendimento, 
+          unidade_id: pront.unidade_id, 
+          proc: null, 
+          origem: 'prontuario' 
+        });
       } else {
-        for (const v of procsDoProntuario) items.push({ pront, vinc: v });
+        for (const v of procsDoProntuario) {
+          items.push({ 
+            id: pront.id, 
+            paciente_id: pront.paciente_id, 
+            paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id, 
+            profissional_nome: pront.profissional_nome, 
+            data: pront.data_atendimento, 
+            unidade_id: pront.unidade_id, 
+            proc: procMap.get(v.procedimento_id), 
+            origem: 'prontuario' 
+          });
+        }
       }
     }
 
+    // Adiciona triagens
+    for (const t of (triagens || [])) {
+      const ag = agsMap.get(t.agendamento_id);
+      if (!ag) continue;
+      if (unidadeId && ag.unidade_id !== unidadeId) continue;
+      
+      const tecnico = employeeMap.get(t.tecnico_id);
+      items.push({
+        id: t.id,
+        paciente_id: ag.paciente_id,
+        paciente_nome: ag.paciente_nome,
+        profissional_id: t.tecnico_id,
+        profissional_nome: tecnico?.nome || 'Técnico',
+        data: ag.data || (t.criado_em || '').slice(0, 10),
+        unidade_id: ag.unidade_id,
+        proc: triagemSigtapPadrao ? { codigo_sigtap: triagemSigtapPadrao, nome: 'Triagem' } : null,
+        origem: 'triagem'
+      });
+    }
+
+    // Ordena por data
+    items.sort((a, b) => a.data.localeCompare(b.data));
+
     for (const item of items) {
-      const { pront, vinc } = item;
+      const { id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, unidade_id, proc, origem } = item;
       totalAtendimentos += 1;
 
       const motivosBloqueio: string[] = [];
-      const pac: any = pacMap.get(pront.paciente_id);
-      const prof: any = profMap.get(pront.profissional_id);
-      const uni: any = uniMap.get(pront.unidade_id);
-      const proc: any = vinc ? procMap.get(vinc.procedimento_id) : null;
+      const pac: any = patientMap.get(paciente_id);
+      const prof: any = employeeMap.get(profissional_id);
+      const uni: any = unitMap.get(unidade_id);
 
       // Identificação obrigatória do paciente
       if (!pac) motivosBloqueio.push('Paciente não encontrado');
@@ -247,9 +325,9 @@ Deno.serve(async (req) => {
 
       if (motivosBloqueio.length > 0) {
         pendentes.push({
-          prontuario_id: pront.id,
-          paciente_nome: pront.paciente_nome,
-          profissional_nome: pront.profissional_nome,
+          prontuario_id: id,
+          paciente_nome: paciente_nome,
+          profissional_nome: profissional_nome,
           procedimento_nome: proc ? proc.nome : (isMedico(cboDigits) ? 'Consulta médica' : '—'),
           motivos: motivosBloqueio,
         });
@@ -259,19 +337,30 @@ Deno.serve(async (req) => {
       // Auto-preenchimento de campos opcionais
       const pacCustom = pac.custom_data || {};
       const raca = mapRaca(String(pacCustom.raca_cor || pacCustom.racaCor || '99'));
-      const nacionalidade = padNum(pacCustom.nacionalidade_codigo || pacCustom.nacionalidade || '010', 3);
+      
+      let nac = String(pacCustom.nacionalidade_codigo || pacCustom.nacionalidade || '010');
+      if (nac.toLowerCase().includes('brasil') || nac.toLowerCase().includes('brasileir')) nac = '010';
+      const nacionalidade = padNum(nac, 3);
+      
       const sexo = mapSexo(String(pacCustom.sexo || ''));
       const etnia = onlyDigits(pacCustom.etnia_codigo || '').padStart(4, '0').slice(-4);
-      const municipio = padNum(pacCustom.municipio_ibge || pacCustom.codigo_ibge_municipio || '', 6);
+      
+      // Município: tenta pegar código IBGE do custom_data ou usa padrão se não houver
+      let munCode = String(pacCustom.municipio_ibge || pacCustom.codigo_ibge_municipio || pac.municipio || '');
+      // Se for nome de cidade comum na região, mapeia para código (ex: Oriximiná = 150530)
+      if (munCode.toUpperCase().includes('ORIXIMINA')) munCode = '150530';
+      const municipio = padNum(munCode, 6);
+      
       const cep = padNum(pacCustom.cep || '', 8);
       const cid = String(pacCustom.cid || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
       const carater = padNum(pacCustom.carater_atendimento || '01', 2); // 01=Eletivo
       const autorizacao = padText(String(pacCustom.numero_autorizacao || ''), 13);
 
       // Para médico sem procedimento, usa código SIGTAP genérico de consulta médica (0301010072)
+      // Se for triagem, usa o sigtap da triagem configurado
       const sigtapFinal = sigtap.length === 10
         ? sigtap
-        : (isMedico(cboDigits) ? '0301010072' : '0000000000'); // 0301010072 = Consulta médica em APS
+        : (origem === 'triagem' ? triagemSigtapPadrao : (isMedico(cboDigits) ? '0301010072' : '0000000000'));
 
       seq += 1;
       if (seq > 99) { folha += 1; seq = 1; }
@@ -304,7 +393,7 @@ Deno.serve(async (req) => {
       // Versão simplificada compatível: usamos os 60 caracteres principais para validação.
 
       const dtNasc = formatDate(pac.data_nascimento);
-      const dtAtend = formatDate(pront.data_atendimento);
+      const dtAtend = formatDate(data);
 
       // Calcula idade em anos no atendimento
       let idade = 0;
