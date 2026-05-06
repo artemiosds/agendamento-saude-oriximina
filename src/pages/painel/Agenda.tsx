@@ -649,16 +649,25 @@ const Agenda: React.FC = () => {
         return horaToMin(a.hora) - horaToMin(b.hora);
       });
 
-    if (!debouncedSearch) return base;
+    let result = base;
 
-    return base.filter((a) => {
-      const pac = pacientes.find((p) => p.id === a.pacienteId);
-      const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
-      const cpf = pac?.cpf?.toLowerCase() || "";
-      const cns = pac?.cns?.toLowerCase() || "";
-      return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
-    });
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap, arrivalMap, nowMinutes]);
+    if (debouncedSearch) {
+      result = result.filter((a) => {
+        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
+        const cpf = pac?.cpf?.toLowerCase() || "";
+        const cns = pac?.cns?.toLowerCase() || "";
+        return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
+      });
+    }
+
+    if (statusFilter !== "all") {
+      const allowed = STATUS_FILTER_GROUPS[statusFilter] || [statusFilter];
+      result = result.filter((a) => allowed.includes(a.status));
+    }
+
+    return result;
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
