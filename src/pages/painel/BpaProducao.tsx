@@ -481,22 +481,41 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq','CNS Paciente','CPF Paciente','Nome','Dt.Nasc','Sexo','Munic.Residência',
+      'Seq','CNS Paciente','CPF Paciente','Nome','Dt.Nasc','Idade','Sexo','Munic.Residência',
       'Dt.Atendimento','Procedimento','SIGTAP','QTD','CID','Car.Atend.','Num.Autorização',
       'Raça/Cor','Etnia','Nacionalidade','CEP','Cód.Logradouro','Endereço','Número','Complemento','Bairro',
       'Telefone','E-mail','CNES','CNS Profissional','Nome Profissional','CBO','Código INE',
       'Competência','Folha','Unidade','Origem','Prontuário ID','Status Validação',
     ];
-    const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => [
-      seq, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-      pac.sexo || '', pac.municipio || '', l.data, l.procedimento_nome, l.codigo_sigtap || '',
-      l.qtd, l.cid || '', l.carater || '01', '',
-      pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-      pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
-      pac.telefone || '', pac.email || '',
-      cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-      competenciaFmt, folha, uniNome, l.origem, l.prontuario_id, ok ? 'OK' : 'PENDENTE',
-    ]);
+    const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
+      // Cálculo de idade
+      let idade = '';
+      if (pac.data_nascimento && l.data) {
+        const dN = new Date(pac.data_nascimento);
+        const dA = new Date(l.data);
+        if (!isNaN(dN.getTime()) && !isNaN(dA.getTime())) {
+          let diff = dA.getFullYear() - dN.getFullYear();
+          if (dA.getMonth() < dN.getMonth() || (dA.getMonth() === dN.getMonth() && dA.getDate() < dN.getDate())) diff--;
+          idade = String(Math.max(0, diff));
+        }
+      }
+
+      // SIGTAP Final (se médico e vazio, usa o padrão)
+      const isMed = (prof.cbo || '').startsWith('225');
+      const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
+      const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
+
+      return [
+        seq, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
+        idade, pac.sexo || '', pac.municipio || '', l.data, procNomeFinal, sigtapFinal,
+        l.qtd, l.cid || '', l.carater || '01', '',
+        pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
+        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
+        pac.telefone || '', pac.email || '',
+        cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
+        competenciaFmt, folha, uniNome, l.origem, l.prontuario_id, ok ? 'OK' : 'PENDENTE',
+      ];
+    });
     const wsBpa = XLSX.utils.aoa_to_sheet([bpaHeader, ...bpaRows]);
     wsBpa['!cols'] = bpaHeader.map((h) => ({ wch: Math.max(10, Math.min(28, h.length + 4)) }));
     wsBpa['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: bpaRows.length, c: bpaHeader.length - 1 } }) };
