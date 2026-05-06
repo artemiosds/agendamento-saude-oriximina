@@ -490,11 +490,13 @@ const Funcionarios: React.FC = () => {
                     values={customData}
                     onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
                   />
-                )}
-                <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
-                  {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  {editId ? 'Salvar' : 'Cadastrar'}
-                </Button>
+                </div>
+                <div className="modal-footer px-4 sm:px-6">
+                  <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    {editId ? 'Salvar' : 'Cadastrar'}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
