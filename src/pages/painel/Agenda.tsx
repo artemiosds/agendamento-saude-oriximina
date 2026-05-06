@@ -118,6 +118,45 @@ const statusBadgeClass: Record<string, string> = {
   indeferido: "bg-destructive/10 text-destructive",
 };
 
+// Grupos de status para filtro da Agenda (mapeia status equivalentes)
+const STATUS_FILTER_GROUPS: Record<string, string[]> = {
+  confirmado: ["confirmado", "confirmada", "agendado"],
+  chegada_confirmada: ["confirmado_chegada", "chegada_confirmada"],
+  aguardando_triagem: ["aguardando_triagem"],
+  triagem_concluida: ["triagem_concluida"],
+  apto_atendimento: ["apto_atendimento", "apto", "aguardando_atendimento", "aguardando_profissional"],
+  em_atendimento: ["em_atendimento"],
+  concluido: ["concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado"],
+  faltou: ["faltou", "falta"],
+  cancelado: ["cancelado", "cancelada"],
+  pendente: ["pendente"],
+};
+
+const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "confirmado", label: "Confirmado" },
+  { value: "chegada_confirmada", label: "Chegada confirmada" },
+  { value: "aguardando_triagem", label: "Aguardando triagem" },
+  { value: "triagem_concluida", label: "Triagem concluída" },
+  { value: "apto_atendimento", label: "Apto p/ atendimento" },
+  { value: "em_atendimento", label: "Em atendimento" },
+  { value: "concluido", label: "Concluído" },
+  { value: "faltou", label: "Faltou" },
+  { value: "cancelado", label: "Cancelado" },
+  { value: "pendente", label: "Pendente" },
+];
+
+const STATUS_QUICK_CHIPS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "confirmado", label: "Confirmados" },
+  { value: "apto_atendimento", label: "Aptos" },
+  { value: "em_atendimento", label: "Em atendimento" },
+  { value: "concluido", label: "Concluídos" },
+  { value: "faltou", label: "Faltou" },
+  { value: "cancelado", label: "Cancelados" },
+  { value: "pendente", label: "Pendentes" },
+];
+
 const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {
   Consulta: { label: "1ª Consulta", class: "bg-success/15 text-success border border-success/30", icon: "🟢" },
   Retorno: { label: "Retorno", class: "bg-info/15 text-info border border-info/30", icon: "🔵" },
@@ -297,6 +336,7 @@ const Agenda: React.FC = () => {
 
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
@@ -609,23 +649,56 @@ const Agenda: React.FC = () => {
         return horaToMin(a.hora) - horaToMin(b.hora);
       });
 
-    if (!debouncedSearch) return base;
+    let result = base;
 
-    return base.filter((a) => {
-      const pac = pacientes.find((p) => p.id === a.pacienteId);
-      const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
-      const cpf = pac?.cpf?.toLowerCase() || "";
-      const cns = pac?.cns?.toLowerCase() || "";
-      return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
-    });
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes, triageMap, arrivalMap, nowMinutes]);
+    if (debouncedSearch) {
+      result = result.filter((a) => {
+        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
+        const cpf = pac?.cpf?.toLowerCase() || "";
+        const cns = pac?.cns?.toLowerCase() || "";
+        return nome.includes(debouncedSearch) || cpf.includes(debouncedSearch) || cns.includes(debouncedSearch);
+      });
+    }
+
+    if (statusFilter !== "all") {
+      const allowed = STATUS_FILTER_GROUPS[statusFilter] || [statusFilter];
+      result = result.filter((a) => allowed.includes(a.status));
+    }
+
+    return result;
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
     [filtered],
   );
 
-  // Quando a tarde já entrou, marcar visualmente o início do bloco "Pendentes da manhã"
+  // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
+  const statusCounts = React.useMemo(() => {
+    const base = agendamentos.filter((a) => {
+      if (a.data !== selectedDate) return false;
+      if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
+      if (isProfissional && a.profissionalId !== user?.id) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
+      if (debouncedSearch) {
+        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
+        const cpf = pac?.cpf?.toLowerCase() || "";
+        const cns = pac?.cns?.toLowerCase() || "";
+        if (!nome.includes(debouncedSearch) && !cpf.includes(debouncedSearch) && !cns.includes(debouncedSearch)) return false;
+      }
+      return true;
+    });
+    const byGroup: Record<string, number> = {};
+    for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
+      const allowed = STATUS_FILTER_GROUPS[key];
+      byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
+    }
+    return { total: base.length, byGroup };
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+
   // (primeiro item da manhã que ainda não foi concluído).
   const idxPendentesManha = React.useMemo(() => {
     const isToday = selectedDate === todayLocalStr();
@@ -2221,6 +2294,52 @@ const Agenda: React.FC = () => {
                 className="pl-9 h-9"
               />
             </div>
+            {/* Filtro de Status */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(statusFilter !== "all" || debouncedSearch) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setStatusFilter("all"); setSearchTerm(""); }}
+                className="h-9"
+              >
+                Limpar filtros
+              </Button>
+            )}
+          </div>
+
+          {/* Chips rápidos de status */}
+          <div className="flex flex-wrap gap-2">
+            {STATUS_QUICK_CHIPS.map((chip) => {
+              const count = chip.value === "all"
+                ? statusCounts.total
+                : (statusCounts.byGroup[chip.value] || 0);
+              const active = statusFilter === chip.value;
+              return (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => setStatusFilter(chip.value)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-muted text-foreground border-border"
+                  )}
+                >
+                  {chip.label} <span className="opacity-70">({count})</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Slot availability summary for selected professional */}
