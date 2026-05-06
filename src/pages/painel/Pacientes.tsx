@@ -1058,14 +1058,16 @@ const Pacientes: React.FC = () => {
                 >
                   Ver pendências
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="bg-background"
-                  onClick={() => exportCSV("pendentes")}
-                >
-                  Exportar pendentes
-                </Button>
+                {can('pacientes', 'export') && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="bg-background"
+                    onClick={() => exportCSV("pendentes")}
+                  >
+                    Exportar pendentes
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
