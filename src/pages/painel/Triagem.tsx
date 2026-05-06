@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInMinutes } from "date-fns";
 import CustomFieldsRenderer from "@/components/CustomFieldsRenderer";
+import { EmptyState } from "@/components/EmptyState";
+import { ClipboardList } from "lucide-react";
 import { useCustomFields } from "@/hooks/useCustomFields";
 
 interface Agendamento {
