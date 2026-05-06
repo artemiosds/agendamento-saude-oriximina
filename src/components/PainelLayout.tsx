@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -17,42 +17,92 @@ import logoSms from '@/assets/logo-sms.jpeg';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
-const menuItems: {
+type MenuItem = {
   to: string;
   label: string;
   icon: React.ElementType;
   modulo: ModuleName | null;
   roles_master_only?: boolean;
   hide_from_master?: boolean;
-}[] = [
-  { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
-  { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
-  { to: '/painel/fila',             label: 'Fila de Espera',         icon: ListOrdered,        modulo: 'fila' },
-  { to: '/painel/pacientes',        label: 'Pacientes',              icon: Users,              modulo: 'pacientes' },
-  { to: '/painel/atendimentos',     label: 'Atendimentos',           icon: ClipboardList,      modulo: 'atendimento' },
-  { to: '/painel/tratamentos',      label: 'Gestão de Tratamentos',  icon: Activity,           modulo: 'tratamento' },
-  
-  { to: '/painel/prontuario',       label: 'Prontuário',             icon: Stethoscope,        modulo: 'prontuario' },
-  { to: '/painel/triagem',          label: 'Triagem',                icon: HeartPulse,         modulo: 'triagem' },
-  { to: '/painel/historico-triagem', label: 'Histórico Triagem',      icon: History,            modulo: 'triagem' },
-  { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
-  { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
-  { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },
-  { to: '/painel/alta',              label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
-  { to: '/painel/encaminhamentos',  label: 'Encaminhamentos',        icon: Send,               modulo: 'encaminhamento' },
-  { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
-  { to: '/painel/bpa-producao',     label: 'BPA-Produção',           icon: FileText,           modulo: 'relatorios' },
-  { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
-  
-  { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
-  { to: '/painel/disponibilidade',  label: 'Disponibilidade',        icon: CalendarClock,      modulo: 'usuarios' },
-  { to: '/painel/bloqueios',        label: 'Feriados/Bloqueios',     icon: CalendarClock,      modulo: 'agenda' },
-  { to: '/painel/auditoria',        label: 'Logs & Auditoria',       icon: ShieldCheck,        modulo: 'relatorios' },
-  { to: '/painel/meu-prontuario',   label: 'Meu Prontuário',         icon: Settings,           modulo: 'prontuario', hide_from_master: true },
-  { to: '/painel/configuracoes',    label: 'Configurações',          icon: Settings,           modulo: null, roles_master_only: true },
-  { to: '/painel/permissoes',       label: 'Permissões',             icon: Lock,               modulo: null, roles_master_only: true },
-  { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,           modulo: null, roles_master_only: true },
+};
+
+type MenuGroup = {
+  id: string;
+  title: string | null; // null = sem título (Principal)
+  items: MenuItem[];
+};
+
+const menuGroups: MenuGroup[] = [
+  {
+    id: 'principal',
+    title: null,
+    items: [
+      { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, modulo: null },
+    ],
+  },
+  {
+    id: 'atendimento',
+    title: 'Agenda e Recepção',
+    items: [
+      { to: '/painel/agenda',       label: 'Agenda',          icon: Calendar,      modulo: 'agenda' },
+      { to: '/painel/fila',         label: 'Fila de Espera',  icon: ListOrdered,   modulo: 'fila' },
+      { to: '/painel/pacientes',    label: 'Pacientes',       icon: Users,         modulo: 'pacientes' },
+      { to: '/painel/atendimentos', label: 'Atendimentos',    icon: ClipboardList, modulo: 'atendimento' },
+    ],
+  },
+  {
+    id: 'clinica',
+    title: 'Assistência / Clínica',
+    items: [
+      { to: '/painel/tratamentos',       label: 'Gestão de Tratamentos', icon: Activity,    modulo: 'tratamento' },
+      { to: '/painel/prontuario',        label: 'Prontuário',            icon: Stethoscope, modulo: 'prontuario' },
+      { to: '/painel/triagem',           label: 'Triagem',               icon: HeartPulse,  modulo: 'triagem' },
+      { to: '/painel/historico-triagem', label: 'Histórico Triagem',     icon: History,     modulo: 'triagem' },
+      { to: '/painel/enfermagem',        label: 'Avaliação Enfermagem',  icon: Stethoscope, modulo: 'enfermagem' },
+      { to: '/painel/pts',               label: 'PTS',                   icon: FileText,    modulo: 'prontuario' },
+      { to: '/painel/multiprofissional', label: 'Avaliação Multi',       icon: BookOpen,    modulo: 'atendimento' },
+      { to: '/painel/alta',              label: 'Relatório de Alta',     icon: FileText,    modulo: 'prontuario' },
+      { to: '/painel/meu-prontuario',    label: 'Meu Prontuário',        icon: Settings,    modulo: 'prontuario', hide_from_master: true },
+    ],
+  },
+  {
+    id: 'documentos',
+    title: 'Documentos e Arquivo',
+    items: [
+      { to: '/painel/relatorios',   label: 'Relatórios',    icon: FileText, modulo: 'relatorios' },
+      { to: '/painel/bpa-producao', label: 'BPA-Produção',  icon: FileText, modulo: 'relatorios' },
+    ],
+  },
+  {
+    id: 'regulacao',
+    title: 'Regulação / Encaminhamentos',
+    items: [
+      { to: '/painel/encaminhamentos', label: 'Encaminhamentos', icon: Send, modulo: 'encaminhamento' },
+    ],
+  },
+  {
+    id: 'gestao',
+    title: 'Gestão da Unidade',
+    items: [
+      { to: '/painel/funcionarios',    label: 'Funcionários',       icon: UserCog,       modulo: 'usuarios' },
+      { to: '/painel/unidades',        label: 'Unidades/Salas',     icon: Building2,     modulo: 'usuarios' },
+      { to: '/painel/disponibilidade', label: 'Disponibilidade',    icon: CalendarClock, modulo: 'usuarios' },
+      { to: '/painel/bloqueios',       label: 'Feriados/Bloqueios', icon: CalendarClock, modulo: 'agenda' },
+    ],
+  },
+  {
+    id: 'administracao',
+    title: 'Administração',
+    items: [
+      { to: '/painel/auditoria',               label: 'Logs & Auditoria',  icon: ShieldCheck, modulo: 'relatorios' },
+      { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
+      { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
+      { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },
+    ],
+  },
 ];
+
+const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-collapsed-groups-v1';
 
 const roleLabels: Record<string, string> = {
   master:             'Master',
@@ -95,7 +145,7 @@ const PainelLayout: React.FC = () => {
     navigate('/login');
   };
 
-  const isItemVisible = (item: typeof menuItems[0]): boolean => {
+  const isItemVisible = (item: MenuItem): boolean => {
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
     if (item.hide_from_master && isMaster) return false;
@@ -104,7 +154,32 @@ const PainelLayout: React.FC = () => {
     return can(item.modulo, 'can_view');
   };
 
-  const filteredMenu = menuItems.filter(isItemVisible);
+  const filteredGroups = useMemo(
+    () =>
+      menuGroups
+        .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
+        .filter(g => g.items.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isMaster, can, permLoading]
+  );
+
+  // Collapsed groups state (persisted locally)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -139,24 +214,51 @@ const PainelLayout: React.FC = () => {
           </div>
         )}
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {filteredMenu.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/painel'}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) => cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 p-3 space-y-3 overflow-y-auto">
+          {filteredGroups.map(group => {
+            const isCollapsed = !!collapsedGroups[group.id];
+            return (
+              <div key={group.id} className="space-y-0.5">
+                {group.title && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.id)}
+                    className="w-full flex items-center justify-between px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+                  >
+                    <span>{group.title}</span>
+                    <ChevronDown
+                      className={cn(
+                        "w-3 h-3 transition-transform duration-200",
+                        isCollapsed && "-rotate-90"
+                      )}
+                      strokeWidth={2}
+                    />
+                  </button>
+                )}
+                {!isCollapsed && (
+                  <div className="space-y-0.5">
+                    {group.items.map(item => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/painel'}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
+                          isActive
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border">
