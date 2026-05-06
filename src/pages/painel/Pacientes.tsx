@@ -24,13 +24,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer, Loader2, Paperclip } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Trash2, FileDown, Users, Clock, FileUp, Eye, FileText, Printer, Loader2, Paperclip, AlertTriangle } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import ContactActionButton from "@/components/ContactActionButton";
 import DetalheDrawer, { Secao, Campo, calcularIdade, formatarData } from "@/components/DetalheDrawer";
 import PacienteDetalheModal, { PSecao, PCampo, AlergiasBlock, formatCPF, formatCNS, formatTelefoneBR, formatarDataBR } from "@/components/PacienteDetalheModal";
 import { useCustomFields } from "@/hooks/useCustomFields";
 import { toast } from "sonner";
+import { calculatePatientPendingFields } from "@/lib/paciente-validation";
 import { validatePacienteFields } from "@/lib/validation";
 import { supabase } from "@/integrations/supabase/client";
 import ImportarPacientesCSV from "@/components/ImportarPacientesCSV";
@@ -400,16 +401,46 @@ const Pacientes: React.FC = () => {
     return pacientes;
   }, [pacientes, agendamentos, isProfissional, user, isGlobalAdminUser, unidadeIdFuncionario]);
 
-  const pacientesSemUnidade = useMemo(() => {
-    return visiblePacientes.filter((p) => !p.unidadeId);
+  const analyzedPendencies = useMemo(() => {
+    const list = visiblePacientes.map(p => calculatePatientPendingFields(p));
+    const pending = list.filter(p => p.status !== 'completo' && p.status !== 'revisado');
+    return {
+      total: pending.length,
+      semUnidade: pending.filter(p => p.status === 'sem_unidade').length
+    };
   }, [visiblePacientes]);
 
-  useQuery({
-    queryKey: queryKeys.pacientes.semUnidade({ role: user?.role || "", unidadeId: unidadeIdFuncionario || "global" }),
-    queryFn: async () => pacientesSemUnidade,
-    enabled: !!user && ["master", "gestao"].includes(user.role),
-    staleTime: 0,
-  });
+  const exportCSV = (type: "pendentes" | "todos") => {
+    const list = visiblePacientes.map(p => ({
+      ...p,
+      analysis: calculatePatientPendingFields(p)
+    }));
+    
+    const listToExport = type === "pendentes" 
+      ? list.filter(p => p.analysis.status !== "completo" && p.analysis.status !== "revisado")
+      : list;
+
+    if (listToExport.length === 0) {
+      toast.error("Nenhum registro para exportar.");
+      return;
+    }
+
+    const headers = ["id", "nome", "cpf", "cns", "telefone", "data_nascimento", "nome_mae", "unidade_id", "pendencias"];
+    const rows = listToExport.map(p => [
+      p.id, p.nome, p.cpf || "", p.cns || "", p.telefone || "", p.dataNascimento || "", 
+      p.nomeMae || "", p.unidadeId || "", p.analysis.fields.join(" | ")
+    ]);
+
+    const csvContent = [headers.join(";"), ...rows.map(r => r.join(";"))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `pacientes_pendentes_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado com sucesso!");
+  };
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
@@ -989,6 +1020,9 @@ const Pacientes: React.FC = () => {
         }
         actions={
           <>
+            <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
+              <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
+            </Button>
             {canImportCSV && (
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <FileDown className="w-4 h-4 mr-2" /> Importar CSV
@@ -1003,16 +1037,34 @@ const Pacientes: React.FC = () => {
         }
       />
 
-      {pacientesSemUnidade.length > 0 && (
+      {analyzedPendencies.total > 0 && (
         <Card className="border-warning/30 bg-warning/10 shadow-card">
           <CardContent className="p-3 text-sm text-foreground">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span>
-                {pacientesSemUnidade.length} paciente(s) sem unidade vinculada (visíveis na lista). Edite o cadastro para vinculá-los à unidade correta.
-              </span>
-              <Badge variant="outline" className="w-fit border-warning/40 text-warning">
-                Verificação Master/Gestão
-              </Badge>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-warning" />
+                <span>
+                  Existem <strong>{analyzedPendencies.total}</strong> pacientes com pendências cadastrais (CPF, CNS, endereço ou unidade faltando).
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="bg-background"
+                  onClick={() => navigate("/painel/atualizacao-cadastral")}
+                >
+                  Ver pendências
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="bg-background"
+                  onClick={() => exportCSV("pendentes")}
+                >
+                  Exportar pendentes
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

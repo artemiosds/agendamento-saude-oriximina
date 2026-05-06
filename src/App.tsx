@@ -83,6 +83,7 @@ const Encaminhamentos             = lazyRetry(() => import("./pages/painel/Encam
 const ConfiguracoesAvancadas      = lazyRetry(() => import("./pages/painel/ConfiguracoesAvancadas"));
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 const BpaProducao                 = lazyRetry(() => import("./pages/painel/BpaProducao"));
+const AtualizacaoCadastral         = lazyRetry(() => import("./pages/painel/AtualizacaoCadastral"));
 
 const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
 const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
@@ -202,6 +203,7 @@ const App = () => (
                     <Route path="agenda" element={<ModuleRoute modulo="agenda"><Agenda /></ModuleRoute>} />
                     <Route path="fila" element={<ModuleRoute modulo="fila"><FilaEspera /></ModuleRoute>} />
                     <Route path="pacientes" element={<ModuleRoute modulo="pacientes"><Pacientes /></ModuleRoute>} />
+                    <Route path="atualizacao-cadastral" element={<ModuleRoute modulo="pacientes"><AtualizacaoCadastral /></ModuleRoute>} />
                     <Route path="atendimentos" element={<ModuleRoute modulo="atendimento"><Atendimentos /></ModuleRoute>} />
                     <Route path="relatorios" element={<ModuleRoute modulo="relatorios"><Relatorios /></ModuleRoute>} />
                     <Route path="funcionarios" element={<ModuleRoute modulo="usuarios"><Funcionarios /></ModuleRoute>} />
