@@ -705,7 +705,7 @@ const Permissoes: React.FC = () => {
               <Accordion type="multiple" className="space-y-2">
                 {MODULOS.map((modulo) => {
                   const override = getUserRow(modulo);
-                  const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  const profile = perfilRows.find(r => r.modulo === modulo && r.unidade_id === selectedUnidade) 
                                   || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
                   
                   const activeCount = override ? ACTIONS.filter((a) => override[a]).length : (profile ? ACTIONS.filter(a => profile[a]).length : 0);
