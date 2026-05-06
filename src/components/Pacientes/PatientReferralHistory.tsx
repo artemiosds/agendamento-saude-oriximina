@@ -427,7 +427,7 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Editar Encaminhamento" : "Novo Encaminhamento (UBS)"}</DialogTitle>
+            <DialogTitle>{editing ? "Editar Encaminhamento" : "Novo Encaminhamento"}</DialogTitle>
             <DialogDescription>
               {isPendingMode
                 ? "O encaminhamento será salvo automaticamente após o cadastro do paciente."
