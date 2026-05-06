@@ -954,8 +954,21 @@ const ProntuarioPage: React.FC = () => {
     }
     setSoapErrors(false);
     setSaving(true);
+    // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
+    // evitar duplicação de prontuário (autosave INSERT + handleSave INSERT).
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    // Aguarda autosave em voo terminar (até 5s) antes de prosseguir
+    const autosaveStart = Date.now();
+    while (autosaveInFlightRef.current && Date.now() - autosaveStart < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    // Usa editIdRef.current como fonte de verdade (autosave pode ter criado o registro)
+    const effectiveEditId = editId || editIdRef.current;
     let insertedNewProntuario = false;
-    let prontuarioId: string | null = editId;
+    let prontuarioId: string | null = effectiveEditId;
     try {
       const procTexto = selectedProcIds
         .map((id) => {
@@ -969,8 +982,8 @@ const ProntuarioPage: React.FC = () => {
 
       // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
       // ao criar, usa o usuário logado.
-      const profIdToSave = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
-      const profNomeToSave = editId
+      const profIdToSave = effectiveEditId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeToSave = effectiveEditId
         ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
 
@@ -979,7 +992,7 @@ const ProntuarioPage: React.FC = () => {
         paciente_nome: form.paciente_nome,
         profissional_id: profIdToSave,
         profissional_nome: profNomeToSave,
-        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
+        ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
         agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
@@ -998,7 +1011,7 @@ const ProntuarioPage: React.FC = () => {
         resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
-        motivo_alteracao: editId ? form.motivo_alteracao : "",
+        motivo_alteracao: effectiveEditId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
         outro_procedimento: form.outro_procedimento || "",
         tipo_registro: form.tipo_registro || "consulta",
@@ -1014,8 +1027,8 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
-      if (editId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+      if (effectiveEditId) {
+        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
         if (error) throw error;
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
@@ -1055,7 +1068,7 @@ const ProntuarioPage: React.FC = () => {
         await logAction({
           acao: "prontuario_editado",
           entidade: "prontuario",
-          entidadeId: editId,
+          entidadeId: effectiveEditId,
           modulo: "prontuario",
           user,
           detalhes: {
@@ -1078,6 +1091,11 @@ const ProntuarioPage: React.FC = () => {
         if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        // Sincroniza imediatamente o ref para que próximos saves não dupliquem
+        if (prontuarioId) {
+          editIdRef.current = prontuarioId;
+          setEditId(prontuarioId);
+        }
       }
 
       if (prontuarioId) {
@@ -1153,10 +1171,10 @@ const ProntuarioPage: React.FC = () => {
         });
         toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
       } else {
-        toast.success(editId ? "Prontuário atualizado!" : "Prontuário criado!");
+        toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
 
-      if (!editId) {
+      if (!effectiveEditId) {
         await logAction({
           acao: "prontuario_criado",
           entidade: "prontuario",
