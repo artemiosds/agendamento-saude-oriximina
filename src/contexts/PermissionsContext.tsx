@@ -206,45 +206,56 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     (modulo: ModuleName, action: string): boolean => {
       if (loading) return false;
       if (!permissions) return false;
-      
+
       const modPerm = permissions[modulo];
       if (!modPerm) return false;
 
-      // Helper to map shorthand (e.g., 'view') to standard field (e.g., 'can_view')
+      // Global admin / master sem unidade → libera tudo
+      const isGlobalAdmin = user?.usuario === 'admin.sms';
+      if (isGlobalAdmin) return true;
+
+      // Mapeia atalhos curtos para o campo padrão CRUD
       const standardMap: Record<string, keyof ModulePermission> = {
-        'view': 'can_view',
-        'create': 'can_create',
-        'edit': 'can_edit',
-        'delete': 'can_delete',
-        'execute': 'can_execute',
-        'print': 'can_print',
-        'export': 'can_export',
-        'attach': 'can_attach',
-        'sign': 'can_sign',
-        'approve': 'can_approve',
-        'cancel': 'can_cancel',
-        'configure': 'can_configure'
+        view: 'can_view',
+        create: 'can_create',
+        edit: 'can_edit',
+        delete: 'can_delete',
+        execute: 'can_execute',
+        print: 'can_print',
+        export: 'can_export',
+        attach: 'can_attach',
+        sign: 'can_sign',
+        approve: 'can_approve',
+        cancel: 'can_cancel',
+        configure: 'can_configure',
       };
 
-      const effectiveAction = standardMap[action] || action;
+      const isStandardKey = action.startsWith('can_') && (action in modPerm);
+      const mappedKey = standardMap[action];
 
-      // Handle standard boolean actions
-      if (effectiveAction in modPerm && typeof (modPerm as any)[effectiveAction] === 'boolean') {
-        if ((modPerm as any)[effectiveAction] === true) return true;
+      // 1) Ação padrão CRUD (can_view, can_edit, view, edit, etc.)
+      if (isStandardKey) {
+        return (modPerm as any)[action] === true;
+      }
+      if (mappedKey) {
+        return (modPerm as any)[mappedKey] === true;
       }
 
-      // Handle granular actions (e.g., 'finalize')
-      if (modPerm.granular_actions && typeof modPerm.granular_actions[action] === 'boolean') {
-        if (modPerm.granular_actions[action] === true) return true;
+      // 2) Ação granular específica do sistema (ex: start_appointment, finalize, generate)
+      // Se foi explicitamente configurada → respeita o valor.
+      if (modPerm.granular_actions && action in modPerm.granular_actions) {
+        return modPerm.granular_actions[action] === true;
       }
 
-      // If it's a global admin, default to true for any action if view is enabled
-      const isMaster = (user?.role || '').toLowerCase().trim() === 'master';
-      if (isMaster && modPerm.can_view) return true;
+      // 3) RETROCOMPATIBILIDADE: ações granulares não configuradas no banco
+      // devem default-allow quando o usuário consegue VER o módulo.
+      // Isso evita que novas ações granulares quebrem fluxos antigos que já funcionavam
+      // antes da introdução do sistema de permissões granulares.
+      if (modPerm.can_view) return true;
 
       return false;
     },
-    [permissions, loading, user?.role]
+    [permissions, loading, user?.usuario]
   );
 
   return (
