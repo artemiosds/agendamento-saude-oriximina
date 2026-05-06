@@ -28,15 +28,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-
-const ESPECIALIDADES_DESTINO = [
-  { value: "fisioterapia", label: "Fisioterapia" },
-  { value: "fonoaudiologia", label: "Fonoaudiologia" },
-  { value: "nutricao", label: "Nutrição" },
-  { value: "psicologia", label: "Psicologia" },
-  { value: "terapia_ocupacional", label: "Terapia Ocupacional" },
-  { value: "outros", label: "Outros" },
-];
+import EspecialidadeDestinoCombobox from "@/components/Pacientes/EspecialidadeDestinoCombobox";
 
 const UBS_LIST = [
   "UBS Dr. Lauro Corrêa Pinto", "UBS Penta", "UBS Corino Guerreiro",
@@ -373,12 +365,12 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-3">
             <div className="md:col-span-2 p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
               <Label className="text-sm font-semibold text-primary">Especialidade Destino *</Label>
-              <Select value={formData.especialidade_destino} onValueChange={(v) => setFormData({...formData, especialidade_destino: v})}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {ESPECIALIDADES_DESTINO.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="mt-1">
+                <EspecialidadeDestinoCombobox
+                  value={formData.especialidade_destino}
+                  onChange={(v) => setFormData({ ...formData, especialidade_destino: v })}
+                />
+              </div>
             </div>
             <div>
               <Label>UBS origem</Label>
