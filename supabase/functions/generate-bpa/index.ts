@@ -320,9 +320,9 @@ Deno.serve(async (req) => {
 
       if (motivosBloqueio.length > 0) {
         pendentes.push({
-          prontuario_id: pront.id,
-          paciente_nome: pront.paciente_nome,
-          profissional_nome: pront.profissional_nome,
+          prontuario_id: id,
+          paciente_nome: paciente_nome,
+          profissional_nome: profissional_nome,
           procedimento_nome: proc ? proc.nome : (isMedico(cboDigits) ? 'Consulta médica' : '—'),
           motivos: motivosBloqueio,
         });
