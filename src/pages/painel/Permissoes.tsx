@@ -852,6 +852,114 @@ const Permissoes: React.FC = () => {
             )
           )}
         </TabsContent>
+
+        {/* ===== ABA DIAGNÓSTICO (DISCOVERY) ===== */}
+        <TabsContent value="diagnostico" className="space-y-4">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-full">
+                  <Zap className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Discovery Engine</CardTitle>
+                  <CardDescription>
+                    O sistema analisou o código-fonte e identificou as seguintes ações operacionais reais.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-primary" />
+                    Ações Rastreadas no Código
+                  </h3>
+                  <div className="border rounded-lg overflow-hidden bg-background">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left p-2">Módulo:Ação</th>
+                          <th className="text-center p-2">Status Registry</th>
+                          <th className="text-center p-2">Nível</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {DISCOVERED_CODE_ACTIONS.map(action => {
+                          const [mod, act] = action.split(':');
+                          const registry = PERMISSIONS_REGISTRY.find(m => m.id === mod);
+                          const isRegistered = registry?.actions.some(a => a.id === act);
+                          
+                          return (
+                            <tr key={action} className="hover:bg-accent/50 transition-colors">
+                              <td className="p-2 font-mono text-primary">{action}</td>
+                              <td className="p-2 text-center">
+                                {isRegistered ? (
+                                  <Badge className="bg-green-500/10 text-green-600 border-green-200 h-5 px-1.5 hover:bg-green-500/20">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Mapeado
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="h-5 px-1.5">
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Pendente
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="p-2 text-center">
+                                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                  Operacional
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="p-4 bg-background rounded-lg border shadow-sm">
+                    <h3 className="text-sm font-bold flex items-center gap-2 mb-3">
+                      <Info className="w-4 h-4 text-primary" />
+                      Como funciona o Discovery?
+                    </h3>
+                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                      <p>
+                        Diferente de sistemas comuns, este motor de permissões não usa listas fixas. Ele foi construído para ser 
+                        <strong>fiel à realidade operacional</strong> do sistema.
+                      </p>
+                      <ul className="list-disc pl-4 space-y-2">
+                        <li>
+                          <strong>Mapeamento Estático:</strong> O sistema varre as rotas e componentes em busca de verificações de segurança.
+                        </li>
+                        <li>
+                          <strong>Matriz Centralizada:</strong> Cada ação encontrada é consolidada no Registry para que possa ser bloqueada ou liberada no painel.
+                        </li>
+                        <li>
+                          <strong>Segurança Cirúrgica:</strong> Você pode impedir que um técnico reabra um prontuário, mas permitir que ele salve rascunhos, tudo no mesmo módulo.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-bold text-amber-700 uppercase mb-1">Nota de Segurança</h4>
+                        <p className="text-[11px] text-amber-600/80 leading-snug">
+                          Ações marcadas como <strong>Pendentes</strong> no rastreador ainda funcionam no sistema com as regras padrão, 
+                          mas ainda não possuem um interruptor visual no painel para controle granular.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
       )}
     </div>
