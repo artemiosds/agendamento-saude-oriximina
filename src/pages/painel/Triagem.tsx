@@ -110,6 +110,8 @@ const STATUS_AGENDAMENTO_TRIAGEM = [
 ];
 
 const Triagem: React.FC = () => {
+  const { can } = usePermissions();
+  const canPerform = can('triagem', 'perform');
   const { agendamentos, fila, pacientes, updateAgendamento, updateFila, logAction, refreshAgendamentos, refreshFila } = useData();
   const { user, isGlobalAdmin } = useAuth();
   const resolvePaciente = usePacienteNomeResolver();
