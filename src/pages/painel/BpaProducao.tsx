@@ -199,11 +199,12 @@ const BpaProducao: React.FC = () => {
         .from('triage_records')
         .select('id, agendamento_id, tecnico_id, criado_em')
         .gte('criado_em', `${dataInicio}T00:00:00`)
-        .lte('criado_em', `${dataFim}T23:59:59`);
+        .lte('criado_em', `${dataFim}T23:59:59`)
+        .limit(5000);
 
       const ags = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
       const agsData = ags.length
-        ? ((await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', ags)).data || [])
+        ? ((await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', ags).limit(5000)).data || [])
         : [];
       const agsMap = new Map<string, any>(agsData.map((a: any) => [a.id, a]));
 
