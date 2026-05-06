@@ -132,6 +132,7 @@ export function ConferirDadosPacienteModal({
   const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
+  const [lastSavedJson, setLastSavedJson] = useState<string>("");
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
