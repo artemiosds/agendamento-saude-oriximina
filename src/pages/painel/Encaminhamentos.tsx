@@ -20,6 +20,7 @@ import { listarEncaminhamentos, type EncaminhamentoData } from '@/services/encam
 import { openPrintDocument } from '@/lib/printLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { EmptyState, LoadingState } from '@/components/EmptyState';
 
 const ITEMS_PER_PAGE = 20;
 
