@@ -332,19 +332,30 @@ Deno.serve(async (req) => {
       // Auto-preenchimento de campos opcionais
       const pacCustom = pac.custom_data || {};
       const raca = mapRaca(String(pacCustom.raca_cor || pacCustom.racaCor || '99'));
-      const nacionalidade = padNum(pacCustom.nacionalidade_codigo || pacCustom.nacionalidade || '010', 3);
+      
+      let nac = String(pacCustom.nacionalidade_codigo || pacCustom.nacionalidade || '010');
+      if (nac.toLowerCase().includes('brasil') || nac.toLowerCase().includes('brasileir')) nac = '010';
+      const nacionalidade = padNum(nac, 3);
+      
       const sexo = mapSexo(String(pacCustom.sexo || ''));
       const etnia = onlyDigits(pacCustom.etnia_codigo || '').padStart(4, '0').slice(-4);
-      const municipio = padNum(pacCustom.municipio_ibge || pacCustom.codigo_ibge_municipio || '', 6);
+      
+      // Município: tenta pegar código IBGE do custom_data ou usa padrão se não houver
+      let munCode = String(pacCustom.municipio_ibge || pacCustom.codigo_ibge_municipio || pac.municipio || '');
+      // Se for nome de cidade comum na região, mapeia para código (ex: Oriximiná = 150530)
+      if (munCode.toUpperCase().includes('ORIXIMINA')) munCode = '150530';
+      const municipio = padNum(munCode, 6);
+      
       const cep = padNum(pacCustom.cep || '', 8);
       const cid = String(pacCustom.cid || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
       const carater = padNum(pacCustom.carater_atendimento || '01', 2); // 01=Eletivo
       const autorizacao = padText(String(pacCustom.numero_autorizacao || ''), 13);
 
       // Para médico sem procedimento, usa código SIGTAP genérico de consulta médica (0301010072)
+      // Se for triagem, usa o sigtap da triagem configurado
       const sigtapFinal = sigtap.length === 10
         ? sigtap
-        : (isMedico(cboDigits) ? '0301010072' : '0000000000'); // 0301010072 = Consulta médica em APS
+        : (origem === 'triagem' ? triagemSigtapPadrao : (isMedico(cboDigits) ? '0301010072' : '0000000000'));
 
       seq += 1;
       if (seq > 99) { folha += 1; seq = 1; }
