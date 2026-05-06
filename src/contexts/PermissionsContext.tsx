@@ -202,12 +202,30 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [user?.id, loadPermissions]);
 
   const can = useCallback(
-    (modulo: ModuleName, action: keyof ModulePermission): boolean => {
+    (modulo: ModuleName, action: string): boolean => {
       if (loading) return false;
       if (!permissions) return false;
-      return permissions[modulo]?.[action] === true;
+      
+      const modPerm = permissions[modulo];
+      if (!modPerm) return false;
+
+      // Handle standard boolean actions
+      if (action in modPerm && typeof (modPerm as any)[action] === 'boolean') {
+        return (modPerm as any)[action] === true;
+      }
+
+      // Handle granular actions (e.g., 'finalize')
+      if (modPerm.granular_actions && typeof modPerm.granular_actions[action] === 'boolean') {
+        return modPerm.granular_actions[action] === true;
+      }
+
+      // If it's a global admin, default to true for any action if view is enabled
+      const isMaster = (user?.role || '').toLowerCase().trim() === 'master';
+      if (isMaster && modPerm.can_view) return true;
+
+      return false;
     },
-    [permissions, loading]
+    [permissions, loading, user?.role]
   );
 
   return (
