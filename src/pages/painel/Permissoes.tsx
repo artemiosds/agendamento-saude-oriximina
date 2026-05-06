@@ -509,6 +509,47 @@ const Permissoes: React.FC = () => {
                   <Button variant="ghost" size="sm" onClick={() => { setSelectedUserId(""); setUserRows([]); }}>Trocar</Button>
                 </div>
               )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary" /> Permissões Efetivas (Resumo)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span>Ver Agenda:</span>
+                      <span className={getUserRow('agenda')?.can_view ?? profileRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_view ?? profileRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Criar Agendamento:</span>
+                      <span className={getUserRow('agenda')?.can_create ?? profileRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_create ?? profileRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Ver Pacientes:</span>
+                      <span className={getUserRow('pacientes')?.can_view ?? profileRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('pacientes')?.can_view ?? profileRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Ver Prontuário:</span>
+                      <span className={getUserRow('prontuario')?.can_view ?? profileRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('prontuario')?.can_view ?? profileRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase leading-relaxed">
+                    <strong>DICA MASTER:</strong> As permissões individuais (exceções) sobrescrevem as permissões do perfil.<br/>
+                    Se o botão "Herda do perfil" estiver visível, o sistema usará a regra padrão do cargo do usuário.
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
