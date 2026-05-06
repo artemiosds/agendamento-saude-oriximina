@@ -29,13 +29,86 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import EspecialidadeDestinoCombobox from "@/components/Pacientes/EspecialidadeDestinoCombobox";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Search, ChevronsUpDown, Check, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const UBS_LIST = [
+// Origens do encaminhamento (não apenas UBS)
+const ORIGEM_LIST = [
   "UBS Dr. Lauro Corrêa Pinto", "UBS Penta", "UBS Corino Guerreiro",
   "UBS Santa Luzia", "UBS Tânia Siqueira da Fonseca", "UBS Antônio Miléo",
-  "Hospital Municipal de Oriximiná", "UBS Nossa Sra. das Graças",
-  "UBS Fluvial Manoel Andrade", "UBS Ribeirinho", "Hospital Regional Menino Jesus",
+  "UBS Nossa Sra. das Graças", "UBS Fluvial Manoel Andrade", "UBS Ribeirinho",
+  "Hospital Municipal de Oriximiná", "Hospital Regional Menino Jesus",
+  "CER II", "CAPS II", "CAPS", "CER",
+  "Unidade Externa", "Demanda Espontânea", "Outro",
 ];
+
+const TIPO_ENCAMINHAMENTO_OPTIONS = [
+  { value: "ubs", label: "UBS" },
+  { value: "hospital", label: "Hospital" },
+  { value: "caps", label: "CAPS" },
+  { value: "cer", label: "CER" },
+  { value: "espontaneo", label: "Espontâneo" },
+  { value: "outro", label: "Outro" },
+];
+
+const _norm = (s: string) =>
+  (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+interface SearchSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+  allowCustom?: boolean;
+}
+const SearchSelect: React.FC<SearchSelectProps> = ({ value, onChange, options, placeholder = "Selecione", allowCustom = false }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const filtered = options.filter(o => _norm(o.label).includes(_norm(search)) || _norm(o.value).includes(_norm(search)));
+  const current = options.find(o => o.value === value)?.label || (allowCustom && value ? value : "");
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" role="combobox" className={cn("w-full justify-between font-normal", !current && "text-muted-foreground")}>
+          <span className="truncate flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 opacity-60" />
+            {current || placeholder}
+          </span>
+          <span className="flex items-center gap-1">
+            {value && (
+              <X className="w-3.5 h-3.5 opacity-60 hover:opacity-100" onClick={(e) => { e.stopPropagation(); onChange(""); }} />
+            )}
+            <ChevronsUpDown className="w-3.5 h-3.5 opacity-50" />
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[260px]" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Buscar..." value={search} onValueChange={setSearch} />
+          <CommandList className="max-h-[280px]">
+            <CommandEmpty>
+              {allowCustom && search.trim() ? (
+                <Button type="button" size="sm" variant="ghost" className="w-full" onClick={() => { onChange(search.trim()); setOpen(false); setSearch(""); }}>
+                  Usar "{search.trim()}"
+                </Button>
+              ) : <span className="p-2 text-sm text-muted-foreground">Nenhuma encontrada.</span>}
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map(o => (
+                <CommandItem key={o.value} value={o.value} onSelect={() => { onChange(o.value); setOpen(false); setSearch(""); }}>
+                  <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
+                  {o.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 const emptyForm = () => ({
   especialidade_destino: "",
