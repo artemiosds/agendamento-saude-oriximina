@@ -22,7 +22,7 @@ import {
   HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw,
   ArrowRightLeft, User, Clock, CalendarDays, Info, FileText,
   Globe, Ban, Plus, Trash2, Building2, ClipboardList, Search,
-  Stethoscope, Activity, Monitor
+  Stethoscope, Activity, Monitor, Network
 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import ModelosDocumentos from '@/components/ModelosDocumentos';
