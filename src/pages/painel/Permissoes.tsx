@@ -336,35 +336,30 @@ const Permissoes: React.FC = () => {
   const toggleUser = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     if (!selectedUserId) return;
     const existing = getUserRow(modulo);
-    // base = override existente OU permissão do perfil do usuário (para clonar)
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
-    let base: UserPermRow;
+    
+    // Perfil de referência para saber o valor original caso não haja exceção
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+
+    let base: any;
     if (existing) {
       base = { ...existing };
     } else {
-      // clone do perfil
-      const { data: perfilData } = await (supabase as any)
-        .from("permissoes")
-        .select("*")
-        .eq("perfil", userObj?.role || "recepcao")
-        .eq("modulo", modulo)
-        .in("unidade_id", [selectedUnidade, ""]);
-      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
-        || (perfilData || []).find((r: any) => r.unidade_id === "");
+      // Cria uma base vazia (com campos NULL) para não clonar o perfil inteiro
       base = {
         user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
-        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
-        can_execute: ref?.can_execute ?? false,
-        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
-        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
-        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
-        can_configure: ref?.can_configure ?? false,
-        granular_actions: ref?.granular_actions || {}
+        can_view: null, can_create: null, can_edit: null, can_delete: null, can_execute: null,
+        can_print: null, can_export: null, can_attach: null, can_sign: null, can_approve: null,
+        can_cancel: null, can_configure: null, granular_actions: {}
       };
     }
-    const newVal = !base[action];
-    const updated: UserPermRow = { ...base, [action]: newVal };
+
+    // O valor atual é a exceção (se existir e não for null) ou o valor do perfil
+    const currentVal = (base[action] !== null && base[action] !== undefined) ? base[action] : !!profile?.[action];
+    const newVal = !currentVal;
+    
+    const updated: any = { ...base, [action]: newVal };
     const key = `user-${modulo}-${action}`;
     setSaving(key);
 
@@ -395,36 +390,30 @@ const Permissoes: React.FC = () => {
     const existing = getUserRow(modulo as ModuleName);
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
-    let base: UserPermRow;
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+
+    let base: any;
     if (existing) {
       base = { ...existing };
     } else {
-      const { data: perfilData } = await (supabase as any)
-        .from("permissoes")
-        .select("*")
-        .eq("perfil", userObj?.role || "recepcao")
-        .eq("modulo", modulo)
-        .in("unidade_id", [selectedUnidade, ""]);
-      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
-        || (perfilData || []).find((r: any) => r.unidade_id === "");
-      
       base = {
         user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
-        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
-        can_execute: ref?.can_execute ?? false,
-        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
-        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
-        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
-        can_configure: ref?.can_configure ?? false,
-        granular_actions: ref?.granular_actions || {}
+        can_view: null, can_create: null, can_edit: null, can_delete: null, can_execute: null,
+        can_print: null, can_export: null, can_attach: null, can_sign: null, can_approve: null,
+        can_cancel: null, can_configure: null, granular_actions: {}
       };
     }
 
     const currentGranular = base.granular_actions || {};
-    const newVal = !currentGranular[actionId];
+    const profileGranular = profile?.granular_actions || {};
+    
+    // Se não está no granular_actions do usuário, pega do perfil
+    const currentVal = (currentGranular[actionId] !== undefined) ? currentGranular[actionId] : !!profileGranular[actionId];
+    const newVal = !currentVal;
+    
     const updatedGranular = { ...currentGranular, [actionId]: newVal };
-    const updated: UserPermRow = { ...base, granular_actions: updatedGranular };
+    const updated: any = { ...base, granular_actions: updatedGranular };
 
     const key = `user-granular-${modulo}-${actionId}`;
     setSaving(key);
