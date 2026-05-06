@@ -210,18 +210,18 @@ const Encaminhamentos: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            📋 Encaminhamentos
+      <PageHeader
+        title="📋 Encaminhamentos"
+        subtitle="Gerencie encaminhamentos enviados e recebidos"
+        actions={
+          <>
             {naoLidos > 0 && <Badge variant="destructive" className="text-xs">{naoLidos} não lido{naoLidos > 1 ? 's' : ''}</Badge>}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">Gerencie encaminhamentos enviados e recebidos</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1.5">
-          <Download className="w-4 h-4" /> Exportar CSV
-        </Button>
-      </div>
+            <Button variant="outline" size="sm" onClick={exportCSV} className="gap-1.5">
+              <Download className="w-4 h-4" /> Exportar CSV
+            </Button>
+          </>
+        }
+      />
 
       <Tabs defaultValue="recebidos" className="w-full">
         <TabsList>
