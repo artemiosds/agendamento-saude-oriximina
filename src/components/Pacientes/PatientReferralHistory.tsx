@@ -28,15 +28,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-
-const ESPECIALIDADES_DESTINO = [
-  { value: "fisioterapia", label: "Fisioterapia" },
-  { value: "fonoaudiologia", label: "Fonoaudiologia" },
-  { value: "nutricao", label: "Nutrição" },
-  { value: "psicologia", label: "Psicologia" },
-  { value: "terapia_ocupacional", label: "Terapia Ocupacional" },
-  { value: "outros", label: "Outros" },
-];
+import EspecialidadeDestinoCombobox from "@/components/Pacientes/EspecialidadeDestinoCombobox";
 
 const UBS_LIST = [
   "UBS Dr. Lauro Corrêa Pinto", "UBS Penta", "UBS Corino Guerreiro",
