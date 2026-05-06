@@ -505,9 +505,13 @@ const Funcionarios: React.FC = () => {
           </Dialog>
 
           {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <LoadingState label="Carregando funcionários..." size="lg" />
+          ) : filteredFuncionarios.length === 0 ? (
+            <EmptyState
+              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
+              title="Nenhum funcionário"
+              description='Clique em "Novo Funcionário" para começar.'
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredFuncionarios.map(f => {
