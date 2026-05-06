@@ -570,11 +570,6 @@ const Funcionarios: React.FC = () => {
                   </Card>
                 );
               })}
-              {filteredFuncionarios.length === 0 && !loading && (
-                <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
-                  Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
-                </p>
-              )}
             </div>
           )}
         </TabsContent>
