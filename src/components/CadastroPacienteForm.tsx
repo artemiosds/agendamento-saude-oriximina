@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { User, MapPin, Phone, FileHeart, Upload, Loader2, Building2, Stethoscope, Loader, CheckCircle2, FileIcon, Eye, Download, Trash2, Loader2 as Spinner, AlertCircle, History } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
-import PatientReferralHistory from "@/components/Pacientes/PatientReferralHistory";
+import PatientReferralHistory, { type PatientReferralHistoryHandle } from "@/components/Pacientes/PatientReferralHistory";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { applyPhoneMask, formatPhoneForDisplay } from "@/lib/phoneUtils";
