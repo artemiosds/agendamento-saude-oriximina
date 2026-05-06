@@ -438,19 +438,21 @@ const Permissoes: React.FC = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 py-2">
                         {ACTIONS.map((action) => {
                           const k = `perfil-${modulo}-${action}`;
                           const isLoading = saving === k;
                           return (
-                            <label key={action} className="flex items-center gap-2 cursor-pointer">
-                              <Switch
-                                checked={!!row?.[action]}
-                                onCheckedChange={() => togglePerfil(modulo, action)}
-                                disabled={isLoading}
-                              />
-                              <span className="text-sm">{ACTION_LABELS[action]}</span>
-                              {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                            <label key={action} className="flex flex-col gap-1 cursor-pointer group">
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={!!row?.[action]}
+                                  onCheckedChange={() => togglePerfil(modulo, action)}
+                                  disabled={isLoading}
+                                />
+                                <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
+                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                              </div>
                             </label>
                           );
                         })}
