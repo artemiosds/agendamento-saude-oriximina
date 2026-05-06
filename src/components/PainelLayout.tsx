@@ -145,7 +145,7 @@ const PainelLayout: React.FC = () => {
     navigate('/login');
   };
 
-  const isItemVisible = (item: typeof menuItems[0]): boolean => {
+  const isItemVisible = (item: MenuItem): boolean => {
     // roles_master_only: accessible by any master (global or unit)
     if (item.roles_master_only) return isMaster;
     if (item.hide_from_master && isMaster) return false;
@@ -154,7 +154,32 @@ const PainelLayout: React.FC = () => {
     return can(item.modulo, 'can_view');
   };
 
-  const filteredMenu = menuItems.filter(isItemVisible);
+  const filteredGroups = useMemo(
+    () =>
+      menuGroups
+        .map(g => ({ ...g, items: g.items.filter(isItemVisible) }))
+        .filter(g => g.items.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isMaster, can, permLoading]
+  );
+
+  // Collapsed groups state (persisted locally)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_GROUPS_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleGroup = (id: string) => {
+    setCollapsedGroups(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      try { localStorage.setItem(SIDEBAR_GROUPS_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -189,24 +214,51 @@ const PainelLayout: React.FC = () => {
           </div>
         )}
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {filteredMenu.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/painel'}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) => cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 p-3 space-y-3 overflow-y-auto">
+          {filteredGroups.map(group => {
+            const isCollapsed = !!collapsedGroups[group.id];
+            return (
+              <div key={group.id} className="space-y-0.5">
+                {group.title && (
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.id)}
+                    className="w-full flex items-center justify-between px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+                  >
+                    <span>{group.title}</span>
+                    <ChevronDown
+                      className={cn(
+                        "w-3 h-3 transition-transform duration-200",
+                        isCollapsed && "-rotate-90"
+                      )}
+                      strokeWidth={2}
+                    />
+                  </button>
+                )}
+                {!isCollapsed && (
+                  <div className="space-y-0.5">
+                    {group.items.map(item => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.to === '/painel'}
+                        onClick={() => setSidebarOpen(false)}
+                        className={({ isActive }) => cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative group",
+                          isActive
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm sidebar-active-glow"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        )}
+                      >
+                        <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                        {item.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border">
