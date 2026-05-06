@@ -391,8 +391,8 @@ const Permissoes: React.FC = () => {
     const existing = getUserRow(modulo as ModuleName);
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
-    const profile = perfilRows.find(r => r.modulo === modulo && r.unidade_id === selectedUnidade) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
 
     let base: any;
     if (existing) {
