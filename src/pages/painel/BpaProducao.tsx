@@ -808,7 +808,7 @@ const BpaProducao: React.FC = () => {
                         </TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
                           {l.codigo_sigtap || (l.origem === 'prontuario' && isMed
-                            ? <span className="text-muted-foreground italic">opcional</span>
+                            ? <span className="text-primary font-medium">0301010072</span>
                             : <span className="italic">faltando</span>)}
                         </TableCell>
                         <TableCell className="text-xs">{l.qtd}</TableCell>
