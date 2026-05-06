@@ -561,7 +561,8 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
               <div className="space-y-3 py-3 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <div><span className="text-muted-foreground block text-xs">Data:</span><span className="font-semibold">{selectedReferral.data_encaminhamento ? format(new Date(selectedReferral.data_encaminhamento), "dd/MM/yyyy") : "-"}</span></div>
-                  <div><span className="text-muted-foreground block text-xs">UBS:</span><span className="font-semibold">{selectedReferral.ubs_origem || "—"}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Origem:</span><span className="font-semibold">{selectedReferral.ubs_origem || "—"}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Tipo:</span><span className="font-semibold uppercase">{selectedReferral.tipo_encaminhamento || "—"}</span></div>
                   <div><span className="text-muted-foreground block text-xs">Solicitante:</span><span className="font-semibold">{selectedReferral.profissional_solicitante || "—"}</span></div>
                   <div><span className="text-muted-foreground block text-xs">CID-10:</span><span className="font-semibold">{selectedReferral.cid || "—"}</span></div>
                 </div>
