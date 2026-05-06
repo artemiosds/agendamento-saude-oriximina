@@ -327,7 +327,7 @@ const Permissoes: React.FC = () => {
   const getUserRow = (modulo: ModuleName): UserPermRow | undefined =>
     userRows.find((r) => r.modulo === modulo);
 
-  const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
+  const toggleUser = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     if (!selectedUserId) return;
     const existing = getUserRow(modulo);
     // base = override existente OU permissão do perfil do usuário (para clonar)
@@ -354,6 +354,7 @@ const Permissoes: React.FC = () => {
         can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
         can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
         can_configure: ref?.can_configure ?? false,
+        granular_actions: ref?.granular_actions || {}
       };
     }
     const newVal = !base[action];
@@ -370,12 +371,7 @@ const Permissoes: React.FC = () => {
     const { error } = await (supabase as any)
       .from("permissoes_usuario")
       .upsert(
-        { user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-          can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute,
-          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
-          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
-          can_configure: updated.can_configure },
+        { ...updated, unidade_id: selectedUnidade },
         { onConflict: "user_id,modulo,unidade_id" }
       );
 
@@ -384,6 +380,67 @@ const Permissoes: React.FC = () => {
       loadUser();
     } else {
       toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
+    }
+    setSaving(null);
+  };
+
+  const toggleGranularUser = async (modulo: string, actionId: string) => {
+    if (!selectedUserId) return;
+    const existing = getUserRow(modulo as ModuleName);
+    const userObj = funcionarios.find((f) => f.id === selectedUserId);
+    
+    let base: UserPermRow;
+    if (existing) {
+      base = { ...existing };
+    } else {
+      const { data: perfilData } = await (supabase as any)
+        .from("permissoes")
+        .select("*")
+        .eq("perfil", userObj?.role || "recepcao")
+        .eq("modulo", modulo)
+        .in("unidade_id", [selectedUnidade, ""]);
+      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
+        || (perfilData || []).find((r: any) => r.unidade_id === "");
+      
+      base = {
+        user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
+        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
+        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
+        can_execute: ref?.can_execute ?? false,
+        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
+        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
+        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
+        can_configure: ref?.can_configure ?? false,
+        granular_actions: ref?.granular_actions || {}
+      };
+    }
+
+    const currentGranular = base.granular_actions || {};
+    const newVal = !currentGranular[actionId];
+    const updatedGranular = { ...currentGranular, [actionId]: newVal };
+    const updated: UserPermRow = { ...base, granular_actions: updatedGranular };
+
+    const key = `user-granular-${modulo}-${actionId}`;
+    setSaving(key);
+
+    setUserRows((prev) => {
+      const idx = prev.findIndex((r) => r.modulo === modulo);
+      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
+      return [...prev, updated];
+    });
+
+    const { error } = await (supabase as any)
+      .from("permissoes_usuario")
+      .upsert(
+        { ...updated, unidade_id: selectedUnidade },
+        { onConflict: "user_id,modulo,unidade_id" }
+      );
+
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+      loadUser();
+    } else {
+      toast.success(`Exceção salva: Ação ${actionId}`);
     }
     setSaving(null);
   };
