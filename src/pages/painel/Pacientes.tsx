@@ -698,7 +698,16 @@ const Pacientes: React.FC = () => {
         setDialogOpen(false);
         setSaving(false);
         Promise.resolve(supabase.from("pacientes").insert(insertPayload))
-          .then(({ error }) => { if (error) console.error("Erro ao cadastrar paciente:", error); })
+          .then(async ({ error }) => {
+            if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
+            // Flush pending referrals + attachments queued in CadastroPacienteForm
+            try {
+              const refHandle = (window as any).__patientReferralRef?.current;
+              if (refHandle?.hasPending?.()) {
+                await refHandle.flushPending(id);
+              }
+            } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
+          })
           .catch((err) => console.error("Erro ao cadastrar paciente:", err))
           .finally(() => {
             queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
