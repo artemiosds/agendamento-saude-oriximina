@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
