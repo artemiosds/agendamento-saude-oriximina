@@ -268,6 +268,7 @@ Deno.serve(async (req) => {
     for (const t of (triagens || [])) {
       const ag = agsMap.get(t.agendamento_id);
       if (!ag) continue;
+      if (unidadeId && ag.unidade_id !== unidadeId) continue;
       
       const tecnico = employeeMap.get(t.tecnico_id);
       items.push({
