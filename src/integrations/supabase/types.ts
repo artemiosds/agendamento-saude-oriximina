@@ -1597,6 +1597,7 @@ export type Database = {
           can_sign: boolean | null
           can_view: boolean
           created_at: string
+          granular_actions: Json | null
           id: string
           modulo: string
           perfil: string
@@ -1617,6 +1618,7 @@ export type Database = {
           can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
+          granular_actions?: Json | null
           id?: string
           modulo: string
           perfil: string
@@ -1637,6 +1639,7 @@ export type Database = {
           can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
+          granular_actions?: Json | null
           id?: string
           modulo?: string
           perfil?: string
@@ -1660,6 +1663,7 @@ export type Database = {
           can_sign: boolean | null
           can_view: boolean
           created_at: string
+          granular_actions: Json | null
           id: string
           modulo: string
           unidade_id: string
@@ -1680,6 +1684,7 @@ export type Database = {
           can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
+          granular_actions?: Json | null
           id?: string
           modulo: string
           unidade_id?: string
@@ -1700,6 +1705,7 @@ export type Database = {
           can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
+          granular_actions?: Json | null
           id?: string
           modulo?: string
           unidade_id?: string
