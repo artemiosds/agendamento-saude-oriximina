@@ -902,6 +902,45 @@ export type Database = {
         }
         Relationships: []
       }
+      integracoes_log: {
+        Row: {
+          created_at: string
+          direcao: string
+          endpoint: string
+          id: string
+          identificador_origem: string
+          ip: string
+          mensagem: string
+          payload: Json
+          sistema_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          direcao?: string
+          endpoint?: string
+          id?: string
+          identificador_origem?: string
+          ip?: string
+          mensagem?: string
+          payload?: Json
+          sistema_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          direcao?: string
+          endpoint?: string
+          id?: string
+          identificador_origem?: string
+          ip?: string
+          mensagem?: string
+          payload?: Json
+          sistema_id?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       logradouros_dne: {
         Row: {
           codigo: string
@@ -2412,6 +2451,63 @@ export type Database = {
           total_cids?: number
           updated_at?: string
           valor?: number | null
+        }
+        Relationships: []
+      }
+      sistemas_integrados: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          criado_por: string
+          id: string
+          identificador: string
+          nome: string
+          pode_enviar: boolean
+          pode_receber: boolean
+          token_entrada_hash: string
+          token_entrada_prefix: string
+          token_saida: string
+          ultimo_teste_em: string | null
+          ultimo_teste_status: string
+          unidade_id: string
+          updated_at: string
+          url_base: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          id?: string
+          identificador: string
+          nome: string
+          pode_enviar?: boolean
+          pode_receber?: boolean
+          token_entrada_hash?: string
+          token_entrada_prefix?: string
+          token_saida?: string
+          ultimo_teste_em?: string | null
+          ultimo_teste_status?: string
+          unidade_id?: string
+          updated_at?: string
+          url_base?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          criado_por?: string
+          id?: string
+          identificador?: string
+          nome?: string
+          pode_enviar?: boolean
+          pode_receber?: boolean
+          token_entrada_hash?: string
+          token_entrada_prefix?: string
+          token_saida?: string
+          ultimo_teste_em?: string | null
+          ultimo_teste_status?: string
+          unidade_id?: string
+          updated_at?: string
+          url_base?: string
         }
         Relationships: []
       }

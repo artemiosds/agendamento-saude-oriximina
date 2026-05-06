@@ -22,7 +22,7 @@ import {
   HeartPulse, Shield, Users, Bell, ShieldAlert, RefreshCw,
   ArrowRightLeft, User, Clock, CalendarDays, Info, FileText,
   Globe, Ban, Plus, Trash2, Building2, ClipboardList, Search,
-  Stethoscope, Activity, Monitor
+  Stethoscope, Activity, Monitor, Network
 } from 'lucide-react';
 import EditorProntuarioConfig from '@/components/EditorProntuarioConfig';
 import ModelosDocumentos from '@/components/ModelosDocumentos';
@@ -40,6 +40,7 @@ import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
+import ConfigSistemasIntegrados from '@/components/config/ConfigSistemasIntegrados';
 import { cn } from '@/lib/utils';
 import { whatsappService } from '@/services/whatsappService';
 
@@ -54,6 +55,7 @@ const TABS = [
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
   { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  { id: 'integracoes', label: 'Sistemas Integrados', icon: Network, globalOnly: false },
   { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
 
@@ -1171,6 +1173,9 @@ const Configuracoes: React.FC = () => {
             <EditorProntuarioConfig />
           </div>
         );
+
+      case 'integracoes':
+        return <ConfigSistemasIntegrados />;
 
       case 'sistema':
         return <ConfigSistema />;
