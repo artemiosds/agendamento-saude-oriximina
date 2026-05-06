@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +132,8 @@ export function ConferirDadosPacienteModal({
   const [dirty, setDirty] = useState(false);
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
+  const [lastSavedJson, setLastSavedJson] = useState<string>("");
+  const formRef = useRef<any>({});
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
@@ -215,41 +217,57 @@ export function ConferirDadosPacienteModal({
 
   const updateField = (name: string, value: string) => {
     const masked = MASKS[name] ? MASKS[name](value) : value;
-    setForm((p: any) => ({ ...p, [name]: masked }));
+    const newForm = { ...form, [name]: masked };
+    setForm(newForm);
     setDirty(true);
+    
+    // Autosave: salvar imediatamente ao alterar qualquer campo
+    // Debounce manual opcional, mas o pedido é "salva automaticamente e reflete de imediato"
+    if (paciente) {
+      handleSave(true, newForm).catch(err => {
+        console.error("[ConferirDados] Erro no autosave:", err);
+      });
+    }
   };
 
-  const handleSave = async (silent = false) => {
-    if (!paciente) throw new Error("Paciente não carregado");
+  const handleSave = async (silent = false, currentForm?: any) => {
+    if (!paciente) return;
+    const formToSave = currentForm || form;
+    
+    // Evitar salvar se os dados não mudaram (autosave excessivo)
+    const currentJson = JSON.stringify(formToSave);
+    if (silent && currentJson === lastSavedJson) return;
+    
     setSaving(true);
+    setLastSavedJson(currentJson);
     try {
       // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
-      const telNormalizado = form.telefone ? (normalizePhone(form.telefone) || form.telefone) : "";
-      const telSecNormalizado = form.telefone_secundario
-        ? (normalizePhone(form.telefone_secundario) || form.telefone_secundario)
+      const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
+      const telSecNormalizado = formToSave.telefone_secundario
+        ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
         : "";
 
       const customData = {
         ...(paciente.custom_data || {}),
-        sexo: form.sexo,
+        sexo: formToSave.sexo,
         // Persistir Raça/Cor em ambas as chaves (compat com BPA)
-        racaCor: form.raca_cor,
-        raca_cor: form.raca_cor,
-        etnia: form.etnia,
-        etniaOutra: form.etnia_outra,
-        nacionalidade: form.nacionalidade,
-        paisNascimento: form.pais_nascimento,
+        racaCor: formToSave.raca_cor,
+        raca_cor: formToSave.raca_cor,
+        etnia: formToSave.etnia,
+        etniaOutra: formToSave.etnia_outra,
+        nacionalidade: formToSave.nacionalidade,
+        paisNascimento: formToSave.pais_nascimento,
         // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
-        tipoLogradouroDne: form.tipo_logradouro_dne,
-        tipoLogradouroCodigo: form.tipo_logradouro_codigo,
-        tipoLogradouro: form.tipo_logradouro_dne,
+        tipoLogradouroDne: formToSave.tipo_logradouro_dne,
+        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo,
+        tipoLogradouro: formToSave.tipo_logradouro_dne,
         // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
-        logradouro: form.logradouro,
-        numero: form.numero,
-        complemento: form.complemento,
-        bairro: form.bairro,
-        uf: form.uf,
-        cep: form.cep,
+        logradouro: formToSave.logradouro,
+        numero: formToSave.numero,
+        complemento: formToSave.complemento,
+        bairro: formToSave.bairro,
+        uf: formToSave.uf,
+        cep: formToSave.cep,
         telefoneSecundario: telSecNormalizado,
         // Auditoria de conferência
         data_ultima_validacao_cadastro: new Date().toISOString(),
@@ -258,18 +276,18 @@ export function ConferirDadosPacienteModal({
       };
 
       const updatePayload: any = {
-        nome: form.nome,
-        nome_mae: form.nome_mae,
-        data_nascimento: form.data_nascimento || "",
-        cpf: form.cpf,
-        cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
+        nome: formToSave.nome,
+        nome_mae: formToSave.nome_mae,
+        data_nascimento: formToSave.data_nascimento || "",
+        cpf: formToSave.cpf,
+        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15),
         telefone: telNormalizado,
-        email: form.email,
+        email: formToSave.email,
         // Não sobrescrever endereço legado: preserva o valor atual do paciente.
         endereco: paciente.endereco || "",
-        municipio: form.municipio,
-        naturalidade: form.naturalidade || "",
-        naturalidade_uf: form.naturalidade_uf || "",
+        municipio: formToSave.municipio,
+        naturalidade: formToSave.naturalidade || "",
+        naturalidade_uf: formToSave.naturalidade_uf || "",
         custom_data: customData,
       };
 
@@ -289,8 +307,6 @@ export function ConferirDadosPacienteModal({
         const depois = (updatePayload as any)[k] ?? "";
         if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
       });
-
-      setPaciente({ ...paciente, ...updatePayload });
       setDirty(false);
 
       // CRÍTICO: invalidar caches + recarregar contexto global para refletir
@@ -306,6 +322,9 @@ export function ConferirDadosPacienteModal({
 
       // Auditoria (best-effort, não bloqueia fluxo)
       if (Object.keys(camposAlterados).length > 0) {
+        // Atualiza o estado do paciente para refletir o que foi salvo
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+        
         auditService.log({
           acao: "atualizar",
           entidade: "paciente",
@@ -314,6 +333,10 @@ export function ConferirDadosPacienteModal({
           user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
           detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
         }).catch(() => {});
+      } else {
+        // Se não houver alterações (ex: apenas abertura ou salvamento de campos iguais), 
+        // ainda precisamos garantir que o estado local do paciente não está defasado
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
       }
 
       if (!silent) toast.success("Dados atualizados em todo o sistema!");
