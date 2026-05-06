@@ -791,11 +791,12 @@ const Permissoes: React.FC = () => {
                                   const k = `user-granular-${modulo}-${act.id}`;
                                   const isLoading = saving === k;
                                   const isAllowedByProfile = !!profile?.granular_actions?.[act.id];
-                                  const isAllowedByOverride = !!override?.granular_actions?.[act.id];
-                                  const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                                  const userGranular = override?.granular_actions || {};
+                                  const isOverridden = userGranular[act.id] !== undefined;
+                                  const finalValue = isOverridden ? !!userGranular[act.id] : isAllowedByProfile;
 
                                   return (
-                                    <div key={act.id} className="flex items-start gap-3 p-2 rounded-md bg-muted/30 relative">
+                                    <div key={act.id} className={`flex items-start gap-3 p-2 rounded-md relative ${isOverridden ? 'bg-primary/5 border border-primary/20' : 'bg-muted/30'}`}>
                                       <Switch
                                         checked={finalValue}
                                         onCheckedChange={() => toggleGranularUser(modulo, act.id)}
@@ -803,7 +804,14 @@ const Permissoes: React.FC = () => {
                                         className="mt-1"
                                       />
                                       <div className="flex flex-col flex-1">
-                                        <span className="text-xs font-bold">{act.label}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-bold">{act.label}</span>
+                                          {isOverridden ? (
+                                            <Badge variant="default" className="text-[7px] h-3 px-1 py-0 uppercase">Exceção</Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="text-[7px] h-3 px-1 py-0 uppercase opacity-50">Herdado</Badge>
+                                          )}
+                                        </div>
                                         <div className="flex flex-col gap-0.5 mt-1">
                                           <div className="flex items-center justify-between text-[9px]">
                                             <span>Perfil:</span>
@@ -811,16 +819,8 @@ const Permissoes: React.FC = () => {
                                               {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
                                             </span>
                                           </div>
-                                          {override && (
-                                            <div className="flex items-center justify-between text-[9px]">
-                                              <span>Individual:</span>
-                                              <span className={isAllowedByOverride ? "text-green-600" : "text-red-600"}>
-                                                {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                              </span>
-                                            </div>
-                                          )}
                                           <div className="flex items-center justify-between text-[9px] border-t pt-0.5 mt-0.5">
-                                            <span className="font-bold uppercase">Final:</span>
+                                            <span className="font-bold uppercase opacity-70">Acesso Final:</span>
                                             <span className={finalValue ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                                               {finalValue ? "PERMITIDO" : "NEGADO"}
                                             </span>
