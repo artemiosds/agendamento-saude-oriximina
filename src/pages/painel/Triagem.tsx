@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { PageHeader } from '@/components/ui/page-header';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
