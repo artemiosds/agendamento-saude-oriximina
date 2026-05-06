@@ -209,14 +209,32 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const modPerm = permissions[modulo];
       if (!modPerm) return false;
 
+      // Helper to map shorthand (e.g., 'view') to standard field (e.g., 'can_view')
+      const standardMap: Record<string, keyof ModulePermission> = {
+        'view': 'can_view',
+        'create': 'can_create',
+        'edit': 'can_edit',
+        'delete': 'can_delete',
+        'execute': 'can_execute',
+        'print': 'can_print',
+        'export': 'can_export',
+        'attach': 'can_attach',
+        'sign': 'can_sign',
+        'approve': 'can_approve',
+        'cancel': 'can_cancel',
+        'configure': 'can_configure'
+      };
+
+      const effectiveAction = standardMap[action] || action;
+
       // Handle standard boolean actions
-      if (action in modPerm && typeof (modPerm as any)[action] === 'boolean') {
-        return (modPerm as any)[action] === true;
+      if (effectiveAction in modPerm && typeof (modPerm as any)[effectiveAction] === 'boolean') {
+        if ((modPerm as any)[effectiveAction] === true) return true;
       }
 
       // Handle granular actions (e.g., 'finalize')
       if (modPerm.granular_actions && typeof modPerm.granular_actions[action] === 'boolean') {
-        return modPerm.granular_actions[action] === true;
+        if (modPerm.granular_actions[action] === true) return true;
       }
 
       // If it's a global admin, default to true for any action if view is enabled

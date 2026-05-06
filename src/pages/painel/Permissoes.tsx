@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { ModuleName, ModulePermission, ALL_MODULES } from "@/contexts/PermissionsContext";
 import { PERMISSIONS_REGISTRY, getRegistryModule } from "@/config/permissions-registry";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio, ChevronDown, ListCheck, Settings2 } from "lucide-react";
+import { 
+  Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, 
+  RotateCcw, Radio, ChevronDown, ListCheck, Settings2, Eye, 
+  Activity, Zap, Info, AlertTriangle, CheckCircle2 
+} from "lucide-react";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Identificadas via Estática / Discovery (RG)
+const DISCOVERED_CODE_ACTIONS = [
+  "agenda:approve_online", "agenda:confirm_arrival", "agenda:start_appointment", "agenda:reschedule", "agenda:block_time",
+  "pacientes:export", "pacientes:import", "pacientes:update_cadastral",
+  "prontuario:finalize", "prontuario:save_draft", "prontuario:create", "prontuario:reopen", "prontuario:sign",
+  "bpa_producao:generate", "bpa_producao:export", "bpa_producao:audit",
+  "gestao_tratamentos:manage", "gestao_tratamentos:schedule_sessions",
+  "triagem:perform", "configuracoes:advanced", "permissoes:edit"
+];
 
 const PERFIS = ["gestao", "recepcao", "tecnico", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
@@ -24,45 +39,36 @@ const PERFIL_LABELS: Record<string, string> = {
   profissional: "PROFISSIONAL",
 };
 
-const MODULOS: ModuleName[] = [
-  "dashboard", "agenda", "fila_espera", "pacientes", "atendimentos", 
-  "gestao_tratamentos", "prontuario", "triagem", "historico_triagem", 
-  "avaliacao_enfermagem", "pts", "avaliacao_multi", "relatorio_alta", 
-  "encaminhamentos", "encaminhamentos_externos", "arquivo_digital", 
-  "relatorios", "bpa_producao", "funcionarios", "unidades_salas", 
-  "disponibilidade", "feriados_bloqueios", "logs_auditoria", 
-  "configuracoes", "permissoes", "assinatura_eletronica", 
-  "modelos_documentos", "sistema"
-];
-const MODULO_LABELS: Record<ModuleName, string> = {
-  dashboard: "Dashboard",
-  agenda: "Agenda",
+const MODULOS = ALL_MODULES;
+const MODULO_LABELS: Record<string, string> = {
+  dashboard: "Painel Principal",
+  agenda: "Agenda & Recepção",
   fila_espera: "Fila de Espera",
-  pacientes: "Pacientes",
-  atendimentos: "Atendimentos",
-  gestao_tratamentos: "Gestão de Tratamentos",
-  prontuario: "Prontuário",
-  triagem: "Triagem",
-  historico_triagem: "Histórico Triagem",
+  pacientes: "Cadastro de Pacientes",
+  atendimentos: "Gestão de Atendimentos",
+  gestao_tratamentos: "Planos de Tratamento",
+  prontuario: "Prontuário Eletrônico",
+  triagem: "Triagem / Acolhimento",
+  historico_triagem: "Histórico de Triagens",
   avaliacao_enfermagem: "Avaliação Enfermagem",
-  pts: "PTS",
-  avaliacao_multi: "Avaliação Multi",
-  relatorio_alta: "Relatório de Alta",
-  encaminhamentos: "Encaminhamentos",
+  pts: "Projeto Terapêutico Singular",
+  avaliacao_multi: "Avaliação Multiprofissional",
+  relatorio_alta: "Relatórios de Alta",
+  encaminhamentos: "Encaminhamentos Internos",
   encaminhamentos_externos: "Encaminhamentos Externos",
   arquivo_digital: "Arquivo Digital",
-  relatorios: "Relatórios",
-  bpa_producao: "BPA-Produção",
-  funcionarios: "Funcionários",
-  unidades_salas: "Unidades/Salas",
-  disponibilidade: "Disponibilidade",
-  feriados_bloqueios: "Feriados/Bloqueios",
-  logs_auditoria: "Logs & Auditoria",
-  configuracoes: "Configurações",
-  permissoes: "Permissões",
-  assinatura_eletronica: "Assinatura Eletrônica",
-  modelos_documentos: "Modelos Documentos",
-  sistema: "Sistema",
+  relatorios: "Relatórios e Estatísticas",
+  bpa_producao: "BPA & Produção SUS",
+  funcionarios: "Gestão de Funcionários",
+  unidades_salas: "Unidades e Salas",
+  disponibilidade: "Escala/Disponibilidade",
+  feriados_bloqueios: "Feriados e Bloqueios",
+  logs_auditoria: "Auditoria e Segurança",
+  configuracoes: "Configurações Gerais",
+  permissoes: "Matriz de Permissões",
+  assinatura_eletronica: "Certificados Digitais",
+  modelos_documentos: "Modelos de Documentos",
+  sistema: "Parâmetros de Sistema",
 };
 const ACTIONS: (keyof Omit<ModulePermission, 'granular_actions'>)[] = [
   "can_view", "can_create", "can_edit", "can_delete", "can_execute",
@@ -501,9 +507,12 @@ const Permissoes: React.FC = () => {
         <Card><CardContent className="pt-6 text-center text-muted-foreground">Selecione uma unidade para continuar.</CardContent></Card>
       ) : (
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="perfil">Permissões por Perfil</TabsTrigger>
-          <TabsTrigger value="individual">Permissões Individuais</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 max-w-xl">
+          <TabsTrigger value="perfil">Por Perfil</TabsTrigger>
+          <TabsTrigger value="individual">Individual / Exceção</TabsTrigger>
+          <TabsTrigger value="diagnostico" className="gap-2">
+            <Zap className="w-3 h-3" /> Auto-Discovery
+          </TabsTrigger>
         </TabsList>
 
         {/* ===== ABA PERFIL ===== */}
@@ -842,6 +851,114 @@ const Permissoes: React.FC = () => {
               </Accordion>
             )
           )}
+        </TabsContent>
+
+        {/* ===== ABA DIAGNÓSTICO (DISCOVERY) ===== */}
+        <TabsContent value="diagnostico" className="space-y-4">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-full">
+                  <Zap className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Discovery Engine</CardTitle>
+                  <CardDescription>
+                    O sistema analisou o código-fonte e identificou as seguintes ações operacionais reais.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-primary" />
+                    Ações Rastreadas no Código
+                  </h3>
+                  <div className="border rounded-lg overflow-hidden bg-background">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left p-2">Módulo:Ação</th>
+                          <th className="text-center p-2">Status Registry</th>
+                          <th className="text-center p-2">Nível</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {DISCOVERED_CODE_ACTIONS.map(action => {
+                          const [mod, act] = action.split(':');
+                          const registry = PERMISSIONS_REGISTRY.find(m => m.id === mod);
+                          const isRegistered = registry?.actions.some(a => a.id === act);
+                          
+                          return (
+                            <tr key={action} className="hover:bg-accent/50 transition-colors">
+                              <td className="p-2 font-mono text-primary">{action}</td>
+                              <td className="p-2 text-center">
+                                {isRegistered ? (
+                                  <Badge className="bg-green-500/10 text-green-600 border-green-200 h-5 px-1.5 hover:bg-green-500/20">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Mapeado
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="destructive" className="h-5 px-1.5">
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Pendente
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="p-2 text-center">
+                                <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                                  Operacional
+                                </Badge>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="p-4 bg-background rounded-lg border shadow-sm">
+                    <h3 className="text-sm font-bold flex items-center gap-2 mb-3">
+                      <Info className="w-4 h-4 text-primary" />
+                      Como funciona o Discovery?
+                    </h3>
+                    <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
+                      <p>
+                        Diferente de sistemas comuns, este motor de permissões não usa listas fixas. Ele foi construído para ser 
+                        <strong>fiel à realidade operacional</strong> do sistema.
+                      </p>
+                      <ul className="list-disc pl-4 space-y-2">
+                        <li>
+                          <strong>Mapeamento Estático:</strong> O sistema varre as rotas e componentes em busca de verificações de segurança.
+                        </li>
+                        <li>
+                          <strong>Matriz Centralizada:</strong> Cada ação encontrada é consolidada no Registry para que possa ser bloqueada ou liberada no painel.
+                        </li>
+                        <li>
+                          <strong>Segurança Cirúrgica:</strong> Você pode impedir que um técnico reabra um prontuário, mas permitir que ele salve rascunhos, tudo no mesmo módulo.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <div>
+                        <h4 className="text-xs font-bold text-amber-700 uppercase mb-1">Nota de Segurança</h4>
+                        <p className="text-[11px] text-amber-600/80 leading-snug">
+                          Ações marcadas como <strong>Pendentes</strong> no rastreador ainda funcionam no sistema com as regras padrão, 
+                          mas ainda não possuem um interruptor visual no painel para controle granular.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
       )}
