@@ -172,10 +172,11 @@ const Permissoes: React.FC = () => {
   const loadPerfil = useCallback(async () => {
     if (!selectedUnidade) return;
     setLoading(true);
+    // Busca permissões do perfil selecionado e também do perfil 'master' (como fallback ou referência se necessário)
     const { data, error } = await (supabase as any)
       .from("permissoes")
       .select("*")
-      .eq("perfil", selectedPerfil)
+      .in("perfil", [selectedPerfil, 'master'])
       .in("unidade_id", [selectedUnidade, ""]);
     if (error) {
       toast.error("Erro ao carregar permissões");
