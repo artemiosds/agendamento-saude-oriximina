@@ -954,9 +954,18 @@ const ProntuarioPage: React.FC = () => {
     }
     setSoapErrors(false);
     setSaving(true);
-    // CRÍTICO: usa editIdRef.current como fonte de verdade para evitar
-    // duplicação quando o autosave já criou o prontuário mas o estado
-    // editId ainda não propagou para esta closure.
+    // CRÍTICO: cancela autosave pendente e aguarda autosave em andamento para
+    // evitar duplicação de prontuário (autosave INSERT + handleSave INSERT).
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    // Aguarda autosave em voo terminar (até 5s) antes de prosseguir
+    const autosaveStart = Date.now();
+    while (autosaveInFlightRef.current && Date.now() - autosaveStart < 5000) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    // Usa editIdRef.current como fonte de verdade (autosave pode ter criado o registro)
     const effectiveEditId = editId || editIdRef.current;
     let insertedNewProntuario = false;
     let prontuarioId: string | null = effectiveEditId;
