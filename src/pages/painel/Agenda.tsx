@@ -208,6 +208,10 @@ const Agenda: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
+  const isMaster = (user?.role || '').toLowerCase().trim() === 'master';
+  const isProfissional = (user?.role || '').toLowerCase().trim() === 'profissional';
+  const canAprovar = can('agenda', 'approve_online');
+  const canStart = can('agenda', 'start_appointment');
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
