@@ -228,14 +228,15 @@ export function ConferirDadosPacienteModal({
     }
   };
 
-  const handleSave = async (silent = false) => {
-    if (!paciente) throw new Error("Paciente não carregado");
+  const handleSave = async (silent = false, currentForm?: any) => {
+    if (!paciente) return;
+    const formToSave = currentForm || form;
     setSaving(true);
     try {
       // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
-      const telNormalizado = form.telefone ? (normalizePhone(form.telefone) || form.telefone) : "";
-      const telSecNormalizado = form.telefone_secundario
-        ? (normalizePhone(form.telefone_secundario) || form.telefone_secundario)
+      const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
+      const telSecNormalizado = formToSave.telefone_secundario
+        ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
         : "";
 
       const customData = {
