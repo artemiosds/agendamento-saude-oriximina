@@ -217,11 +217,12 @@ const ProntuarioPage: React.FC = () => {
 
   // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
   const canFinalize = useMemo(() => {
+    if (!can('prontuario', 'finalize')) return false;
     if (activeAtendimento) return true;
     if (!form.agendamento_id) return false;
     const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
     return ag && ag.status === 'em_atendimento';
-  }, [activeAtendimento, form.agendamento_id, agendamentos]);
+  }, [activeAtendimento, form.agendamento_id, agendamentos, can]);
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -277,8 +278,8 @@ const ProntuarioPage: React.FC = () => {
   }, [loadCidsForProc]);
 
   const isProfissional = user?.role === "profissional";
-  const canEdit = can('prontuario', 'can_edit');
-  const canDelete = can('prontuario', 'can_delete');
+  const canEdit = can('prontuario', 'edit');
+  const canDelete = can('prontuario', 'delete');
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();

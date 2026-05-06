@@ -172,10 +172,11 @@ const Permissoes: React.FC = () => {
   const loadPerfil = useCallback(async () => {
     if (!selectedUnidade) return;
     setLoading(true);
+    // Busca permissões do perfil selecionado e também do perfil 'master' (como fallback ou referência se necessário)
     const { data, error } = await (supabase as any)
       .from("permissoes")
       .select("*")
-      .eq("perfil", selectedPerfil)
+      .in("perfil", [selectedPerfil, 'master'])
       .in("unidade_id", [selectedUnidade, ""]);
     if (error) {
       toast.error("Erro ao carregar permissões");
@@ -245,8 +246,8 @@ const Permissoes: React.FC = () => {
   // ===== Helpers Perfil =====
   const getPerfilRow = (modulo: ModuleName): PermRow | undefined => {
     // prefere unidade específica, fallback global
-    return perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
-      || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
+    return perfilRows.find((r) => r.perfil === selectedPerfil && r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || perfilRows.find((r) => r.perfil === selectedPerfil && r.modulo === modulo && r.unidade_id === "");
   };
 
   const togglePerfil = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
@@ -339,8 +340,8 @@ const Permissoes: React.FC = () => {
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
     // Perfil de referência para saber o valor original caso não haja exceção
-    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
 
     let base: any;
     if (existing) {
@@ -390,8 +391,8 @@ const Permissoes: React.FC = () => {
     const existing = getUserRow(modulo as ModuleName);
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
-    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
 
     let base: any;
     if (existing) {
@@ -457,8 +458,8 @@ const Permissoes: React.FC = () => {
 
   const getEffectiveValue = (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     const override = getUserRow(modulo);
-    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
     
     const overrideValue = (override as any)?.[action];
     if (overrideValue !== null && overrideValue !== undefined) return !!overrideValue;
@@ -705,8 +706,8 @@ const Permissoes: React.FC = () => {
               <Accordion type="multiple" className="space-y-2">
                 {MODULOS.map((modulo) => {
                   const override = getUserRow(modulo);
-                  const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
-                                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+                  const profile = perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                                  || perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
                   
                   const activeCount = override ? ACTIONS.filter((a) => override[a]).length : (profile ? ACTIONS.filter(a => profile[a]).length : 0);
                   

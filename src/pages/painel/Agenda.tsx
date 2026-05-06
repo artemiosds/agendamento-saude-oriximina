@@ -175,6 +175,7 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 };
 
 const Agenda: React.FC = () => {
+  const { user } = useAuth();
   const {
     agendamentos,
     updateAgendamento,
@@ -200,7 +201,6 @@ const Agenda: React.FC = () => {
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
-  const { user } = useAuth();
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -208,6 +208,7 @@ const Agenda: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
+  const canStart = can('agenda', 'start_appointment');
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
@@ -360,7 +361,7 @@ const Agenda: React.FC = () => {
     profissionalId: string;
     observacoes: string;
   } | null>(null);
-  const canEdit = can('agenda', 'can_edit');
+  const canEdit = can('agenda', 'edit');
 
   // ── Modal de conferência de dados (Novo Agendamento + Confirmar Chegada) ──
   const [conferenciaModal, setConferenciaModal] = useState<{
@@ -2422,11 +2423,11 @@ const Agenda: React.FC = () => {
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
                 // Para apto_atendimento, libera independente da data (permite registrar atendimentos retroativos)
-                const canStart =
+                const canStartAction =
                   isProfissional &&
                   STATUS_LIBERADOS.includes(ag.status) &&
                   (ag.status === "apto_atendimento" || ehHoje) &&
-                  can('agenda', 'start_appointment');
+                  canStart;
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
@@ -2678,7 +2679,7 @@ const Agenda: React.FC = () => {
                                 <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
                               </Tooltip>
                             )}
-                            {canStart && (
+                            {canStartAction && (
                               <Button
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"

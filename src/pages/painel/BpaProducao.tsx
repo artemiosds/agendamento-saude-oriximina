@@ -84,6 +84,9 @@ const fmtCompetencia = (c: string) => c.length === 6 ? `${c.slice(4, 6)}/${c.sli
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
+  const canGenerate = can('bpa_producao', 'generate');
+  const canExport = can('bpa_producao', 'export');
+  const canAudit = can('bpa_producao', 'audit');
   const { unidades, funcionarios } = useData();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
@@ -602,12 +605,16 @@ const BpaProducao: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportXlsx} className="gap-2" disabled={!can('bpa_producao', 'export')}>
-            <FileSpreadsheet className="w-4 h-4" /> Exportar XLSX BPA-I
-          </Button>
-          <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2" disabled={!can('bpa_producao', 'generate')}>
-            <Download className="w-4 h-4" /> Gerar BPA
-          </Button>
+          {canExport && (
+            <Button variant="outline" onClick={exportXlsx} className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" /> Exportar XLSX BPA-I
+            </Button>
+          )}
+          {canGenerate && (
+            <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2">
+              <Download className="w-4 h-4" /> Gerar BPA
+            </Button>
+          )}
         </div>
       </div>
 

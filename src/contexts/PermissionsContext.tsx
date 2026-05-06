@@ -160,18 +160,18 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         
         // As permissões individuais (exceções) sobrescrevem apenas se não forem NULL
         map[m] = {
-          can_view: activeIndividual?.can_view ?? profile.can_view ?? false,
-          can_create: activeIndividual?.can_create ?? profile.can_create ?? false,
-          can_edit: activeIndividual?.can_edit ?? profile.can_edit ?? false,
-          can_delete: activeIndividual?.can_delete ?? profile.can_delete ?? false,
-          can_execute: activeIndividual?.can_execute ?? profile.can_execute ?? false,
-          can_print: activeIndividual?.can_print ?? profile.can_print ?? false,
-          can_export: activeIndividual?.can_export ?? profile.can_export ?? false,
-          can_attach: activeIndividual?.can_attach ?? profile.can_attach ?? false,
-          can_sign: activeIndividual?.can_sign ?? profile.can_sign ?? false,
-          can_approve: activeIndividual?.can_approve ?? profile.can_approve ?? false,
-          can_cancel: activeIndividual?.can_cancel ?? profile.can_cancel ?? false,
-          can_configure: activeIndividual?.can_configure ?? profile.can_configure ?? false,
+          can_view: activeIndividual?.can_view !== null && activeIndividual?.can_view !== undefined ? activeIndividual.can_view : (profile.can_view ?? false),
+          can_create: activeIndividual?.can_create !== null && activeIndividual?.can_create !== undefined ? activeIndividual.can_create : (profile.can_create ?? false),
+          can_edit: activeIndividual?.can_edit !== null && activeIndividual?.can_edit !== undefined ? activeIndividual.can_edit : (profile.can_edit ?? false),
+          can_delete: activeIndividual?.can_delete !== null && activeIndividual?.can_delete !== undefined ? activeIndividual.can_delete : (profile.can_delete ?? false),
+          can_execute: activeIndividual?.can_execute !== null && activeIndividual?.can_execute !== undefined ? activeIndividual.can_execute : (profile.can_execute ?? false),
+          can_print: activeIndividual?.can_print !== null && activeIndividual?.can_print !== undefined ? activeIndividual.can_print : (profile.can_print ?? false),
+          can_export: activeIndividual?.can_export !== null && activeIndividual?.can_export !== undefined ? activeIndividual.can_export : (profile.can_export ?? false),
+          can_attach: activeIndividual?.can_attach !== null && activeIndividual?.can_attach !== undefined ? activeIndividual.can_attach : (profile.can_attach ?? false),
+          can_sign: activeIndividual?.can_sign !== null && activeIndividual?.can_sign !== undefined ? activeIndividual.can_sign : (profile.can_sign ?? false),
+          can_approve: activeIndividual?.can_approve !== null && activeIndividual?.can_approve !== undefined ? activeIndividual.can_approve : (profile.can_approve ?? false),
+          can_cancel: activeIndividual?.can_cancel !== null && activeIndividual?.can_cancel !== undefined ? activeIndividual.can_cancel : (profile.can_cancel ?? false),
+          can_configure: activeIndividual?.can_configure !== null && activeIndividual?.can_configure !== undefined ? activeIndividual.can_configure : (profile.can_configure ?? false),
           granular_actions: { 
             ...((profile as any).granular_actions || {}), 
             ...((activeIndividual as any)?.granular_actions || {}) 
