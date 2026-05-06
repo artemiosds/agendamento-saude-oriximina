@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
