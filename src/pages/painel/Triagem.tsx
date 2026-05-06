@@ -515,8 +515,12 @@ const Triagem: React.FC = () => {
       </div>
       {filaFiltrada.length === 0 ? (
         <Card className="border-0 shadow-card">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            {busca.trim() ? `Nenhum paciente encontrado para "${busca}".` : "Nenhum paciente aguardando triagem no momento."}
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<ClipboardList className="w-8 h-8 text-muted-foreground/50" />}
+              title={busca.trim() ? "Nenhum resultado" : "Fila vazia"}
+              description={busca.trim() ? `Nenhum paciente encontrado para "${busca}".` : "Nenhum paciente aguardando triagem no momento."}
+            />
           </CardContent>
         </Card>
       ) : (
