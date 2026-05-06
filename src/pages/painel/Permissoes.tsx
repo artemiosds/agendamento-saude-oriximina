@@ -340,8 +340,8 @@ const Permissoes: React.FC = () => {
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
     // Perfil de referência para saber o valor original caso não haja exceção
-    const profile = perfilRows.find(r => r.modulo === modulo && r.unidade_id === selectedUnidade) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (userObj?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
 
     let base: any;
     if (existing) {
