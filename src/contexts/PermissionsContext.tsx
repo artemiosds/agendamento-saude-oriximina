@@ -77,13 +77,15 @@ export const ALL_ACTIONS: (keyof ModulePermission)[] = [
 export const defaultPerm: ModulePermission = {
   can_view: false, can_create: false, can_edit: false, can_delete: false, 
   can_execute: false, can_print: false, can_export: false, can_attach: false,
-  can_sign: false, can_approve: false, can_cancel: false, can_configure: false
+  can_sign: false, can_approve: false, can_cancel: false, can_configure: false,
+  granular_actions: {}
 };
 
 export const fullPerm: ModulePermission = {
   can_view: true, can_create: true, can_edit: true, can_delete: true, 
   can_execute: true, can_print: true, can_export: true, can_attach: true,
-  can_sign: true, can_approve: true, can_cancel: true, can_configure: true
+  can_sign: true, can_approve: true, can_cancel: true, can_configure: true,
+  granular_actions: {} // Will be treated as full access if isGlobalAdmin
 };
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
