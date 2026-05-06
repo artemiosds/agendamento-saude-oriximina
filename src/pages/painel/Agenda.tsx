@@ -2772,6 +2772,10 @@ const Agenda: React.FC = () => {
                             if (isProfissional) {
                               return sa.key === "falta" && ag.profissionalId === user?.id;
                             }
+                            
+                            // Permissões granulares para status específicos
+                            if (sa.key === 'confirmado_chegada' && !can('agenda', 'confirm_arrival')) return false;
+                            
                             return true;
                           }).map((sa) => (
                             <Button
