@@ -326,6 +326,10 @@ export function ConferirDadosPacienteModal({
           user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
           detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
         }).catch(() => {});
+      } else {
+        // Se não houver alterações (ex: apenas abertura ou salvamento de campos iguais), 
+        // ainda precisamos garantir que o estado local do paciente não está defasado
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
       }
 
       if (!silent) toast.success("Dados atualizados em todo o sistema!");
