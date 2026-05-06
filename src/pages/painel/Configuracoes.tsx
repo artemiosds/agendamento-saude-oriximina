@@ -1174,6 +1174,9 @@ const Configuracoes: React.FC = () => {
           </div>
         );
 
+      case 'integracoes':
+        return <ConfigSistemasIntegrados />;
+
       case 'sistema':
         return <ConfigSistema />;
 
