@@ -721,57 +721,119 @@ const Permissoes: React.FC = () => {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="flex justify-end mb-2">
-                          {override && (
-                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
-                              <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
-                            </Button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-2 border-t">
-                          {ACTIONS.map((action) => {
-                            const k = `user-${modulo}-${action}`;
-                            const isLoading = saving === k;
-                            const isAllowedByProfile = !!profile?.[action];
-                            const isAllowedByOverride = !!override?.[action];
-                            const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                        <div className="space-y-6 py-4">
+                          <div className="flex justify-end mb-2">
+                            {override && (
+                              <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
+                                <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                              <ListCheck className="w-3 h-3" /> Permissões Básicas (CRUD)
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                              {ACTIONS.map((action) => {
+                                const k = `user-${modulo}-${action}`;
+                                const isLoading = saving === k;
+                                const isAllowedByProfile = !!profile?.[action];
+                                const isAllowedByOverride = !!override?.[action];
+                                const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
 
-                            return (
-                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
-                                  <Switch
-                                    checked={finalValue}
-                                    onCheckedChange={() => toggleUser(modulo, action)}
-                                    disabled={isLoading}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1 mt-1">
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
-                                    <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                      {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
-                                    </span>
-                                  </div>
-                                  {override && (
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span>Individual:</span>
-                                      <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                        {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                      </span>
+                                return (
+                                  <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                      <Switch
+                                        checked={finalValue}
+                                        onCheckedChange={() => toggleUser(modulo, action)}
+                                        disabled={isLoading}
+                                      />
                                     </div>
-                                  )}
-                                  <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
-                                    <span className="font-bold">RESULTADO:</span>
-                                    <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
-                                      {finalValue ? "PERMITIDO" : "NEGADO"}
-                                    </Badge>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
+                                        <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                          {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                        </span>
+                                      </div>
+                                      {override && (
+                                        <div className="flex items-center justify-between text-[10px]">
+                                          <span>Individual:</span>
+                                          <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                            {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                          </span>
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
+                                        <span className="font-bold">RESULTADO:</span>
+                                        <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
+                                          {finalValue ? "PERMITIDO" : "NEGADO"}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
                                   </div>
-                                </div>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {getRegistryModule(modulo)?.actions && getRegistryModule(modulo)!.actions.length > 0 && (
+                            <div className="pt-4 border-t">
+                              <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                                <Settings2 className="w-3 h-3" /> Ações Específicas do Sistema
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                                {getRegistryModule(modulo)!.actions.map((act) => {
+                                  const k = `user-granular-${modulo}-${act.id}`;
+                                  const isLoading = saving === k;
+                                  const isAllowedByProfile = !!profile?.granular_actions?.[act.id];
+                                  const isAllowedByOverride = !!override?.granular_actions?.[act.id];
+                                  const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+
+                                  return (
+                                    <div key={act.id} className="flex items-start gap-3 p-2 rounded-md bg-muted/30 relative">
+                                      <Switch
+                                        checked={finalValue}
+                                        onCheckedChange={() => toggleGranularUser(modulo, act.id)}
+                                        disabled={isLoading}
+                                        className="mt-1"
+                                      />
+                                      <div className="flex flex-col flex-1">
+                                        <span className="text-xs font-bold">{act.label}</span>
+                                        <div className="flex flex-col gap-0.5 mt-1">
+                                          <div className="flex items-center justify-between text-[9px]">
+                                            <span>Perfil:</span>
+                                            <span className={isAllowedByProfile ? "text-green-600" : "text-red-600"}>
+                                              {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                            </span>
+                                          </div>
+                                          {override && (
+                                            <div className="flex items-center justify-between text-[9px]">
+                                              <span>Individual:</span>
+                                              <span className={isAllowedByOverride ? "text-green-600" : "text-red-600"}>
+                                                {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                              </span>
+                                            </div>
+                                          )}
+                                          <div className="flex items-center justify-between text-[9px] border-t pt-0.5 mt-0.5">
+                                            <span className="font-bold uppercase">Final:</span>
+                                            <span className={finalValue ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                              {finalValue ? "PERMITIDO" : "NEGADO"}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
+                            </div>
+                          )}
                         </div>
                       </AccordionContent>
                     </AccordionItem>
