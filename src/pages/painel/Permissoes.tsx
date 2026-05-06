@@ -737,13 +737,24 @@ const Permissoes: React.FC = () => {
                                 const k = `user-${modulo}-${action}`;
                                 const isLoading = saving === k;
                                 const isAllowedByProfile = !!profile?.[action];
-                                const isAllowedByOverride = !!override?.[action];
-                                const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                                const isAllowedByProfile = !!profile?.[action];
+                                
+                                // Verificamos se existe uma exceção explícita (não NULL)
+                                const overrideValue = override?.[action as keyof typeof override];
+                                const isOverridden = overrideValue !== null && overrideValue !== undefined;
+                                const finalValue = isOverridden ? !!overrideValue : isAllowedByProfile;
 
                                 return (
-                                  <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
+                                  <div key={action} className={`flex flex-col gap-1 p-2 rounded-md relative ${isOverridden ? 'bg-primary/5 border border-primary/20' : 'bg-muted/30'}`}>
                                     <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                        {isOverridden ? (
+                                          <Badge variant="default" className="w-fit text-[8px] h-3 px-1 py-0 uppercase">Exceção</Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="w-fit text-[8px] h-3 px-1 py-0 uppercase opacity-50">Herdado</Badge>
+                                        )}
+                                      </div>
                                       <Switch
                                         checked={finalValue}
                                         onCheckedChange={() => toggleUser(modulo, action)}
@@ -752,21 +763,13 @@ const Permissoes: React.FC = () => {
                                     </div>
                                     <div className="flex flex-col gap-1 mt-1">
                                       <div className="flex items-center justify-between text-[10px]">
-                                        <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
+                                        <span className="text-muted-foreground">No Perfil:</span>
                                         <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                                           {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
                                         </span>
                                       </div>
-                                      {override && (
-                                        <div className="flex items-center justify-between text-[10px]">
-                                          <span>Individual:</span>
-                                          <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                            {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                          </span>
-                                        </div>
-                                      )}
                                       <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
-                                        <span className="font-bold">RESULTADO:</span>
+                                        <span className="font-bold uppercase opacity-70">Acesso Final:</span>
                                         <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
                                           {finalValue ? "PERMITIDO" : "NEGADO"}
                                         </Badge>
