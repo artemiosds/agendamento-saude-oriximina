@@ -445,7 +445,7 @@ const Agenda: React.FC = () => {
     });
   }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const canAprovar = can('agenda', 'can_execute');
+  const canAprovar = can('agenda', 'approve_online');
   const profissionais = profissionaisVisiveis;
 
   // NOVO: agendamentos online pendentes de aprovação
