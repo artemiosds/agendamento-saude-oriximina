@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { ModuleName, ModulePermission, ALL_MODULES } from "@/contexts/PermissionsContext";
 import { PERMISSIONS_REGISTRY, getRegistryModule } from "@/config/permissions-registry";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio, ChevronDown, ListCheck, Settings2 } from "lucide-react";
+import { 
+  Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, 
+  RotateCcw, Radio, ChevronDown, ListCheck, Settings2, Eye, 
+  Activity, Zap, Info, AlertTriangle, CheckCircle2 
+} from "lucide-react";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Identificadas via Estática / Discovery (RG)
+const DISCOVERED_CODE_ACTIONS = [
+  "agenda:approve_online", "agenda:confirm_arrival", "agenda:start_appointment", "agenda:reschedule", "agenda:block_time",
+  "pacientes:export", "pacientes:import", "pacientes:update_cadastral",
+  "prontuario:finalize", "prontuario:save_draft", "prontuario:create", "prontuario:reopen", "prontuario:sign",
+  "bpa_producao:generate", "bpa_producao:export", "bpa_producao:audit",
+  "gestao_tratamentos:manage", "gestao_tratamentos:schedule_sessions",
+  "triagem:perform", "configuracoes:advanced", "permissoes:edit"
+];
 
 const PERFIS = ["gestao", "recepcao", "tecnico", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
