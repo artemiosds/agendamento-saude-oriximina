@@ -490,6 +490,7 @@ const Funcionarios: React.FC = () => {
                     values={customData}
                     onChange={(field, value) => setCustomData(prev => ({ ...prev, [field]: value }))}
                   />
+                )}
                 </div>
                 <div className="modal-footer px-4 sm:px-6">
                   <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
