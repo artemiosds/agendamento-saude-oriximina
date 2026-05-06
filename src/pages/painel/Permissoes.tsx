@@ -336,35 +336,30 @@ const Permissoes: React.FC = () => {
   const toggleUser = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     if (!selectedUserId) return;
     const existing = getUserRow(modulo);
-    // base = override existente OU permissão do perfil do usuário (para clonar)
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
-    let base: UserPermRow;
+    
+    // Perfil de referência para saber o valor original caso não haja exceção
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+
+    let base: any;
     if (existing) {
       base = { ...existing };
     } else {
-      // clone do perfil
-      const { data: perfilData } = await (supabase as any)
-        .from("permissoes")
-        .select("*")
-        .eq("perfil", userObj?.role || "recepcao")
-        .eq("modulo", modulo)
-        .in("unidade_id", [selectedUnidade, ""]);
-      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
-        || (perfilData || []).find((r: any) => r.unidade_id === "");
+      // Cria uma base vazia (com campos NULL) para não clonar o perfil inteiro
       base = {
         user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
-        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
-        can_execute: ref?.can_execute ?? false,
-        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
-        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
-        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
-        can_configure: ref?.can_configure ?? false,
-        granular_actions: ref?.granular_actions || {}
+        can_view: null, can_create: null, can_edit: null, can_delete: null, can_execute: null,
+        can_print: null, can_export: null, can_attach: null, can_sign: null, can_approve: null,
+        can_cancel: null, can_configure: null, granular_actions: {}
       };
     }
-    const newVal = !base[action];
-    const updated: UserPermRow = { ...base, [action]: newVal };
+
+    // O valor atual é a exceção (se existir e não for null) ou o valor do perfil
+    const currentVal = (base[action] !== null && base[action] !== undefined) ? base[action] : !!profile?.[action];
+    const newVal = !currentVal;
+    
+    const updated: any = { ...base, [action]: newVal };
     const key = `user-${modulo}-${action}`;
     setSaving(key);
 
@@ -395,36 +390,30 @@ const Permissoes: React.FC = () => {
     const existing = getUserRow(modulo as ModuleName);
     const userObj = funcionarios.find((f) => f.id === selectedUserId);
     
-    let base: UserPermRow;
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+
+    let base: any;
     if (existing) {
       base = { ...existing };
     } else {
-      const { data: perfilData } = await (supabase as any)
-        .from("permissoes")
-        .select("*")
-        .eq("perfil", userObj?.role || "recepcao")
-        .eq("modulo", modulo)
-        .in("unidade_id", [selectedUnidade, ""]);
-      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
-        || (perfilData || []).find((r: any) => r.unidade_id === "");
-      
       base = {
         user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
-        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
-        can_execute: ref?.can_execute ?? false,
-        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
-        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
-        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
-        can_configure: ref?.can_configure ?? false,
-        granular_actions: ref?.granular_actions || {}
+        can_view: null, can_create: null, can_edit: null, can_delete: null, can_execute: null,
+        can_print: null, can_export: null, can_attach: null, can_sign: null, can_approve: null,
+        can_cancel: null, can_configure: null, granular_actions: {}
       };
     }
 
     const currentGranular = base.granular_actions || {};
-    const newVal = !currentGranular[actionId];
+    const profileGranular = profile?.granular_actions || {};
+    
+    // Se não está no granular_actions do usuário, pega do perfil
+    const currentVal = (currentGranular[actionId] !== undefined) ? currentGranular[actionId] : !!profileGranular[actionId];
+    const newVal = !currentVal;
+    
     const updatedGranular = { ...currentGranular, [actionId]: newVal };
-    const updated: UserPermRow = { ...base, granular_actions: updatedGranular };
+    const updated: any = { ...base, granular_actions: updatedGranular };
 
     const key = `user-granular-${modulo}-${actionId}`;
     setSaving(key);
@@ -464,6 +453,16 @@ const Permissoes: React.FC = () => {
     else toast.success(`Exceção removida: ${MODULO_LABELS[modulo]}`);
     setUserRows((prev) => prev.filter((r) => r.modulo !== modulo));
     setSaving(null);
+  };
+
+  const getEffectiveValue = (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
+    const override = getUserRow(modulo);
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    
+    const overrideValue = (override as any)?.[action];
+    if (overrideValue !== null && overrideValue !== undefined) return !!overrideValue;
+    return !!(profile as any)?.[action];
   };
 
   const selectedUser = funcionarios.find((f) => f.id === selectedUserId);
@@ -665,34 +664,34 @@ const Permissoes: React.FC = () => {
                   <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                     <div className="flex items-center justify-between">
                       <span>Ver Agenda:</span>
-                      <span className={getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('agenda', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('agenda', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Criar Agendamento:</span>
-                      <span className={getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('agenda', 'can_create') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('agenda', 'can_create') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Pacientes:</span>
-                      <span className={getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('pacientes', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('pacientes', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Prontuário:</span>
-                      <span className={getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('prontuario', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('prontuario', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                   </CardContent>
                 </Card>
                 <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase leading-relaxed">
-                    <strong>DICA MASTER:</strong> As permissões individuais (exceções) sobrescrevem as permissões do perfil.<br/>
-                    Se o botão "Herda do perfil" estiver visível, o sistema usará a regra padrão do cargo do usuário.
+                    <strong>DICA MASTER:</strong> As permissões individuais agora funcionam como <strong>exceções</strong>.<br/>
+                    Ao ativar uma exceção, ela terá prioridade sobre o perfil. Para voltar a herdar a regra do perfil, use o botão de reset do módulo.
                   </p>
                 </div>
               </div>
@@ -748,13 +747,23 @@ const Permissoes: React.FC = () => {
                                 const k = `user-${modulo}-${action}`;
                                 const isLoading = saving === k;
                                 const isAllowedByProfile = !!profile?.[action];
-                                const isAllowedByOverride = !!override?.[action];
-                                const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                                
+                                // Verificamos se existe uma exceção explícita (não NULL)
+                                const overrideValue = override?.[action as keyof typeof override];
+                                const isOverridden = overrideValue !== null && overrideValue !== undefined;
+                                const finalValue = isOverridden ? !!overrideValue : isAllowedByProfile;
 
                                 return (
-                                  <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
+                                  <div key={action} className={`flex flex-col gap-1 p-2 rounded-md relative ${isOverridden ? 'bg-primary/5 border border-primary/20' : 'bg-muted/30'}`}>
                                     <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                        {isOverridden ? (
+                                          <Badge variant="default" className="w-fit text-[8px] h-3 px-1 py-0 uppercase">Exceção</Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="w-fit text-[8px] h-3 px-1 py-0 uppercase opacity-50">Herdado</Badge>
+                                        )}
+                                      </div>
                                       <Switch
                                         checked={finalValue}
                                         onCheckedChange={() => toggleUser(modulo, action)}
@@ -763,21 +772,13 @@ const Permissoes: React.FC = () => {
                                     </div>
                                     <div className="flex flex-col gap-1 mt-1">
                                       <div className="flex items-center justify-between text-[10px]">
-                                        <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
+                                        <span className="text-muted-foreground">No Perfil:</span>
                                         <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                                           {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
                                         </span>
                                       </div>
-                                      {override && (
-                                        <div className="flex items-center justify-between text-[10px]">
-                                          <span>Individual:</span>
-                                          <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                            {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                          </span>
-                                        </div>
-                                      )}
                                       <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
-                                        <span className="font-bold">RESULTADO:</span>
+                                        <span className="font-bold uppercase opacity-70">Acesso Final:</span>
                                         <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
                                           {finalValue ? "PERMITIDO" : "NEGADO"}
                                         </Badge>
@@ -800,11 +801,12 @@ const Permissoes: React.FC = () => {
                                   const k = `user-granular-${modulo}-${act.id}`;
                                   const isLoading = saving === k;
                                   const isAllowedByProfile = !!profile?.granular_actions?.[act.id];
-                                  const isAllowedByOverride = !!override?.granular_actions?.[act.id];
-                                  const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                                  const userGranular = override?.granular_actions || {};
+                                  const isOverridden = userGranular[act.id] !== undefined;
+                                  const finalValue = isOverridden ? !!userGranular[act.id] : isAllowedByProfile;
 
                                   return (
-                                    <div key={act.id} className="flex items-start gap-3 p-2 rounded-md bg-muted/30 relative">
+                                    <div key={act.id} className={`flex items-start gap-3 p-2 rounded-md relative ${isOverridden ? 'bg-primary/5 border border-primary/20' : 'bg-muted/30'}`}>
                                       <Switch
                                         checked={finalValue}
                                         onCheckedChange={() => toggleGranularUser(modulo, act.id)}
@@ -812,7 +814,14 @@ const Permissoes: React.FC = () => {
                                         className="mt-1"
                                       />
                                       <div className="flex flex-col flex-1">
-                                        <span className="text-xs font-bold">{act.label}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-bold">{act.label}</span>
+                                          {isOverridden ? (
+                                            <Badge variant="default" className="text-[7px] h-3 px-1 py-0 uppercase">Exceção</Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="text-[7px] h-3 px-1 py-0 uppercase opacity-50">Herdado</Badge>
+                                          )}
+                                        </div>
                                         <div className="flex flex-col gap-0.5 mt-1">
                                           <div className="flex items-center justify-between text-[9px]">
                                             <span>Perfil:</span>
@@ -820,16 +829,8 @@ const Permissoes: React.FC = () => {
                                               {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
                                             </span>
                                           </div>
-                                          {override && (
-                                            <div className="flex items-center justify-between text-[9px]">
-                                              <span>Individual:</span>
-                                              <span className={isAllowedByOverride ? "text-green-600" : "text-red-600"}>
-                                                {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                              </span>
-                                            </div>
-                                          )}
                                           <div className="flex items-center justify-between text-[9px] border-t pt-0.5 mt-0.5">
-                                            <span className="font-bold uppercase">Final:</span>
+                                            <span className="font-bold uppercase opacity-70">Acesso Final:</span>
                                             <span className={finalValue ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                                               {finalValue ? "PERMITIDO" : "NEGADO"}
                                             </span>
