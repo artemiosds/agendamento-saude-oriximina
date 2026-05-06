@@ -132,6 +132,7 @@ const BpaProducao: React.FC = () => {
         .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
         .gte('data_atendimento', dataInicio)
         .lte('data_atendimento', dataFim)
+        .limit(5000) // Aumentado para garantir completude
         .order('data_atendimento', { ascending: false });
       if (unidadeFiltro && unidadeFiltro !== 'all') q = q.eq('unidade_id', unidadeFiltro);
       const { data: prontuarios, error } = await q;
@@ -141,7 +142,7 @@ const BpaProducao: React.FC = () => {
       // 2) Vínculos prontuário-procedimento
       const prontIds = prots.map((p) => p.id);
       const vincs = prontIds.length
-        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds)).data || [])
+        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds).limit(5000)).data || [])
         : [];
       const procIds = [...new Set(vincs.map((v: any) => v.procedimento_id))];
       const procsData = procIds.length
@@ -198,11 +199,12 @@ const BpaProducao: React.FC = () => {
         .from('triage_records')
         .select('id, agendamento_id, tecnico_id, criado_em')
         .gte('criado_em', `${dataInicio}T00:00:00`)
-        .lte('criado_em', `${dataFim}T23:59:59`);
+        .lte('criado_em', `${dataFim}T23:59:59`)
+        .limit(5000);
 
       const ags = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
       const agsData = ags.length
-        ? ((await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', ags)).data || [])
+        ? ((await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', ags).limit(5000)).data || [])
         : [];
       const agsMap = new Map<string, any>(agsData.map((a: any) => [a.id, a]));
 
