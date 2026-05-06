@@ -352,7 +352,7 @@ const Encaminhamentos: React.FC = () => {
           </Card>
 
           {loadingEnviados ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            <Card><CardContent className="p-0"><LoadingState label="Carregando enviados..." /></CardContent></Card>
           ) : (
             <Card>
               <CardContent className="p-0">
