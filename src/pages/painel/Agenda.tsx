@@ -360,7 +360,7 @@ const Agenda: React.FC = () => {
     profissionalId: string;
     observacoes: string;
   } | null>(null);
-  const canEdit = can('agenda', 'can_edit');
+  const canEdit = can('agenda', 'edit');
 
   // ── Modal de conferência de dados (Novo Agendamento + Confirmar Chegada) ──
   const [conferenciaModal, setConferenciaModal] = useState<{
