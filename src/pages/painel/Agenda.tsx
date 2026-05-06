@@ -2270,6 +2270,52 @@ const Agenda: React.FC = () => {
                 className="pl-9 h-9"
               />
             </div>
+            {/* Filtro de Status */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {(statusFilter !== "all" || debouncedSearch) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setStatusFilter("all"); setSearchTerm(""); }}
+                className="h-9"
+              >
+                Limpar filtros
+              </Button>
+            )}
+          </div>
+
+          {/* Chips rápidos de status */}
+          <div className="flex flex-wrap gap-2">
+            {STATUS_QUICK_CHIPS.map((chip) => {
+              const count = chip.value === "all"
+                ? statusCounts.total
+                : (statusCounts.byGroup[chip.value] || 0);
+              const active = statusFilter === chip.value;
+              return (
+                <button
+                  key={chip.value}
+                  type="button"
+                  onClick={() => setStatusFilter(chip.value)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium border transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-muted text-foreground border-border"
+                  )}
+                >
+                  {chip.label} <span className="opacity-70">({count})</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Slot availability summary for selected professional */}
