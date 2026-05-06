@@ -458,8 +458,8 @@ const Permissoes: React.FC = () => {
 
   const getEffectiveValue = (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     const override = getUserRow(modulo);
-    const profile = perfilRows.find(r => r.modulo === modulo && r.unidade_id === selectedUnidade) 
-                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    const profile = perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === selectedUnidade) 
+                  || perfilRows.find(r => r.perfil === (selectedUser?.role || selectedPerfil) && r.modulo === modulo && r.unidade_id === "");
     
     const overrideValue = (override as any)?.[action];
     if (overrideValue !== null && overrideValue !== undefined) return !!overrideValue;
