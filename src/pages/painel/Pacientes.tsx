@@ -204,11 +204,11 @@ const Pacientes: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
   const isProfissional = user?.role === "profissional";
-  const canDelete = can("pacientes", "can_delete");
-  const canImportCSV = can("pacientes", "can_create");
-  const canAddToFila = can("fila_espera", "can_create");
-  const canCreate = can("pacientes", "can_create");
-  const canEdit = can("pacientes", "can_edit");
+  const canDelete = can("pacientes", "delete");
+  const canImportCSV = can("pacientes", "create");
+  const canAddToFila = can("fila_espera", "create");
+  const canCreate = can("pacientes", "create");
+  const canEdit = can("pacientes", "edit");
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
   const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
