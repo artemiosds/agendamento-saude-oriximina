@@ -244,7 +244,9 @@ const Permissoes: React.FC = () => {
     const baseRow: PermRow = existing
       ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
       : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
-          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false };
+          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
+          can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
+          can_cancel: false, can_configure: false };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
     const key = `perfil-${modulo}-${action}`;
