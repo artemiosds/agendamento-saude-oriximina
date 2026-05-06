@@ -1002,7 +1002,7 @@ const ProntuarioPage: React.FC = () => {
         resultado_exame: form.resultado_exame || "",
         // CORRIGIDO: converte 'no_indication' para '' antes de salvar no banco
         indicacao_retorno: form.indicacao_retorno === "no_indication" ? "" : form.indicacao_retorno || "",
-        motivo_alteracao: editId ? form.motivo_alteracao : "",
+        motivo_alteracao: effectiveEditId ? form.motivo_alteracao : "",
         procedimentos_texto: procTexto || form.procedimentos_texto || "",
         outro_procedimento: form.outro_procedimento || "",
         tipo_registro: form.tipo_registro || "consulta",
