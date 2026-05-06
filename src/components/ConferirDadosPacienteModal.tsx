@@ -133,6 +133,7 @@ export function ConferirDadosPacienteModal({
   const [paciente, setPaciente] = useState<any | null>(null);
   const [form, setForm] = useState<any>({});
   const [lastSavedJson, setLastSavedJson] = useState<string>("");
+  const formRef = useState<any>(form); // Usar ref para acessar form atual em callbacks se necessário, mas manteremos o estado para re-render
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
