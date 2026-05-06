@@ -2679,7 +2679,7 @@ const Agenda: React.FC = () => {
                                 <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
                               </Tooltip>
                             )}
-                            {canStart && (
+                            {canStartAction && (
                               <Button
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"
