@@ -175,6 +175,7 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 };
 
 const Agenda: React.FC = () => {
+  const { user } = useAuth();
   const {
     agendamentos,
     updateAgendamento,
@@ -200,7 +201,6 @@ const Agenda: React.FC = () => {
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
-  const { user } = useAuth();
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
