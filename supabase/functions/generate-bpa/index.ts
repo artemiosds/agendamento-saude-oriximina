@@ -126,14 +126,18 @@ Deno.serve(async (req) => {
     const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
 
     // 1. Carrega configurações e dados do período
+    let prontQuery = supabase
+      .from('prontuarios')
+      .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
+      .gte('data_atendimento', dataInicio)
+      .lte('data_atendimento', dataFim)
+      .order('data_atendimento', { ascending: true });
+    
+    if (unidadeId) prontQuery = prontQuery.eq('unidade_id', unidadeId);
+
     const [{ data: configData }, { data: prontuarios, error: prontErr }] = await Promise.all([
       supabase.from('system_config').select('configuracoes').limit(1).maybeSingle(),
-      supabase
-        .from('prontuarios')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
-        .gte('data_atendimento', dataInicio)
-        .lte('data_atendimento', dataFim)
-        .order('data_atendimento', { ascending: true })
+      prontQuery
     ]);
 
     const cfg = configData?.configuracoes || {};
