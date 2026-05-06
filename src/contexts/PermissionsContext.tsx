@@ -155,27 +155,28 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const uGlob = userRes.data?.find(r => r.modulo === m && r.unidade_id === '');
         const activeIndividual = uUnid || uGlob;
 
-        const source = activeIndividual || activeProfile;
-
-        if (source) {
-          map[m] = {
-            can_view: source.can_view ?? false,
-            can_create: source.can_create ?? false,
-            can_edit: source.can_edit ?? false,
-            can_delete: source.can_delete ?? false,
-            can_execute: source.can_execute ?? false,
-            can_print: source.can_print ?? false,
-            can_export: source.can_export ?? false,
-            can_attach: source.can_attach ?? false,
-            can_sign: source.can_sign ?? false,
-            can_approve: source.can_approve ?? false,
-            can_cancel: source.can_cancel ?? false,
-            can_configure: source.can_configure ?? false,
-            granular_actions: (source as any).granular_actions || {},
-          };
-        } else {
-          map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) || { ...defaultPerm };
-        }
+        // As permissões básicas vêm do perfil ou do padrão do sistema
+        const profile = activeProfile || (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) || defaultPerm;
+        
+        // As permissões individuais (exceções) sobrescrevem apenas se não forem NULL
+        map[m] = {
+          can_view: activeIndividual?.can_view ?? profile.can_view ?? false,
+          can_create: activeIndividual?.can_create ?? profile.can_create ?? false,
+          can_edit: activeIndividual?.can_edit ?? profile.can_edit ?? false,
+          can_delete: activeIndividual?.can_delete ?? profile.can_delete ?? false,
+          can_execute: activeIndividual?.can_execute ?? profile.can_execute ?? false,
+          can_print: activeIndividual?.can_print ?? profile.can_print ?? false,
+          can_export: activeIndividual?.can_export ?? profile.can_export ?? false,
+          can_attach: activeIndividual?.can_attach ?? profile.can_attach ?? false,
+          can_sign: activeIndividual?.can_sign ?? profile.can_sign ?? false,
+          can_approve: activeIndividual?.can_approve ?? profile.can_approve ?? false,
+          can_cancel: activeIndividual?.can_cancel ?? profile.can_cancel ?? false,
+          can_configure: activeIndividual?.can_configure ?? profile.can_configure ?? false,
+          granular_actions: { 
+            ...(profile.granular_actions || {}), 
+            ...(activeIndividual?.granular_actions || {}) 
+          },
+        };
       });
 
       setPermissions(buildFullMap(map));
