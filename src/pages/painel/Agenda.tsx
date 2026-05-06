@@ -1823,19 +1823,18 @@ const Agenda: React.FC = () => {
         <div className="flex flex-col gap-2">
           {/* Lembrete de Pendências (Req 5 & 9) */}
           {(isMaster || isProfissional) && agendamentosPendentesRevisao.length > 0 && (
-            <Alert className="bg-warning/5 border-warning/20 animate-in fade-in slide-in-from-top-4 duration-500">
-              <AlertCircle className="h-4 w-4 text-warning" />
+            <Alert className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-primary/10 border-l-4 border-l-amber-500 border border-amber-500/30 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                 <div className="pr-4">
-                  <AlertTitle className="text-sm font-semibold text-warning-foreground">Pendências de agenda</AlertTitle>
-                  <AlertDescription className="text-xs text-muted-foreground">
-                    Existem {agendamentosPendentesRevisao.length} pacientes sem conclusão no período. Revise agora.
+                  <AlertTitle className="text-sm font-semibold text-foreground">Pendências de agenda</AlertTitle>
+                  <AlertDescription className="text-xs text-foreground/70">
+                    Existem <span className="font-semibold text-amber-700 dark:text-amber-300">{agendamentosPendentesRevisao.length}</span> pacientes sem conclusão no período. Revise agora.
                   </AlertDescription>
                 </div>
                 <Button 
                   size="sm" 
-                  variant="outline" 
-                  className="h-8 border-warning/30 hover:bg-warning/10 text-warning-foreground text-xs shrink-0"
+                  className="h-8 bg-amber-500 hover:bg-amber-600 text-white text-xs shrink-0 shadow-sm"
                   onClick={() => setPendenciasDialogOpen(true)}
                 >
                   <ListChecks className="w-3.5 h-3.5 mr-1" />
