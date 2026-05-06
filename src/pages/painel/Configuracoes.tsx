@@ -54,6 +54,7 @@ const TABS = [
   { id: 'usuarios', label: 'Usuários e Permissões', icon: Users, globalOnly: false },
   { id: 'unidades', label: 'Unidades e Setores', icon: Building2, globalOnly: true },
   { id: 'auditoria', label: 'Auditoria e Logs', icon: Search, globalOnly: false },
+  { id: 'integracoes', label: 'Sistemas Integrados', icon: Network, globalOnly: false },
   { id: 'sistema', label: 'Sistema', icon: Monitor, globalOnly: true },
 ] as const;
 
