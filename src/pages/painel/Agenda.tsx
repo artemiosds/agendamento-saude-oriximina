@@ -118,6 +118,45 @@ const statusBadgeClass: Record<string, string> = {
   indeferido: "bg-destructive/10 text-destructive",
 };
 
+// Grupos de status para filtro da Agenda (mapeia status equivalentes)
+const STATUS_FILTER_GROUPS: Record<string, string[]> = {
+  confirmado: ["confirmado", "confirmada", "agendado"],
+  chegada_confirmada: ["confirmado_chegada", "chegada_confirmada"],
+  aguardando_triagem: ["aguardando_triagem"],
+  triagem_concluida: ["triagem_concluida"],
+  apto_atendimento: ["apto_atendimento", "apto", "aguardando_atendimento", "aguardando_profissional"],
+  em_atendimento: ["em_atendimento"],
+  concluido: ["concluido", "finalizado", "atendido", "atendimento_encerrado", "prontuario_finalizado"],
+  faltou: ["faltou", "falta"],
+  cancelado: ["cancelado", "cancelada"],
+  pendente: ["pendente"],
+};
+
+const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "confirmado", label: "Confirmado" },
+  { value: "chegada_confirmada", label: "Chegada confirmada" },
+  { value: "aguardando_triagem", label: "Aguardando triagem" },
+  { value: "triagem_concluida", label: "Triagem concluída" },
+  { value: "apto_atendimento", label: "Apto p/ atendimento" },
+  { value: "em_atendimento", label: "Em atendimento" },
+  { value: "concluido", label: "Concluído" },
+  { value: "faltou", label: "Faltou" },
+  { value: "cancelado", label: "Cancelado" },
+  { value: "pendente", label: "Pendente" },
+];
+
+const STATUS_QUICK_CHIPS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "confirmado", label: "Confirmados" },
+  { value: "apto_atendimento", label: "Aptos" },
+  { value: "em_atendimento", label: "Em atendimento" },
+  { value: "concluido", label: "Concluídos" },
+  { value: "faltou", label: "Faltou" },
+  { value: "cancelado", label: "Cancelados" },
+  { value: "pendente", label: "Pendentes" },
+];
+
 const tipoBadge: Record<string, { label: string; class: string; icon: string }> = {
   Consulta: { label: "1ª Consulta", class: "bg-success/15 text-success border border-success/30", icon: "🟢" },
   Retorno: { label: "Retorno", class: "bg-info/15 text-info border border-info/30", icon: "🔵" },
