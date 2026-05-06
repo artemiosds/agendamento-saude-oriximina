@@ -2425,7 +2425,8 @@ const Agenda: React.FC = () => {
                 const canStart =
                   isProfissional &&
                   STATUS_LIBERADOS.includes(ag.status) &&
-                  (ag.status === "apto_atendimento" || ehHoje);
+                  (ag.status === "apto_atendimento" || ehHoje) &&
+                  can('agenda', 'start_appointment');
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
