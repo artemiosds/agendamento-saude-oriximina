@@ -40,6 +40,7 @@ import ConfigFluxoAtendimento from '@/components/config/ConfigFluxoAtendimento';
 import ConfigSistema from '@/components/config/ConfigSistema';
 import ConfigPersonalizarCampos from '@/components/config/ConfigPersonalizarCampos';
 import ConfigWhatsApp from '@/components/config/ConfigWhatsApp';
+import ConfigSistemasIntegrados from '@/components/config/ConfigSistemasIntegrados';
 import { cn } from '@/lib/utils';
 import { whatsappService } from '@/services/whatsappService';
 
