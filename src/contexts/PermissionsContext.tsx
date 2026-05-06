@@ -173,8 +173,8 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           can_cancel: activeIndividual?.can_cancel ?? profile.can_cancel ?? false,
           can_configure: activeIndividual?.can_configure ?? profile.can_configure ?? false,
           granular_actions: { 
-            ...(profile.granular_actions || {}), 
-            ...(activeIndividual?.granular_actions || {}) 
+            ...((profile as any).granular_actions || {}), 
+            ...((activeIndividual as any)?.granular_actions || {}) 
           },
         };
       });
