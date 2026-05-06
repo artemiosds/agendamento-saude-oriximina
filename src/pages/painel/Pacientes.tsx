@@ -1469,19 +1469,16 @@ const Pacientes: React.FC = () => {
           </DialogHeader>
           <div className="px-6 pb-6">
             {fichaLoading ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-4">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Carregando dados da ficha...</p>
-              </div>
+              <LoadingState label="Carregando dados da ficha..." size="lg" />
             ) : fichaData ? (
               <FichaImpressao data={fichaData} mode={fichaPrintMode} onPrintComplete={handlePrintComplete} />
             ) : (
-              <div className="text-center py-16 text-muted-foreground">
-                <p>Erro ao carregar dados da ficha.</p>
-                <Button variant="outline" className="mt-4" onClick={() => setFichaOpen(false)}>
-                  Fechar
-                </Button>
-              </div>
+              <ErrorState
+                title="Erro ao carregar"
+                description="Não foi possível carregar os dados da ficha."
+                onRetry={() => setFichaOpen(false)}
+                retryLabel="Fechar"
+              />
             )}
           </div>
         </DialogContent>
