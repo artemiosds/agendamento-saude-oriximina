@@ -1654,14 +1654,14 @@ export type Database = {
           can_attach: boolean | null
           can_cancel: boolean | null
           can_configure: boolean | null
-          can_create: boolean
-          can_delete: boolean
-          can_edit: boolean
-          can_execute: boolean
+          can_create: boolean | null
+          can_delete: boolean | null
+          can_edit: boolean | null
+          can_execute: boolean | null
           can_export: boolean | null
           can_print: boolean | null
           can_sign: boolean | null
-          can_view: boolean
+          can_view: boolean | null
           created_at: string
           granular_actions: Json | null
           id: string
@@ -1675,14 +1675,14 @@ export type Database = {
           can_attach?: boolean | null
           can_cancel?: boolean | null
           can_configure?: boolean | null
-          can_create?: boolean
-          can_delete?: boolean
-          can_edit?: boolean
-          can_execute?: boolean
+          can_create?: boolean | null
+          can_delete?: boolean | null
+          can_edit?: boolean | null
+          can_execute?: boolean | null
           can_export?: boolean | null
           can_print?: boolean | null
           can_sign?: boolean | null
-          can_view?: boolean
+          can_view?: boolean | null
           created_at?: string
           granular_actions?: Json | null
           id?: string
@@ -1696,14 +1696,14 @@ export type Database = {
           can_attach?: boolean | null
           can_cancel?: boolean | null
           can_configure?: boolean | null
-          can_create?: boolean
-          can_delete?: boolean
-          can_edit?: boolean
-          can_execute?: boolean
+          can_create?: boolean | null
+          can_delete?: boolean | null
+          can_edit?: boolean | null
+          can_execute?: boolean | null
           can_export?: boolean | null
           can_print?: boolean | null
           can_sign?: boolean | null
-          can_view?: boolean
+          can_view?: boolean | null
           created_at?: string
           granular_actions?: Json | null
           id?: string
