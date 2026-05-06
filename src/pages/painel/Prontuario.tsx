@@ -973,8 +973,8 @@ const ProntuarioPage: React.FC = () => {
 
       // Profissional responsável: ao editar, preserva quem fez (ou Master pode trocar via UI);
       // ao criar, usa o usuário logado.
-      const profIdToSave = editId ? (form.profissional_id || user?.id || "") : (user?.id || "");
-      const profNomeToSave = editId
+      const profIdToSave = effectiveEditId ? (form.profissional_id || user?.id || "") : (user?.id || "");
+      const profNomeToSave = effectiveEditId
         ? (form.profissional_nome || funcionarios.find(f => f.id === profIdToSave)?.nome || user?.nome || "")
         : (user?.nome || "");
 
@@ -983,7 +983,7 @@ const ProntuarioPage: React.FC = () => {
         paciente_nome: form.paciente_nome,
         profissional_id: profIdToSave,
         profissional_nome: profNomeToSave,
-        ...(editId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
+        ...(effectiveEditId ? {} : { unidade_id: user?.unidadeId || "", setor: user?.setor || "" }),
         agendamento_id: form.agendamento_id,
         data_atendimento: form.data_atendimento,
         hora_atendimento: form.hora_atendimento,
