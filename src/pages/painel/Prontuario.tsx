@@ -1018,8 +1018,8 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
-      if (editId) {
-        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", editId);
+      if (effectiveEditId) {
+        const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
         if (error) throw error;
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
@@ -1059,7 +1059,7 @@ const ProntuarioPage: React.FC = () => {
         await logAction({
           acao: "prontuario_editado",
           entidade: "prontuario",
-          entidadeId: editId,
+          entidadeId: effectiveEditId,
           modulo: "prontuario",
           user,
           detalhes: {
@@ -1082,6 +1082,11 @@ const ProntuarioPage: React.FC = () => {
         if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
+        // Sincroniza imediatamente o ref para que próximos saves não dupliquem
+        if (prontuarioId) {
+          editIdRef.current = prontuarioId;
+          setEditId(prontuarioId);
+        }
       }
 
       if (prontuarioId) {
