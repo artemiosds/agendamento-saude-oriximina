@@ -17,42 +17,92 @@ import logoSms from '@/assets/logo-sms.jpeg';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
-const menuItems: {
+type MenuItem = {
   to: string;
   label: string;
   icon: React.ElementType;
   modulo: ModuleName | null;
   roles_master_only?: boolean;
   hide_from_master?: boolean;
-}[] = [
-  { to: '/painel',                  label: 'Dashboard',              icon: LayoutDashboard,    modulo: null },
-  { to: '/painel/agenda',           label: 'Agenda',                 icon: Calendar,           modulo: 'agenda' },
-  { to: '/painel/fila',             label: 'Fila de Espera',         icon: ListOrdered,        modulo: 'fila' },
-  { to: '/painel/pacientes',        label: 'Pacientes',              icon: Users,              modulo: 'pacientes' },
-  { to: '/painel/atendimentos',     label: 'Atendimentos',           icon: ClipboardList,      modulo: 'atendimento' },
-  { to: '/painel/tratamentos',      label: 'Gestão de Tratamentos',  icon: Activity,           modulo: 'tratamento' },
-  
-  { to: '/painel/prontuario',       label: 'Prontuário',             icon: Stethoscope,        modulo: 'prontuario' },
-  { to: '/painel/triagem',          label: 'Triagem',                icon: HeartPulse,         modulo: 'triagem' },
-  { to: '/painel/historico-triagem', label: 'Histórico Triagem',      icon: History,            modulo: 'triagem' },
-  { to: '/painel/enfermagem',       label: 'Avaliação Enfermagem',   icon: Stethoscope,        modulo: 'enfermagem' },
-  { to: '/painel/pts',              label: 'PTS',                    icon: FileText,           modulo: 'prontuario' },
-  { to: '/painel/multiprofissional',label: 'Avaliação Multi',        icon: BookOpen,           modulo: 'atendimento' },
-  { to: '/painel/alta',              label: 'Relatório de Alta',      icon: FileText,           modulo: 'prontuario' },
-  { to: '/painel/encaminhamentos',  label: 'Encaminhamentos',        icon: Send,               modulo: 'encaminhamento' },
-  { to: '/painel/relatorios',       label: 'Relatórios',             icon: FileText,           modulo: 'relatorios' },
-  { to: '/painel/bpa-producao',     label: 'BPA-Produção',           icon: FileText,           modulo: 'relatorios' },
-  { to: '/painel/funcionarios',     label: 'Funcionários',           icon: UserCog,            modulo: 'usuarios' },
-  
-  { to: '/painel/unidades',         label: 'Unidades/Salas',         icon: Building2,          modulo: 'usuarios' },
-  { to: '/painel/disponibilidade',  label: 'Disponibilidade',        icon: CalendarClock,      modulo: 'usuarios' },
-  { to: '/painel/bloqueios',        label: 'Feriados/Bloqueios',     icon: CalendarClock,      modulo: 'agenda' },
-  { to: '/painel/auditoria',        label: 'Logs & Auditoria',       icon: ShieldCheck,        modulo: 'relatorios' },
-  { to: '/painel/meu-prontuario',   label: 'Meu Prontuário',         icon: Settings,           modulo: 'prontuario', hide_from_master: true },
-  { to: '/painel/configuracoes',    label: 'Configurações',          icon: Settings,           modulo: null, roles_master_only: true },
-  { to: '/painel/permissoes',       label: 'Permissões',             icon: Lock,               modulo: null, roles_master_only: true },
-  { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,           modulo: null, roles_master_only: true },
+};
+
+type MenuGroup = {
+  id: string;
+  title: string | null; // null = sem título (Principal)
+  items: MenuItem[];
+};
+
+const menuGroups: MenuGroup[] = [
+  {
+    id: 'principal',
+    title: null,
+    items: [
+      { to: '/painel', label: 'Dashboard', icon: LayoutDashboard, modulo: null },
+    ],
+  },
+  {
+    id: 'atendimento',
+    title: 'Agenda e Recepção',
+    items: [
+      { to: '/painel/agenda',       label: 'Agenda',          icon: Calendar,      modulo: 'agenda' },
+      { to: '/painel/fila',         label: 'Fila de Espera',  icon: ListOrdered,   modulo: 'fila' },
+      { to: '/painel/pacientes',    label: 'Pacientes',       icon: Users,         modulo: 'pacientes' },
+      { to: '/painel/atendimentos', label: 'Atendimentos',    icon: ClipboardList, modulo: 'atendimento' },
+    ],
+  },
+  {
+    id: 'clinica',
+    title: 'Assistência / Clínica',
+    items: [
+      { to: '/painel/tratamentos',       label: 'Gestão de Tratamentos', icon: Activity,    modulo: 'tratamento' },
+      { to: '/painel/prontuario',        label: 'Prontuário',            icon: Stethoscope, modulo: 'prontuario' },
+      { to: '/painel/triagem',           label: 'Triagem',               icon: HeartPulse,  modulo: 'triagem' },
+      { to: '/painel/historico-triagem', label: 'Histórico Triagem',     icon: History,     modulo: 'triagem' },
+      { to: '/painel/enfermagem',        label: 'Avaliação Enfermagem',  icon: Stethoscope, modulo: 'enfermagem' },
+      { to: '/painel/pts',               label: 'PTS',                   icon: FileText,    modulo: 'prontuario' },
+      { to: '/painel/multiprofissional', label: 'Avaliação Multi',       icon: BookOpen,    modulo: 'atendimento' },
+      { to: '/painel/alta',              label: 'Relatório de Alta',     icon: FileText,    modulo: 'prontuario' },
+      { to: '/painel/meu-prontuario',    label: 'Meu Prontuário',        icon: Settings,    modulo: 'prontuario', hide_from_master: true },
+    ],
+  },
+  {
+    id: 'documentos',
+    title: 'Documentos e Arquivo',
+    items: [
+      { to: '/painel/relatorios',   label: 'Relatórios',    icon: FileText, modulo: 'relatorios' },
+      { to: '/painel/bpa-producao', label: 'BPA-Produção',  icon: FileText, modulo: 'relatorios' },
+    ],
+  },
+  {
+    id: 'regulacao',
+    title: 'Regulação / Encaminhamentos',
+    items: [
+      { to: '/painel/encaminhamentos', label: 'Encaminhamentos', icon: Send, modulo: 'encaminhamento' },
+    ],
+  },
+  {
+    id: 'gestao',
+    title: 'Gestão da Unidade',
+    items: [
+      { to: '/painel/funcionarios',    label: 'Funcionários',       icon: UserCog,       modulo: 'usuarios' },
+      { to: '/painel/unidades',        label: 'Unidades/Salas',     icon: Building2,     modulo: 'usuarios' },
+      { to: '/painel/disponibilidade', label: 'Disponibilidade',    icon: CalendarClock, modulo: 'usuarios' },
+      { to: '/painel/bloqueios',       label: 'Feriados/Bloqueios', icon: CalendarClock, modulo: 'agenda' },
+    ],
+  },
+  {
+    id: 'administracao',
+    title: 'Administração',
+    items: [
+      { to: '/painel/auditoria',               label: 'Logs & Auditoria',  icon: ShieldCheck, modulo: 'relatorios' },
+      { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
+      { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
+      { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },
+    ],
+  },
 ];
+
+const SIDEBAR_GROUPS_STORAGE_KEY = 'sidebar-collapsed-groups-v1';
 
 const roleLabels: Record<string, string> = {
   master:             'Master',
