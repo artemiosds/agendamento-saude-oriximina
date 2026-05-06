@@ -257,7 +257,7 @@ const BpaProducao: React.FC = () => {
             nacionalidade: cd.nacionalidade || '',
             etnia: cd.etnia || '',
             sexo: cd.sexo || '',
-            municipio: p.municipio || cd.municipio || '',
+            municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || p.municipio || cd.municipio || '',
             endereco: p.endereco || '',
             numero: cd.numero || '',
             complemento: cd.complemento || '',
