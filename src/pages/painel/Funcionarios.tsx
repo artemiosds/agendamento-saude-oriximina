@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState, LoadingState } from '@/components/EmptyState';
+import { Users } from 'lucide-react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -503,9 +505,13 @@ const Funcionarios: React.FC = () => {
           </Dialog>
 
           {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <LoadingState label="Carregando funcionários..." size="lg" />
+          ) : filteredFuncionarios.length === 0 ? (
+            <EmptyState
+              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
+              title="Nenhum funcionário"
+              description='Clique em "Novo Funcionário" para começar.'
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredFuncionarios.map(f => {
@@ -564,11 +570,6 @@ const Funcionarios: React.FC = () => {
                   </Card>
                 );
               })}
-              {filteredFuncionarios.length === 0 && !loading && (
-                <p className="text-muted-foreground text-sm col-span-2 text-center py-8">
-                  Nenhum funcionário cadastrado. Clique em "Novo Funcionário" para começar.
-                </p>
-              )}
             </div>
           )}
         </TabsContent>
