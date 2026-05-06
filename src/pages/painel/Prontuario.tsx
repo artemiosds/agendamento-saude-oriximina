@@ -1162,10 +1162,10 @@ const ProntuarioPage: React.FC = () => {
         });
         toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
       } else {
-        toast.success(editId ? "Prontuário atualizado!" : "Prontuário criado!");
+        toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
 
-      if (!editId) {
+      if (!effectiveEditId) {
         await logAction({
           acao: "prontuario_criado",
           entidade: "prontuario",
