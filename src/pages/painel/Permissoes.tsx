@@ -737,7 +737,6 @@ const Permissoes: React.FC = () => {
                                 const k = `user-${modulo}-${action}`;
                                 const isLoading = saving === k;
                                 const isAllowedByProfile = !!profile?.[action];
-                                const isAllowedByProfile = !!profile?.[action];
                                 
                                 // Verificamos se existe uma exceção explícita (não NULL)
                                 const overrideValue = override?.[action as keyof typeof override];
