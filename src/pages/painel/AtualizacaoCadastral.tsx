@@ -193,7 +193,7 @@ const AtualizacaoCadastral: React.FC = () => {
       p.nomeMae || "",
       p.telefone || "",
       p.email || "",
-      p.municipio || "",
+      (p as any).municipio || "",
       p.unidadeId || "SEM UNIDADE",
       p.analysis.fields.join(" | "),
       p.analysis.status,
