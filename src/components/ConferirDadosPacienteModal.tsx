@@ -307,9 +307,6 @@ export function ConferirDadosPacienteModal({
         const depois = (updatePayload as any)[k] ?? "";
         if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
       });
-      formRef.current = form;
-      setLastSavedJson(JSON.stringify(form));
-
       setDirty(false);
 
       // CRÍTICO: invalidar caches + recarregar contexto global para refletir
