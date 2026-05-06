@@ -285,25 +285,38 @@ const PainelLayout: React.FC = () => {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 bg-card border-b border-border flex items-center px-4 lg:px-6 shrink-0 sticky top-0 z-30">
+        <header className="h-14 bg-card/95 backdrop-blur-sm border-b border-border flex items-center px-3 sm:px-4 lg:px-6 shrink-0 sticky top-0 z-30">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden mr-2"
+            className="lg:hidden mr-1 h-10 w-10"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Abrir menu"
           >
             <Menu className="w-5 h-5" />
           </Button>
-          <div className="flex-1" />
+          {/* Título dinâmico da página atual (mobile) */}
+          <div className="flex-1 min-w-0 lg:hidden">
+            <p className="text-sm font-semibold text-foreground truncate">
+              {(() => {
+                for (const g of filteredGroups) {
+                  const it = g.items.find(i => location.pathname === i.to || (i.to !== '/painel' && location.pathname.startsWith(i.to + '/')));
+                  if (it) return it.label;
+                }
+                return location.pathname === '/painel' ? 'Dashboard' : '';
+              })()}
+            </p>
+          </div>
+          <div className="hidden lg:block flex-1" />
           <ThemeToggle />
-          <span className="text-sm text-muted-foreground hidden sm:block ml-2">
+          <span className="text-sm text-muted-foreground hidden md:block ml-2 truncate max-w-[240px]">
             {user?.setor && `${user.setor} • `}{user?.cargo}
           </span>
         </header>
 
         <WhatsappPausedBanner />
 
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto safe-bottom">
           <Suspense fallback={
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
