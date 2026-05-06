@@ -519,7 +519,11 @@ const Permissoes: React.FC = () => {
               <Accordion type="multiple" className="space-y-2">
                 {MODULOS.map((modulo) => {
                   const override = getUserRow(modulo);
-                  const activeCount = override ? ACTIONS.filter((a) => override[a]).length : 0;
+                  const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+                  
+                  const activeCount = override ? ACTIONS.filter((a) => override[a]).length : (profile ? ACTIONS.filter(a => profile[a]).length : 0);
+                  
                   return (
                     <AccordionItem key={modulo} value={modulo} className="border rounded-lg px-4">
                       <AccordionTrigger className="hover:no-underline">
@@ -527,22 +531,75 @@ const Permissoes: React.FC = () => {
                           <span className="font-medium">{MODULO_LABELS[modulo]}</span>
                           {override ? (
                             <>
-                              <Badge variant="default">{activeCount}/5</Badge>
-                              <Badge variant="secondary" className="text-xs">Exceção ativa</Badge>
+                              <Badge variant="default">{activeCount}/{ACTIONS.length}</Badge>
+                              <Badge variant="secondary" className="text-[10px]">Exceção Individual</Badge>
                             </>
                           ) : (
-                            <Badge variant="outline" className="text-xs">Herda do perfil</Badge>
+                            <>
+                              <Badge variant="outline">{activeCount}/{ACTIONS.length}</Badge>
+                              <Badge variant="outline" className="text-[10px] opacity-60">Herda do Perfil</Badge>
+                            </>
                           )}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 py-2">
+                        <div className="flex justify-end mb-2">
+                          {override && (
+                            <Button variant="ghost" size="xs" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
+                              <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
+                            </Button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-2 border-t">
                           {ACTIONS.map((action) => {
                             const k = `user-${modulo}-${action}`;
                             const isLoading = saving === k;
+                            const isAllowedByProfile = !!profile?.[action];
+                            const isAllowedByOverride = !!override?.[action];
+                            const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+
                             return (
-                              <label key={action} className="flex items-center gap-2 cursor-pointer">
-                                <Switch
+                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                  <Switch
+                                    checked={finalValue}
+                                    onCheckedChange={() => toggleUser(modulo, action)}
+                                    disabled={isLoading}
+                                  />
+                                </div>
+                                <div className="flex flex-col gap-1 mt-1">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""]}):</span>
+                                    <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                      {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                    </span>
+                                  </div>
+                                  {override && (
+                                    <div className="flex items-center justify-between text-[10px]">
+                                      <span>Individual:</span>
+                                      <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                        {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
+                                    <span className="font-bold">RESULTADO:</span>
+                                    <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
+                                      {finalValue ? "PERMITIDO" : "NEGADO"}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
                                   checked={!!override?.[action]}
                                   onCheckedChange={() => toggleUser(modulo, action)}
                                   disabled={isLoading}
