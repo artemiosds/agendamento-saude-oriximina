@@ -304,6 +304,10 @@ const Permissoes: React.FC = () => {
         can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
         can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
         can_execute: ref?.can_execute ?? false,
+        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
+        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
+        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
+        can_configure: ref?.can_configure ?? false,
       };
     }
     const newVal = !base[action];
