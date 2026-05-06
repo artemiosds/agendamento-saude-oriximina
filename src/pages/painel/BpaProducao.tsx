@@ -142,7 +142,7 @@ const BpaProducao: React.FC = () => {
       // 2) Vínculos prontuário-procedimento
       const prontIds = prots.map((p) => p.id);
       const vincs = prontIds.length
-        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds)).data || [])
+        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds).limit(5000)).data || [])
         : [];
       const procIds = [...new Set(vincs.map((v: any) => v.procedimento_id))];
       const procsData = procIds.length
