@@ -954,8 +954,12 @@ const ProntuarioPage: React.FC = () => {
     }
     setSoapErrors(false);
     setSaving(true);
+    // CRÍTICO: usa editIdRef.current como fonte de verdade para evitar
+    // duplicação quando o autosave já criou o prontuário mas o estado
+    // editId ainda não propagou para esta closure.
+    const effectiveEditId = editId || editIdRef.current;
     let insertedNewProntuario = false;
-    let prontuarioId: string | null = editId;
+    let prontuarioId: string | null = effectiveEditId;
     try {
       const procTexto = selectedProcIds
         .map((id) => {
