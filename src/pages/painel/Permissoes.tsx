@@ -241,14 +241,14 @@ const Permissoes: React.FC = () => {
       || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
   };
 
-  const togglePerfil = async (modulo: ModuleName, action: keyof ModulePermission) => {
+  const togglePerfil = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     const existing = getPerfilRow(modulo);
     const baseRow: PermRow = existing
       ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
       : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
           can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
           can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
-          can_cancel: false, can_configure: false };
+          can_cancel: false, can_configure: false, granular_actions: {} };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
     const key = `perfil-${modulo}-${action}`;
@@ -269,7 +269,7 @@ const Permissoes: React.FC = () => {
           can_delete: updated.can_delete, can_execute: updated.can_execute,
           can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
           can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
-          can_configure: updated.can_configure },
+          can_configure: updated.can_configure, granular_actions: updated.granular_actions || {} },
         { onConflict: "perfil,modulo,unidade_id" }
       );
 
@@ -278,6 +278,45 @@ const Permissoes: React.FC = () => {
       loadPerfil();
     } else {
       toast.success(`${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}: ${newVal ? "ATIVADO" : "DESATIVADO"}`);
+    }
+    setSaving(null);
+  };
+
+  const toggleGranularPerfil = async (modulo: string, actionId: string) => {
+    const existing = getPerfilRow(modulo as ModuleName);
+    const baseRow: PermRow = existing
+      ? { ...existing, unidade_id: selectedUnidade }
+      : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
+          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
+          can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
+          can_cancel: false, can_configure: false, granular_actions: {} };
+    
+    const currentGranular = baseRow.granular_actions || {};
+    const newVal = !currentGranular[actionId];
+    const updatedGranular = { ...currentGranular, [actionId]: newVal };
+    const updated: PermRow = { ...baseRow, granular_actions: updatedGranular };
+    
+    const key = `perfil-granular-${modulo}-${actionId}`;
+    setSaving(key);
+
+    setPerfilRows((prev) => {
+      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
+      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
+      return [...prev, updated];
+    });
+
+    const { error } = await (supabase as any)
+      .from("permissoes")
+      .upsert(
+        { ...updated, unidade_id: selectedUnidade },
+        { onConflict: "perfil,modulo,unidade_id" }
+      );
+
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+      loadPerfil();
+    } else {
+      toast.success(`Ação ${actionId}: ${newVal ? "ATIVADA" : "DESATIVADA"}`);
     }
     setSaving(null);
   };
