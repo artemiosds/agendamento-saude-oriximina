@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -82,6 +83,7 @@ const fmtCompetencia = (c: string) => c.length === 6 ? `${c.slice(4, 6)}/${c.sli
 
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
+  const { can } = usePermissions();
   const { unidades, funcionarios } = useData();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
@@ -600,10 +602,10 @@ const BpaProducao: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportXlsx} className="gap-2">
+          <Button variant="outline" onClick={exportXlsx} className="gap-2" disabled={!can('bpa_producao', 'export')}>
             <FileSpreadsheet className="w-4 h-4" /> Exportar XLSX BPA-I
           </Button>
-          <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2">
+          <Button onClick={openGenerateModal} className="bg-primary text-primary-foreground gap-2" disabled={!can('bpa_producao', 'generate')}>
             <Download className="w-4 h-4" /> Gerar BPA
           </Button>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { PERMISSIONS_REGISTRY, getRegistryModule } from "@/config/permissions-registry";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -10,8 +11,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio } from "lucide-react";
+import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio, ChevronDown, ListCheck, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
 
 const PERFIS = ["gestao", "recepcao", "tecnico", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
@@ -62,12 +64,12 @@ const MODULO_LABELS: Record<ModuleName, string> = {
   modelos_documentos: "Modelos Documentos",
   sistema: "Sistema",
 };
-const ACTIONS: (keyof ModulePermission)[] = [
+const ACTIONS: (keyof Omit<ModulePermission, 'granular_actions'>)[] = [
   "can_view", "can_create", "can_edit", "can_delete", "can_execute",
   "can_print", "can_export", "can_attach", "can_sign", "can_approve", 
   "can_cancel", "can_configure"
 ];
-const ACTION_LABELS: Record<keyof ModulePermission, string> = {
+const ACTION_LABELS: Record<keyof Omit<ModulePermission, 'granular_actions'>, string> = {
   can_view: "Visualizar",
   can_create: "Criar",
   can_edit: "Editar",
@@ -99,6 +101,7 @@ interface PermRow {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 interface UserPermRow {
@@ -118,6 +121,7 @@ interface UserPermRow {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 interface UnidadeOption { id: string; nome: string; }
@@ -239,14 +243,14 @@ const Permissoes: React.FC = () => {
       || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
   };
 
-  const togglePerfil = async (modulo: ModuleName, action: keyof ModulePermission) => {
+  const togglePerfil = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     const existing = getPerfilRow(modulo);
     const baseRow: PermRow = existing
       ? { ...existing, unidade_id: selectedUnidade } // criar/atualizar para a unidade
       : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
           can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
           can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
-          can_cancel: false, can_configure: false };
+          can_cancel: false, can_configure: false, granular_actions: {} };
     const newVal = !baseRow[action];
     const updated: PermRow = { ...baseRow, [action]: newVal };
     const key = `perfil-${modulo}-${action}`;
@@ -267,7 +271,7 @@ const Permissoes: React.FC = () => {
           can_delete: updated.can_delete, can_execute: updated.can_execute,
           can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
           can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
-          can_configure: updated.can_configure },
+          can_configure: updated.can_configure, granular_actions: updated.granular_actions || {} },
         { onConflict: "perfil,modulo,unidade_id" }
       );
 
@@ -280,11 +284,50 @@ const Permissoes: React.FC = () => {
     setSaving(null);
   };
 
+  const toggleGranularPerfil = async (modulo: string, actionId: string) => {
+    const existing = getPerfilRow(modulo as ModuleName);
+    const baseRow: PermRow = existing
+      ? { ...existing, unidade_id: selectedUnidade }
+      : { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
+          can_view: false, can_create: false, can_edit: false, can_delete: false, can_execute: false,
+          can_print: false, can_export: false, can_attach: false, can_sign: false, can_approve: false,
+          can_cancel: false, can_configure: false, granular_actions: {} };
+    
+    const currentGranular = baseRow.granular_actions || {};
+    const newVal = !currentGranular[actionId];
+    const updatedGranular = { ...currentGranular, [actionId]: newVal };
+    const updated: PermRow = { ...baseRow, granular_actions: updatedGranular };
+    
+    const key = `perfil-granular-${modulo}-${actionId}`;
+    setSaving(key);
+
+    setPerfilRows((prev) => {
+      const idx = prev.findIndex((r) => r.modulo === modulo && r.unidade_id === selectedUnidade);
+      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
+      return [...prev, updated];
+    });
+
+    const { error } = await (supabase as any)
+      .from("permissoes")
+      .upsert(
+        { ...updated, unidade_id: selectedUnidade },
+        { onConflict: "perfil,modulo,unidade_id" }
+      );
+
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+      loadPerfil();
+    } else {
+      toast.success(`Ação ${actionId}: ${newVal ? "ATIVADA" : "DESATIVADA"}`);
+    }
+    setSaving(null);
+  };
+
   // ===== Helpers Individual =====
   const getUserRow = (modulo: ModuleName): UserPermRow | undefined =>
     userRows.find((r) => r.modulo === modulo);
 
-  const toggleUser = async (modulo: ModuleName, action: keyof ModulePermission) => {
+  const toggleUser = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
     if (!selectedUserId) return;
     const existing = getUserRow(modulo);
     // base = override existente OU permissão do perfil do usuário (para clonar)
@@ -311,6 +354,7 @@ const Permissoes: React.FC = () => {
         can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
         can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
         can_configure: ref?.can_configure ?? false,
+        granular_actions: ref?.granular_actions || {}
       };
     }
     const newVal = !base[action];
@@ -327,12 +371,7 @@ const Permissoes: React.FC = () => {
     const { error } = await (supabase as any)
       .from("permissoes_usuario")
       .upsert(
-        { user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
-          can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute,
-          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
-          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
-          can_configure: updated.can_configure },
+        { ...updated, unidade_id: selectedUnidade },
         { onConflict: "user_id,modulo,unidade_id" }
       );
 
@@ -341,6 +380,67 @@ const Permissoes: React.FC = () => {
       loadUser();
     } else {
       toast.success(`Exceção salva: ${MODULO_LABELS[modulo]} → ${ACTION_LABELS[action]}`);
+    }
+    setSaving(null);
+  };
+
+  const toggleGranularUser = async (modulo: string, actionId: string) => {
+    if (!selectedUserId) return;
+    const existing = getUserRow(modulo as ModuleName);
+    const userObj = funcionarios.find((f) => f.id === selectedUserId);
+    
+    let base: UserPermRow;
+    if (existing) {
+      base = { ...existing };
+    } else {
+      const { data: perfilData } = await (supabase as any)
+        .from("permissoes")
+        .select("*")
+        .eq("perfil", userObj?.role || "recepcao")
+        .eq("modulo", modulo)
+        .in("unidade_id", [selectedUnidade, ""]);
+      const ref = (perfilData || []).find((r: any) => r.unidade_id === selectedUnidade)
+        || (perfilData || []).find((r: any) => r.unidade_id === "");
+      
+      base = {
+        user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
+        can_view: ref?.can_view ?? false, can_create: ref?.can_create ?? false,
+        can_edit: ref?.can_edit ?? false, can_delete: ref?.can_delete ?? false,
+        can_execute: ref?.can_execute ?? false,
+        can_print: ref?.can_print ?? false, can_export: ref?.can_export ?? false,
+        can_attach: ref?.can_attach ?? false, can_sign: ref?.can_sign ?? false,
+        can_approve: ref?.can_approve ?? false, can_cancel: ref?.can_cancel ?? false,
+        can_configure: ref?.can_configure ?? false,
+        granular_actions: ref?.granular_actions || {}
+      };
+    }
+
+    const currentGranular = base.granular_actions || {};
+    const newVal = !currentGranular[actionId];
+    const updatedGranular = { ...currentGranular, [actionId]: newVal };
+    const updated: UserPermRow = { ...base, granular_actions: updatedGranular };
+
+    const key = `user-granular-${modulo}-${actionId}`;
+    setSaving(key);
+
+    setUserRows((prev) => {
+      const idx = prev.findIndex((r) => r.modulo === modulo);
+      if (idx >= 0) { const cp = [...prev]; cp[idx] = updated; return cp; }
+      return [...prev, updated];
+    });
+
+    const { error } = await (supabase as any)
+      .from("permissoes_usuario")
+      .upsert(
+        { ...updated, unidade_id: selectedUnidade },
+        { onConflict: "user_id,modulo,unidade_id" }
+      );
+
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+      loadUser();
+    } else {
+      toast.success(`Exceção salva: Ação ${actionId}`);
     }
     setSaving(null);
   };
@@ -438,24 +538,61 @@ const Permissoes: React.FC = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 py-2">
-                        {ACTIONS.map((action) => {
-                          const k = `perfil-${modulo}-${action}`;
-                          const isLoading = saving === k;
-                          return (
-                            <label key={action} className="flex flex-col gap-1 cursor-pointer group">
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={!!row?.[action]}
-                                  onCheckedChange={() => togglePerfil(modulo, action)}
-                                  disabled={isLoading}
-                                />
-                                <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                              </div>
-                            </label>
-                          );
-                        })}
+                      <div className="space-y-6 py-4">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                            <ListCheck className="w-3 h-3" /> Permissões Básicas (CRUD)
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {ACTIONS.map((action) => {
+                              const k = `perfil-${modulo}-${action}`;
+                              const isLoading = saving === k;
+                              return (
+                                <label key={action} className="flex flex-col gap-1 cursor-pointer group">
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={!!row?.[action]}
+                                      onCheckedChange={() => togglePerfil(modulo, action)}
+                                      disabled={isLoading}
+                                    />
+                                    <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {getRegistryModule(modulo)?.actions && getRegistryModule(modulo)!.actions.length > 0 && (
+                          <div className="pt-4 border-t">
+                            <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                              <Settings2 className="w-3 h-3" /> Ações Específicas do Sistema
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                              {getRegistryModule(modulo)!.actions.map((act) => {
+                                const k = `perfil-granular-${modulo}-${act.id}`;
+                                const isLoading = saving === k;
+                                const isChecked = !!row?.granular_actions?.[act.id];
+                                return (
+                                  <div key={act.id} className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/30 transition-colors">
+                                    <Switch
+                                      checked={isChecked}
+                                      onCheckedChange={() => toggleGranularPerfil(modulo, act.id)}
+                                      disabled={isLoading}
+                                      className="mt-1"
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold">{act.label}</span>
+                                      {act.description && <span className="text-[10px] text-muted-foreground">{act.description}</span>}
+                                    </div>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin ml-auto" />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </AccordionContent>
                   </AccordionItem>
@@ -584,57 +721,119 @@ const Permissoes: React.FC = () => {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
-                        <div className="flex justify-end mb-2">
-                          {override && (
-                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
-                              <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
-                            </Button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 py-2 border-t">
-                          {ACTIONS.map((action) => {
-                            const k = `user-${modulo}-${action}`;
-                            const isLoading = saving === k;
-                            const isAllowedByProfile = !!profile?.[action];
-                            const isAllowedByOverride = !!override?.[action];
-                            const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+                        <div className="space-y-6 py-4">
+                          <div className="flex justify-end mb-2">
+                            {override && (
+                              <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
+                                <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                              <ListCheck className="w-3 h-3" /> Permissões Básicas (CRUD)
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                              {ACTIONS.map((action) => {
+                                const k = `user-${modulo}-${action}`;
+                                const isLoading = saving === k;
+                                const isAllowedByProfile = !!profile?.[action];
+                                const isAllowedByOverride = !!override?.[action];
+                                const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
 
-                            return (
-                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
-                                  <Switch
-                                    checked={finalValue}
-                                    onCheckedChange={() => toggleUser(modulo, action)}
-                                    disabled={isLoading}
-                                  />
-                                </div>
-                                <div className="flex flex-col gap-1 mt-1">
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
-                                    <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                      {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
-                                    </span>
-                                  </div>
-                                  {override && (
-                                    <div className="flex items-center justify-between text-[10px]">
-                                      <span>Individual:</span>
-                                      <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                                        {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
-                                      </span>
+                                return (
+                                  <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
+                                      <Switch
+                                        checked={finalValue}
+                                        onCheckedChange={() => toggleUser(modulo, action)}
+                                        disabled={isLoading}
+                                      />
                                     </div>
-                                  )}
-                                  <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
-                                    <span className="font-bold">RESULTADO:</span>
-                                    <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
-                                      {finalValue ? "PERMITIDO" : "NEGADO"}
-                                    </Badge>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                      <div className="flex items-center justify-between text-[10px]">
+                                        <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
+                                        <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                          {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                        </span>
+                                      </div>
+                                      {override && (
+                                        <div className="flex items-center justify-between text-[10px]">
+                                          <span>Individual:</span>
+                                          <span className={isAllowedByOverride ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                            {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                          </span>
+                                        </div>
+                                      )}
+                                      <div className="flex items-center justify-between text-[10px] border-t pt-1 mt-1">
+                                        <span className="font-bold">RESULTADO:</span>
+                                        <Badge className={`text-[9px] h-4 px-1 ${finalValue ? "bg-green-500" : "bg-red-500"}`}>
+                                          {finalValue ? "PERMITIDO" : "NEGADO"}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
                                   </div>
-                                </div>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {getRegistryModule(modulo)?.actions && getRegistryModule(modulo)!.actions.length > 0 && (
+                            <div className="pt-4 border-t">
+                              <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                                <Settings2 className="w-3 h-3" /> Ações Específicas do Sistema
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                                {getRegistryModule(modulo)!.actions.map((act) => {
+                                  const k = `user-granular-${modulo}-${act.id}`;
+                                  const isLoading = saving === k;
+                                  const isAllowedByProfile = !!profile?.granular_actions?.[act.id];
+                                  const isAllowedByOverride = !!override?.granular_actions?.[act.id];
+                                  const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
+
+                                  return (
+                                    <div key={act.id} className="flex items-start gap-3 p-2 rounded-md bg-muted/30 relative">
+                                      <Switch
+                                        checked={finalValue}
+                                        onCheckedChange={() => toggleGranularUser(modulo, act.id)}
+                                        disabled={isLoading}
+                                        className="mt-1"
+                                      />
+                                      <div className="flex flex-col flex-1">
+                                        <span className="text-xs font-bold">{act.label}</span>
+                                        <div className="flex flex-col gap-0.5 mt-1">
+                                          <div className="flex items-center justify-between text-[9px]">
+                                            <span>Perfil:</span>
+                                            <span className={isAllowedByProfile ? "text-green-600" : "text-red-600"}>
+                                              {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
+                                            </span>
+                                          </div>
+                                          {override && (
+                                            <div className="flex items-center justify-between text-[9px]">
+                                              <span>Individual:</span>
+                                              <span className={isAllowedByOverride ? "text-green-600" : "text-red-600"}>
+                                                {isAllowedByOverride ? "LIBERADO" : "BLOQUEADO"}
+                                              </span>
+                                            </div>
+                                          )}
+                                          <div className="flex items-center justify-between text-[9px] border-t pt-0.5 mt-0.5">
+                                            <span className="font-bold uppercase">Final:</span>
+                                            <span className={finalValue ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                                              {finalValue ? "PERMITIDO" : "NEGADO"}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {isLoading && <Loader2 className="w-3 h-3 animate-spin absolute right-2 top-2" />}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
+                            </div>
+                          )}
                         </div>
                       </AccordionContent>
                     </AccordionItem>

@@ -45,6 +45,7 @@ export interface ModulePermission {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 type PermissionsMap = Record<ModuleName, ModulePermission>;
@@ -52,7 +53,7 @@ type PermissionsMap = Record<ModuleName, ModulePermission>;
 interface PermissionsContextType {
   permissions: PermissionsMap | null;
   loading: boolean;
-  can: (modulo: ModuleName, action: keyof ModulePermission) => boolean;
+  can: (modulo: ModuleName, action: string) => boolean;
   reload: () => Promise<void>;
 }
 
@@ -76,13 +77,15 @@ export const ALL_ACTIONS: (keyof ModulePermission)[] = [
 export const defaultPerm: ModulePermission = {
   can_view: false, can_create: false, can_edit: false, can_delete: false, 
   can_execute: false, can_print: false, can_export: false, can_attach: false,
-  can_sign: false, can_approve: false, can_cancel: false, can_configure: false
+  can_sign: false, can_approve: false, can_cancel: false, can_configure: false,
+  granular_actions: {}
 };
 
 export const fullPerm: ModulePermission = {
   can_view: true, can_create: true, can_edit: true, can_delete: true, 
   can_execute: true, can_print: true, can_export: true, can_attach: true,
-  can_sign: true, can_approve: true, can_cancel: true, can_configure: true
+  can_sign: true, can_approve: true, can_cancel: true, can_configure: true,
+  granular_actions: {} // Will be treated as full access if isGlobalAdmin
 };
 
 const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, Partial<PermissionsMap>> = {
@@ -168,6 +171,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
             can_approve: source.can_approve ?? false,
             can_cancel: source.can_cancel ?? false,
             can_configure: source.can_configure ?? false,
+            granular_actions: (source as any).granular_actions || {},
           };
         } else {
           map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) || { ...defaultPerm };
@@ -198,12 +202,30 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [user?.id, loadPermissions]);
 
   const can = useCallback(
-    (modulo: ModuleName, action: keyof ModulePermission): boolean => {
+    (modulo: ModuleName, action: string): boolean => {
       if (loading) return false;
       if (!permissions) return false;
-      return permissions[modulo]?.[action] === true;
+      
+      const modPerm = permissions[modulo];
+      if (!modPerm) return false;
+
+      // Handle standard boolean actions
+      if (action in modPerm && typeof (modPerm as any)[action] === 'boolean') {
+        return (modPerm as any)[action] === true;
+      }
+
+      // Handle granular actions (e.g., 'finalize')
+      if (modPerm.granular_actions && typeof modPerm.granular_actions[action] === 'boolean') {
+        return modPerm.granular_actions[action] === true;
+      }
+
+      // If it's a global admin, default to true for any action if view is enabled
+      const isMaster = (user?.role || '').toLowerCase().trim() === 'master';
+      if (isMaster && modPerm.can_view) return true;
+
+      return false;
     },
-    [permissions, loading]
+    [permissions, loading, user?.role]
   );
 
   return (

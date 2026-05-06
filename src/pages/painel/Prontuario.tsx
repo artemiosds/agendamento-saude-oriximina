@@ -3155,12 +3155,17 @@ const ProntuarioPage: React.FC = () => {
 
               {canFinalize ? (
                 <>
-                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
+                  <Button 
+                    onClick={() => { void handleSave(); }} 
+                    disabled={saving || !can('prontuario', 'save_draft')} 
+                    variant="outline" 
+                    className="flex-1"
+                  >
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
                   <Button
                     onClick={handleFinalizarAtendimento}
-                    disabled={saving}
+                    disabled={saving || !can('prontuario', 'finalize')}
                     className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
@@ -3170,7 +3175,7 @@ const ProntuarioPage: React.FC = () => {
               ) : (
                 <Button
                   onClick={() => { void handleSave(); }}
-                  disabled={saving}
+                  disabled={saving || !can('prontuario', 'create')}
                   className="flex-1 gradient-primary text-primary-foreground"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

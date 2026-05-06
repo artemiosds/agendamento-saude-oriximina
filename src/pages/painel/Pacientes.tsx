@@ -1020,12 +1020,14 @@ const Pacientes: React.FC = () => {
         }
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
-              <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
-            </Button>
-            {canImportCSV && (
+            {can('pacientes', 'update_cadastral') && (
+              <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
+                <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
+              </Button>
+            )}
+            {can('pacientes', 'import') && (
               <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <FileDown className="w-4 h-4 mr-2" /> Importar CSV
+                <FileUp className="w-4 h-4 mr-2" /> Importar CSV
               </Button>
             )}
             {canCreate && (
@@ -1056,14 +1058,16 @@ const Pacientes: React.FC = () => {
                 >
                   Ver pendências
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="bg-background"
-                  onClick={() => exportCSV("pendentes")}
-                >
-                  Exportar pendentes
-                </Button>
+                {can('pacientes', 'export') && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="bg-background"
+                    onClick={() => exportCSV("pendentes")}
+                  >
+                    Exportar pendentes
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>

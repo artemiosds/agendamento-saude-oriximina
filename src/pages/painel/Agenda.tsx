@@ -445,7 +445,7 @@ const Agenda: React.FC = () => {
     });
   }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const canAprovar = can('agenda', 'can_execute');
+  const canAprovar = can('agenda', 'approve_online');
   const profissionais = profissionaisVisiveis;
 
   // NOVO: agendamentos online pendentes de aprovação
@@ -2425,7 +2425,8 @@ const Agenda: React.FC = () => {
                 const canStart =
                   isProfissional &&
                   STATUS_LIBERADOS.includes(ag.status) &&
-                  (ag.status === "apto_atendimento" || ehHoje);
+                  (ag.status === "apto_atendimento" || ehHoje) &&
+                  can('agenda', 'start_appointment');
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
@@ -2771,6 +2772,10 @@ const Agenda: React.FC = () => {
                             if (isProfissional) {
                               return sa.key === "falta" && ag.profissionalId === user?.id;
                             }
+                            
+                            // Permissões granulares para status específicos
+                            if (sa.key === 'confirmado_chegada' && !can('agenda', 'confirm_arrival')) return false;
+                            
                             return true;
                           }).map((sa) => (
                             <Button
