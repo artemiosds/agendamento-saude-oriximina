@@ -316,6 +316,9 @@ export function ConferirDadosPacienteModal({
 
       // Auditoria (best-effort, não bloqueia fluxo)
       if (Object.keys(camposAlterados).length > 0) {
+        // Atualiza o estado do paciente para refletir o que foi salvo
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+        
         auditService.log({
           acao: "atualizar",
           entidade: "paciente",
