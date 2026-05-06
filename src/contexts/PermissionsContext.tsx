@@ -171,6 +171,7 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
             can_approve: source.can_approve ?? false,
             can_cancel: source.can_cancel ?? false,
             can_configure: source.can_configure ?? false,
+            granular_actions: (source as any).granular_actions || {},
           };
         } else {
           map[m] = (DEFAULT_PERMISSIONS_BY_ROLE[role]?.[m]) || { ...defaultPerm };
