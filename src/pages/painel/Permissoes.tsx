@@ -559,7 +559,7 @@ const Permissoes: React.FC = () => {
                             const finalValue = override ? isAllowedByOverride : isAllowedByProfile;
 
                             return (
-                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30">
+                              <div key={action} className="flex flex-col gap-1 p-2 rounded-md bg-muted/30 relative">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-[11px] font-bold uppercase text-muted-foreground">{ACTION_LABELS[action]}</span>
                                   <Switch
@@ -570,7 +570,7 @@ const Permissoes: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col gap-1 mt-1">
                                   <div className="flex items-center justify-between text-[10px]">
-                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""]}):</span>
+                                    <span>Perfil ({PERFIL_LABELS[selectedUser?.role || ""] || "BASE"}):</span>
                                     <span className={isAllowedByProfile ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
                                       {isAllowedByProfile ? "LIBERADO" : "BLOQUEADO"}
                                     </span>
@@ -595,30 +595,6 @@ const Permissoes: React.FC = () => {
                             );
                           })}
                         </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-                                  checked={!!override?.[action]}
-                                  onCheckedChange={() => toggleUser(modulo, action)}
-                                  disabled={isLoading}
-                                />
-                                <span className="text-sm">{ACTION_LABELS[action]}</span>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                              </label>
-                            );
-                          })}
-                        </div>
-                        {override && (
-                          <div className="pt-2 border-t mt-2">
-                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)}
-                              disabled={saving === `user-reset-${modulo}`}>
-                              {saving === `user-reset-${modulo}` ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
-                              Remover exceção (voltar ao perfil)
-                            </Button>
-                          </div>
-                        )}
                       </AccordionContent>
                     </AccordionItem>
                   );
