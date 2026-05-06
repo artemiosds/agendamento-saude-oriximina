@@ -84,6 +84,9 @@ const fmtCompetencia = (c: string) => c.length === 6 ? `${c.slice(4, 6)}/${c.sli
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
+  const canGenerate = can('bpa_producao', 'generate');
+  const canExport = can('bpa_producao', 'export');
+  const canAudit = can('bpa_producao', 'audit');
   const { unidades, funcionarios } = useData();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
