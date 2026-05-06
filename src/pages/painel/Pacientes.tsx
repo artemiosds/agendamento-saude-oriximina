@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { PageHeader } from "@/components/ui/page-header";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -973,31 +974,33 @@ const Pacientes: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Pacientes</h1>
-          <p className="text-muted-foreground text-sm">
+      <PageHeader
+        title="Pacientes"
+        subtitle={
+          <>
             {visiblePacientes.length} cadastrados
             {pacientesNaFila.size > 0 && (
               <span className="ml-2">
                 • <Users className="w-3.5 h-3.5 inline" /> {pacientesNaFila.size} na fila
               </span>
             )}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {canImportCSV && (
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <FileDown className="w-4 h-4 mr-2" /> Importar CSV
-            </Button>
-          )}
-          {canCreate && (
-            <Button onClick={openNew} className="gradient-primary text-primary-foreground">
-              <Plus className="w-4 h-4 mr-2" /> Novo Paciente
-            </Button>
-          )}
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            {canImportCSV && (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <FileDown className="w-4 h-4 mr-2" /> Importar CSV
+              </Button>
+            )}
+            {canCreate && (
+              <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+                <Plus className="w-4 h-4 mr-2" /> Novo Paciente
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {pacientesSemUnidade.length > 0 && (
         <Card className="border-warning/30 bg-warning/10 shadow-card">
