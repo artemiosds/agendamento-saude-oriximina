@@ -232,7 +232,13 @@ export function ConferirDadosPacienteModal({
   const handleSave = async (silent = false, currentForm?: any) => {
     if (!paciente) return;
     const formToSave = currentForm || form;
+    
+    // Evitar salvar se os dados não mudaram (autosave excessivo)
+    const currentJson = JSON.stringify(formToSave);
+    if (silent && currentJson === lastSavedJson) return;
+    
     setSaving(true);
+    setLastSavedJson(currentJson);
     try {
       // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
       const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
