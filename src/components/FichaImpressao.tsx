@@ -551,42 +551,14 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   }, [data, somentePessoais]);
 
   const handlePrint = useCallback(() => {
-    const html = buildHTML();
-    const win = window.open('', '_blank', 'width=800,height=900');
-    if (!win) {
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.top = '-9999px';
-      iframe.style.left = '-9999px';
-      iframe.style.width = '210mm';
-      iframe.style.height = '297mm';
-      document.body.appendChild(iframe);
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(html);
-        doc.close();
-        setTimeout(() => {
-          iframe.contentWindow?.print();
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-            onPrintComplete?.();
-          }, 1000);
-        }, 500);
-      }
-      return;
+    try {
+      const html = buildHTML();
+      printViaIframe(html);
+      // Fecha o modal um pouco depois para o usuário enxergar o diálogo de impressão
+      setTimeout(() => { onPrintComplete?.(); }, 800);
+    } catch (err) {
+      console.error('[FichaImpressao] erro ao imprimir:', err);
     }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-      win.print();
-      win.addEventListener('afterprint', () => {
-        win.close();
-        onPrintComplete?.();
-      });
-    }, 400);
   }, [buildHTML, onPrintComplete]);
 
   const idade = calcIdade(data.paciente.data_nascimento);
