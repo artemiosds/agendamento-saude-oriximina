@@ -92,6 +92,13 @@ interface PermRow {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print: boolean;
+  can_export: boolean;
+  can_attach: boolean;
+  can_sign: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_configure: boolean;
 }
 
 interface UserPermRow {
@@ -104,6 +111,13 @@ interface UserPermRow {
   can_edit: boolean;
   can_delete: boolean;
   can_execute: boolean;
+  can_print: boolean;
+  can_export: boolean;
+  can_attach: boolean;
+  can_sign: boolean;
+  can_approve: boolean;
+  can_cancel: boolean;
+  can_configure: boolean;
 }
 
 interface UnidadeOption { id: string; nome: string; }
