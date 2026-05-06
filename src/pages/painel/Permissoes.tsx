@@ -519,26 +519,26 @@ const Permissoes: React.FC = () => {
                   <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                     <div className="flex items-center justify-between">
                       <span>Ver Agenda:</span>
-                      <span className={getUserRow('agenda')?.can_view ?? profileRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_view ?? profileRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Criar Agendamento:</span>
-                      <span className={getUserRow('agenda')?.can_create ?? profileRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_create ?? profileRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
+                      <span className={getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Pacientes:</span>
-                      <span className={getUserRow('pacientes')?.can_view ?? profileRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('pacientes')?.can_view ?? profileRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Prontuário:</span>
-                      <span className={getUserRow('prontuario')?.can_view ?? profileRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('prontuario')?.can_view ?? profileRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
                       </span>
                     </div>
                   </CardContent>
