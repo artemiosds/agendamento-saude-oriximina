@@ -23,29 +23,63 @@ const PERFIL_LABELS: Record<string, string> = {
 };
 
 const MODULOS: ModuleName[] = [
-  "pacientes", "encaminhamento", "fila", "triagem", "enfermagem",
-  "agenda", "atendimento", "prontuario", "tratamento", "relatorios", "usuarios",
+  "dashboard", "agenda", "fila_espera", "pacientes", "atendimentos", 
+  "gestao_tratamentos", "prontuario", "triagem", "historico_triagem", 
+  "avaliacao_enfermagem", "pts", "avaliacao_multi", "relatorio_alta", 
+  "encaminhamentos", "encaminhamentos_externos", "arquivo_digital", 
+  "relatorios", "bpa_producao", "funcionarios", "unidades_salas", 
+  "disponibilidade", "feriados_bloqueios", "logs_auditoria", 
+  "configuracoes", "permissoes", "assinatura_eletronica", 
+  "modelos_documentos", "sistema"
 ];
 const MODULO_LABELS: Record<ModuleName, string> = {
-  pacientes: "Pacientes",
-  encaminhamento: "Encaminhamento",
-  fila: "Fila de Espera",
-  triagem: "Triagem",
-  enfermagem: "Enfermagem",
+  dashboard: "Dashboard",
   agenda: "Agenda",
-  atendimento: "Atendimento",
+  fila_espera: "Fila de Espera",
+  pacientes: "Pacientes",
+  atendimentos: "Atendimentos",
+  gestao_tratamentos: "Gestão de Tratamentos",
   prontuario: "Prontuário",
-  tratamento: "Tratamento",
+  triagem: "Triagem",
+  historico_triagem: "Histórico Triagem",
+  avaliacao_enfermagem: "Avaliação Enfermagem",
+  pts: "PTS",
+  avaliacao_multi: "Avaliação Multi",
+  relatorio_alta: "Relatório de Alta",
+  encaminhamentos: "Encaminhamentos",
+  encaminhamentos_externos: "Encaminhamentos Externos",
+  arquivo_digital: "Arquivo Digital",
   relatorios: "Relatórios",
-  usuarios: "Usuários",
+  bpa_producao: "BPA-Produção",
+  funcionarios: "Funcionários",
+  unidades_salas: "Unidades/Salas",
+  disponibilidade: "Disponibilidade",
+  feriados_bloqueios: "Feriados/Bloqueios",
+  logs_auditoria: "Logs & Auditoria",
+  configuracoes: "Configurações",
+  permissoes: "Permissões",
+  assinatura_eletronica: "Assinatura Eletrônica",
+  modelos_documentos: "Modelos Documentos",
+  sistema: "Sistema",
 };
-const ACTIONS: (keyof ModulePermission)[] = ["can_view", "can_create", "can_edit", "can_delete", "can_execute"];
+const ACTIONS: (keyof ModulePermission)[] = [
+  "can_view", "can_create", "can_edit", "can_delete", "can_execute",
+  "can_print", "can_export", "can_attach", "can_sign", "can_approve", 
+  "can_cancel", "can_configure"
+];
 const ACTION_LABELS: Record<keyof ModulePermission, string> = {
   can_view: "Visualizar",
   can_create: "Criar",
   can_edit: "Editar",
   can_delete: "Excluir",
   can_execute: "Executar",
+  can_print: "Imprimir",
+  can_export: "Exportar",
+  can_attach: "Anexar",
+  can_sign: "Assinar",
+  can_approve: "Aprovar",
+  can_cancel: "Cancelar",
+  can_configure: "Configurar",
 };
 
 interface PermRow {
