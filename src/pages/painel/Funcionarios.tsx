@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState, LoadingState } from '@/components/EmptyState';
+import { Users } from 'lucide-react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
