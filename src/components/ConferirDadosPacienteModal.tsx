@@ -241,25 +241,25 @@ export function ConferirDadosPacienteModal({
 
       const customData = {
         ...(paciente.custom_data || {}),
-        sexo: form.sexo,
+        sexo: formToSave.sexo,
         // Persistir Raça/Cor em ambas as chaves (compat com BPA)
-        racaCor: form.raca_cor,
-        raca_cor: form.raca_cor,
-        etnia: form.etnia,
-        etniaOutra: form.etnia_outra,
-        nacionalidade: form.nacionalidade,
-        paisNascimento: form.pais_nascimento,
+        racaCor: formToSave.raca_cor,
+        raca_cor: formToSave.raca_cor,
+        etnia: formToSave.etnia,
+        etniaOutra: formToSave.etnia_outra,
+        nacionalidade: formToSave.nacionalidade,
+        paisNascimento: formToSave.pais_nascimento,
         // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
-        tipoLogradouroDne: form.tipo_logradouro_dne,
-        tipoLogradouroCodigo: form.tipo_logradouro_codigo,
-        tipoLogradouro: form.tipo_logradouro_dne,
+        tipoLogradouroDne: formToSave.tipo_logradouro_dne,
+        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo,
+        tipoLogradouro: formToSave.tipo_logradouro_dne,
         // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
-        logradouro: form.logradouro,
-        numero: form.numero,
-        complemento: form.complemento,
-        bairro: form.bairro,
-        uf: form.uf,
-        cep: form.cep,
+        logradouro: formToSave.logradouro,
+        numero: formToSave.numero,
+        complemento: formToSave.complemento,
+        bairro: formToSave.bairro,
+        uf: formToSave.uf,
+        cep: formToSave.cep,
         telefoneSecundario: telSecNormalizado,
         // Auditoria de conferência
         data_ultima_validacao_cadastro: new Date().toISOString(),
@@ -268,18 +268,18 @@ export function ConferirDadosPacienteModal({
       };
 
       const updatePayload: any = {
-        nome: form.nome,
-        nome_mae: form.nome_mae,
-        data_nascimento: form.data_nascimento || "",
-        cpf: form.cpf,
-        cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
+        nome: formToSave.nome,
+        nome_mae: formToSave.nome_mae,
+        data_nascimento: formToSave.data_nascimento || "",
+        cpf: formToSave.cpf,
+        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15),
         telefone: telNormalizado,
-        email: form.email,
+        email: formToSave.email,
         // Não sobrescrever endereço legado: preserva o valor atual do paciente.
         endereco: paciente.endereco || "",
-        municipio: form.municipio,
-        naturalidade: form.naturalidade || "",
-        naturalidade_uf: form.naturalidade_uf || "",
+        municipio: formToSave.municipio,
+        naturalidade: formToSave.naturalidade || "",
+        naturalidade_uf: formToSave.naturalidade_uf || "",
         custom_data: customData,
       };
 
