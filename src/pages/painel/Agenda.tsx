@@ -674,7 +674,31 @@ const Agenda: React.FC = () => {
     [filtered],
   );
 
-  // Quando a tarde já entrou, marcar visualmente o início do bloco "Pendentes da manhã"
+  // Contadores por grupo de status (respeita data/unidade/profissional/busca, ignora status)
+  const statusCounts = React.useMemo(() => {
+    const base = agendamentos.filter((a) => {
+      if (a.data !== selectedDate) return false;
+      if (filterUnit !== "all" && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== "all" && a.profissionalId !== filterProf) return false;
+      if (isProfissional && a.profissionalId !== user?.id) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
+      if (debouncedSearch) {
+        const pac = pacientes.find((p) => p.id === a.pacienteId);
+        const nome = resolvePaciente(a.pacienteId, a.pacienteNome).toLowerCase();
+        const cpf = pac?.cpf?.toLowerCase() || "";
+        const cns = pac?.cns?.toLowerCase() || "";
+        if (!nome.includes(debouncedSearch) && !cpf.includes(debouncedSearch) && !cns.includes(debouncedSearch)) return false;
+      }
+      return true;
+    });
+    const byGroup: Record<string, number> = {};
+    for (const key of Object.keys(STATUS_FILTER_GROUPS)) {
+      const allowed = STATUS_FILTER_GROUPS[key];
+      byGroup[key] = base.filter((a) => allowed.includes(a.status)).length;
+    }
+    return { total: base.length, byGroup };
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, pacientes]);
+
   // (primeiro item da manhã que ainda não foi concluído).
   const idxPendentesManha = React.useMemo(() => {
     const isToday = selectedDate === todayLocalStr();
