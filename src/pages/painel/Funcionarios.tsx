@@ -301,7 +301,7 @@ const Funcionarios: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
+      <PageHeader title="Funcionários" subtitle="Cadastro de funcionários internos e profissionais externos" />
 
       <Tabs defaultValue="internos">
         <TabsList className="w-full">
