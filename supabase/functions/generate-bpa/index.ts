@@ -388,7 +388,7 @@ Deno.serve(async (req) => {
       // Versão simplificada compatível: usamos os 60 caracteres principais para validação.
 
       const dtNasc = formatDate(pac.data_nascimento);
-      const dtAtend = formatDate(pront.data_atendimento);
+      const dtAtend = formatDate(data);
 
       // Calcula idade em anos no atendimento
       let idade = 0;
