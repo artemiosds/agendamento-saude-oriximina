@@ -215,8 +215,17 @@ export function ConferirDadosPacienteModal({
 
   const updateField = (name: string, value: string) => {
     const masked = MASKS[name] ? MASKS[name](value) : value;
-    setForm((p: any) => ({ ...p, [name]: masked }));
+    const newForm = { ...form, [name]: masked };
+    setForm(newForm);
     setDirty(true);
+    
+    // Autosave: salvar imediatamente ao alterar qualquer campo
+    // Debounce manual opcional, mas o pedido é "salva automaticamente e reflete de imediato"
+    if (paciente) {
+      handleSave(true, newForm).catch(err => {
+        console.error("[ConferirDados] Erro no autosave:", err);
+      });
+    }
   };
 
   const handleSave = async (silent = false) => {
