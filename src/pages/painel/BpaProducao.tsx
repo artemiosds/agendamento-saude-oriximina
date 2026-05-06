@@ -132,6 +132,7 @@ const BpaProducao: React.FC = () => {
         .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
         .gte('data_atendimento', dataInicio)
         .lte('data_atendimento', dataFim)
+        .limit(5000) // Aumentado para garantir completude
         .order('data_atendimento', { ascending: false });
       if (unidadeFiltro && unidadeFiltro !== 'all') q = q.eq('unidade_id', unidadeFiltro);
       const { data: prontuarios, error } = await q;
