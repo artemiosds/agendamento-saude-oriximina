@@ -455,6 +455,16 @@ const Permissoes: React.FC = () => {
     setSaving(null);
   };
 
+  const getEffectiveValue = (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
+    const override = getUserRow(modulo);
+    const profile = perfilRows.find(r => r.modulo === modulo && (r.unidade_id === selectedUnidade || r.unidade_id === "")) 
+                  || perfilRows.find(r => r.modulo === modulo && r.unidade_id === "");
+    
+    const overrideValue = (override as any)?.[action];
+    if (overrideValue !== null && overrideValue !== undefined) return !!overrideValue;
+    return !!(profile as any)?.[action];
+  };
+
   const selectedUser = funcionarios.find((f) => f.id === selectedUserId);
 
   return (
