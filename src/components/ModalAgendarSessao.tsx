@@ -245,15 +245,16 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {mode === 'remarcar' ? <CalendarClock className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
-            {mode === 'remarcar' ? 'Remarcar' : 'Agendar'} Sessão {session?.session_number}/{session?.total_sessions}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+        <div className="modal-shell">
+          <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-2 pr-6">
+              {mode === 'remarcar' ? <CalendarClock className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
+              {mode === 'remarcar' ? 'Remarcar' : 'Agendar'} Sessão {session?.session_number}/{session?.total_sessions}
+            </DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4">
+          <div className="modal-body px-4 sm:px-6 py-4 space-y-4">
           {/* Patient / Professional / Treatment info */}
           <div className="p-3 bg-muted/30 rounded-lg text-sm space-y-1">
             <p><strong>Paciente:</strong> {pacienteNome}</p>
@@ -449,21 +450,24 @@ export const ModalAgendarSessao: React.FC<ModalAgendarSessaoProps> = ({
               ✅ Selecionado: <strong>{formatDateBR(selectedDate)}</strong> às <strong>{selectedHora}</strong>
             </div>
           )}
+          </div>
 
-          {/* Action button */}
-          <Button
-            onClick={handleConfirm}
-            className="w-full gradient-primary text-primary-foreground"
-            disabled={!selectedDate || !selectedHora || saving}
-          >
-            {saving ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>
-            ) : isAlreadyScheduled && mode === 'agendar' ? (
-              <><CalendarClock className="w-4 h-4 mr-2" /> Remarcar</>
-            ) : (
-              <><Calendar className="w-4 h-4 mr-2" /> {mode === 'remarcar' ? 'Confirmar Remarcação' : 'Confirmar Agendamento'}</>
-            )}
-          </Button>
+          {/* Action button — fixed footer */}
+          <div className="modal-footer px-4 sm:px-6">
+            <Button
+              onClick={handleConfirm}
+              className="w-full gradient-primary text-primary-foreground"
+              disabled={!selectedDate || !selectedHora || saving}
+            >
+              {saving ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processando...</>
+              ) : isAlreadyScheduled && mode === 'agendar' ? (
+                <><CalendarClock className="w-4 h-4 mr-2" /> Remarcar</>
+              ) : (
+                <><Calendar className="w-4 h-4 mr-2" /> {mode === 'remarcar' ? 'Confirmar Remarcação' : 'Confirmar Agendamento'}</>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
