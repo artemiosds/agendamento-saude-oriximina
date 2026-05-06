@@ -26,6 +26,7 @@ export const PERMISSIONS_REGISTRY: ModuleDefinition[] = [
       { id: 'create', label: 'Novo Agendamento' },
       { id: 'edit', label: 'Editar Agendamento' },
       { id: 'cancel', label: 'Cancelar Agendamento' },
+      { id: 'approve_online', label: 'Aprovar Agendamento Online' },
       { id: 'confirm_arrival', label: 'Confirmar Chegada (Recepção)' },
       { id: 'start_appointment', label: 'Iniciar Atendimento' },
       { id: 'reschedule', label: 'Remarcar' },
