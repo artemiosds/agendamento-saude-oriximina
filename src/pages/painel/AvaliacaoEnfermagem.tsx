@@ -285,7 +285,7 @@ const AvaliacaoEnfermagem: React.FC = () => {
     setSaving(false);
   };
 
-  if (!can('enfermagem', 'can_view')) {
+  if (!can('avaliacao_enfermagem', 'can_view')) {
     return <div className="p-6 text-muted-foreground">Sem permissão para acessar esta página.</div>;
   }
 

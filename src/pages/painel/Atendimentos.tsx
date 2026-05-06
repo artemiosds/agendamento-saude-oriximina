@@ -33,7 +33,7 @@ const Atendimentos: React.FC = () => {
   const resolvePaciente = usePacienteNomeResolver();
   const [atendimentos, setAtendimentos] = useState<AtendimentoDB[]>([]);
   const [loading, setLoading] = useState(true);
-  const canDelete = can('atendimento', 'can_delete');
+  const canDelete = can('atendimentos', 'can_delete');
 
   const load = async () => {
     setLoading(true);
