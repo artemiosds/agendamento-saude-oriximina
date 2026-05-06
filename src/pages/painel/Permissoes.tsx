@@ -538,24 +538,61 @@ const Permissoes: React.FC = () => {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 py-2">
-                        {ACTIONS.map((action) => {
-                          const k = `perfil-${modulo}-${action}`;
-                          const isLoading = saving === k;
-                          return (
-                            <label key={action} className="flex flex-col gap-1 cursor-pointer group">
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={!!row?.[action]}
-                                  onCheckedChange={() => togglePerfil(modulo, action)}
-                                  disabled={isLoading}
-                                />
-                                <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
-                                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                              </div>
-                            </label>
-                          );
-                        })}
+                      <div className="space-y-6 py-4">
+                        <div>
+                          <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                            <ListCheck className="w-3 h-3" /> Permissões Básicas (CRUD)
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {ACTIONS.map((action) => {
+                              const k = `perfil-${modulo}-${action}`;
+                              const isLoading = saving === k;
+                              return (
+                                <label key={action} className="flex flex-col gap-1 cursor-pointer group">
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={!!row?.[action]}
+                                      onCheckedChange={() => togglePerfil(modulo, action)}
+                                      disabled={isLoading}
+                                    />
+                                    <span className="text-xs font-medium">{ACTION_LABELS[action]}</span>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {getRegistryModule(modulo)?.actions && getRegistryModule(modulo)!.actions.length > 0 && (
+                          <div className="pt-4 border-t">
+                            <h4 className="text-xs font-bold uppercase text-muted-foreground mb-3 flex items-center gap-2">
+                              <Settings2 className="w-3 h-3" /> Ações Específicas do Sistema
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                              {getRegistryModule(modulo)!.actions.map((act) => {
+                                const k = `perfil-granular-${modulo}-${act.id}`;
+                                const isLoading = saving === k;
+                                const isChecked = !!row?.granular_actions?.[act.id];
+                                return (
+                                  <div key={act.id} className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/30 transition-colors">
+                                    <Switch
+                                      checked={isChecked}
+                                      onCheckedChange={() => toggleGranularPerfil(modulo, act.id)}
+                                      disabled={isLoading}
+                                      className="mt-1"
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-bold">{act.label}</span>
+                                      {act.description && <span className="text-[10px] text-muted-foreground">{act.description}</span>}
+                                    </div>
+                                    {isLoading && <Loader2 className="w-3 h-3 animate-spin ml-auto" />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </AccordionContent>
                   </AccordionItem>
