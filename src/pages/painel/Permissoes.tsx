@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleName, ModulePermission } from "@/contexts/PermissionsContext";
+import { PERMISSIONS_REGISTRY, getRegistryModule } from "@/config/permissions-registry";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -10,8 +11,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio } from "lucide-react";
+import { Loader2, Shield, ShieldCheck, Search, User as UserIcon, Building2, RotateCcw, Radio, ChevronDown, ListCheck, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
 
 const PERFIS = ["gestao", "recepcao", "tecnico", "enfermagem", "profissional"] as const;
 const PERFIL_LABELS: Record<string, string> = {
