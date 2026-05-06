@@ -246,8 +246,8 @@ const Permissoes: React.FC = () => {
   // ===== Helpers Perfil =====
   const getPerfilRow = (modulo: ModuleName): PermRow | undefined => {
     // prefere unidade específica, fallback global
-    return perfilRows.find((r) => r.modulo === modulo && r.unidade_id === selectedUnidade)
-      || perfilRows.find((r) => r.modulo === modulo && r.unidade_id === "");
+    return perfilRows.find((r) => r.perfil === selectedPerfil && r.modulo === modulo && r.unidade_id === selectedUnidade)
+      || perfilRows.find((r) => r.perfil === selectedPerfil && r.modulo === modulo && r.unidade_id === "");
   };
 
   const togglePerfil = async (modulo: ModuleName, action: keyof Omit<ModulePermission, 'granular_actions'>) => {
