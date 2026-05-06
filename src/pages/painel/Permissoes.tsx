@@ -545,7 +545,7 @@ const Permissoes: React.FC = () => {
                       <AccordionContent>
                         <div className="flex justify-end mb-2">
                           {override && (
-                            <Button variant="ghost" size="xs" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
+                            <Button variant="ghost" size="sm" onClick={() => resetUserOverride(modulo)} className="text-[10px] h-6">
                               <RotateCcw className="w-3 h-3 mr-1" /> Resetar para Perfil
                             </Button>
                           )}
