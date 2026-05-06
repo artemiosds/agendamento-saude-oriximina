@@ -264,7 +264,10 @@ const Permissoes: React.FC = () => {
       .upsert(
         { perfil: selectedPerfil, modulo, unidade_id: selectedUnidade,
           can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
+          can_delete: updated.can_delete, can_execute: updated.can_execute,
+          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
+          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
+          can_configure: updated.can_configure },
         { onConflict: "perfil,modulo,unidade_id" }
       );
 
@@ -326,7 +329,10 @@ const Permissoes: React.FC = () => {
       .upsert(
         { user_id: selectedUserId, modulo, unidade_id: selectedUnidade,
           can_view: updated.can_view, can_create: updated.can_create, can_edit: updated.can_edit,
-          can_delete: updated.can_delete, can_execute: updated.can_execute },
+          can_delete: updated.can_delete, can_execute: updated.can_execute,
+          can_print: updated.can_print, can_export: updated.can_export, can_attach: updated.can_attach,
+          can_sign: updated.can_sign, can_approve: updated.can_approve, can_cancel: updated.can_cancel,
+          can_configure: updated.can_configure },
         { onConflict: "user_id,modulo,unidade_id" }
       );
 
