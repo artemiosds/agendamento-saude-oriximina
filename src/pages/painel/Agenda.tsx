@@ -2762,10 +2762,10 @@ const Agenda: React.FC = () => {
                             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                           </Button>
                         )}
-                        {(isMaster || isProfissional) &&
-                          ag.status !== "cancelado" &&
+                        {ag.status !== "cancelado" &&
                           ag.status !== "concluido" &&
                           !ehPendenteOnline &&
+                          (isMaster || isProfissional || user?.role === "recepcao" || can("agenda", "can_edit")) &&
                           statusActions.filter(sa => {
                             // Se for profissional, só mostra ação de "falta" para a própria agenda
                             if (isProfissional) {
