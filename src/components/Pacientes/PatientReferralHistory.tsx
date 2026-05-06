@@ -446,24 +446,23 @@ const PatientReferralHistory = forwardRef<PatientReferralHistoryHandle, Props>(
               </div>
             </div>
             <div>
-              <Label>UBS origem</Label>
-              <Select value={formData.ubs_origem} onValueChange={(v) => setFormData({...formData, ubs_origem: v})}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{UBS_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-              </Select>
+              <Label>Origem do Encaminhamento</Label>
+              <SearchSelect
+                value={formData.ubs_origem}
+                onChange={(v) => setFormData({ ...formData, ubs_origem: v })}
+                options={ORIGEM_LIST.map(u => ({ value: u, label: u }))}
+                placeholder="Selecione a origem"
+                allowCustom
+              />
             </div>
             <div>
               <Label>Tipo encaminhamento</Label>
-              <Select value={formData.tipo_encaminhamento} onValueChange={(v) => setFormData({...formData, tipo_encaminhamento: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ubs">UBS</SelectItem>
-                  <SelectItem value="hospital">Hospital</SelectItem>
-                  <SelectItem value="caps">CAPS</SelectItem>
-                  <SelectItem value="espontaneo">Espontâneo</SelectItem>
-                  <SelectItem value="outro">Outro</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchSelect
+                value={formData.tipo_encaminhamento}
+                onChange={(v) => setFormData({ ...formData, tipo_encaminhamento: v })}
+                options={TIPO_ENCAMINHAMENTO_OPTIONS}
+                placeholder="Selecione o tipo"
+              />
             </div>
             <div>
               <Label>Profissional solicitante</Label>
