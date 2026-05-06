@@ -664,34 +664,34 @@ const Permissoes: React.FC = () => {
                   <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                     <div className="flex items-center justify-between">
                       <span>Ver Agenda:</span>
-                      <span className={getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_view ?? perfilRows.find(r => r.modulo === 'agenda')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('agenda', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('agenda', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Criar Agendamento:</span>
-                      <span className={getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('agenda')?.can_create ?? perfilRows.find(r => r.modulo === 'agenda')?.can_create ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('agenda', 'can_create') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('agenda', 'can_create') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Pacientes:</span>
-                      <span className={getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('pacientes')?.can_view ?? perfilRows.find(r => r.modulo === 'pacientes')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('pacientes', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('pacientes', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ver Prontuário:</span>
-                      <span className={getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
-                        {getUserRow('prontuario')?.can_view ?? perfilRows.find(r => r.modulo === 'prontuario')?.can_view ? "SIM" : "NÃO"}
+                      <span className={getEffectiveValue('prontuario', 'can_view') ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                        {getEffectiveValue('prontuario', 'can_view') ? "SIM" : "NÃO"}
                       </span>
                     </div>
                   </CardContent>
                 </Card>
                 <div className="flex items-center justify-center border-2 border-dashed rounded-lg p-4 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase leading-relaxed">
-                    <strong>DICA MASTER:</strong> As permissões individuais (exceções) sobrescrevem as permissões do perfil.<br/>
-                    Se o botão "Herda do perfil" estiver visível, o sistema usará a regra padrão do cargo do usuário.
+                    <strong>DICA MASTER:</strong> As permissões individuais agora funcionam como <strong>exceções</strong>.<br/>
+                    Ao ativar uma exceção, ela terá prioridade sobre o perfil. Para voltar a herdar a regra do perfil, use o botão de reset do módulo.
                   </p>
                 </div>
               </div>
