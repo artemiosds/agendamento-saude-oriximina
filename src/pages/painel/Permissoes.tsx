@@ -64,12 +64,12 @@ const MODULO_LABELS: Record<ModuleName, string> = {
   modelos_documentos: "Modelos Documentos",
   sistema: "Sistema",
 };
-const ACTIONS: (keyof ModulePermission)[] = [
+const ACTIONS: (keyof Omit<ModulePermission, 'granular_actions'>)[] = [
   "can_view", "can_create", "can_edit", "can_delete", "can_execute",
   "can_print", "can_export", "can_attach", "can_sign", "can_approve", 
   "can_cancel", "can_configure"
 ];
-const ACTION_LABELS: Record<keyof ModulePermission, string> = {
+const ACTION_LABELS: Record<keyof Omit<ModulePermission, 'granular_actions'>, string> = {
   can_view: "Visualizar",
   can_create: "Criar",
   can_edit: "Editar",
@@ -101,6 +101,7 @@ interface PermRow {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 interface UserPermRow {
@@ -120,6 +121,7 @@ interface UserPermRow {
   can_approve: boolean;
   can_cancel: boolean;
   can_configure: boolean;
+  granular_actions?: Record<string, boolean>;
 }
 
 interface UnidadeOption { id: string; nome: string; }
