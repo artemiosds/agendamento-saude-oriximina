@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { updatePacienteCadastro } from "@/lib/paciente-utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
 import { useData } from "@/contexts/DataContext";
@@ -521,81 +522,25 @@ const Pacientes: React.FC = () => {
     const normalizedPhone = normalizePhone(rawPhone!) || "";
 
     const dbFields: any = {
-      nome: form.nome,
-      cpf: form.cpf,
-      cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
-      nome_mae: form.nomeMae,
-      telefone: normalizedPhone,
-      data_nascimento: form.dataNascimento,
-      email: form.email,
-      endereco: form.endereco,
-      descricao_clinica: form.descricaoClinica || form.diagnosticoResumido,
-      cid: form.cid,
-      especialidade_destino: form.especialidadeDestino,
-      municipio: form.municipio,
-      naturalidade: form.naturalidade || "",
-      naturalidade_uf: form.naturalidadeUf || "",
-      menor_idade: form.menorIdade,
-      nome_responsavel: form.nomeResponsavel,
-      cpf_responsavel: form.cpfResponsavel,
-      ubs_origem: form.ubsOrigem,
-      profissional_solicitante: form.profissionalSolicitante,
-      tipo_encaminhamento: form.tipoEncaminhamento,
-      diagnostico_resumido: form.diagnosticoResumido,
-      justificativa: form.justificativa,
-      data_encaminhamento: form.dataEncaminhamento,
-      documento_url: form.documentoUrl,
-      tipo_condicao: form.tipoCondicao,
-      mobilidade: form.mobilidade,
-      usa_dispositivo: form.usaDispositivo,
-      tipo_dispositivo: form.tipoDispositivo,
-      comunicacao: form.comunicacao,
-      comportamento: form.comportamento,
-      usa_equipamentos: form.usaEquipamentos,
-      equipamentos: form.equipamentos,
-      observacao_equipamentos: form.observacaoEquipamentos,
-      outro_servico_sus: form.outroServicoSus,
-      transporte: form.transporte,
-      turno_preferido: form.turnoPreferido,
-      is_gestante: form.isGestante,
-      is_pne: form.isPne,
-      is_autista: form.isAutista,
-      custom_data: {
-        ...(form.customData || {}),
-        atualizado_em: new Date().toISOString(),
-        atualizado_por: user?.id || "",
-        atualizado_por_nome: user?.nome || "",
-        atualizado_por_usuario: user?.usuario || "",
-        motivo_alteracao: "Atualização cadastral pela página Pacientes",
-      },
+      ...form,
+      unidade_id: user?.role === "recepcao" || (!isGlobalAdminUser && unidadeIdFuncionario) 
+        ? unidadeIdFuncionario 
+        : form.unidadeId,
     };
-
-    if (user?.role === "recepcao") {
-      if (!unidadeIdFuncionario) {
-        toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
-        setSaving(false);
-        return;
-      }
-      dbFields.unidade_id = unidadeIdFuncionario;
-    } else if (!isGlobalAdminUser && unidadeIdFuncionario) {
-      dbFields.unidade_id = unidadeIdFuncionario;
-    }
 
     try {
       if (editId) {
-        // Close dialog immediately (optimistic)
-        setDialogOpen(false);
+        // Usa a função centralizada para update
+        await updatePacienteCadastro(
+          editId,
+          dbFields,
+          "Pacientes",
+          user,
+          queryClient
+        );
+        
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").update(dbFields).eq("id", editId))
-          .then(({ error }) => { if (error) console.error("Erro ao atualizar paciente:", error); })
-          .catch((err) => console.error("Erro ao atualizar paciente:", err))
-          .finally(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
-            refreshPacientes();
-          });
+        setDialogOpen(false);
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
