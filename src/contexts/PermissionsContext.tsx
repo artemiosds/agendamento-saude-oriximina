@@ -202,6 +202,18 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     loadPermissions();
+    // Safety net: nunca deixar a UI travada em "Carregando permissões..." mais de 10s.
+    const safety = setTimeout(() => {
+      setLoading((l) => {
+        if (l) {
+          console.warn('[Permissions] Timeout de segurança — liberando UI com permissões vazias.');
+          setPermissions((prev) => prev ?? buildFullMap({}));
+          return false;
+        }
+        return l;
+      });
+    }, 10000);
+    return () => clearTimeout(safety);
   }, [loadPermissions]);
 
   useEffect(() => {
