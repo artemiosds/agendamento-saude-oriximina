@@ -2034,7 +2034,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Carrega agendamentos de uma janela arbitrária (ex.: meses anteriores) sob demanda
   // e faz merge com o estado atual sem remover registros já carregados.
-  const loadedRangesRef = useRef<Set<string>>(new Set());
   const ensureAgendamentosForRange = useCallback(async (startISO: string, endISO: string) => {
     if (!startISO || !endISO) return;
     const key = `${startISO}|${endISO}`;
