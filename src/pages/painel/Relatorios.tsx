@@ -148,57 +148,79 @@ const Relatorios: React.FC = () => {
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
   const loadReportData = useCallback(async () => {
-    if (!dateFrom || !dateTo) return;
-    
     setIsLoading(true);
     try {
-      // Build filters
-      const startOfDay = `${dateFrom}`;
-      const endOfDay = `${dateTo}`;
-
       // 1. Agendamentos
       let qAg = supabase
         .from('agendamentos')
         .select('*')
-        .gte('data', startOfDay)
-        .lte('data', endOfDay);
+        .order('data', { ascending: false })
+        .limit(10000);
+
+      if (dateFrom) qAg = qAg.gte('data', dateFrom);
+      if (dateTo) qAg = qAg.lte('data', dateTo);
 
       // 2. Atendimentos
       let qAt = supabase
         .from('atendimentos')
         .select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status')
-        .gte('data', startOfDay)
-        .lte('data', endOfDay);
+        .order('data', { ascending: false })
+        .limit(10000);
+
+      if (dateFrom) qAt = qAt.gte('data', dateFrom);
+      if (dateTo) qAt = qAt.lte('data', dateTo);
 
       // 3. Fila Espera
       let qFila = supabase
         .from('fila_espera')
         .select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em')
-        .gte('criado_em', `${startOfDay}T00:00:00`)
-        .lte('criado_em', `${endOfDay}T23:59:59`);
+        .order('criado_em', { ascending: false })
+        .limit(5000);
+
+      if (dateFrom) qFila = qFila.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qFila = qFila.lte('criado_em', `${dateTo}T23:59:59`);
 
       // 4. Triagens
       let qTriage = supabase
         .from('triage_records')
         .select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em')
-        .gte('criado_em', `${startOfDay}T00:00:00`)
-        .lte('criado_em', `${endOfDay}T23:59:59`);
+        .order('criado_em', { ascending: false })
+        .limit(5000);
+
+      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59`);
 
       // 5. Procedimentos
       let qProc = supabase
         .from('prontuario_procedimentos')
         .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
-        .gte('criado_em', `${startOfDay}T00:00:00`)
-        .lte('criado_em', `${endOfDay}T23:59:59`);
+        .order('criado_em', { ascending: false })
+        .limit(10000);
+
+      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59`);
 
       // Apply common filters
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id') => {
         let q = query;
-        if (filterUnit !== 'all') q = q.eq(unitCol, filterUnit);
-        else if (user?.unidadeId && user?.usuario !== 'admin.sms') q = q.eq(unitCol, user.unidadeId);
+        
+        // Unidade filter
+        if (filterUnit !== 'all') {
+          q = q.eq(unitCol, filterUnit);
+        } else {
+          // Se for Master global ou admin, pode ver todas. Caso contrário, restringe à unidade do usuário.
+          const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
+          if (!isMasterGlobal && user?.unidadeId) {
+            q = q.eq(unitCol, user.unidadeId);
+          }
+        }
 
-        if (filterProf !== 'all') q = q.eq(profCol, filterProf);
-        else if (user?.role === 'profissional' && user.id) q = q.eq(profCol, user.id);
+        // Profissional filter
+        if (filterProf !== 'all') {
+          q = q.eq(profCol, filterProf);
+        } else if (user?.role === 'profissional' && user.id) {
+          q = q.eq(profCol, user.id);
+        }
         
         return q;
       };
@@ -207,33 +229,46 @@ const Relatorios: React.FC = () => {
       qAt = applyFilters(qAt, 'unidade_id', 'profissional_id');
       qFila = applyFilters(qFila, 'unidade_id', 'profissional_id');
       
-      // Triagem doesn't have unidade_id in triage_records, usually linked via agendamento
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
       // 6. Treatment Cycles & Sessions
       let qCycles = supabase
         .from('treatment_cycles')
         .select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at')
-        .gte('start_date', startOfDay)
-        .lte('start_date', endOfDay);
+        .order('start_date', { ascending: false })
+        .limit(5000);
+      
+      if (dateFrom) qCycles = qCycles.gte('start_date', dateFrom);
+      if (dateTo) qCycles = qCycles.lte('start_date', dateTo);
       qCycles = applyFilters(qCycles, 'unit_id', 'professional_id');
 
       let qSessions = supabase
         .from('treatment_sessions')
         .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-        .gte('scheduled_date', startOfDay)
-        .lte('scheduled_date', endOfDay);
+        .order('scheduled_date', { ascending: false })
+        .limit(10000);
+      
+      if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
+      if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
       if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
 
       // 7. Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at')
-        .gte('evaluation_date', startOfDay).lte('evaluation_date', endOfDay);
+        .order('evaluation_date', { ascending: false }).limit(5000);
+      if (dateFrom) qNursing = qNursing.gte('evaluation_date', dateFrom);
+      if (dateTo) qNursing = qNursing.lte('evaluation_date', dateTo);
+
       let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at')
-        .gte('evaluation_date', startOfDay).lte('evaluation_date', endOfDay);
+        .order('evaluation_date', { ascending: false }).limit(5000);
+      if (dateFrom) qMulti = qMulti.gte('evaluation_date', dateFrom);
+      if (dateTo) qMulti = qMulti.lte('evaluation_date', dateTo);
+
       let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at')
-        .gte('created_at', `${startOfDay}T00:00:00`).lte('created_at', `${endOfDay}T23:59:59`);
+        .order('created_at', { ascending: false }).limit(5000);
+      if (dateFrom) qPts = qPts.gte('created_at', `${dateFrom}T00:00:00`);
+      if (dateTo) qPts = qPts.lte('created_at', `${dateTo}T23:59:59`);
       
-      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id'); // patient_id used as placeholder if no prof_id
+      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id');
       qMulti = applyFilters(qMulti, 'unit_id', 'id');
       qPts = applyFilters(qPts, 'unit_id', 'professional_id');
 
@@ -253,7 +288,6 @@ const Relatorios: React.FC = () => {
       ]);
 
       if (agData) {
-        // Map database columns to camelCase expected by the component logic
         setAgendamentosDB(agData.map(a => ({
           ...a,
           unidadeId: a.unidade_id,
