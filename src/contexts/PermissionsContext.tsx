@@ -199,12 +199,17 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   useEffect(() => {
     if (!user?.id) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const debouncedReload = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { loadPermissions(); }, 800);
+    };
     const channel = supabase
       .channel(`perm-realtime-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, () => loadPermissions())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, () => loadPermissions())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes' }, debouncedReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'permissoes_usuario', filter: `user_id=eq.${user.id}` }, debouncedReload)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { if (t) clearTimeout(t); supabase.removeChannel(channel); };
   }, [user?.id, loadPermissions]);
 
   const can = useCallback(

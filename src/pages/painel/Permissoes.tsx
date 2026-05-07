@@ -209,18 +209,23 @@ const Permissoes: React.FC = () => {
 
   useEffect(() => { if (tab === "individual") loadUser(); }, [loadUser, tab]);
 
-  // Realtime — quando QUALQUER permissão muda, recarrega
+  // Realtime — quando QUALQUER permissão muda, recarrega (com debounce p/ evitar tempestade)
   useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const debounced = (fn: () => void) => {
+      if (t) clearTimeout(t);
+      t = setTimeout(fn, 600);
+    };
     const ch = supabase
       .channel("permissoes-admin-page")
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes" }, () => {
-        if (tab === "perfil") loadPerfil();
+        if (tab === "perfil") debounced(loadPerfil);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "permissoes_usuario" }, () => {
-        if (tab === "individual") loadUser();
+        if (tab === "individual") debounced(loadUser);
       })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => { if (t) clearTimeout(t); supabase.removeChannel(ch); };
   }, [tab, loadPerfil, loadUser]);
 
   // Filtragem de funcionários pela busca (hook ANTES do early return)
