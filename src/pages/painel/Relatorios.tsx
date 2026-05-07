@@ -69,7 +69,6 @@ interface AgendamentoDB {
   status: string;
   tipo: string;
   origem: string;
-  // Aliases for camelCase
   unidadeId?: string;
   profissionalId?: string;
   pacienteId?: string;
@@ -131,7 +130,6 @@ const Relatorios: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
-  // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
@@ -151,156 +149,86 @@ const Relatorios: React.FC = () => {
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Agendamentos
-      let qAg = supabase
-        .from('agendamentos')
-        .select('*')
-        .order('data', { ascending: false })
-        .limit(10000);
-
-      if (dateFrom) qAg = qAg.gte('data', dateFrom);
-      if (dateTo) qAg = qAg.lte('data', dateTo);
-
-      // 2. Atendimentos
-      let qAt = supabase
-        .from('atendimentos')
-        .select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status')
-        .order('data', { ascending: false })
-        .limit(10000);
-
-      if (dateFrom) qAt = qAt.gte('data', dateFrom);
-      if (dateTo) qAt = qAt.lte('data', dateTo);
-
-      // 3. Fila Espera
-      let qFila = supabase
-        .from('fila_espera')
-        .select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em')
-        .order('criado_em', { ascending: false })
-        .limit(5000);
-
-      if (dateFrom) qFila = qFila.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qFila = qFila.lte('criado_em', `${dateTo}T23:59:59`);
-
-      // 4. Triagens
-      let qTriage = supabase
-        .from('triage_records')
-        .select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em')
-        .order('criado_em', { ascending: false })
-        .limit(5000);
-
-      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59`);
-
-      // 5. Procedimentos
-      let qProc = supabase
-        .from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
-        .order('criado_em', { ascending: false })
-        .limit(10000);
-
-      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59`);
-
-      // 5.1 Prontuários
-      let qPront = supabase
-        .from('prontuarios')
-        .select('*')
-        .order('data_atendimento', { ascending: false })
-        .limit(10000);
-      
-      if (dateFrom) qPront = qPront.gte('data_atendimento', dateFrom);
-      if (dateTo) qPront = qPront.lte('data_atendimento', dateTo);
-      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id');
-
-      // Apply common filters
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id') => {
         let q = query;
-        
-        // Unidade filter
         if (filterUnit !== 'all') {
           q = q.eq(unitCol, filterUnit);
         } else {
-          // Se for Master global ou admin, pode ver todas. Caso contrário, restringe à unidade do usuário.
           const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
           if (!isMasterGlobal && user?.unidadeId) {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
-
-        // Profissional filter
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
           q = q.eq(profCol, user.id);
         }
-        
         return q;
       };
 
+      let qAg = supabase.from('agendamentos').select('*').order('data', { ascending: false }).limit(10000);
+      if (dateFrom) qAg = qAg.gte('data', dateFrom);
+      if (dateTo) qAg = qAg.lte('data', dateTo);
       qAg = applyFilters(qAg, 'unidade_id', 'profissional_id');
+
+      let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(10000);
+      if (dateFrom) qAt = qAt.gte('data', dateFrom);
+      if (dateTo) qAt = qAt.lte('data', dateTo);
       qAt = applyFilters(qAt, 'unidade_id', 'profissional_id');
+
+      let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(5000);
+      if (dateFrom) qFila = qFila.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qFila = qFila.lte('criado_em', `${dateTo}T23:59:59`);
       qFila = applyFilters(qFila, 'unidade_id', 'profissional_id');
-      
+
+      let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(5000);
+      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
-      // 6. Treatment Cycles & Sessions
-      let qCycles = supabase
-        .from('treatment_cycles')
-        .select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at')
-        .order('start_date', { ascending: false })
-        .limit(5000);
-      
+      let qProc = supabase.from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
+        .order('criado_em', { ascending: false }).limit(10000);
+      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
+      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59`);
+
+      let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(10000);
+      if (dateFrom) qPront = qPront.gte('data_atendimento', dateFrom);
+      if (dateTo) qPront = qPront.lte('data_atendimento', dateTo);
+      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id');
+
+      let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(5000);
       if (dateFrom) qCycles = qCycles.gte('start_date', dateFrom);
       if (dateTo) qCycles = qCycles.lte('start_date', dateTo);
       qCycles = applyFilters(qCycles, 'unit_id', 'professional_id');
 
-      let qSessions = supabase
-        .from('treatment_sessions')
-        .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-        .order('scheduled_date', { ascending: false })
-        .limit(10000);
-      
+      let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(10000);
       if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
       if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
       if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
 
-      // 7. Evaluations
-      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at')
-        .order('evaluation_date', { ascending: false }).limit(5000);
+      let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(5000);
       if (dateFrom) qNursing = qNursing.gte('evaluation_date', dateFrom);
       if (dateTo) qNursing = qNursing.lte('evaluation_date', dateTo);
+      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id');
 
-      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at')
-        .order('evaluation_date', { ascending: false }).limit(5000);
+      let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(5000);
       if (dateFrom) qMulti = qMulti.gte('evaluation_date', dateFrom);
       if (dateTo) qMulti = qMulti.lte('evaluation_date', dateTo);
+      qMulti = applyFilters(qMulti, 'unit_id', 'id');
 
-      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at')
-        .order('created_at', { ascending: false }).limit(5000);
+      let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(5000);
       if (dateFrom) qPts = qPts.gte('created_at', `${dateFrom}T00:00:00`);
       if (dateTo) qPts = qPts.lte('created_at', `${dateTo}T23:59:59`);
-      
-      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id');
-      qMulti = applyFilters(qMulti, 'unit_id', 'id');
       qPts = applyFilters(qPts, 'unit_id', 'professional_id');
 
-      const [
-        { data: agData },
-        { data: atData },
-        { data: filaData },
-        { data: triageData },
-        { data: procData },
-        { data: cyclesData },
-        { data: sessionsData },
-        { data: nursingData },
-        { data: multiData },
-        { data: ptsDataResult },
-      ] = await Promise.all([
-        qAg, qAt, qFila, qTriage, qProc, qCycles, qSessions, qNursing, qMulti, qPts
+      const results = await Promise.all([
+        qAg, qAt, qFila, qTriage, qProc, qPront, qCycles, qSessions, qNursing, qMulti, qPts
       ]);
 
-      if (agData) {
-        setAgendamentosDB(agData.map(a => ({
+      if (results[0].data) {
+        setAgendamentosDB(results[0].data.map(a => ({
           ...a,
           unidadeId: a.unidade_id,
           profissionalId: a.profissional_id,
@@ -310,11 +238,11 @@ const Relatorios: React.FC = () => {
           setorId: a.setor_id
         })));
       }
-      if (atData) setAtendimentosDB(atData);
-      if (filaData) setFilaDB(filaData);
-      if (triageData) setTriagensDB(triageData as TriagemDB[]);
-      if (procData) {
-        setProcedimentosDB(procData.map((r: any) => ({
+      if (results[1].data) setAtendimentosDB(results[1].data);
+      if (results[2].data) setFilaDB(results[2].data);
+      if (results[3].data) setTriagensDB(results[3].data as TriagemDB[]);
+      if (results[4].data) {
+        setProcedimentosDB(results[4].data.map((r: any) => ({
           prontuario_id: r.prontuario_id,
           procedimento_id: r.procedimento_id,
           proc_nome: r.procedimentos?.nome || '',
@@ -323,11 +251,12 @@ const Relatorios: React.FC = () => {
           data: r.prontuarios?.data_atendimento || '',
         })));
       }
-      if (cyclesData) setTreatmentCycles(cyclesData);
-      if (sessionsData) setTreatmentSessions(sessionsData);
-      if (nursingData) setNursingEvals(nursingData);
-      if (multiData) setMultiEvals(multiData);
-      if (ptsDataResult) setPtsData(ptsDataResult);
+      if (results[5].data) setProntuariosDB(results[5].data);
+      if (results[6].data) setTreatmentCycles(results[6].data);
+      if (results[7].data) setTreatmentSessions(results[7].data);
+      if (results[8].data) setNursingEvals(results[8].data);
+      if (results[9].data) setMultiEvals(results[9].data);
+      if (results[10].data) setPtsData(results[10].data);
       
       setLastUpdated(new Date());
     } catch (err) { 
@@ -339,7 +268,6 @@ const Relatorios: React.FC = () => {
 
   useEffect(() => { loadReportData(); }, [loadReportData]);
 
-  // Realtime subscription for auto-refresh
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
     onchange: loadReportData,
@@ -347,7 +275,6 @@ const Relatorios: React.FC = () => {
     debounceMs: 2000,
   });
 
-  // Update "last updated" label every 10s
   useEffect(() => {
     const interval = setInterval(() => {
       const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
@@ -369,10 +296,8 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentosDB]);
 
-  // === FILTERS ===
   const filtered = useMemo(() => {
     return agendamentosDB.filter(a => {
-      // Basic filters (more are already applied at DB level)
       if (filterStatus !== 'all' && normalizeStatus(a.status) !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
       return true;
@@ -386,7 +311,6 @@ const Relatorios: React.FC = () => {
     });
   }, [atendimentosDB, filterSetor]);
 
-  // === STATS ===
   const stats = useMemo(() => {
     const total = filtered.length;
     const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
@@ -403,7 +327,6 @@ const Relatorios: React.FC = () => {
     const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
     const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
     
-    // Atendimentos realizados é a soma de atendimentos concluídos na agenda + prontuários concluídos
     const atendimentosRealizados = concluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
     
     return { 
@@ -420,7 +343,6 @@ const Relatorios: React.FC = () => {
     return { totalAtendimentos: finalizados.length, tempoMedio: media, totalMinutos };
   }, [filteredAtendimentos]);
 
-  // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
@@ -481,12 +403,10 @@ const Relatorios: React.FC = () => {
       })).sort((a, b) => b.total - a.total);
   }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
-  // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
     if (!str) return '';
     return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
   };
-  const removeAccents = normalizarProfissao;
 
   const CATEGORIAS: Array<{ key: string; icon: LucideIcon; label: string; cor: string; bgLight: string; termos: string[] }> = [
     { key: 'medico', icon: Stethoscope, label: 'Médicos', cor: '#1B3A5C', bgLight: '#EEF2F7',
@@ -538,7 +458,6 @@ const Relatorios: React.FC = () => {
     }));
   }, [filtered, funcionarios]);
 
-  // === PROD TOTALS ===
   const prodTotals = useMemo(() => {
     return porProfissional.reduce((acc, p) => ({
       total: acc.total + p.total,
@@ -550,7 +469,6 @@ const Relatorios: React.FC = () => {
     }), { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, retornos: 0 });
   }, [porProfissional]);
 
-  // === SEGMENTED BAR CHART DATA ===
   const prodChartData = useMemo(() => {
     return porProfissional.filter(p => p.total > 0).map(p => ({
       nome: p.nome.length > 20 ? p.nome.substring(0, 20) + '…' : p.nome,
@@ -562,7 +480,6 @@ const Relatorios: React.FC = () => {
     }));
   }, [porProfissional]);
 
-  // === BY UNIT ===
   const porUnidade = useMemo(() => {
     const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number }> = {};
     filtered.forEach(a => {
@@ -578,7 +495,6 @@ const Relatorios: React.FC = () => {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filtered, unidades]);
 
-  // === FALTAS REPORT ===
   const faltasReport = useMemo(() => {
     const faltaAgs = filtered.filter(a => normalizeStatus(a.status) === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
@@ -593,7 +509,6 @@ const Relatorios: React.FC = () => {
     return Object.values(porPaciente).sort((a, b) => b.total - a.total);
   }, [filtered, pacientes, unidades]);
 
-  // === PATIENTS REPORT ===
   const pacientesReport = useMemo(() => {
     const pacIds = new Set(filtered.map(a => a.pacienteId));
     return Array.from(pacIds).map(pid => {
@@ -616,7 +531,6 @@ const Relatorios: React.FC = () => {
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
   }, [filtered, pacientes]);
 
-  // === FILA REPORT ===
   const filaReport = useMemo(() => {
     const filteredFila = filaDB.filter(f => {
       if (filterUnit !== 'all' && f.unidade_id !== filterUnit) return false;
@@ -629,7 +543,6 @@ const Relatorios: React.FC = () => {
     return { items: filteredFila.sort((a, b) => a.posicao - b.posicao), aguardando, chamados, desistencias, total: filteredFila.length };
   }, [filaDB, filterUnit, filterProf]);
 
-  // === TRIAGEM REPORT ===
   const triagemReport = useMemo(() => {
     const filteredTriagens = triagensDB.filter(t => {
       if (dateFrom && t.criado_em && t.criado_em < dateFrom) return false;
@@ -640,7 +553,6 @@ const Relatorios: React.FC = () => {
     const confirmadas = filteredTriagens.filter(t => t.confirmado_em).length;
     const pendentes = total - confirmadas;
 
-    // Por técnico
     const porTecnico: Record<string, { id: string; nome: string; total: number; confirmadas: number; pendentes: number }> = {};
     filteredTriagens.forEach(t => {
       const tec = funcionarios.find(f => f.id === t.tecnico_id);
@@ -654,7 +566,6 @@ const Relatorios: React.FC = () => {
     return { total, confirmadas, pendentes, porTecnico: Object.values(porTecnico).sort((a, b) => b.total - a.total) };
   }, [triagensDB, funcionarios, dateFrom, dateTo]);
 
-  // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     const map: Record<string, { data: string; agendamentos: number; concluidos: number; faltas: number }> = {};
     filtered.forEach(a => {
@@ -677,7 +588,6 @@ const Relatorios: React.FC = () => {
     { name: 'Remarcados', value: stats.remarcados },
   ].filter(d => d.value > 0), [stats]);
 
-  // === TIMELINE GROUPED (dia/semana/mês) ===
   const timelineGrouped = useMemo(() => {
     const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
     filtered.forEach(a => {
@@ -690,7 +600,7 @@ const Relatorios: React.FC = () => {
         startOfWeek.setDate(d.getDate() - d.getDay());
         key = startOfWeek.toISOString().split('T')[0];
       } else {
-        key = a.data.substring(0, 7); // YYYY-MM
+        key = a.data.substring(0, 7);
       }
       if (!map[key]) {
         const label = timelineGroup === 'mes'
@@ -708,7 +618,6 @@ const Relatorios: React.FC = () => {
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
   }, [filtered, timelineGroup]);
 
-  // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
     const map: Record<string, number> = {};
     for (let h = 7; h <= 18; h++) {
@@ -726,7 +635,6 @@ const Relatorios: React.FC = () => {
     return Object.entries(map).map(([hora, total]) => ({ hora, total }));
   }, [filtered]);
 
-  // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
     const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
     const novos = filtered.length - retornos;
@@ -736,7 +644,6 @@ const Relatorios: React.FC = () => {
     ].filter(d => d.value > 0);
   }, [filtered]);
 
-  // === FALTAS POR UNIDADE (pie) ===
   const faltasPorUnidade = useMemo(() => {
     const map: Record<string, { name: string; value: number }> = {};
     filtered.filter(a => a.status === 'falta').forEach(a => {
@@ -748,7 +655,6 @@ const Relatorios: React.FC = () => {
     return Object.values(map).sort((a, b) => b.value - a.value);
   }, [filtered, unidades]);
 
-  // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
   const evolucaoMensal = useMemo(() => {
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const map: Record<string, number> = {};
@@ -762,7 +668,6 @@ const Relatorios: React.FC = () => {
     });
   }, [filtered]);
 
-  // === RANKING PRODUTIVIDADE (barras horizontais) ===
   const rankingProdutividade = useMemo(() => {
     return porProfissional.map(p => ({
       nome: p.nome,
@@ -772,7 +677,6 @@ const Relatorios: React.FC = () => {
     })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
   }, [porProfissional]);
 
-  // === PROCEDURE STATS ===
   const procedimentoStats = useMemo(() => {
     const filteredProcs = procedimentosDB.filter(p => {
       if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
@@ -797,7 +701,6 @@ const Relatorios: React.FC = () => {
     };
   }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
 
-  // === TREATMENT STATS ===
   const treatmentStats = useMemo(() => {
     const filteredCycles = treatmentCycles.filter(c => {
       if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
@@ -823,17 +726,14 @@ const Relatorios: React.FC = () => {
     const sessCanceladas = filteredSessions.filter(s => s.status === 'cancelada').length;
     const totalSessions = filteredSessions.length;
 
-    // Average sessions per patient
     const pacientesMap = new Map<string, number>();
     filteredCycles.forEach(c => pacientesMap.set(c.patient_id, (pacientesMap.get(c.patient_id) || 0) + c.sessions_done));
     const avgSessoesPorPaciente = pacientesMap.size > 0
       ? Math.round(Array.from(pacientesMap.values()).reduce((a, b) => a + b, 0) / pacientesMap.size)
       : 0;
 
-    // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
     const taxaAbandono = total > 0 ? Math.round(((suspensos) / total) * 100) : 0;
 
-    // By professional
     const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
     filteredCycles.forEach(c => {
       const prof = funcionarios.find(f => f.id === c.professional_id);
@@ -844,7 +744,6 @@ const Relatorios: React.FC = () => {
       byProf[c.professional_id].sessoes += c.sessions_done;
     });
 
-    // By unit
     const byUnit: Record<string, { nome: string; total: number; ativos: number }> = {};
     filteredCycles.forEach(c => {
       const un = unidades.find(u => u.id === c.unit_id);
@@ -854,7 +753,6 @@ const Relatorios: React.FC = () => {
       if (c.status === 'em_andamento') byUnit[c.unit_id].ativos++;
     });
 
-    // By treatment type
     const byType: Record<string, number> = {};
     filteredCycles.forEach(c => {
       byType[c.treatment_type || 'Outros'] = (byType[c.treatment_type || 'Outros'] || 0) + 1;
@@ -870,7 +768,6 @@ const Relatorios: React.FC = () => {
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
 
-  // === NURSING EVALUATIONS REPORT ===
   const nursingReport = useMemo(() => {
     const filteredNursing = nursingEvals.filter((n: any) => {
       if (filterUnit !== 'all' && n.unit_id !== filterUnit) return false;
@@ -887,7 +784,6 @@ const Relatorios: React.FC = () => {
     return { total, aptos, inaptos, multiprof, byPriority: Object.entries(byPriority).map(([k, v]) => ({ nome: k === 'alta' ? 'Alta' : k === 'media' ? 'Média' : 'Baixa', total: v })) };
   }, [nursingEvals, filterUnit, dateFrom, dateTo]);
 
-  // === MULTIPROFESSIONAL EVALUATIONS REPORT ===
   const multiReport = useMemo(() => {
     const filteredMulti = multiEvals.filter((m: any) => {
       if (filterUnit !== 'all' && m.unit_id !== filterUnit) return false;
@@ -903,7 +799,6 @@ const Relatorios: React.FC = () => {
     return { total, bySpecialty: Object.entries(bySpecialty).map(([k, v]) => ({ nome: k, total: v })), byParecer: Object.entries(byParecer).map(([k, v]) => ({ nome: k === 'favoravel' ? 'Favorável' : 'Desfavorável', total: v })) };
   }, [multiEvals, filterUnit, dateFrom, dateTo]);
 
-  // === PTS REPORT ===
   const ptsReport = useMemo(() => {
     const filteredPts = ptsData.filter((p: any) => {
       if (filterUnit !== 'all' && p.unit_id !== filterUnit) return false;
@@ -939,23 +834,18 @@ const Relatorios: React.FC = () => {
     } else if (type === 'pacientes') {
       headers = ['Paciente', 'E-mail', 'Telefone', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'];
       rows = pacientesReport.map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.retornos.toString(), p.ultimaConsulta]);
-    } else if (type === 'fila') {
-      headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada', 'Hora Chamada'];
-      rows = filaReport.items.map(f => {
-        const un = unidades.find(u => u.id === f.unidade_id);
-        return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
-      });
     }
 
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
+    a.href = url;
+    a.download = filename;
+    a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, filteredAtendimentos]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, unidades, filteredAtendimentos]);
 
-  // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -975,15 +865,8 @@ const Relatorios: React.FC = () => {
     } else if (type === 'pacientes') {
       headers = ['Paciente', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Última Consulta'];
       rows = pacientesReport.map(p => [p.nome, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.ultimaConsulta]);
-    } else if (type === 'fila') {
-      headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada'];
-      rows = filaReport.items.map(f => {
-        const un = unidades.find(u => u.id === f.unidade_id);
-        return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
-      });
     }
 
-    // Build XML Spreadsheet (Excel-compatible)
     const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const headerCells = headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
     const dataRows = rows.map(r =>
@@ -1016,9 +899,8 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, unidades]);
 
-  // === EXPORT PDF ===
   const exportPDF = useCallback((type: string) => {
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
     const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
@@ -1073,203 +955,16 @@ ${dataRows}
       body = `${summaryBlock}
         <h2>Relatório de Pacientes</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
-    } else if (type === 'fila') {
-      const filaRows = filaReport.items.map(f => {
-        const unName = unidades.find(u => u.id === f.unidade_id)?.nome || '';
-        return `<tr><td>${f.posicao}</td><td>${f.paciente_nome}</td><td>${unName}</td><td>${f.setor}</td><td>${f.prioridade}</td><td>${f.status}</td><td>${f.hora_chegada}</td><td>${f.hora_chamada || '-'}</td></tr>`;
-      }).join('');
-      body = `
-        <div class="summary">
-          <div class="stat"><strong>${filaReport.total}</strong><small>Total na Fila</small></div>
-          <div class="stat"><strong>${filaReport.aguardando}</strong><small>Aguardando</small></div>
-          <div class="stat"><strong>${filaReport.chamados}</strong><small>Chamados</small></div>
-          <div class="stat"><strong>${filaReport.desistencias}</strong><small>Desistências</small></div>
-        </div>
-        <h2>Fila de Espera</h2>
-        <table><thead><tr><th>Posição</th><th>Paciente</th><th>Unidade</th><th>Setor</th><th>Prioridade</th><th>Status</th><th>Chegada</th><th>Chamada</th></tr></thead><tbody>${filaRows}</tbody></table>`;
     }
 
-    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes' };
 
     openPrintDocument(
       titleMap[type] || 'Relatório',
       body,
       { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
     );
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
-
-  // === MAPA DE ATENDIMENTO ===
-  const generateMapa = useCallback(async () => {
-    if (!mapaDateFrom || !mapaDateTo) return;
-    setMapaLoading(true);
-    try {
-      let query = supabase
-        .from('agendamentos')
-        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
-        .eq('status', 'concluido')
-        .gte('data', mapaDateFrom)
-        .lte('data', mapaDateTo)
-        .order('data', { ascending: true })
-        .limit(10000);
-
-      if (mapaProf !== 'all') {
-        query = query.eq('profissional_id', mapaProf);
-      }
-      const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
-      if (!isMasterGlobal && user?.unidadeId) {
-        query = query.eq('unidade_id', user.unidadeId);
-      }
-
-      const { data: agend } = await query;
-
-      if (!agend || agend.length === 0) {
-        setMapaData([]);
-        setMapaGenerated(true);
-        setMapaLoading(false);
-        return;
-      }
-
-      const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
-      const { data: pacs } = await supabase
-        .from('pacientes')
-        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco')
-        .in('id', pacienteIds);
-
-      const pacMap = new Map((pacs || []).map(p => [p.id, p]));
-
-      // Get profissional specialties from funcionarios
-      const profIds = [...new Set(agend.map(a => a.profissional_id).filter(Boolean))];
-      const profMap = new Map(funcionarios.filter(f => profIds.includes(f.id)).map(f => [f.id, f]));
-
-      const rows = agend.map((a, i) => {
-        const pac = pacMap.get(a.paciente_id);
-        const prof = profMap.get(a.profissional_id);
-        return {
-          num: i + 1,
-          paciente_nome: a.paciente_nome || '',
-          cns: pac?.cns || '',
-          telefone: pac?.telefone || '',
-          profissional_nome: a.profissional_nome || '',
-          profissional_id: a.profissional_id || '',
-          especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
-          cid: pac?.cid || '',
-          tipo: a.tipo || '',
-          cpf: pac?.cpf || '',
-          data_nascimento: pac?.data_nascimento || '',
-          endereco: pac?.endereco || '',
-          procedimento_sigtap: (a as any).procedimento_sigtap || '',
-          nome_procedimento: (a as any).nome_procedimento || '',
-        };
-      });
-
-      setMapaData(rows);
-      setMapaGenerated(true);
-    } catch (e) {
-      console.error('Erro ao gerar mapa:', e);
-    } finally {
-      setMapaLoading(false);
-    }
-  }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
-
-  const formatDateBR = (d: string) => {
-    if (!d) return '';
-    const [y, m, day] = d.split('-');
-    return `${day}/${m}/${y}`;
-  };
-
-  const exportMapaPDF = useCallback(() => {
-    if (mapaData.length === 0) return;
-    const now = new Date().toLocaleString('pt-BR');
-    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
-    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
-
-    const tableRows = mapaData.map((r, i) => {
-      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${fmtCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
-    }).join('');
-
-    const body = `
-      <h2>Mapa de Atendimentos Concluídos</h2>
-      <table>
-        <thead><tr>
-          <th style="width:30px;text-align:center">Nº</th>
-          <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
-          <th>CNS</th><th>Telefone</th><th>Profissional</th>
-          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
-        </tr></thead>
-        <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
-      </table>
-      <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
-
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const logoUrl = logoSmsFallback;
-    const logoUrlRight = logoCerFallback;
-
-    printWindow.document.write(`<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
-<style>
-  @page { size: A4 landscape; margin: 10mm; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Segoe UI',Arial,sans-serif; padding:16px; color:#1e293b; font-size:10px; line-height:1.4; }
-  .doc-header { display:flex; align-items:center; gap:14px; padding:12px 16px; margin-bottom:12px;
-    background:linear-gradient(135deg,#0c4a6e,#0369a1); border-radius:6px; color:#fff;
-    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .doc-header img { width:48px; height:48px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
-  .doc-header .header-text { flex:1; }
-  .doc-header h1 { font-size:13px; font-weight:700; }
-  .doc-header .subtitle { font-size:10px; opacity:.85; margin-top:1px; }
-  .doc-header .doc-title { font-size:11px; font-weight:700; margin-top:4px; text-transform:uppercase; }
-  .doc-header .emit-date { text-align:right; font-size:8px; opacity:.75; white-space:nowrap; }
-  .periodo { text-align:center; font-size:11px; color:#334155; margin-bottom:10px; font-weight:600; }
-  h2 { font-size:12px; color:#0369a1; margin:10px 0 6px; padding-bottom:3px; border-bottom:2px solid #e0f2fe; }
-  table { width:100%; border-collapse:collapse; margin-bottom:10px; }
-  th,td { border:1px solid #e2e8f0; padding:4px 6px; text-align:left; font-size:9px; }
-  th { background:#f1f5f9; font-weight:600; color:#334155; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  tr:nth-child(even) { background:#f9f9f9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  tfoot td { border-top:2px solid #0369a1; }
-  @media print { body { padding:6px; } .no-print { display:none !important; } }
-</style></head><body>
-  <div class="doc-header">
-    <img src="${logoUrl}" alt="Logo SMS" />
-    <div class="header-text">
-      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
-      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div>
-      <div class="doc-title">Mapa de Atendimentos Concluídos</div>
-    </div>
-    <img src="${logoUrlRight}" alt="Logo CER II" style="max-height:48px;max-width:90px;object-fit:contain;" />
-    <div class="emit-date">Data de emissão:<br/>${now}</div>
-  </div>
-  <div class="periodo">Período: ${periodo}</div>
-  ${body}
-</body></html>`);
-
-    printWindow.document.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
-  }, [mapaData, mapaDateFrom, mapaDateTo, user]);
-
-  const exportMapaCSV = useCallback(() => {
-    if (mapaData.length === 0) return;
-    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
-    const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
-      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
-      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
-      r.cid,
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mapa-atendimentos-${mapaDateFrom}-a-${mapaDateTo}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [mapaData, mapaDateFrom, mapaDateTo]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
@@ -1277,40 +972,38 @@ ${dataRows}
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
-            <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
+          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-primary" /> Relatórios
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+          <p className="text-muted-foreground text-sm">
             {stats.total} agendamentos · {stats.atendimentosRealizados} atendimentos realizados
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
+          <span className="text-xs flex items-center gap-1 mr-2 text-muted-foreground">
             <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
           </span>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="rounded-xl border p-4" style={{ borderColor: '#DDE3ED', background: '#FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <div className="rounded-xl border p-4 bg-card shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
+          <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-sm text-foreground">Filtros</span></div>
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">Limpar filtros</Button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <div>
@@ -1366,25 +1059,21 @@ ${dataRows}
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
-          { label: 'Total', value: stats.total, color: '#1B3A5C' },
-          { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
-          { label: 'Pendentes', value: stats.pendentes, color: '#C17B1A' },
-          { label: 'Faltas', value: stats.faltas, color: '#B83232' },
-          { label: 'Cancelados', value: stats.cancelados, color: '#6B7280' },
-          { label: 'Remarcados', value: stats.remarcados, color: '#C17B1A' },
-          { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
-          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
-          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
-          { label: 'Atend. Realizados', value: stats.atendimentosRealizados, color: '#2D7A4F' },
+          { label: 'Total', value: stats.total, color: 'text-primary' },
+          { label: 'Concluídos', value: stats.concluidos, color: 'text-success' },
+          { label: 'Pendentes', value: stats.pendentes, color: 'text-warning' },
+          { label: 'Faltas', value: stats.faltas, color: 'text-destructive' },
+          { label: 'Cancelados', value: stats.cancelados, color: 'text-muted-foreground' },
+          { label: 'Remarcados', value: stats.remarcados, color: 'text-warning' },
+          { label: 'Retornos', value: stats.retornos, color: 'text-primary' },
+          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: 'text-info' },
+          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: 'text-success' },
+          { label: 'Atend. Realizados', value: stats.atendimentosRealizados, color: 'text-success' },
         ].map(s => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border/60 bg-card text-center px-2 py-3 shadow-sm"
-          >
-            <p className="text-lg font-bold font-display leading-none" style={{ color: s.color }}>{s.value}</p>
+          <div key={s.label} className="rounded-xl border bg-card text-center px-2 py-3 shadow-sm">
+            <p className={`text-lg font-bold font-display leading-none ${s.color}`}>{s.value}</p>
             <p className="text-[9px] uppercase tracking-wider mt-1 text-muted-foreground truncate">{s.label}</p>
           </div>
         ))}
@@ -1396,7 +1085,7 @@ ${dataRows}
             <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-xl border animate-in fade-in zoom-in duration-300">
               <RefreshCw className="w-10 h-10 animate-spin text-primary" />
               <div className="text-center">
-                <p className="font-bold text-lg" style={{ color: '#1B3A5C' }}>Buscando dados...</p>
+                <p className="font-bold text-lg text-primary">Buscando dados...</p>
                 <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos para relatórios grandes.</p>
               </div>
             </div>
@@ -1404,1202 +1093,353 @@ ${dataRows}
         )}
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
-          {[
-            { value: 'geral', label: 'Geral' },
-            { value: 'produtividade', label: 'Produtividade' },
-            { value: 'procedimentos', label: 'Procedimentos' },
-            { value: 'faltas', label: 'Faltas' },
-            { value: 'pacientes', label: 'Pacientes' },
-            { value: 'fila', label: 'Fila de Espera' },
-            { value: 'triagem', label: 'Triagem' },
-            { value: 'enfermagem', label: 'Enfermagem' },
-            { value: 'multiprofissional', label: 'Multiprofissional' },
-            { value: 'pts_report', label: 'PTS' },
-            { value: 'tratamentos', label: 'Tratamentos' },
-            { value: 'detalhado', label: 'Detalhado' },
-            { value: 'mapa', label: '📍 Mapa Atendimento' },
-          ].map(tab => (
-            <button
-              key={tab.value}
-              onClick={() => setActiveTab(tab.value)}
-              className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
-              style={{
-                color: activeTab === tab.value ? '#1B3A5C' : '#6B7280',
-                borderBottomColor: activeTab === tab.value ? '#2E8B8B' : 'transparent',
-                fontWeight: activeTab === tab.value ? 600 : 500,
-              }}
+          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
+            {[
+              { value: 'geral', label: 'Geral' },
+              { value: 'produtividade', label: 'Produtividade' },
+              { value: 'procedimentos', label: 'Procedimentos' },
+              { value: 'faltas', label: 'Faltas' },
+              { value: 'pacientes', label: 'Pacientes' },
+              { value: 'fila', label: 'Fila de Espera' },
+              { value: 'triagem', label: 'Triagem' },
+              { value: 'enfermagem', label: 'Enfermagem' },
+              { value: 'multiprofissional', label: 'Multiprofissional' },
+              { value: 'pts_report', label: 'PTS' },
+              { value: 'tratamentos', label: 'Tratamentos' },
+              { value: 'detalhado', label: 'Detalhado' },
+            ].map(tab => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <TabsContent value="geral" className="space-y-5 mt-4">
+            <ChartCard
+              title="Atendimentos por Período"
+              actions={
+                <div className="flex gap-1">
+                  {(['dia', 'semana', 'mes'] as const).map(g => (
+                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                    </Button>
+                  ))}
+                </div>
+              }
             >
-              {tab.label}
-            </button>
-          ))}
-        </TabsList>
-
-        {/* === GERAL === */}
-        <TabsContent value="geral" className="space-y-5 mt-4">
-          <ChartCard
-            title="Atendimentos por Período"
-            actions={
-              <div className="flex gap-1">
-                {(['dia', 'semana', 'mes'] as const).map(g => (
-                  <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
-                    {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
-                  </Button>
-                ))}
-              </div>
-            }
-          >
-            {timelineGrouped.length > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={timelineGrouped}>
-                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
-            )}
-          </ChartCard>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ChartCard title="Horários de Pico">
-              {peakHoursData.some(d => d.total > 0) ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={peakHoursData}>
+              {timelineGrouped.length > 0 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={timelineGrouped}>
                     <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-              )}
-            </ChartCard>
-
-            <ChartCard title="Novos vs Retorno">
-              {novosVsRetorno.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      <Cell fill="#3b82f6" />
-                      <Cell fill="#14b8a6" />
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-              )}
-            </ChartCard>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ChartCard title="Agendamentos por Profissional">
-              <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
-                <BarChart data={porProfissional} layout="vertical">
-                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
-                  <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
-                  <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
-                  <Legend />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            <ChartCard title="Distribuição por Status">
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                    {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartCard>
-
-            {porUnidade.length > 1 && (
-              <ChartCard title="Por Unidade">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={porUnidade}>
-                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
-                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
-                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            )}
-
-            <Card className="group relative rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4">Origem dos Agendamentos</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-accent rounded-xl">
-                    <p className="text-2xl font-bold text-foreground">{stats.online}</p>
-                    <p className="text-sm text-muted-foreground">Online</p>
-                    <p className="text-xs text-muted-foreground">{stats.total > 0 ? Math.round((stats.online / stats.total) * 100) : 0}%</p>
-                  </div>
-                  <div className="text-center p-4 bg-muted rounded-xl">
-                    <p className="text-2xl font-bold text-foreground">{stats.recepcao}</p>
-                    <p className="text-sm text-muted-foreground">Recepção</p>
-                    <p className="text-xs text-muted-foreground">{stats.total > 0 ? Math.round((stats.recepcao / stats.total) * 100) : 0}%</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* === PRODUTIVIDADE === */}
-        <TabsContent value="produtividade" className="space-y-5 mt-4">
-          {/* Category cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
-            {categoriaCards.map(c => {
-              const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
-              const isActive = filterCargoProd === c.key;
-              const catDef = CATEGORIAS.find(cat => cat.key === c.key);
-              const IconComp = catDef?.icon || Stethoscope;
-              const bgLight = catDef?.bgLight || '#F8FAFC';
-              return (
-                <div
-                  key={c.key}
-                  className="cursor-pointer rounded-xl border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
-                  style={{
-                    borderColor: isActive ? c.cor : 'hsl(var(--border))',
-                    borderLeftWidth: 4,
-                    borderLeftColor: c.cor,
-                    padding: '16px 18px',
-                    background: isActive ? bgLight : 'hsl(var(--card))',
-                    boxShadow: isActive ? `0 4px 16px ${c.cor}30` : '0 1px 4px rgba(0,0,0,0.05)',
-                  }}
-                  onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
-                >
-                  <div className="flex items-center gap-2.5 mb-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: `${c.cor}15` }}>
-                      <IconComp className="w-[18px] h-[18px]" style={{ color: c.cor }} />
-                    </div>
-                    <span className="text-xs uppercase tracking-wider font-semibold font-display text-muted-foreground leading-tight">{c.label}</span>
-                  </div>
-                  <div className="flex items-baseline gap-4">
-                    <div>
-                      <p className="text-3xl font-bold font-display leading-none" style={{ color: 'hsl(var(--foreground))' }}>{c.total}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
-                    </div>
-                    <div>
-                      <p className="text-lg font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Concluídos</p>
-                    </div>
-                  </div>
-                  <div className="mt-2.5">
-                    <div className="w-full overflow-hidden rounded-full" style={{ height: 4, background: 'hsl(var(--muted))' }}>
-                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 9999, transition: 'width 0.3s' }} />
-                    </div>
-                    <p className="text-right mt-0.5 text-[11px] text-muted-foreground">{taxa}%</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Card className="group rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
-            <CardContent className="p-5">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
-                    <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os perfis</SelectItem>
-                      <SelectItem value="profissional">Profissional</SelectItem>
-                      <SelectItem value="coordenador">Coordenador</SelectItem>
-                      <SelectItem value="master">Master</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant={prodViewMode === 'tabela' ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}
-                  >
-                    {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    const now = new Date().toLocaleString('pt-BR');
-                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
-                    const prodRows = porProfissional.map(p => {
-                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
-                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
-                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
-                    }).join('');
-                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) return;
-                    const logoUrl = logoSmsFallback;
-                    const logoUrlRight = logoCerFallback;
-                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
-<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
-.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
-.header img{max-height:48px;max-width:90px;object-fit:contain;}
-.header h1{font-size:13px;font-weight:700;}
-.header .sub{font-size:10px;color:#555;margin-top:1px;}
-.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
-th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:9px;}
-th{background:#f1f5f9;font-weight:600;}
-@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
-<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
-</body></html>`);
-                    printWindow.document.close();
-                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
-                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
-                </div>
-              </div>
-
-              {prodViewMode === 'tabela' ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr style={{ background: '#F4F6FA' }}>
-                        <th className="text-left py-3 px-4 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Profissional</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Total</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Concluídos</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Faltas</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Cancelados</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Remarcados</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Retornos</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Tempo Médio</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Conclusão</th>
-                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Retorno</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {porProfissional.map((p, idx) => {
-                        const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
-                        const catBadge = catMatch
-                          ? { label: catMatch.label, cor: catMatch.cor }
-                          : { label: 'Outros', cor: '#888' };
-                        const taxaConcStyle = p.taxaConclusao >= 70
-                          ? { background: '#ECFDF5', color: '#2D7A4F' }
-                          : p.taxaConclusao >= 40
-                          ? { background: '#FFFBEB', color: '#C17B1A' }
-                          : { background: '#FEF2F2', color: '#B83232' };
-                        const taxaRetStyle = p.taxaRetorno > 30
-                          ? { background: '#EEF2F7', color: '#1B3A5C' }
-                          : {};
-                        return (
-                          <tr
-                            key={p.id || p.nome}
-                            className="border-b last:border-0 transition-colors"
-                            style={{ background: idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#EEF2F7')}
-                            onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF')}
-                          >
-                            <td className="py-3 px-4 font-medium" style={{ color: '#1B3A5C' }}>
-                              <div className="flex items-center gap-2">
-                                {p.nome}
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-center font-semibold" style={{ color: '#1B3A5C' }}>{p.total}</td>
-                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2D7A4F' }}>{p.concluidos}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{p.faltas}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{p.cancelados}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{p.remarcados}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{p.retornos}</td>
-                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2E8B8B' }}>{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
-                            <td className="py-3 px-2 text-center">
-                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcStyle, borderRadius: 20 }}>{p.taxaConclusao}%</span>
-                            </td>
-                            <td className="py-3 px-2 text-center">
-                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaRetStyle, borderRadius: 20, color: taxaRetStyle.color || '#6B7280' }}>{p.taxaRetorno}%</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8" style={{ color: '#6B7280' }}>Nenhum dado encontrado para o período selecionado</td></tr>}
-                    </tbody>
-                    {porProfissional.length > 0 && (() => {
-                      const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
-                      const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
-                      const taxaConcGeralStyle = taxaConcGeral >= 70
-                        ? { background: '#ECFDF5', color: '#2D7A4F' }
-                        : taxaConcGeral >= 40
-                        ? { background: '#FFFBEB', color: '#C17B1A' }
-                        : { background: '#FEF2F2', color: '#B83232' };
-                      return (
-                        <tfoot>
-                          <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
-                            <td className="py-3 px-4" style={{ color: '#1B3A5C' }}>TOTAL GERAL</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.total}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#2D7A4F' }}>{prodTotals.concluidos}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{prodTotals.faltas}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{prodTotals.cancelados}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{prodTotals.remarcados}</td>
-                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.retornos}</td>
-                            <td className="py-3 px-2 text-center">-</td>
-                            <td className="py-3 px-2 text-center">
-                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcGeralStyle, borderRadius: 20 }}>{taxaConcGeral}%</span>
-                            </td>
-                            <td className="py-3 px-2 text-center">
-                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: '#6B7280', borderRadius: 20 }}>{taxaRetGeral}%</span>
-                            </td>
-                          </tr>
-                        </tfoot>
-                      );
-                    })()}
-                  </table>
-                </div>
-              ) : (
-                <div>
-                  {prodChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={Math.max(300, prodChartData.length * 45)}>
-                      <BarChart data={prodChartData} layout="vertical" margin={{ left: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                        <XAxis type="number" tick={{ fontSize: 10 }} />
-                        <YAxis dataKey="nome" type="category" width={140} tick={{ fontSize: 10 }} />
-                        <Tooltip content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0]?.payload;
-                          return (
-                            <div className="bg-background border border-border p-2 rounded shadow text-xs">
-                              <p className="font-semibold mb-1">{d?.nomeCompleto}</p>
-                              {payload.map((p: any) => (
-                                <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
-                              ))}
-                            </div>
-                          );
-                        }} />
-                        <Legend />
-                        <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
-                        <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
-                        <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
-                        <Bar dataKey="remarcados" name="Remarcados" stackId="a" fill="hsl(45,93%,47%)" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Gráfico — Evolução Mensal */}
-          <ChartCard title="Evolução Mensal">
-            {evolucaoMensal.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={evolucaoMensal}>
-                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="total" name="Atendimentos" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-            )}
-          </ChartCard>
-
-          {/* Ranking + Tendência */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <ChartCard title="Ranking de Produtividade (Top 5)">
-              {rankingProdutividade.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={rankingProdutividade.slice(0, 5)} layout="vertical" margin={{ left: 10 }}>
-                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="nome" type="category" width={130} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="total" name="Concluídos" fill="#14b8a6" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-              )}
-            </ChartCard>
-
-            <ChartCard title="Tendência de Concluídos (Últimos 6 meses)">
-              {evolucaoMensal.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={evolucaoMensal.slice(-6)}>
-                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="total" name="Concluídos" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} />
+                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
               )}
             </ChartCard>
-          </div>
-        </TabsContent>
 
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <ChartCard title="Horários de Pico">
+                {peakHoursData.some(d => d.total > 0) ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={peakHoursData}>
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                )}
+              </ChartCard>
 
-        {/* === FALTAS === */}
-        <TabsContent value="faltas" className="space-y-5 mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{stats.faltas}</p><p className="text-xs text-muted-foreground">Total de Faltas</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{faltasReport.length}</p><p className="text-xs text-muted-foreground">Pacientes com Faltas</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{stats.taxaFalta}%</p><p className="text-xs text-muted-foreground">Taxa de Faltas</p></CardContent></Card>
-          </div>
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Faltas por Paciente</h3>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => exportCSV('faltas')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">E-mail</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Telefone</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Profissional</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Unidade</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Datas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {faltasReport.map((f) => (
-                      <tr key={`falta-${f.nome}-${f.profissional}`} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-3 text-foreground font-medium">{f.nome}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.email || '-'}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.telefone || '-'}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground">{f.profissional}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground">{f.unidade}</td>
-                        <td className="py-2.5 px-2 text-center"><Badge variant="destructive">{f.total}</Badge></td>
-                        <td className="py-2.5 px-2 text-xs text-muted-foreground">{f.datas.join(', ')}</td>
-                      </tr>
-                    ))}
-                    {faltasReport.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma falta registrada no período</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+              <ChartCard title="Novos vs Retorno">
+                {novosVsRetorno.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        <Cell fill="#3b82f6" />
+                        <Cell fill="#14b8a6" />
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                )}
+              </ChartCard>
+            </div>
+          </TabsContent>
 
-          {/* Gráfico 6 — Faltas por Unidade */}
-          {faltasPorUnidade.length > 0 && (
+          <TabsContent value="produtividade" className="space-y-5 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
+              {categoriaCards.map(c => {
+                const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
+                const isActive = filterCargoProd === c.key;
+                const catDef = CATEGORIAS.find(cat => cat.key === c.key);
+                const IconComp = catDef?.icon || Stethoscope;
+                return (
+                  <div
+                    key={c.key}
+                    className={cn("cursor-pointer rounded-xl border p-4 transition-all hover:shadow-md", isActive ? "border-primary bg-primary/5" : "bg-card")}
+                    onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
+                  >
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center bg-muted">
+                        <IconComp className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">{c.label}</span>
+                    </div>
+                    <div className="flex items-baseline gap-4">
+                      <div><p className="text-2xl font-bold">{c.total}</p><p className="text-[10px] text-muted-foreground">Total</p></div>
+                      <div><p className="text-lg font-bold text-success">{c.concluidos}</p><p className="text-[10px] text-muted-foreground">Concluídos</p></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Faltas por Unidade</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie data={faltasPorUnidade} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={true}>
-                      {faltasPorUnidade.map((entry, i) => <Cell key={`unidade-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip formatter={(value: number) => [`${value} faltas`, 'Total']} />
-                    <Legend />
-                  </PieChart>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-foreground">Produtividade por Profissional</h3>
+                  <Button size="sm" variant="outline" onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}>
+                    {prodViewMode === 'tabela' ? 'Ver Gráfico' : 'Ver Tabela'}
+                  </Button>
+                </div>
+                {prodViewMode === 'tabela' ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left py-2 px-3">Profissional</th>
+                          <th className="text-center py-2 px-2">Total</th>
+                          <th className="text-center py-2 px-2">Concluídos</th>
+                          <th className="text-center py-2 px-2">Faltas</th>
+                          <th className="text-center py-2 px-2">Taxa Conclusão</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {porProfissional.map(p => (
+                          <tr key={p.id} className="border-b hover:bg-muted/30">
+                            <td className="py-2 px-3">{p.nome}</td>
+                            <td className="py-2 px-2 text-center">{p.total}</td>
+                            <td className="py-2 px-2 text-center text-success">{p.concluidos}</td>
+                            <td className="py-2 px-2 text-center text-destructive">{p.faltas}</td>
+                            <td className="py-2 px-2 text-center">{p.taxaConclusao}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={prodChartData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="nome" type="category" width={150} />
+                      <Tooltip />
+                      <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                      <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="procedimentos" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Procedimentos Mais Realizados</h3>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={procedimentoStats.byProcedure.slice(0, 15)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="nome" type="category" width={200} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="#3b82f6" />
+                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
+          </TabsContent>
 
-        {/* === PACIENTES === */}
-        <TabsContent value="pacientes" className="space-y-5 mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-info">{stats.primeiraConsulta}</p><p className="text-xs text-muted-foreground">Primeira Consulta</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0}</p><p className="text-xs text-muted-foreground">Agend./Paciente</p></CardContent></Card>
-          </div>
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">E-mail</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Telefone</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Agendamentos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Última Consulta</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pacientesReport.slice(0, 100).map(p => (
-                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-3 text-foreground font-medium">{p.nome}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.email || '-'}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.telefone || '-'}</td>
-                        <td className="py-2.5 px-2 text-center font-semibold">{p.totalAgendamentos}</td>
-                        <td className="py-2.5 px-2 text-center text-success">{p.concluidos}</td>
-                        <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
-                        <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground">{p.ultimaConsulta}</td>
-                      </tr>
-                    ))}
-                    {pacientesReport.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum paciente encontrado</td></tr>}
-                  </tbody>
-                </table>
-                {pacientesReport.length > 100 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 100 de {pacientesReport.length} — exporte para ver todos</p>}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === FILA DE ESPERA === */}
-        <TabsContent value="fila" className="space-y-5 mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{filaReport.total}</p><p className="text-xs text-muted-foreground">Total na Fila</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-warning">{filaReport.aguardando}</p><p className="text-xs text-muted-foreground">Aguardando</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-success">{filaReport.chamados}</p><p className="text-xs text-muted-foreground">Chamados / Atendidos</p></CardContent></Card>
-            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{filaReport.desistencias}</p><p className="text-xs text-muted-foreground">Desistências</p></CardContent></Card>
-          </div>
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground flex items-center gap-2 mb-4"><ListOrdered className="w-5 h-5 text-primary" /> Registros da Fila</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">#</th>
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Setor</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Prioridade</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Status</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Chegada</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Chamada</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filaReport.items.map(f => (
-                      <tr key={f.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2.5 px-2 text-center text-muted-foreground">{f.posicao}</td>
-                        <td className="py-2.5 px-3 text-foreground font-medium">{f.paciente_nome}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground">{f.setor || '-'}</td>
-                        <td className="py-2.5 px-2">
-                          <Badge variant={f.prioridade === 'urgente' ? 'destructive' : f.prioridade === 'alta' ? 'default' : 'secondary'} className="text-xs">{f.prioridade_perfil || f.prioridade}</Badge>
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <Badge variant={f.status === 'aguardando' ? 'outline' : f.status === 'atendido' ? 'default' : 'secondary'} className="text-xs">{f.status}</Badge>
-                        </td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.hora_chegada}</td>
-                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.hora_chamada || '-'}</td>
-                      </tr>
-                    ))}
-                    {filaReport.items.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum registro na fila</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === TRIAGEM === */}
-        <TabsContent value="triagem" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <TabsContent value="faltas" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{triagemReport.total}</p>
-                <p className="text-xs text-muted-foreground">Total Triagens</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-success">{triagemReport.confirmadas}</p>
-                <p className="text-xs text-muted-foreground">Confirmadas</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-warning">{triagemReport.pendentes}</p>
-                <p className="text-xs text-muted-foreground">Pendentes/Rascunho</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-info">{tecnicos.length}</p>
-                <p className="text-xs text-muted-foreground">Técnicos Ativos</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
-                <HeartPulse className="w-5 h-5 text-primary" /> Produtividade por Técnico de Enfermagem
-              </h3>
-              {triagemReport.porTecnico.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">Nenhum registro de triagem encontrado no período.</p>
-              ) : (
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Faltas por Paciente</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Técnico(a)</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Confirmadas</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pendentes</th>
-                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
+                        <th className="text-left py-2 px-3">Paciente</th>
+                        <th className="text-center py-2 px-2">Total Faltas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {faltasReport.map(f => (
+                        <tr key={f.nome} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{f.nome}</td>
+                          <td className="py-2 px-2 text-center font-bold text-destructive">{f.total}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pacientes" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Pacientes Atendidos</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Paciente</th>
+                        <th className="text-center py-2 px-2">Total Agendamentos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pacientesReport.slice(0, 50).map(p => (
+                        <tr key={p.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{p.nome}</td>
+                          <td className="py-2 px-2 text-center font-bold">{p.totalAgendamentos}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="fila" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Fila de Espera</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Paciente</th>
+                        <th className="text-left py-2 px-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filaReport.items.map(f => (
+                        <tr key={f.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{f.paciente_nome}</td>
+                          <td className="py-2 px-2">{f.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="triagem" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Triagens por Técnico</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Técnico</th>
+                        <th className="text-center py-2 px-2">Total</th>
                       </tr>
                     </thead>
                     <tbody>
                       {triagemReport.porTecnico.map(t => (
-                        <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2.5 px-3 font-medium text-foreground">{t.nome}</td>
-                          <td className="text-center py-2.5 px-2 text-foreground font-semibold">{t.total}</td>
-                          <td className="text-center py-2.5 px-2 text-success font-medium">{t.confirmadas}</td>
-                          <td className="text-center py-2.5 px-2 text-warning font-medium">{t.pendentes}</td>
-                          <td className="text-center py-2.5 px-2">
-                            <Badge variant="outline" className="text-xs">
-                              {t.total > 0 ? Math.round((t.confirmadas / t.total) * 100) : 0}%
-                            </Badge>
-                          </td>
+                        <tr key={t.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{t.nome}</td>
+                          <td className="py-2 px-2 text-center font-bold">{t.total}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          {triagemReport.porTecnico.length > 0 && (
+          <TabsContent value="enfermagem" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 text-center text-muted-foreground">
+                Dados de Enfermagem indisponíveis no momento.
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="multiprofissional" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 text-center text-muted-foreground">
+                Dados Multiprofissionais indisponíveis no momento.
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pts_report" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 text-center text-muted-foreground">
+                Dados de PTS indisponíveis no momento.
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="tratamentos" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5 text-center text-muted-foreground">
+                Dados de Tratamentos indisponíveis no momento.
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="detalhado" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Triagens por Técnico</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={triagemReport.porTecnico}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
-                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="confirmadas" name="Confirmadas" fill="hsl(152,60%,42%)" />
-                    <Bar dataKey="pendentes" name="Pendentes" fill="hsl(45,93%,47%)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* === DETALHADO === */}
-        <TabsContent value="detalhado" className="space-y-5 mt-4">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Data</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Hora</th>
-                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Profissional</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Unidade</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Tipo</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Status</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Origem</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Início</th>
-                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Fim</th>
-                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Duração</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.slice(0, 200).map(a => {
-                      const un = unidades.find(u => u.id === a.unidadeId);
-                      const at = atendimentosDB.find(at => at.agendamento_id === a.id);
-                      return (
-                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2 px-2 text-foreground">{a.data}</td>
-                          <td className="py-2 px-2 text-foreground">{a.hora}</td>
-                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
-                          <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
-                          <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
-                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
-                          <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_inicio || '-'}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_fim || '-'}</td>
-                          <td className="py-2 px-2 text-center text-primary font-medium">{at?.duracao_minutos ? `${at.duracao_minutos}min` : '-'}</td>
-                        </tr>
-                      );
-                    })}
-                    {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
-                  </tbody>
-                </table>
-                {filtered.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {filtered.length} — exporte para ver todos</p>}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* === PROCEDIMENTOS === */}
-        <TabsContent value="procedimentos" className="space-y-5 mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-primary">{procedimentoStats.total}</p>
-                <p className="text-xs text-muted-foreground">Total de Procedimentos</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-success">{procedimentoStats.byProcedure.length}</p>
-                <p className="text-xs text-muted-foreground">Tipos Diferentes</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-info">{procedimentoStats.byProfessional.length}</p>
-                <p className="text-xs text-muted-foreground">Profissionais</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Ranking by procedure */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos Mais Realizados</h3>
-              {procedimentoStats.byProcedure.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum procedimento registrado no período.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={Math.max(200, procedimentoStats.byProcedure.length * 35)}>
-                  <BarChart data={procedimentoStats.byProcedure.slice(0, 15)} layout="vertical" margin={{ left: 120 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={110} />
-                    <Tooltip />
-                    <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* By professional */}
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Profissional</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead><tr className="border-b">
-                    <th className="text-left py-2 px-2 text-xs text-muted-foreground">Profissional</th>
-                    <th className="text-center py-2 px-2 text-xs text-muted-foreground">Total</th>
-                  </tr></thead>
-                  <tbody>
-                    {procedimentoStats.byProfessional.map(p => (
-                      <tr key={p.nome} className="border-b border-border/50">
-                        <td className="py-2 px-2">{p.nome}</td>
-                        <td className="py-2 px-2 text-center font-semibold text-primary">{p.total}</td>
-                      </tr>
-                    ))}
-                    {procedimentoStats.byProfessional.length === 0 && (
-                      <tr><td colSpan={2} className="text-center py-4 text-muted-foreground">Sem dados</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* By unit */}
-          {procedimentoStats.byUnit.length > 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Unidade</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie data={procedimentoStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
-                      {procedimentoStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* === TRATAMENTOS === */}
-        <TabsContent value="tratamentos" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-            {[
-              { label: 'Total Ciclos', value: treatmentStats.total, color: 'text-foreground' },
-              { label: 'Ativos', value: treatmentStats.ativos, color: 'text-success' },
-              { label: 'Finalizados', value: treatmentStats.finalizados, color: 'text-muted-foreground' },
-              { label: 'Suspensos', value: treatmentStats.suspensos, color: 'text-destructive' },
-              { label: 'Méd. Sessões/Pac.', value: treatmentStats.avgSessoesPorPaciente, color: 'text-primary' },
-              { label: 'Taxa Abandono', value: `${treatmentStats.taxaAbandono}%`, color: 'text-warning' },
-            ].map(s => (
-              <Card key={s.label} className="shadow-card border-0">
-                <CardContent className="p-2.5 text-center">
-                  <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { label: 'Total Sessões', value: treatmentStats.totalSessions },
-              { label: 'Realizadas', value: treatmentStats.sessRealizadas },
-              { label: 'Faltas', value: treatmentStats.sessFaltas },
-              { label: 'Canceladas', value: treatmentStats.sessCanceladas },
-            ].map(s => (
-              <Card key={s.label} className="shadow-card border-0">
-                <CardContent className="p-2.5 text-center">
-                  <p className="text-lg font-bold text-foreground">{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {treatmentStats.byType.length > 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Tipo</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={treatmentStats.byType} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="nome" width={150} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {treatmentStats.byProfessional.length > 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Profissional</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b">
-                      <th className="text-left py-2 px-2">Profissional</th>
-                      <th className="text-center py-2 px-2">Ativos</th>
-                      <th className="text-center py-2 px-2">Finalizados</th>
-                      <th className="text-center py-2 px-2">Sessões</th>
-                    </tr></thead>
-                    <tbody>
-                      {treatmentStats.byProfessional.map((p, i) => (
-                        <tr key={i} className="border-b last:border-0">
-                          <td className="py-2 px-2 font-medium">{p.nome}</td>
-                          <td className="py-2 px-2 text-center text-success">{p.ativos}</td>
-                          <td className="py-2 px-2 text-center text-muted-foreground">{p.finalizados}</td>
-                          <td className="py-2 px-2 text-center font-bold">{p.sessoes}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {treatmentStats.byUnit.length > 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Unidade</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie data={treatmentStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
-                      {treatmentStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* === ENFERMAGEM === */}
-        <TabsContent value="enfermagem" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'Total Avaliações', value: nursingReport.total },
-              { label: 'Aptos', value: nursingReport.aptos },
-              { label: 'Inaptos', value: nursingReport.inaptos },
-              { label: 'Multiprofissional', value: nursingReport.multiprof },
-            ].map(s => (
-              <Card key={s.label} className="shadow-card border-0">
-                <CardContent className="p-2.5 text-center">
-                  <p className="text-lg font-bold text-foreground">{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {nursingReport.byPriority.length > 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold font-display text-foreground mb-4">Avaliações por Prioridade</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie data={nursingReport.byPriority} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
-                      {nursingReport.byPriority.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* === MULTIPROFISSIONAL === */}
-        <TabsContent value="multiprofissional" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-2.5 text-center">
-                <p className="text-lg font-bold text-foreground">{multiReport.total}</p>
-                <p className="text-[10px] text-muted-foreground">Total Avaliações</p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {multiReport.bySpecialty.length > 0 && (
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5">
-                  <h3 className="font-semibold font-display text-foreground mb-4">Por Especialidade</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={multiReport.bySpecialty}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="total" fill="hsl(262, 83%, 58%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-            {multiReport.byParecer.length > 0 && (
-              <Card className="shadow-card border-0">
-                <CardContent className="p-5">
-                  <h3 className="font-semibold font-display text-foreground mb-4">Por Parecer</h3>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie data={multiReport.byParecer} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
-                        {multiReport.byParecer.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        {/* === PTS === */}
-        <TabsContent value="pts_report" className="space-y-5 mt-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              { label: 'Total PTS', value: ptsReport.total },
-              { label: 'Ativos', value: ptsReport.ativos },
-              { label: 'Concluídos', value: ptsReport.concluidos },
-            ].map(s => (
-              <Card key={s.label} className="shadow-card border-0">
-                <CardContent className="p-2.5 text-center">
-                  <p className="text-lg font-bold text-foreground">{s.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {ptsReport.total === 0 && (
-            <Card className="shadow-card border-0">
-              <CardContent className="p-8 text-center text-muted-foreground">
-                Nenhum PTS registrado no período selecionado.
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* === MAPA DE ATENDIMENTO === */}
-        <TabsContent value="mapa" className="space-y-5 mt-4">
-          <Card className="shadow-card border-0">
-            <CardContent className="p-5">
-              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" /> Mapa de Atendimentos Concluídos
-              </h3>
-              <div className="flex flex-wrap items-end gap-3 mb-4">
-                <div>
-                  <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
-                </div>
-                <div>
-                  <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
-                </div>
-                <div>
-                  <Label className="text-xs">Profissional</Label>
-                  <Select value={mapaProf} onValueChange={v => { setMapaProf(v); setMapaGenerated(false); }}>
-                    <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {[...profissionais, ...tecnicos]
-                        .sort((a, b) => a.nome.localeCompare(b.nome))
-                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
-                  <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
-                  <FileText className="w-4 h-4 mr-1" />PDF
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
-                  <Download className="w-4 h-4 mr-1" />CSV
-                </Button>
-                <Button variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" onClick={() => {
-                  const now = new Date().toLocaleString('pt-BR');
-                  const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
-                  const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                  const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
-                  const tableRows = mapaData.map((r, i) => {
-                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
-                  }).join('');
-                  const printWindow = window.open('', '_blank');
-                  if (!printWindow) return;
-                  const logoUrl = logoSmsFallback;
-                  const logoUrlRight = logoCerFallback;
-                  printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
-<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
-.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
-.header img{max-height:48px;max-width:90px;object-fit:contain;}
-.header h1{font-size:13px;font-weight:700;}
-.header .sub{font-size:10px;color:#555;margin-top:1px;}
-.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
-th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
-th{background:#f1f5f9;font-weight:600;}
-@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
-<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
-</body></html>`);
-                  printWindow.document.close();
-                  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
-                }}>
-                  <Printer className="w-4 h-4 mr-1" />Imprimir
-                </Button>
-              </div>
-
-              {mapaGenerated && mapaData.length === 0 && (
-                <p className="text-center text-muted-foreground py-8">Nenhum atendimento concluído encontrado no período selecionado.</p>
-              )}
-
-              {mapaGenerated && mapaData.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-border/60">
-                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
-                  <table className="w-full text-xs border-collapse">
                     <thead>
-                      <tr className="bg-muted/60">
-                        <th className="border border-border px-2 py-1.5 text-center w-8">Nº</th>
-                        <th className="border border-border px-2 py-1.5 text-center w-10">Foto</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
-                        <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
-                        <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
-                        <th className="border border-border px-2 py-1.5 text-left">CNS</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
-                        <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                        <th className="text-left py-2 px-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {mapaData.map((r, i) => {
-                        const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
-                        const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
-                        const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-                        return (
-                          <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                            <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
-                            <td className="border border-border px-2 py-1 text-center">
-                              <div className="relative group inline-block">
-                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white mx-auto" style={{ backgroundColor: hashColor }} title={r.profissional_nome}>
-                                  {initials}
-                                </div>
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-foreground text-background text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                  {r.profissional_nome}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
-                            <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
-                            <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
-                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
-                            <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
-                            <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
-                            <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
-                            <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
-                            <td className="border border-border px-2 py-1">{procSigtap}</td>
-                            <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
-                          </tr>
-                        );
-                      })}
+                      {filtered.slice(0, 100).map(a => (
+                        <tr key={a.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{a.data}</td>
+                          <td className="py-2 px-2">{a.pacienteNome}</td>
+                          <td className="py-2 px-2">{statusLabels[normalizeStatus(a.status)] || a.status}</td>
+                        </tr>
+                      ))}
                     </tbody>
-                    <tfoot>
-                      <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
