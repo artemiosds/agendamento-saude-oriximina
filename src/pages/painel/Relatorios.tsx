@@ -246,9 +246,7 @@ const Relatorios: React.FC = () => {
 
       // 8. Treatment Sessions
       let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
-      if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
-      if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
+      qSessions = applyFilters(qSessions, 'unit_id', 'professional_id', 'scheduled_date');
 
       // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
