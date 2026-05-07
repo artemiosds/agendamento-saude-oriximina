@@ -2259,6 +2259,12 @@ const Agenda: React.FC = () => {
               getAvailableSlots={getAvailableSlots}
               getAvailableDates={getAvailableDates}
               unidades={unidades}
+              onMonthChange={(year, month) => {
+                const start = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+                const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+                const end = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                ensureAgendamentosForRange(start, end);
+              }}
             />
 
             {!isProfissional && showUnitSelector && (
