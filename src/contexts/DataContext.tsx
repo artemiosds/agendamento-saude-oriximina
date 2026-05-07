@@ -274,6 +274,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   funcionariosRef.current = funcionarios;
   const configuracoesRef = useRef(configuracoes);
   configuracoesRef.current = configuracoes;
+  // Tracks already-fetched agendamento date ranges to avoid duplicate network calls
+  const loadedRangesRef = useRef<Set<string>>(new Set());
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
