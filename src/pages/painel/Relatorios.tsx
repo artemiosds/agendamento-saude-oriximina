@@ -209,92 +209,124 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      const MAX_RECORDS = 50000; 
+      // CRITICAL: PostgREST has a hard 1000-row limit per request.
+      // We must paginate via .range() to fetch ALL rows for accurate totals.
+      const PAGE_SIZE = 1000;
+      const fetchAll = async (buildQuery: () => any): Promise<{ data: any[]; count: number }> => {
+        const all: any[] = [];
+        let from = 0;
+        let totalCount = 0;
+        // Loop until we get less than PAGE_SIZE rows back
+        // Safety cap at 100k to prevent runaway
+        for (let i = 0; i < 100; i++) {
+          const q = buildQuery().range(from, from + PAGE_SIZE - 1);
+          const { data, count, error } = await q;
+          if (error) {
+            console.error('fetchAll error:', error);
+            break;
+          }
+          if (typeof count === 'number') totalCount = count;
+          if (!data || data.length === 0) break;
+          all.push(...data);
+          if (data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
+        }
+        return { data: all, count: totalCount || all.length };
+      };
 
-      // 1. Agendamentos - FETCH FULL COUNT AND DATA
-      let qAg = supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }).limit(MAX_RECORDS);
-      qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
+      const buildAg = () => applyFilters(
+        supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }),
+        'unidade_id', 'profissional_id', 'data'
+      );
+      const buildAt = () => applyFilters(
+        supabase.from('atendimentos').select('*').order('data', { ascending: false }),
+        'unidade_id', 'profissional_id', 'data'
+      );
+      const buildFila = () => applyFilters(
+        supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }),
+        'unidade_id', 'profissional_id', 'criado_em'
+      );
+      const buildTriage = () => {
+        let q = supabase.from('triage_records').select('*').order('criado_em', { ascending: false });
+        if (dateFrom) q = q.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+        if (dateTo) q = q.lte('criado_em', `${dateTo}T23:59:59.999Z`);
+        if (user?.role === 'tecnico' && user.id) q = q.eq('tecnico_id', user.id);
+        return q;
+      };
+      const buildProc = () => {
+        let q = supabase.from('prontuario_procedimentos')
+          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
+          .order('criado_em', { ascending: false });
+        if (dateFrom) q = q.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+        if (dateTo) q = q.lte('criado_em', `${dateTo}T23:59:59.999Z`);
+        return q;
+      };
+      const buildPront = () => applyFilters(
+        supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }),
+        'unidade_id', 'profissional_id', 'data_atendimento'
+      );
+      const buildCycles = () => applyFilters(
+        supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }),
+        'unit_id', 'professional_id', 'start_date'
+      );
+      const buildSessions = () => applyFilters(
+        supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }),
+        'unit_id', 'professional_id', 'scheduled_date'
+      );
+      const buildNursing = () => applyFilters(
+        supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }),
+        'unit_id', 'professional_id', 'evaluation_date', false
+      );
+      const buildMulti = () => applyFilters(
+        supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }),
+        'unit_id', 'professional_id', 'evaluation_date', false
+      );
+      const buildPts = () => applyFilters(
+        supabase.from('pts').select('*').order('created_at', { ascending: false }),
+        'unit_id', 'professional_id', 'created_at'
+      );
 
-      // 2. Atendimentos
-      let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
-      qAt = applyFilters(qAt, 'unidade_id', 'profissional_id', 'data');
-
-      // 3. Fila de Espera
-      let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      qFila = applyFilters(qFila, 'unidade_id', 'profissional_id', 'criado_em');
-
-      // 4. Triagem
-      let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
-      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999Z`);
-      if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
-
-      // 5. Procedimentos
-      let qProc = supabase.from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
-        .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
-      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999Z`);
-
-      // 6. Prontuários (Primary source for "Atendimentos Realizados")
-      let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
-      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id', 'data_atendimento');
-
-      // 7. Treatment Cycles
-      let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(MAX_RECORDS);
-      qCycles = applyFilters(qCycles, 'unit_id', 'professional_id', 'start_date');
-
-      // 8. Treatment Sessions
-      let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
-      qSessions = applyFilters(qSessions, 'unit_id', 'professional_id', 'scheduled_date');
-
-      // 9. Nursing Evaluations
-      let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date', false);
-
-      // 10. Multiprofessional Evaluations
-      let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date', false);
-
-      // 11. PTS
-      let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
-      qPts = applyFilters(qPts, 'unit_id', 'professional_id', 'created_at');
-
-      const results = await Promise.all([
-        qAg, qAt, qFila, qTriage, qProc, qPront, qCycles, qSessions, qNursing, qMulti, qPts
+      const [rAg, rAt, rFila, rTriage, rProc, rPront, rCycles, rSessions, rNursing, rMulti, rPts] = await Promise.all([
+        fetchAll(buildAg),
+        fetchAll(buildAt),
+        fetchAll(buildFila),
+        fetchAll(buildTriage),
+        fetchAll(buildProc),
+        fetchAll(buildPront),
+        fetchAll(buildCycles),
+        fetchAll(buildSessions),
+        fetchAll(buildNursing),
+        fetchAll(buildMulti),
+        fetchAll(buildPts),
       ]);
 
-      if (results[0].data) {
-        setAgendamentosDB(results[0].data.map(a => ({
-          ...a,
-          unidadeId: a.unidade_id,
-          profissionalId: a.profissional_id,
-          pacienteId: a.paciente_id,
-          pacienteNome: a.paciente_nome,
-          profissionalNome: a.profissional_nome,
-          setorId: a.setor_id
-        })));
-        setTotalCountAg(results[0].count || results[0].data?.length || 0);
-      }
-      if (results[1].data) setAtendimentosDB(results[1].data);
-      if (results[2].data) setFilaDB(results[2].data);
-      if (results[3].data) setTriagensDB(results[3].data as TriagemDB[]);
-      if (results[4].data) {
-        setProcedimentosDB(results[4].data.map((r: any) => ({
-          prontuario_id: r.prontuario_id,
-          procedimento_id: r.procedimento_id,
-          proc_nome: r.procedimentos?.nome || '',
-          prof_nome: r.prontuarios?.profissional_nome || '',
-          unidade_id: r.prontuarios?.unidade_id || '',
-          data: r.prontuarios?.data_atendimento || '',
-        })));
-      }
-      if (results[5].data) setProntuariosDB(results[5].data);
-      if (results[6].data) setTreatmentCycles(results[6].data);
-      if (results[7].data) setTreatmentSessions(results[7].data);
-      if (results[8].data) setNursingEvals(results[8].data);
-      if (results[9].data) setMultiEvals(results[9].data);
-      if (results[10].data) setPtsData(results[10].data);
+      setAgendamentosDB(rAg.data.map((a: any) => ({
+        ...a,
+        unidadeId: a.unidade_id,
+        profissionalId: a.profissional_id,
+        pacienteId: a.paciente_id,
+        pacienteNome: a.paciente_nome,
+        profissionalNome: a.profissional_nome,
+        setorId: a.setor_id,
+      })));
+      setTotalCountAg(rAg.count || rAg.data.length);
+      setAtendimentosDB(rAt.data);
+      setFilaDB(rFila.data);
+      setTriagensDB(rTriage.data as TriagemDB[]);
+      setProcedimentosDB(rProc.data.map((r: any) => ({
+        prontuario_id: r.prontuario_id,
+        procedimento_id: r.procedimento_id,
+        proc_nome: r.procedimentos?.nome || '',
+        prof_nome: r.prontuarios?.profissional_nome || '',
+        unidade_id: r.prontuarios?.unidade_id || '',
+        data: r.prontuarios?.data_atendimento || '',
+      })));
+      setProntuariosDB(rPront.data);
+      setTreatmentCycles(rCycles.data);
+      setTreatmentSessions(rSessions.data);
+      setNursingEvals(rNursing.data);
+      setMultiEvals(rMulti.data);
+      setPtsData(rPts.data);
       
       setLastUpdated(new Date());
     } catch (err) { 
