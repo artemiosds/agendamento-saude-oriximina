@@ -161,7 +161,11 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
+  const isFetchingRef = useRef(false);
+
   const loadReportData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsLoading(true);
     try {
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data', useZ = true) => {
@@ -182,14 +186,13 @@ const Relatorios: React.FC = () => {
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
-          // Professionals can only see their own data unless they have master permissions
           q = q.eq(profCol, user.id);
         }
 
-        // Filter by Date Range - ENSURE INCLUSIVE DATES
+        // Filter by Date Range - ENSURE INCLUSIVE DATES AND HANDLE TIMEZONES
         if (dateFrom) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00${useZ ? '.000Z' : ''}`);
+            q = q.gte(dateCol, `${dateFrom}T00:00:00.000Z`);
           } else {
             q = q.gte(dateCol, dateFrom);
           }
@@ -197,7 +200,7 @@ const Relatorios: React.FC = () => {
         
         if (dateTo) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59${useZ ? '.999Z' : ''}`);
+            q = q.lte(dateCol, `${dateTo}T23:59:59.999Z`);
           } else {
             q = q.lte(dateCol, dateTo);
           }
@@ -206,7 +209,6 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Ensure we fetch a large enough dataset to reflect reality - Increase MAX_RECORDS
       const MAX_RECORDS = 50000; 
 
       // 1. Agendamentos - FETCH FULL COUNT AND DATA
@@ -301,10 +303,13 @@ const Relatorios: React.FC = () => {
       console.error('Error loading report data:', err); 
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [user, dateFrom, dateTo, filterUnit, filterProf]);
+  }, [user?.id, user?.role, user?.unidadeId, dateFrom, dateTo, filterUnit, filterProf]);
 
-  useEffect(() => { loadReportData(); }, [loadReportData]);
+  useEffect(() => {
+    loadReportData();
+  }, [loadReportData]);
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
