@@ -2137,6 +2137,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
+    ensureAgendamentosForRange,
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
