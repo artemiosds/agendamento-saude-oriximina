@@ -757,9 +757,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Guard: don't load until auth user is resolved to avoid loading unfiltered data
-    if (!authUser) return;
+    if (!authUser?.id) return;
     loadAll();
-  }, [loadAll, authUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.id, authUser?.unidadeId, authUser?.usuario]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
