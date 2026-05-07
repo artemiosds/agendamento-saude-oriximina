@@ -150,7 +150,7 @@ const Relatorios: React.FC = () => {
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id') => {
+      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data') => {
         let q = query;
         if (filterUnit !== 'all') {
           q = q.eq(unitCol, filterUnit);
@@ -160,69 +160,74 @@ const Relatorios: React.FC = () => {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
+        
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
           q = q.eq(profCol, user.id);
         }
+
+        if (dateFrom) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+            q = q.gte(dateCol, `${dateFrom}T00:00:00`);
+          } else {
+            q = q.gte(dateCol, dateFrom);
+          }
+        }
+        
+        if (dateTo) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+            q = q.lte(dateCol, `${dateTo}T23:59:59.999`);
+          } else {
+            q = q.lte(dateCol, dateTo);
+          }
+        }
+
         return q;
       };
 
-      let qAg = supabase.from('agendamentos').select('*').order('data', { ascending: false }).limit(10000);
-      if (dateFrom) qAg = qAg.gte('data', dateFrom);
-      if (dateTo) qAg = qAg.lte('data', dateTo);
-      qAg = applyFilters(qAg, 'unidade_id', 'profissional_id');
+      // Increase limits and ensure all data is fetched correctly
+      const MAX_RECORDS = 50000;
 
-      let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(10000);
-      if (dateFrom) qAt = qAt.gte('data', dateFrom);
-      if (dateTo) qAt = qAt.lte('data', dateTo);
-      qAt = applyFilters(qAt, 'unidade_id', 'profissional_id');
+      let qAg = supabase.from('agendamentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
+      qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
 
-      let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(5000);
-      if (dateFrom) qFila = qFila.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qFila = qFila.lte('criado_em', `${dateTo}T23:59:59`);
-      qFila = applyFilters(qFila, 'unidade_id', 'profissional_id');
+      let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
+      qAt = applyFilters(qAt, 'unidade_id', 'profissional_id', 'data');
 
-      let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(5000);
+      let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
+      qFila = applyFilters(qFila, 'unidade_id', 'profissional_id', 'criado_em');
+
+      let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59`);
+      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
       let qProc = supabase.from('prontuario_procedimentos')
         .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
-        .order('criado_em', { ascending: false }).limit(10000);
+        .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59`);
+      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999`);
 
-      let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(10000);
-      if (dateFrom) qPront = qPront.gte('data_atendimento', dateFrom);
-      if (dateTo) qPront = qPront.lte('data_atendimento', dateTo);
-      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id');
+      let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
+      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id', 'data_atendimento');
 
-      let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(5000);
-      if (dateFrom) qCycles = qCycles.gte('start_date', dateFrom);
-      if (dateTo) qCycles = qCycles.lte('start_date', dateTo);
-      qCycles = applyFilters(qCycles, 'unit_id', 'professional_id');
+      let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(MAX_RECORDS);
+      qCycles = applyFilters(qCycles, 'unit_id', 'professional_id', 'start_date');
 
-      let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(10000);
+      let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
       if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
       if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
 
-      let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(5000);
-      if (dateFrom) qNursing = qNursing.gte('evaluation_date', dateFrom);
-      if (dateTo) qNursing = qNursing.lte('evaluation_date', dateTo);
-      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id');
+      let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
+      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id', 'evaluation_date');
 
-      let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(5000);
-      if (dateFrom) qMulti = qMulti.gte('evaluation_date', dateFrom);
-      if (dateTo) qMulti = qMulti.lte('evaluation_date', dateTo);
-      qMulti = applyFilters(qMulti, 'unit_id', 'id');
+      let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
+      qMulti = applyFilters(qMulti, 'unit_id', 'id', 'evaluation_date');
 
-      let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(5000);
-      if (dateFrom) qPts = qPts.gte('created_at', `${dateFrom}T00:00:00`);
-      if (dateTo) qPts = qPts.lte('created_at', `${dateTo}T23:59:59`);
-      qPts = applyFilters(qPts, 'unit_id', 'professional_id');
+      let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
+      qPts = applyFilters(qPts, 'unit_id', 'professional_id', 'created_at');
 
       const results = await Promise.all([
         qAg, qAt, qFila, qTriage, qProc, qPront, qCycles, qSessions, qNursing, qMulti, qPts
