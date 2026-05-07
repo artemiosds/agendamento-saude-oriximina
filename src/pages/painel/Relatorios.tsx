@@ -1307,8 +1307,20 @@ ${dataRows}
         ))}
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-50 flex items-center justify-center rounded-xl min-h-[400px]">
+            <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-xl border animate-in fade-in zoom-in duration-300">
+              <RefreshCw className="w-10 h-10 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="font-bold text-lg" style={{ color: '#1B3A5C' }}>Buscando dados...</p>
+                <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos para relatórios grandes.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
           {[
             { value: 'geral', label: 'Geral' },
