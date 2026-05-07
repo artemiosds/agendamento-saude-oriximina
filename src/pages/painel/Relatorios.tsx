@@ -306,9 +306,10 @@ const Relatorios: React.FC = () => {
     return agendamentosDB.filter(a => {
       if (filterStatus !== 'all' && normalizeStatus(a.status) !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
+      if (filterSetor !== 'all' && (a.setor_id !== filterSetor && a.tipo !== filterSetor)) return false;
       return true;
     });
-  }, [agendamentosDB, filterStatus, filterTipo]);
+  }, [agendamentosDB, filterStatus, filterTipo, filterSetor]);
 
   const filteredAtendimentos = useMemo(() => {
     return atendimentosDB.filter(a => {
