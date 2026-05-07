@@ -22,9 +22,37 @@ import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
 const statusLabels: Record<string, string> = {
-  pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
-  em_atendimento: 'Em Atendimento', concluido: 'Concluído', falta: 'Falta',
-  cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
+  pendente: 'Pendente', 
+  confirmado: 'Confirmado', 
+  confirmado_chegada: 'Chegou',
+  em_atendimento: 'Em Atendimento', 
+  concluido: 'Concluído', 
+  falta: 'Falta',
+  cancelado: 'Cancelado', 
+  remarcado: 'Remarcado', 
+  atraso: 'Atraso',
+};
+
+const normalizeStatus = (status: string): string => {
+  if (!status) return 'pendente';
+  const s = status.toLowerCase().trim();
+  
+  if (['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'prontuario_finalizado', 'atendimento_finalizado'].includes(s)) {
+    return 'concluido';
+  }
+  if (['falta', 'faltou', 'ausente'].includes(s)) {
+    return 'falta';
+  }
+  if (['cancelado', 'cancelada'].includes(s)) {
+    return 'cancelado';
+  }
+  if (['remarcado', 'reagendado'].includes(s)) {
+    return 'remarcado';
+  }
+  if (['pendente', 'aguardando', 'confirmado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
+    return 'pendente';
+  }
+  return s;
 };
 
 interface AgendamentoDB {
