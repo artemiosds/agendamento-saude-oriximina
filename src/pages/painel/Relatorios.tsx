@@ -377,21 +377,29 @@ const Relatorios: React.FC = () => {
   // === STATS ===
   const stats = useMemo(() => {
     const total = filtered.length;
-    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
-    const pendentes = filtered.filter(a => a.status === 'pendente').length;
-    const concluidos = filtered.filter(a => a.status === 'concluido').length;
-    const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
-    const faltas = filtered.filter(a => a.status === 'falta').length;
-    const cancelados = filtered.filter(a => a.status === 'cancelado').length;
-    const remarcados = filtered.filter(a => a.status === 'remarcado').length;
+    const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
+    const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
+    const concluidos = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
+    const emAtendimento = filtered.filter(a => normalizeStatus(a.status) === 'em_atendimento').length;
+    const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
+    const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
+    const remarcados = filtered.filter(a => normalizeStatus(a.status) === 'remarcado').length;
     const online = filtered.filter(a => a.origem === 'online').length;
     const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
     const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
     const primeiraConsulta = filtered.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
     const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
     const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
-    return { total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, taxaFalta };
-  }, [filtered]);
+    
+    // Atendimentos realizados é a soma de atendimentos concluídos na agenda + prontuários concluídos
+    const atendimentosRealizados = concluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    
+    return { 
+      total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
+      remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
+      taxaFalta, atendimentosRealizados 
+    };
+  }, [filtered, filteredAtendimentos]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
