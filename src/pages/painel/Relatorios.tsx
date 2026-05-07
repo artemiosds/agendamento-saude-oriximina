@@ -181,7 +181,7 @@ const Relatorios: React.FC = () => {
         // Filter by Date Range - ENSURE INCLUSIVE DATES
         if (dateFrom) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00.000Z`);
+            q = q.gte(dateCol, `${dateFrom}T00:00:00${useZ ? '.000Z' : ''}`);
           } else {
             q = q.gte(dateCol, dateFrom);
           }
@@ -189,7 +189,7 @@ const Relatorios: React.FC = () => {
         
         if (dateTo) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59.999Z`);
+            q = q.lte(dateCol, `${dateTo}T23:59:59${useZ ? '.999Z' : ''}`);
           } else {
             q = q.lte(dateCol, dateTo);
           }
