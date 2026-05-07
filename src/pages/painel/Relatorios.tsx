@@ -156,7 +156,7 @@ const Relatorios: React.FC = () => {
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data') => {
+      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data', useZ = true) => {
         let q = query;
         
         // Filter by Unit
