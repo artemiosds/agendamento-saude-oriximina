@@ -952,7 +952,7 @@ const Relatorios: React.FC = () => {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[normalizeStatus(a.status)] || a.status, a.origem];
       });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Pacientes', 'Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Tempo Médio (min)', 'Taxa Conclusão (%)'];
