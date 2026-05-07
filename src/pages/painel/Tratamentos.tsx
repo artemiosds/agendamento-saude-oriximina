@@ -299,18 +299,24 @@ const Tratamentos: React.FC = () => {
   // Tracks which cycle has had its sessions loaded (lazy load)
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
 
+  const userId = user?.id;
+  const userRole = user?.role;
+  const userUnidadeId = user?.unidadeId;
+  const userUsuario = user?.usuario;
+
   const loadData = useCallback(async (silent = false) => {
+    if (!userId) return;
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
-      const isProf = user?.role === "profissional";
-      const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
+      const isProf = userRole === "profissional";
+      const restrictUnit = !!(userUnidadeId && userUsuario !== 'admin.sms');
 
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
-        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
-        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
+        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? userId : null),
+        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? userUnidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
@@ -325,7 +331,7 @@ const Tratamentos: React.FC = () => {
 
       // PTS list (lightweight, scoped by unit)
       let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
-      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
+      if (restrictUnit && userUnidadeId) qPts = qPts.eq("unit_id", userUnidadeId);
       const [{ data: ptsData }, procsData] = await Promise.all([
         qPts,
         procedureService.getActive(),
@@ -338,7 +344,7 @@ const Tratamentos: React.FC = () => {
       if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
     if (!silent) setLoading(false);
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
+  }, [userId, userRole, userUnidadeId, userUsuario, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
