@@ -540,13 +540,30 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = async () => {
     setLoading(true);
     try {
-      // All professionals can VIEW all prontuários — edit is restricted in the UI
-      // Recursive pagination to bypass Supabase's default 1000-row limit
+      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+      // PERF: quando aberto a partir de um paciente específico (Agenda → Prontuário,
+      // Pacientes → Prontuário, etc.), buscamos apenas os prontuários daquele paciente.
+      // Isso reduz de ~2.300 para ~10 registros e elimina a lentidão de abertura.
+      const queryPacienteId = searchParams.get("pacienteId");
+
+      if (queryPacienteId) {
+        let query = (supabase as any)
+          .from("prontuarios")
+          .select("*")
+          .eq("paciente_id", queryPacienteId)
+          .order("data_atendimento", { ascending: false });
+        if (restrictUnit) query = query.eq("unidade_id", user!.unidadeId);
+        const { data, error } = await query;
+        if (error) console.error("Error loading prontuarios:", error);
+        setProntuarios(data || []);
+        setLoading(false);
+        return;
+      }
+
+      // Sem paciente específico (listagem geral): paginação recursiva completa.
       const PAGE_SIZE = 1000;
       const all: any[] = [];
       let fromIdx = 0;
-      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // [PERF] removido count(exact) separado — duplicava latência sem uso funcional
 
       while (true) {
         let query = (supabase as any)
@@ -575,7 +592,7 @@ const ProntuarioPage: React.FC = () => {
 
   useEffect(() => {
     loadProntuarios();
-  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role, searchParams.get("pacienteId")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dialogOpenRef = useRef(false);
   useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
