@@ -361,7 +361,7 @@ const Relatorios: React.FC = () => {
   const filtered = useMemo(() => {
     return agendamentosDB.filter(a => {
       // Basic filters (more are already applied at DB level)
-      if (filterStatus !== 'all' && a.status !== filterStatus) return false;
+      if (filterStatus !== 'all' && normalizeStatus(a.status) !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
       return true;
     });
