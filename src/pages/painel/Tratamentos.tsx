@@ -299,12 +299,18 @@ const Tratamentos: React.FC = () => {
   // Tracks which cycle has had its sessions loaded (lazy load)
   const [loadedSessionsCycleId, setLoadedSessionsCycleId] = useState<string | null>(null);
 
+  const userId = user?.id;
+  const userRole = user?.role;
+  const userUnidadeId = user?.unidadeId;
+  const userUsuario = user?.usuario;
+
   const loadData = useCallback(async (silent = false) => {
+    if (!userId) return;
     if (!silent) setLoading(true);
     try {
       // Server-side paginated cycles via RPC (lightweight, with stats only)
-      const isProf = user?.role === "profissional";
-      const restrictUnit = !!(user?.unidadeId && user?.usuario !== 'admin.sms');
+      const isProf = userRole === "profissional";
+      const restrictUnit = !!(userUnidadeId && userUsuario !== 'admin.sms');
 
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
         p_page: currentPage,
