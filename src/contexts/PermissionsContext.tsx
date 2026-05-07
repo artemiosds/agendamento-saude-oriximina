@@ -209,8 +209,9 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const can = useCallback(
     (modulo: ModuleName, action: string): boolean => {
-      if (loading) return false;
-      if (!permissions) return false;
+      // Durante o primeiríssimo load (sem permissões ainda), libera por padrão
+      // para evitar que guards derrubem a navegação. Após carregar, o filtro real entra em vigor.
+      if (!permissions) return true;
 
       const modPerm = permissions[modulo];
       if (!modPerm) return false;
