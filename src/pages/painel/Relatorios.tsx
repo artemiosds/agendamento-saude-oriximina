@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { cn } from "@/lib/utils";
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
