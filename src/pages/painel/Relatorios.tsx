@@ -367,8 +367,16 @@ const Relatorios: React.FC = () => {
 
       if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
 
-      const { data, error } = await query.limit(10000);
-      if (error) throw error;
+      // Paginate to bypass 1000-row PostgREST limit
+      const PAGE = 1000;
+      const data: any[] = [];
+      for (let i = 0; i < 50; i++) {
+        const { data: page, error } = await query.range(i * PAGE, (i + 1) * PAGE - 1);
+        if (error) throw error;
+        if (!page || page.length === 0) break;
+        data.push(...page);
+        if (page.length < PAGE) break;
+      }
 
       // Enrich with patient data
       const pacIds = Array.from(new Set(data.map(a => a.paciente_id))).filter(Boolean);
