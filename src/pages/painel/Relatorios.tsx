@@ -38,19 +38,24 @@ const normalizeStatus = (status: string): string => {
   if (!status) return 'pendente';
   const s = status.toLowerCase().trim();
   
+  // Concluídos / Realizados
   if (['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'prontuario_finalizado', 'atendimento_finalizado'].includes(s)) {
     return 'concluido';
   }
+  // Faltas
   if (['falta', 'faltou', 'ausente'].includes(s)) {
     return 'falta';
   }
+  // Cancelados
   if (['cancelado', 'cancelada'].includes(s)) {
     return 'cancelado';
   }
+  // Remarcados
   if (['remarcado', 'reagendado'].includes(s)) {
     return 'remarcado';
   }
-  if (['pendente', 'aguardando', 'confirmado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
+  // Pendentes / Em andamento
+  if (['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
     return 'pendente';
   }
   return s;
@@ -152,23 +157,29 @@ const Relatorios: React.FC = () => {
     try {
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data') => {
         let q = query;
+        
+        // Filter by Unit
         if (filterUnit !== 'all') {
           q = q.eq(unitCol, filterUnit);
         } else {
+          // If "All Units" is selected, handle permissions
           const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
           if (!isMasterGlobal && user?.unidadeId) {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
         
+        // Filter by Professional
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
+          // Professionals can only see their own data unless they have master permissions
           q = q.eq(profCol, user.id);
         }
 
+        // Filter by Date Range
         if (dateFrom) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
             q = q.gte(dateCol, `${dateFrom}T00:00:00`);
           } else {
             q = q.gte(dateCol, dateFrom);
@@ -176,7 +187,7 @@ const Relatorios: React.FC = () => {
         }
         
         if (dateTo) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
             q = q.lte(dateCol, `${dateTo}T23:59:59.999`);
           } else {
             q = q.lte(dateCol, dateTo);
@@ -186,46 +197,57 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Increase limits and ensure all data is fetched correctly
-      const MAX_RECORDS = 50000;
+      // Ensure we fetch a large enough dataset to reflect reality
+      const MAX_RECORDS = 100000;
 
-      let qAg = supabase.from('agendamentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
+      // 1. Agendamentos
+      let qAg = supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }).limit(MAX_RECORDS);
       qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
 
+      // 2. Atendimentos
       let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
       qAt = applyFilters(qAt, 'unidade_id', 'profissional_id', 'data');
 
+      // 3. Fila de Espera
       let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       qFila = applyFilters(qFila, 'unidade_id', 'profissional_id', 'criado_em');
 
+      // 4. Triagem
       let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
       if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
+      // 5. Procedimentos
       let qProc = supabase.from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
         .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
       if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999`);
 
+      // 6. Prontuários (Primary source for "Atendimentos Realizados")
       let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
       qPront = applyFilters(qPront, 'unidade_id', 'profissional_id', 'data_atendimento');
 
+      // 7. Treatment Cycles
       let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(MAX_RECORDS);
       qCycles = applyFilters(qCycles, 'unit_id', 'professional_id', 'start_date');
 
+      // 8. Treatment Sessions
       let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
       if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
       if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
 
+      // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id', 'evaluation_date');
+      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date');
 
+      // 10. Multiprofessional Evaluations
       let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qMulti = applyFilters(qMulti, 'unit_id', 'id', 'evaluation_date');
+      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date');
 
+      // 11. PTS
       let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
       qPts = applyFilters(qPts, 'unit_id', 'professional_id', 'created_at');
 
@@ -280,6 +302,65 @@ const Relatorios: React.FC = () => {
     enabled: true,
     debounceMs: 2000,
   });
+
+  const generateMapaAtendimento = useCallback(async () => {
+    setMapaLoading(true);
+    try {
+      let query = supabase.from('agendamentos').select('*').order('data', { ascending: true });
+
+      if (mapaDateFrom) query = query.gte('data', mapaDateFrom);
+      else if (dateFrom) query = query.gte('data', dateFrom);
+      
+      if (mapaDateTo) query = query.lte('data', mapaDateTo);
+      else if (dateTo) query = query.lte('data', dateTo);
+
+      if (mapaProf !== 'all') query = query.eq('profissional_id', mapaProf);
+      else if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+
+      if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+
+      const { data, error } = await query.limit(5000);
+      if (error) throw error;
+
+      // Enrich with patient data
+      const pacIds = Array.from(new Set(data.map(a => a.paciente_id))).filter(Boolean);
+      const { data: pacs } = await supabase.from('pacientes').select('id, cns, telefone, cpf, data_nascimento, endereco').in('id', pacIds);
+      const pacMap = new Map(pacs?.map(p => [p.id, p]));
+
+      // Enrich with professional data (for specialty)
+      const profIds = Array.from(new Set(data.map(a => a.profissional_id))).filter(Boolean);
+      const { data: profs } = await supabase.from('funcionarios').select('id, profissao').in('id', profIds);
+      const profMap = new Map(profs?.map(p => [p.id, p]));
+
+      const mapped = data.map((a: any, index: number) => {
+        const p = pacMap.get(a.paciente_id);
+        const f = profMap.get(a.profissional_id);
+        return {
+          num: index + 1,
+          paciente_nome: a.paciente_nome,
+          cns: p?.cns || '',
+          telefone: p?.telefone || '',
+          profissional_nome: a.profissional_nome,
+          profissional_id: a.profissional_id,
+          especialidade: f?.profissao || '',
+          cid: '',
+          tipo: a.tipo,
+          cpf: p?.cpf || '',
+          data_nascimento: p?.data_nascimento || '',
+          endereco: p?.endereco || '',
+          procedimento_sigtap: '',
+          nome_procedimento: ''
+        };
+      });
+
+      setMapaData(mapped);
+      setMapaGenerated(true);
+    } catch (err) {
+      console.error('Error generating mapa:', err);
+    } finally {
+      setMapaLoading(false);
+    }
+  }, [mapaDateFrom, mapaDateTo, mapaProf, dateFrom, dateTo, filterProf, filterUnit]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -341,14 +422,17 @@ const Relatorios: React.FC = () => {
       return true;
     }).length;
 
-    const atendimentosRealizados = concluidos + prontuariosConcluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    // Total of sessions completed from treatment cycles
+    const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
+
+    const atendimentosRealizados = concluidos + prontuariosConcluidos + sessionsDone + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
       remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
       taxaFalta, atendimentosRealizados 
     };
-  }, [filtered, filteredAtendimentos, prontuariosDB, filterUnit, filterProf]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
@@ -971,14 +1055,36 @@ ${dataRows}
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
-    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes' };
+    const titleMap: Record<string, string> = { 
+      geral: 'Relatório Geral', 
+      agendamentos: 'Relatório de Agendamentos', 
+      detalhado: 'Relatório Detalhado', 
+      produtividade: 'Relatório de Produtividade', 
+      faltas: 'Relatório de Faltas', 
+      pacientes: 'Relatório de Pacientes',
+      mapa: 'Mapa de Atendimento Mensal'
+    };
+
+    if (type === 'mapa' && mapaData.length > 0) {
+      const rows = mapaData.map(row => 
+        `<tr><td>${row.num}</td><td>${row.paciente_nome}</td><td>${row.cns}</td><td>${row.profissional_nome}</td><td>${row.especialidade}</td><td>${row.tipo}</td><td>${row.cpf}</td><td>${row.data_nascimento}</td></tr>`
+      ).join('');
+      body = `
+        <h2>Mapa de Atendimento Mensal</h2>
+        <table>
+          <thead>
+            <tr><th>Nº</th><th>Paciente</th><th>CNS</th><th>Profissional</th><th>Especialidade</th><th>Tipo</th><th>CPF</th><th>Nascimento</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
 
     openPrintDocument(
       titleMap[type] || 'Relatório',
-      body,
+      body || '<p>Nenhum dado para exportar nesta aba.</p>',
       { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
     );
-  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, mapaData]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
@@ -1121,6 +1227,7 @@ ${dataRows}
               { value: 'pts_report', label: 'PTS' },
               { value: 'tratamentos', label: 'Tratamentos' },
               { value: 'detalhado', label: 'Detalhado' },
+              { value: 'mapa', label: 'Mapa Atendimento' },
             ].map(tab => (
               <TabsTrigger
                 key={tab.value}
@@ -1398,32 +1505,130 @@ ${dataRows}
 
           <TabsContent value="enfermagem" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de Enfermagem indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Avaliações de Enfermagem ({nursingEvals.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                        <th className="text-left py-2 px-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nursingEvals.slice(0, 50).map((n, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{n.evaluation_date}</td>
+                          <td className="py-2 px-2">{n.professional_name || 'Profissional'}</td>
+                          <td className="py-2 px-2">{n.patient_name || n.patient_id}</td>
+                          <td className="py-2 px-2">{n.status || 'Finalizado'}</td>
+                        </tr>
+                      ))}
+                      {nursingEvals.length === 0 && (
+                        <tr><td colSpan={4} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="multiprofissional" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados Multiprofissionais indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Avaliações Multiprofissionais ({multiEvals.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Especialidade</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiEvals.slice(0, 50).map((m, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{m.evaluation_date}</td>
+                          <td className="py-2 px-2">{m.specialty || 'Geral'}</td>
+                          <td className="py-2 px-2">{m.patient_name || m.patient_id}</td>
+                        </tr>
+                      ))}
+                      {multiEvals.length === 0 && (
+                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="pts_report" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de PTS indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Projetos Terapêuticos Singulares - PTS ({ptsData.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Criado em</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ptsData.slice(0, 50).map((p, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-2 px-2">{p.professional_name || 'Responsável'}</td>
+                          <td className="py-2 px-2">{p.patient_name || p.patient_id}</td>
+                        </tr>
+                      ))}
+                      {ptsData.length === 0 && (
+                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhum PTS encontrado</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="tratamentos" className="space-y-5 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Ciclos Ativos</p>
+                <p className="text-2xl font-bold text-primary">{treatmentStats.ativos}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Sessões Realizadas</p>
+                <p className="text-2xl font-bold text-success">{treatmentStats.sessRealizadas}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Faltas em Sessões</p>
+                <p className="text-2xl font-bold text-destructive">{treatmentStats.sessFaltas}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Abandono</p>
+                <p className="text-2xl font-bold">{treatmentStats.taxaAbandono}%</p>
+              </CardContent></Card>
+            </div>
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de Tratamentos indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Tratamentos por Tipo</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={treatmentStats.byType}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="nome" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1431,26 +1636,117 @@ ${dataRows}
           <TabsContent value="detalhado" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-foreground">Listagem Detalhada</h3>
+                  <Badge variant="outline">{filtered.length} registros</Badge>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Hora</th>
                         <th className="text-left py-2 px-2">Paciente</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Tipo</th>
                         <th className="text-left py-2 px-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 100).map(a => (
+                      {filtered.slice(0, 200).map(a => (
                         <tr key={a.id} className="border-b hover:bg-muted/30">
                           <td className="py-2 px-3">{a.data}</td>
-                          <td className="py-2 px-2">{a.pacienteNome}</td>
-                          <td className="py-2 px-2">{statusLabels[normalizeStatus(a.status)] || a.status}</td>
+                          <td className="py-2 px-2">{a.hora}</td>
+                          <td className="py-2 px-2 font-medium">{a.pacienteNome}</td>
+                          <td className="py-2 px-2">{a.profissionalNome}</td>
+                          <td className="py-2 px-2">{a.tipo}</td>
+                          <td className="py-2 px-2">
+                            <Badge className={cn(
+                              normalizeStatus(a.status) === 'concluido' ? "bg-success" : 
+                              normalizeStatus(a.status) === 'falta' ? "bg-destructive" :
+                              normalizeStatus(a.status) === 'pendente' ? "bg-warning" : ""
+                            )}>
+                              {statusLabels[normalizeStatus(a.status)] || a.status}
+                            </Badge>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="mapa" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex flex-col md:flex-row items-end gap-3 mb-6">
+                  <div className="flex-1">
+                    <Label className="text-xs">Data De</Label>
+                    <Input type="date" value={mapaDateFrom} onChange={e => setMapaDateFrom(e.target.value)} className="h-9" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">Data Até</Label>
+                    <Input type="date" value={mapaDateTo} onChange={e => setMapaDateTo(e.target.value)} className="h-9" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">Profissional</Label>
+                    <Select value={mapaProf} onValueChange={setMapaProf}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="gradient-primary text-white gap-2 h-9" onClick={generateMapaAtendimento} disabled={mapaLoading}>
+                    {mapaLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Gerar Mapa
+                  </Button>
+                </div>
+
+                {mapaGenerated ? (
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-[10px] border-collapse">
+                      <thead>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="border-r p-1 text-center">Nº</th>
+                          <th className="border-r p-1 text-left">NOME DO PACIENTE</th>
+                          <th className="border-r p-1 text-center">CNS</th>
+                          <th className="border-r p-1 text-center">TELEFONE</th>
+                          <th className="border-r p-1 text-left">PROFISSIONAL</th>
+                          <th className="border-r p-1 text-left">ESPECIALIDADE</th>
+                          <th className="border-r p-1 text-center">CID</th>
+                          <th className="border-r p-1 text-center">TIPO</th>
+                          <th className="border-r p-1 text-center">CPF</th>
+                          <th className="border-r p-1 text-center">DATA NASC.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mapaData.map((row, i) => (
+                          <tr key={i} className="border-b hover:bg-muted/30">
+                            <td className="border-r p-1 text-center">{row.num}</td>
+                            <td className="border-r p-1 text-left font-medium uppercase">{row.paciente_nome}</td>
+                            <td className="border-r p-1 text-center">{row.cns}</td>
+                            <td className="border-r p-1 text-center">{row.telefone}</td>
+                            <td className="border-r p-1 text-left">{row.profissional_nome}</td>
+                            <td className="border-r p-1 text-left uppercase">{row.especialidade}</td>
+                            <td className="border-r p-1 text-center">{row.cid}</td>
+                            <td className="border-r p-1 text-center uppercase">{row.tipo}</td>
+                            <td className="border-r p-1 text-center">{row.cpf}</td>
+                            <td className="border-r p-1 text-center">{row.data_nascimento}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                    <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p>Clique em "Gerar Mapa" para visualizar os dados de atendimento.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
