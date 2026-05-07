@@ -553,13 +553,15 @@ export function ConferirDadosPacienteModal({
                     <LogradouroDneAutocomplete
                       value={form.tipo_logradouro_dne}
                       codigo={form.tipo_logradouro_codigo}
-                      onChange={(descricao, codigo) => {
-                        setForm((p: any) => ({
-                          ...p,
+                      onChange={async (descricao, codigo) => {
+                        const newForm = {
+                          ...form,
                           tipo_logradouro_dne: descricao,
                           tipo_logradouro_codigo: codigo,
-                        }));
+                        };
+                        setForm(newForm);
                         setDirty(true);
+                        if (paciente) await handleSave(true, newForm);
                       }}
                     />
                   </div>
