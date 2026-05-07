@@ -395,7 +395,7 @@ export function ConferirDadosPacienteModal({
   ) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={form[name] || ""} onValueChange={(v) => updateField(name, v)}>
+      <Select value={form[name] || ""} onValueChange={async (v) => await updateField(name, v)}>
         <SelectTrigger className="h-11 sm:h-10 text-base sm:text-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
