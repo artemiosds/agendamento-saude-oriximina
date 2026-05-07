@@ -201,6 +201,17 @@ const Relatorios: React.FC = () => {
       if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
       if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59`);
 
+      // 5.1 Prontuários
+      let qPront = supabase
+        .from('prontuarios')
+        .select('*')
+        .order('data_atendimento', { ascending: false })
+        .limit(10000);
+      
+      if (dateFrom) qPront = qPront.gte('data_atendimento', dateFrom);
+      if (dateTo) qPront = qPront.lte('data_atendimento', dateTo);
+      qPront = applyFilters(qPront, 'unidade_id', 'profissional_id');
+
       // Apply common filters
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id') => {
         let q = query;
