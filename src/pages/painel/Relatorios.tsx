@@ -568,7 +568,7 @@ const Relatorios: React.FC = () => {
 
   // === FALTAS REPORT ===
   const faltasReport = useMemo(() => {
-    const faltaAgs = filtered.filter(a => a.status === 'falta');
+    const faltaAgs = filtered.filter(a => normalizeStatus(a.status) === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
     faltaAgs.forEach(a => {
       const pac = pacientes.find(p => p.id === a.pacienteId);
