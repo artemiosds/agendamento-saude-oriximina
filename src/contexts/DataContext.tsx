@@ -864,10 +864,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (id) setPacientes((prev) => removeById(prev, id));
         return;
       }
-      // For INSERT/UPDATE: reload full list so all consumers (Prontuário,
-      // Agenda, Triagem, Tratamentos, PTS, BPA) get fresh data including
-      // custom_data, municipio, etc.
-      loadPacientes();
+      // PERF: upsert SINGLE row instead of full reload (1650 rows + 40 cols).
+      // Unit isolation: skip events from other units.
+      const row = payload.new as any;
+      if (!row?.id) return;
+      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
+      setPacientes((prev) =>
+        upsertById(prev, {
+          id: row.id,
+          nome: row.nome,
+          cpf: row.cpf || "",
+          cns: row.cns || "",
+          nomeMae: row.nome_mae || "",
+          telefone: row.telefone || "",
+          dataNascimento: row.data_nascimento || "",
+          email: row.email || "",
+          endereco: row.endereco || "",
+          observacoes: row.observacoes || "",
+          descricaoClinica: row.descricao_clinica || "",
+          cid: row.cid || "",
+          criadoEm: row.criado_em || "",
+          unidadeId: row.unidade_id || "",
+          isGestante: !!row.is_gestante,
+          isPne: !!row.is_pne,
+          isAutista: !!row.is_autista,
+          naturalidade: row.naturalidade || "",
+          naturalidade_uf: row.naturalidade_uf || "",
+          municipio: row.municipio || "",
+          menor_idade: !!row.menor_idade,
+          nome_responsavel: row.nome_responsavel || "",
+          cpf_responsavel: row.cpf_responsavel || "",
+          ubs_origem: row.ubs_origem || "",
+          profissional_solicitante: row.profissional_solicitante || "",
+          tipo_encaminhamento: row.tipo_encaminhamento || "",
+          diagnostico_resumido: row.diagnostico_resumido || "",
+          justificativa: row.justificativa || "",
+          data_encaminhamento: row.data_encaminhamento || "",
+          documento_url: row.documento_url || "",
+          tipo_condicao: row.tipo_condicao || "",
+          mobilidade: row.mobilidade || "",
+          usa_dispositivo: !!row.usa_dispositivo,
+          tipo_dispositivo: row.tipo_dispositivo || "",
+          comunicacao: row.comunicacao || "",
+          comportamento: row.comportamento || "",
+          usa_equipamentos: !!row.usa_equipamentos,
+          equipamentos: row.equipamentos || [],
+          observacao_equipamentos: row.observacao_equipamentos || "",
+          outro_servico_sus: !!row.outro_servico_sus,
+          transporte: row.transporte || "",
+          turno_preferido: row.turno_preferido || "",
+          especialidade_destino: row.especialidade_destino || "",
+          custom_data: {},
+        } as any),
+      );
     },
     poll: loadPacientes,
   });
