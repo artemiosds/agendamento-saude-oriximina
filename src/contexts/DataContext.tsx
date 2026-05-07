@@ -167,6 +167,7 @@ interface DataContextType {
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
+  ensureAgendamentosForRange: (startISO: string, endISO: string) => Promise<void>;
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
