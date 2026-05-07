@@ -2517,7 +2517,8 @@ th{background:#f1f5f9;font-weight:600;}
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 };
