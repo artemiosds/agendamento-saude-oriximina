@@ -145,10 +145,17 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const unidadeId = user.unidadeId || '';
 
-      const [perfilRes, userRes] = await Promise.all([
+      // Timeout de segurança: nunca deixar loading travado por queries pendentes.
+      const withTimeout = <T,>(p: Promise<T>, ms = 8000): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((_, rej) => setTimeout(() => rej(new Error('permissions_timeout')), ms)),
+        ]);
+
+      const [perfilRes, userRes] = await withTimeout(Promise.all([
         supabase.from('permissoes').select('*').eq('perfil', role).in('unidade_id', [unidadeId, '']),
         supabase.from('permissoes_usuario').select('*').eq('user_id', user.id).in('unidade_id', [unidadeId, ''])
-      ]);
+      ]));
 
       const map: Partial<PermissionsMap> = {};
       ALL_MODULES.forEach((m) => {
