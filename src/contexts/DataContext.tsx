@@ -646,6 +646,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           horaChegada: a.hora_chegada || "",
         })),
       );
+      // Mark initial window as loaded to avoid duplicate fetches by ensureAgendamentosForRange
+      loadedRangesRef.current.add(`${cutoff}|${endCutoff}`);
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
