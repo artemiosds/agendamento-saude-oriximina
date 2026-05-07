@@ -315,8 +315,8 @@ const Tratamentos: React.FC = () => {
       const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_treatment_cycles_paginated', {
         p_page: currentPage,
         p_page_size: PAGE_SIZE,
-        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? user?.id : null),
-        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? user?.unidadeId : null),
+        p_professional_id: filterProf !== 'all' ? filterProf : (isProf ? userId : null),
+        p_unit_id: filterUnit !== 'all' ? filterUnit : (restrictUnit ? userUnidadeId : null),
         p_status: filterStatus !== 'all' ? filterStatus : null,
         p_search: debouncedSearchTerm || null,
         p_only_own_professional: false, // already handled via p_professional_id
@@ -331,7 +331,7 @@ const Tratamentos: React.FC = () => {
 
       // PTS list (lightweight, scoped by unit)
       let qPts = supabase.from("pts").select("*").order("created_at", { ascending: false });
-      if (restrictUnit) qPts = qPts.eq("unit_id", user!.unidadeId!);
+      if (restrictUnit && userUnidadeId) qPts = qPts.eq("unit_id", userUnidadeId);
       const [{ data: ptsData }, procsData] = await Promise.all([
         qPts,
         procedureService.getActive(),
@@ -344,7 +344,7 @@ const Tratamentos: React.FC = () => {
       if (!silent) toast.error("Erro ao carregar dados de tratamento.");
     }
     if (!silent) setLoading(false);
-  }, [user, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
+  }, [userId, userRole, userUnidadeId, userUsuario, currentPage, filterProf, filterUnit, filterStatus, debouncedSearchTerm]);
 
   // Lazy load: sessions, extensions and agendamento map only for the selected cycle
   const loadSessionsForCycle = useCallback(async (cycle: TreatmentCycle, silent = true) => {
