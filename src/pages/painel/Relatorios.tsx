@@ -1229,7 +1229,7 @@ ${dataRows}
           <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
           <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
             <Select value={filterUnit} onValueChange={setFilterUnit}>
@@ -1270,6 +1270,16 @@ ${dataRows}
           </div>
           <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
           <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div className="flex items-end">
+            <Button 
+              className="w-full h-9 gradient-primary text-primary-foreground gap-2" 
+              onClick={loadReportData}
+              disabled={isLoading}
+            >
+              {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Buscar
+            </Button>
+          </div>
         </div>
       </div>
 
