@@ -7,18 +7,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope, Paperclip } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope, Paperclip, Loader2 } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
-import { applyPhoneMask, normalizePhone } from "@/lib/phoneUtils";
+import { applyPhoneMask } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/hooks/queries/queryKeys";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { auditService } from "@/services/auditService";
+import { updatePacienteCadastro } from "@/lib/paciente-utils";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {
