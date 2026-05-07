@@ -274,6 +274,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   funcionariosRef.current = funcionarios;
   const configuracoesRef = useRef(configuracoes);
   configuracoesRef.current = configuracoes;
+  // Tracks already-fetched agendamento date ranges to avoid duplicate network calls
+  const loadedRangesRef = useRef<Set<string>>(new Set());
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -589,11 +591,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      // PERF: janela reduzida para 7 dias atrás (e tudo a partir de hoje).
-      // Histórico antigo é acessado sob demanda via páginas de Auditoria/Histórico.
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - 7);
-      const cutoff = localDateStr(cutoffDate);
+      // PERF: janela inicial limitada (7 dias atrás → 45 dias à frente).
+      // Histórico antigo e futuro distante carregam sob demanda via
+      // ensureAgendamentosForRange quando o usuário navega na agenda.
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 45);
+      const cutoff = localDateStr(startDate);
+      const endCutoff = localDateStr(endDate);
 
       let allData: any[] = [];
       let from = 0;
@@ -605,6 +611,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
           )
           .gte("data", cutoff)
+          .lte("data", endCutoff)
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
         // Unit isolation
@@ -639,6 +646,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           horaChegada: a.hora_chegada || "",
         })),
       );
+      // Mark initial window as loaded to avoid duplicate fetches by ensureAgendamentosForRange
+      loadedRangesRef.current.add(`${cutoff}|${endCutoff}`);
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
@@ -2027,7 +2036,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Carrega agendamentos de uma janela arbitrária (ex.: meses anteriores) sob demanda
   // e faz merge com o estado atual sem remover registros já carregados.
-  const loadedRangesRef = useRef<Set<string>>(new Set());
   const ensureAgendamentosForRange = useCallback(async (startISO: string, endISO: string) => {
     if (!startISO || !endISO) return;
     const key = `${startISO}|${endISO}`;
