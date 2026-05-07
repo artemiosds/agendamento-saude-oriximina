@@ -27,6 +27,29 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
 
+interface AgendamentoDB {
+  id: string;
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
+  unidade_id: string;
+  sala_id: string;
+  setor_id: string;
+  data: string;
+  hora: string;
+  status: string;
+  tipo: string;
+  origem: string;
+  // Aliases for camelCase
+  unidadeId?: string;
+  profissionalId?: string;
+  pacienteId?: string;
+  pacienteNome?: string;
+  profissionalNome?: string;
+  setorId?: string;
+}
+
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
   profissional_id: string; profissional_nome: string; unidade_id: string;
@@ -47,7 +70,7 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { pacientes, funcionarios, unidades, agendamentos: agendamentosContext } = useData();
+  const { pacientes, funcionarios, unidades } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
@@ -61,7 +84,6 @@ const Relatorios: React.FC = () => {
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
   
-  // Initialize with current month
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
@@ -70,7 +92,7 @@ const Relatorios: React.FC = () => {
     return new Date().toISOString().split('T')[0];
   });
 
-  const [agendamentosDB, setAgendamentosDB] = useState<any[]>([]);
+  const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
