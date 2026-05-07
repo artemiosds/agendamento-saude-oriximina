@@ -38,8 +38,13 @@ export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
   filterUnit,
   profissionais,
   getAvailableSlots,
+  onMonthChange,
 }) => {
   const [currentMonth, setCurrentMonth] = useState(() => dateStrToUtcDate(selectedDate));
+
+  useEffect(() => {
+    onMonthChange?.(currentMonth.getUTCFullYear(), currentMonth.getUTCMonth() + 1);
+  }, [currentMonth, onMonthChange]);
 
   useEffect(() => {
     setCurrentMonth(dateStrToUtcDate(selectedDate));
