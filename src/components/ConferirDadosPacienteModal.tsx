@@ -247,101 +247,123 @@ export function ConferirDadosPacienteModal({
         ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
         : "";
 
+      // Mapeamento de campos estruturado para bater exatamente com a tabela de pacientes e custom_data
+      // conforme usado no CadastroPacienteForm.tsx
       const customData = {
         ...(paciente.custom_data || {}),
         sexo: formToSave.sexo,
-        // Persistir Raça/Cor em ambas as chaves (compat com BPA)
         racaCor: formToSave.raca_cor,
         raca_cor: formToSave.raca_cor,
         etnia: formToSave.etnia,
         etniaOutra: formToSave.etnia_outra,
         nacionalidade: formToSave.nacionalidade,
         paisNascimento: formToSave.pais_nascimento,
-        // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
+        
+        // Endereço estruturado (campos reais usados no custom_data pelo sistema)
         tipoLogradouroDne: formToSave.tipo_logradouro_dne,
         tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo,
         tipoLogradouro: formToSave.tipo_logradouro_dne,
-        // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
         logradouro: formToSave.logradouro,
         numero: formToSave.numero,
         complemento: formToSave.complemento,
         bairro: formToSave.bairro,
         uf: formToSave.uf,
         cep: formToSave.cep,
+        
         telefoneSecundario: telSecNormalizado,
-        // Auditoria de conferência
+        
+        // Auditoria
         data_ultima_validacao_cadastro: new Date().toISOString(),
         dados_conferidos_em: new Date().toISOString(),
         dados_conferidos_por: user?.nome || user?.id || "",
       };
 
+      // Payload principal da tabela 'pacientes'
       const updatePayload: any = {
         nome: formToSave.nome,
         nome_mae: formToSave.nome_mae,
-        data_nascimento: formToSave.data_nascimento || "",
-        cpf: formToSave.cpf,
-        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15),
+        data_nascimento: formToSave.data_nascimento || null,
+        cpf: formToSave.cpf || null,
+        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15) || null,
         telefone: telNormalizado,
-        email: formToSave.email,
-        // Não sobrescrever endereço legado: preserva o valor atual do paciente.
-        endereco: paciente.endereco || "",
+        email: formToSave.email || null,
         municipio: formToSave.municipio,
-        naturalidade: formToSave.naturalidade || "",
-        naturalidade_uf: formToSave.naturalidade_uf || "",
+        naturalidade: formToSave.naturalidade || null,
+        naturalidade_uf: formToSave.naturalidade_uf || null,
         custom_data: customData,
       };
+
+      // Sincroniza o campo 'endereco' (texto livre legado) para manter retrocompatibilidade
+      // Monta string: "LOGRADOURO, NUMERO, BAIRRO, MUNICIPIO - UF"
+      const enderecoTexto = [
+        formToSave.logradouro,
+        formToSave.numero,
+        formToSave.bairro,
+        formToSave.municipio ? `${formToSave.municipio} - ${formToSave.uf || ""}` : ""
+      ].filter(Boolean).join(", ");
+      
+      if (enderecoTexto) {
+        updatePayload.endereco = enderecoTexto;
+      }
+
+      console.log("[ConferirDados] Salvando payload:", updatePayload);
 
       const { error } = await (supabase as any)
         .from("pacientes")
         .update(updatePayload)
         .eq("id", paciente.id);
+      
       if (error) throw error;
 
-      // Captura diff para auditoria (campos alterados)
+      // Auditoria e log de alterações
       const camposAlterados: Record<string, { de: any; para: any }> = {};
-      const compareFields: Array<keyof typeof updatePayload> = [
-        "nome", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "endereco", "municipio",
-      ];
+      const compareFields = ["nome", "cpf", "cns", "telefone", "municipio"];
       compareFields.forEach((k) => {
         const antes = (paciente as any)[k] ?? "";
         const depois = (updatePayload as any)[k] ?? "";
-        if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
+        if (String(antes) !== String(depois)) camposAlterados[k] = { de: antes, para: depois };
       });
+
       setDirty(false);
 
-      // CRÍTICO: invalidar caches + recarregar contexto global para refletir
-      // imediatamente em Paciente, Agenda, Prontuário, Tratamento, PTS, Triagem, BPA.
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.triagem.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
-      try { await refreshPacientes(); } catch {}
+      // CRÍTICO: Invalidação agressiva de cache para refletir em todas as páginas
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.fila.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) }),
+      ]);
 
-      // Auditoria (best-effort, não bloqueia fluxo)
+      // Atualiza contexto global se disponível
+      try {
+        await refreshPacientes();
+      } catch (err) {
+        console.warn("[ConferirDados] Falha ao atualizar refreshPacientes:", err);
+      }
+
+      // Atualiza estado local do paciente para evitar que o modal mostre dados antigos
+      setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+
       if (Object.keys(camposAlterados).length > 0) {
-        // Atualiza o estado do paciente para refletir o que foi salvo
-        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
-        
         auditService.log({
           acao: "atualizar",
           entidade: "paciente",
           entidadeId: paciente.id,
           modulo: "Conferir Dados do Paciente",
           user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
-          detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
+          detalhes: { 
+            origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", 
+            campos_alterados: camposAlterados 
+          },
         }).catch(() => {});
-      } else {
-        // Se não houver alterações (ex: apenas abertura ou salvamento de campos iguais), 
-        // ainda precisamos garantir que o estado local do paciente não está defasado
-        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
       }
 
-      if (!silent) toast.success("Dados atualizados em todo o sistema!");
+      if (!silent) toast.success("Dados do paciente atualizados com sucesso!");
     } catch (e: any) {
-      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      console.error("[ConferirDados] Erro ao salvar paciente:", e);
+      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "Erro desconhecido"));
       throw e;
     } finally {
       setSaving(false);
