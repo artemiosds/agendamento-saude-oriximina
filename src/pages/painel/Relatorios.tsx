@@ -333,14 +333,21 @@ const Relatorios: React.FC = () => {
     const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
     const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
     
-    const atendimentosRealizados = concluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    // Normalizing "atendimentos realizados" to include both agendamentos and completed prontuários
+    const prontuariosConcluidos = prontuariosDB.filter(p => {
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
+      if (filterProf !== 'all' && p.profissional_id !== filterProf) return false;
+      return true;
+    }).length;
+
+    const atendimentosRealizados = concluidos + prontuariosConcluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
       remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
       taxaFalta, atendimentosRealizados 
     };
-  }, [filtered, filteredAtendimentos]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, filterUnit, filterProf]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
