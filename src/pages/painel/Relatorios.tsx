@@ -591,12 +591,33 @@ const Relatorios: React.FC = () => {
       }
     });
 
+    // Also include completions from other sources for categories
+    filteredAtendimentos.forEach(at => {
+      const func = profMap.get(at.profissional_id);
+      const profissao = func?.profissao || '';
+      for (const cat of CATEGORIAS) {
+        if (profissionalPertenceCategoria(profissao, cat)) {
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          const statusNorm = normalizeStatus(at.status);
+          if (statusNorm === 'concluido' || at.status === 'finalizado') {
+            // We only increment concluidos if it's an attendance that might not be in agendamentos
+            // or we just ensure concluidos doesn't exceed total if total is just agendamentos
+            counts[cat.key].concluidos++;
+            if (counts[cat.key].concluidos > counts[cat.key].total) {
+              counts[cat.key].total = counts[cat.key].concluidos;
+            }
+          }
+          break;
+        }
+      }
+    });
+
     return CATEGORIAS.map(cat => ({
       ...cat,
       total: counts[cat.key]?.total || 0,
       concluidos: counts[cat.key]?.concluidos || 0,
     }));
-  }, [filtered, funcionarios]);
+  }, [filtered, filteredAtendimentos, funcionarios]);
 
   const prodTotals = useMemo(() => {
     return porProfissional.reduce((acc, p) => ({
