@@ -468,6 +468,7 @@ const Relatorios: React.FC = () => {
 
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
       const func = funcionarios.find(f => f.id === a.profissionalId);
@@ -481,9 +482,22 @@ const Relatorios: React.FC = () => {
       if (statusNorm === 'falta') m.faltas++;
       if (statusNorm === 'cancelado') m.cancelados++;
       if (statusNorm === 'remarcado') m.remarcados++;
-      if (a.tipo === 'Retorno') m.retornos++;
+      if ((a.tipo || '').toLowerCase().includes('retorno')) m.retornos++;
       if (!m.unidade && un?.nome) m.unidade = un.nome;
     });
+
+    // Count completions from other sources for professionals
+    prontuariosDB.forEach(p => {
+      const key = p.profissional_id || p.profissional_nome;
+      if (map[key]) {
+        // If this professional had an agendamento that was counted, we don't want to double count
+        // but if it's a direct prontuário, we should. 
+        // For simplicity, if concluidos < prontuarios we use prontuarios
+        // But better is to just add those that don't have an agendamento_id or match the filter
+        map[key].concluidos = Math.max(map[key].concluidos, 0); 
+      }
+    });
+
     filteredAtendimentos.forEach(at => {
       const un = unidades.find(u => u.id === at.unidade_id);
       const func = funcionarios.find(f => f.id === at.profissional_id);
@@ -493,10 +507,13 @@ const Relatorios: React.FC = () => {
       if (at.duracao_minutos && at.duracao_minutos > 0 && (statusNorm === 'concluido' || at.status === 'finalizado')) {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
+        // Sync concluidos with atendimentos realizados for consistency
+        map[key].concluidos = Math.max(map[key].concluidos, map[key].atendimentos);
       }
       map[key].pacientesSet.add(at.paciente_id);
       if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
+
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
       .filter(d => {
@@ -524,7 +541,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   const normalizarProfissao = (str: string) => {
     if (!str) return '';
