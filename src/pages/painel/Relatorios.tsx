@@ -157,23 +157,29 @@ const Relatorios: React.FC = () => {
     try {
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data') => {
         let q = query;
+        
+        // Filter by Unit
         if (filterUnit !== 'all') {
           q = q.eq(unitCol, filterUnit);
         } else {
+          // If "All Units" is selected, handle permissions
           const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
           if (!isMasterGlobal && user?.unidadeId) {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
         
+        // Filter by Professional
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
+          // Professionals can only see their own data unless they have master permissions
           q = q.eq(profCol, user.id);
         }
 
+        // Filter by Date Range
         if (dateFrom) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
             q = q.gte(dateCol, `${dateFrom}T00:00:00`);
           } else {
             q = q.gte(dateCol, dateFrom);
@@ -181,7 +187,7 @@ const Relatorios: React.FC = () => {
         }
         
         if (dateTo) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at')) {
+          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
             q = q.lte(dateCol, `${dateTo}T23:59:59.999`);
           } else {
             q = q.lte(dateCol, dateTo);
@@ -191,46 +197,57 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Increase limits and ensure all data is fetched correctly
-      const MAX_RECORDS = 50000;
+      // Ensure we fetch a large enough dataset to reflect reality
+      const MAX_RECORDS = 100000;
 
-      let qAg = supabase.from('agendamentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
+      // 1. Agendamentos
+      let qAg = supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }).limit(MAX_RECORDS);
       qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
 
+      // 2. Atendimentos
       let qAt = supabase.from('atendimentos').select('*').order('data', { ascending: false }).limit(MAX_RECORDS);
       qAt = applyFilters(qAt, 'unidade_id', 'profissional_id', 'data');
 
+      // 3. Fila de Espera
       let qFila = supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       qFila = applyFilters(qFila, 'unidade_id', 'profissional_id', 'criado_em');
 
+      // 4. Triagem
       let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
       if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
+      // 5. Procedimentos
       let qProc = supabase.from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
         .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
       if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999`);
 
+      // 6. Prontuários (Primary source for "Atendimentos Realizados")
       let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
       qPront = applyFilters(qPront, 'unidade_id', 'profissional_id', 'data_atendimento');
 
+      // 7. Treatment Cycles
       let qCycles = supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }).limit(MAX_RECORDS);
       qCycles = applyFilters(qCycles, 'unit_id', 'professional_id', 'start_date');
 
+      // 8. Treatment Sessions
       let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
       if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
       if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
       if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
 
+      // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id', 'evaluation_date');
+      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date');
 
+      // 10. Multiprofessional Evaluations
       let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qMulti = applyFilters(qMulti, 'unit_id', 'id', 'evaluation_date');
+      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date');
 
+      // 11. PTS
       let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
       qPts = applyFilters(qPts, 'unit_id', 'professional_id', 'created_at');
 
