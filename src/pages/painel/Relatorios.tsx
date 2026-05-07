@@ -688,9 +688,10 @@ const Relatorios: React.FC = () => {
           : key.substring(5);
         map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
       }
-      if (a.status === 'concluido') map[key].concluidos++;
-      if (a.status === 'falta') map[key].faltas++;
-      if (a.status === 'cancelado') map[key].cancelados++;
+      const statusNorm = normalizeStatus(a.status);
+      if (statusNorm === 'concluido') map[key].concluidos++;
+      if (statusNorm === 'falta') map[key].faltas++;
+      if (statusNorm === 'cancelado') map[key].cancelados++;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
   }, [filtered, timelineGroup]);
