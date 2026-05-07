@@ -124,7 +124,12 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return;
     }
 
-    setLoading(true);
+    // Só ativa o spinner no PRIMEIRO carregamento. Recargas (realtime / reload manual)
+    // mantêm o estado anterior para não derrubar guards de rota durante a atualização.
+    setPermissions((prev) => {
+      if (prev === null) setLoading(true);
+      return prev;
+    });
 
     try {
       const role = (user.role || '').toLowerCase().trim();
@@ -204,8 +209,9 @@ export const PermissionsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const can = useCallback(
     (modulo: ModuleName, action: string): boolean => {
-      if (loading) return false;
-      if (!permissions) return false;
+      // Se ainda não carregou nenhuma permissão (primeiro load em andamento),
+      // não bloqueia a UI — guards de rota devem aguardar via `loading`, não negar.
+      if (!permissions) return loading ? true : false;
 
       const modPerm = permissions[modulo];
       if (!modPerm) return false;
