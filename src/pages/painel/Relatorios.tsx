@@ -177,10 +177,10 @@ const Relatorios: React.FC = () => {
           q = q.eq(profCol, user.id);
         }
 
-        // Filter by Date Range
+        // Filter by Date Range - ENSURE INCLUSIVE DATES
         if (dateFrom) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00`);
+            q = q.gte(dateCol, `${dateFrom}T00:00:00.000Z`);
           } else {
             q = q.gte(dateCol, dateFrom);
           }
@@ -188,7 +188,7 @@ const Relatorios: React.FC = () => {
         
         if (dateTo) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59.999`);
+            q = q.lte(dateCol, `${dateTo}T23:59:59.999Z`);
           } else {
             q = q.lte(dateCol, dateTo);
           }
@@ -197,10 +197,10 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Ensure we fetch a large enough dataset to reflect reality
-      const MAX_RECORDS = 100000;
+      // Ensure we fetch a large enough dataset to reflect reality - Increase MAX_RECORDS
+      const MAX_RECORDS = 50000; 
 
-      // 1. Agendamentos
+      // 1. Agendamentos - FETCH FULL COUNT AND DATA
       let qAg = supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }).limit(MAX_RECORDS);
       qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
 
@@ -214,16 +214,16 @@ const Relatorios: React.FC = () => {
 
       // 4. Triagem
       let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999`);
+      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999Z`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
       // 5. Procedimentos
       let qProc = supabase.from('prontuario_procedimentos')
         .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
         .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999`);
+      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999Z`);
 
       // 6. Prontuários (Primary source for "Atendimentos Realizados")
       let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
