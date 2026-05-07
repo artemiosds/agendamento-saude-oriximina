@@ -176,8 +176,8 @@ const Relatorios: React.FC = () => {
           q = q.eq(unitCol, filterUnit);
         } else {
           // If "All Units" is selected, handle permissions
-          const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
-          if (!isMasterGlobal && user?.unidadeId) {
+          const isMaster = user?.role === 'master';
+          if (!isMaster && user?.unidadeId) {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
