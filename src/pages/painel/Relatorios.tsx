@@ -121,6 +121,7 @@ const Relatorios: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
 
   const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
+  const [totalCountAg, setTotalCountAg] = useState(0);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
