@@ -1055,14 +1055,36 @@ ${dataRows}
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
-    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes' };
+    const titleMap: Record<string, string> = { 
+      geral: 'Relatório Geral', 
+      agendamentos: 'Relatório de Agendamentos', 
+      detalhado: 'Relatório Detalhado', 
+      produtividade: 'Relatório de Produtividade', 
+      faltas: 'Relatório de Faltas', 
+      pacientes: 'Relatório de Pacientes',
+      mapa: 'Mapa de Atendimento Mensal'
+    };
+
+    if (type === 'mapa' && mapaData.length > 0) {
+      const rows = mapaData.map(row => 
+        `<tr><td>${row.num}</td><td>${row.paciente_nome}</td><td>${row.cns}</td><td>${row.profissional_nome}</td><td>${row.especialidade}</td><td>${row.tipo}</td><td>${row.cpf}</td><td>${row.data_nascimento}</td></tr>`
+      ).join('');
+      body = `
+        <h2>Mapa de Atendimento Mensal</h2>
+        <table>
+          <thead>
+            <tr><th>Nº</th><th>Paciente</th><th>CNS</th><th>Profissional</th><th>Especialidade</th><th>Tipo</th><th>CPF</th><th>Nascimento</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
 
     openPrintDocument(
       titleMap[type] || 'Relatório',
-      body,
+      body || '<p>Nenhum dado para exportar nesta aba.</p>',
       { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
     );
-  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, mapaData]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
