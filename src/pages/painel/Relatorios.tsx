@@ -84,13 +84,8 @@ const Relatorios: React.FC = () => {
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
   
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-  });
-  const [dateTo, setDateTo] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
