@@ -402,7 +402,7 @@ const Relatorios: React.FC = () => {
   }, [atendimentosDB, filterSetor]);
 
   const stats = useMemo(() => {
-    const total = filtered.length;
+    const total = Math.max(filtered.length, totalCountAg);
     const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
     const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
     const concluidos = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
