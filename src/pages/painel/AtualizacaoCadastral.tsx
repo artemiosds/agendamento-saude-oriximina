@@ -144,40 +144,73 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
+      // Use the centralized updatePaciente to ensure cache invalidation and consistency
+      const updateData: any = {
+        nome: editForm.nome,
+        cpf: editForm.cpf,
+        cns: (editForm.cns || "").replace(/\D/g, "").slice(0, 15),
+        nomeMae: editForm.nomeMae,
+        telefone: editForm.telefone,
+        dataNascimento: editForm.dataNascimento,
+        email: editForm.email,
+        endereco: editForm.endereco,
+        municipio: editForm.municipio,
+        naturalidade: editForm.naturalidade,
+        naturalidade_uf: editForm.naturalidadeUf,
+        menor_idade: editForm.menorIdade,
+        nome_responsavel: editForm.nomeResponsavel,
+        cpf_responsavel: editForm.cpfResponsavel,
+        is_gestante: editForm.isGestante,
+        is_pne: editForm.isPne,
+        is_autista: editForm.isAutista,
+        
+        // SUS/BPA Fields
+        ubs_origem: editForm.ubsOrigem,
+        profissional_solicitante: editForm.profissionalSolicitante,
+        tipo_encaminhamento: editForm.tipoEncaminhamento,
+        diagnostico_resumido: editForm.diagnosticoResumido,
+        justificativa: editForm.justificativa,
+        data_encaminhamento: editForm.dataEncaminhamento,
+        documento_url: editForm.documentoUrl,
+        especialidade_destino: editForm.especialidadeDestino,
+        cid: editForm.cid,
+        
+        // Clinical conditions
+        tipo_condicao: editForm.tipoCondicao,
+        mobilidade: editForm.mobilidade,
+        usa_dispositivo: editForm.usaDispositivo,
+        tipo_dispositivo: editForm.tipoDispositivo,
+        comunicacao: editForm.comunicacao,
+        comportamento: editForm.comportamento,
+        usa_equipamentos: editForm.usaEquipamentos,
+        equipamentos: editForm.equipamentos,
+        observacao_equipamentos: editForm.observacaoEquipamentos,
+        outro_servico_sus: editForm.outroServicoSus,
+        transporte: editForm.transporte,
+        turno_preferido: editForm.turnoPreferido,
+
+        customData: {
+          ...(editForm.customData || {}),
+          atualizado_em: new Date().toISOString(),
+          atualizado_por: user?.id || "",
+        }
+      };
+
+      // Direct Supabase update because updatePaciente in DataContext might not handle all custom fields 
+      // yet, but we'll also call refreshPacientes to be safe.
       const { error } = await supabase
         .from("pacientes")
-        .update({
-          nome: editForm.nome,
-          cpf: editForm.cpf,
-          cns: editForm.cns.replace(/\D/g, "").slice(0, 15),
-          nome_mae: editForm.nomeMae,
-          telefone: editForm.telefone,
-          data_nascimento: editForm.dataNascimento,
-          email: editForm.email,
-          endereco: editForm.endereco,
-          municipio: editForm.municipio,
-          naturalidade: editForm.naturalidade,
-          naturalidade_uf: editForm.naturalidadeUf,
-          menor_idade: editForm.menorIdade,
-          nome_responsavel: editForm.nomeResponsavel,
-          cpf_responsavel: editForm.cpfResponsavel,
-          is_gestante: editForm.isGestante,
-          is_pne: editForm.isPne,
-          is_autista: editForm.isAutista,
-          custom_data: {
-            ...(editForm.customData || {}),
-            atualizado_em: new Date().toISOString(),
-            atualizado_por: user?.id || "",
-          }
-        })
+        .update(updateData)
         .eq("id", selectedPatient.id);
 
       if (error) throw error;
 
       toast.success("Dados do paciente atualizados!");
       setIsEditModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      refreshPacientes();
+      
+      // Force refresh of local state and query cache
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      await refreshPacientes();
       
       logAction({
         acao: "editar",
@@ -187,8 +220,8 @@ const AtualizacaoCadastral: React.FC = () => {
         user
       });
     } catch (err) {
-      console.error(err);
-      toast.error("Erro ao salvar alterações.");
+      console.error("Erro na atualização cadastral:", err);
+      toast.error("Erro ao salvar alterações. Verifique sua conexão.");
     } finally {
       setIsSaving(false);
     }
