@@ -325,10 +325,8 @@ const Pacientes: React.FC = () => {
   // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
   // Não filtrar por setor, sala, criado_por, profissional, fila ou agendamento.
   const visiblePacientes = useMemo(() => {
-    if (isProfissional && user) {
-      const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
-      return pacientes.filter((p) => myPacienteIds.has(p.id));
-    }
+    // Profissionais agora visualizam todos os pacientes da sua unidade (não apenas os
+    // vinculados aos próprios agendamentos), permitindo busca/consulta completa.
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
       // Mostra pacientes da unidade + pacientes sem unidade vinculada (legados/órfãos)
