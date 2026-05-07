@@ -91,26 +91,51 @@ const AtualizacaoCadastral: React.FC = () => {
 
   const handleEditQuick = (p: any) => {
     setSelectedPatient(p);
+    // Ensure data alignment with CadastroPacienteForm expected structure
     setEditForm({
       ...emptyPacienteForm,
-      nome: p.nome,
+      nome: p.nome || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nomeMae || "",
+      nomeMae: p.nomeMae || p.nome_mae || "",
       telefone: p.telefone || "",
-      dataNascimento: p.dataNascimento || "",
+      dataNascimento: p.dataNascimento || p.data_nascimento || "",
       email: p.email || "",
       endereco: p.endereco || "",
       municipio: p.municipio || "",
       naturalidade: p.naturalidade || "",
-      naturalidadeUf: p.naturalidade_uf || "",
-      menorIdade: !!p.menor_idade,
-      nomeResponsavel: p.nome_responsavel || "",
-      cpfResponsavel: p.cpf_responsavel || "",
-      isGestante: !!p.is_gestante,
-      isPne: !!p.is_pne,
-      isAutista: !!p.is_autista,
-      customData: p.custom_data || {},
+      naturalidadeUf: p.naturalidadeUf || p.naturalidade_uf || "",
+      menorIdade: !!(p.menorIdade || p.menor_idade),
+      nomeResponsavel: p.nomeResponsavel || p.nome_responsavel || "",
+      cpfResponsavel: p.cpfResponsavel || p.cpf_responsavel || "",
+      isGestante: !!p.isGestante || !!p.is_gestante,
+      isPne: !!p.isPne || !!p.is_pne,
+      isAutista: !!p.isAutista || !!p.is_autista,
+      
+      // Fields from other sources that might be in different naming conventions
+      tipoCondicao: p.tipoCondicao || p.tipo_condicao || "",
+      mobilidade: p.mobilidade || "",
+      usaDispositivo: !!(p.usaDispositivo || p.usa_dispositivo),
+      tipoDispositivo: p.tipoDispositivo || p.tipo_dispositivo || "",
+      comunicacao: p.comunicacao || "",
+      comportamento: p.comportamento || "",
+      usaEquipamentos: !!(p.usaEquipamentos || p.usa_equipamentos),
+      equipamentos: p.equipamentos || [],
+      observacaoEquipamentos: p.observacaoEquipamentos || p.observacao_equipamentos || "",
+      outroServicoSus: !!(p.outroServicoSus || p.outro_servico_sus),
+      transporte: p.transporte || "",
+      turnoPreferido: p.turnoPreferido || p.turno_preferido || "",
+      especialidadeDestino: p.especialidadeDestino || p.especialidade_destino || "",
+      ubsOrigem: p.ubsOrigem || p.ubs_origem || "",
+      profissionalSolicitante: p.profissionalSolicitante || p.profissional_solicitante || "",
+      tipoEncaminhamento: p.tipoEncaminhamento || p.tipo_encaminhamento || "",
+      cid: p.cid || "",
+      diagnosticoResumido: p.diagnosticoResumido || p.diagnostico_resumido || "",
+      justificativa: p.justificativa || "",
+      dataEncaminhamento: p.dataEncaminhamento || p.data_encaminhamento || "",
+      documentoUrl: p.documentoUrl || p.documento_url || "",
+      
+      customData: p.customData || p.custom_data || {},
     });
     setIsEditModalOpen(true);
   };
@@ -119,40 +144,73 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
+      // Use the centralized updatePaciente to ensure cache invalidation and consistency
+      const updateData: any = {
+        nome: editForm.nome,
+        cpf: editForm.cpf,
+        cns: (editForm.cns || "").replace(/\D/g, "").slice(0, 15),
+        nomeMae: editForm.nomeMae,
+        telefone: editForm.telefone,
+        dataNascimento: editForm.dataNascimento,
+        email: editForm.email,
+        endereco: editForm.endereco,
+        municipio: editForm.municipio,
+        naturalidade: editForm.naturalidade,
+        naturalidade_uf: editForm.naturalidadeUf,
+        menor_idade: editForm.menorIdade,
+        nome_responsavel: editForm.nomeResponsavel,
+        cpf_responsavel: editForm.cpfResponsavel,
+        is_gestante: editForm.isGestante,
+        is_pne: editForm.isPne,
+        is_autista: editForm.isAutista,
+        
+        // SUS/BPA Fields
+        ubs_origem: editForm.ubsOrigem,
+        profissional_solicitante: editForm.profissionalSolicitante,
+        tipo_encaminhamento: editForm.tipoEncaminhamento,
+        diagnostico_resumido: editForm.diagnosticoResumido,
+        justificativa: editForm.justificativa,
+        data_encaminhamento: editForm.dataEncaminhamento,
+        documento_url: editForm.documentoUrl,
+        especialidade_destino: editForm.especialidadeDestino,
+        cid: editForm.cid,
+        
+        // Clinical conditions
+        tipo_condicao: editForm.tipoCondicao,
+        mobilidade: editForm.mobilidade,
+        usa_dispositivo: editForm.usaDispositivo,
+        tipo_dispositivo: editForm.tipoDispositivo,
+        comunicacao: editForm.comunicacao,
+        comportamento: editForm.comportamento,
+        usa_equipamentos: editForm.usaEquipamentos,
+        equipamentos: editForm.equipamentos,
+        observacao_equipamentos: editForm.observacaoEquipamentos,
+        outro_servico_sus: editForm.outroServicoSus,
+        transporte: editForm.transporte,
+        turno_preferido: editForm.turnoPreferido,
+
+        customData: {
+          ...(editForm.customData || {}),
+          atualizado_em: new Date().toISOString(),
+          atualizado_por: user?.id || "",
+        }
+      };
+
+      // Direct Supabase update because updatePaciente in DataContext might not handle all custom fields 
+      // yet, but we'll also call refreshPacientes to be safe.
       const { error } = await supabase
         .from("pacientes")
-        .update({
-          nome: editForm.nome,
-          cpf: editForm.cpf,
-          cns: editForm.cns.replace(/\D/g, "").slice(0, 15),
-          nome_mae: editForm.nomeMae,
-          telefone: editForm.telefone,
-          data_nascimento: editForm.dataNascimento,
-          email: editForm.email,
-          endereco: editForm.endereco,
-          municipio: editForm.municipio,
-          naturalidade: editForm.naturalidade,
-          naturalidade_uf: editForm.naturalidadeUf,
-          menor_idade: editForm.menorIdade,
-          nome_responsavel: editForm.nomeResponsavel,
-          cpf_responsavel: editForm.cpfResponsavel,
-          is_gestante: editForm.isGestante,
-          is_pne: editForm.isPne,
-          is_autista: editForm.isAutista,
-          custom_data: {
-            ...(editForm.customData || {}),
-            atualizado_em: new Date().toISOString(),
-            atualizado_por: user?.id || "",
-          }
-        })
+        .update(updateData)
         .eq("id", selectedPatient.id);
 
       if (error) throw error;
 
       toast.success("Dados do paciente atualizados!");
       setIsEditModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      refreshPacientes();
+      
+      // Force refresh of local state and query cache
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      await refreshPacientes();
       
       logAction({
         acao: "editar",
@@ -162,8 +220,8 @@ const AtualizacaoCadastral: React.FC = () => {
         user
       });
     } catch (err) {
-      console.error(err);
-      toast.error("Erro ao salvar alterações.");
+      console.error("Erro na atualização cadastral:", err);
+      toast.error("Erro ao salvar alterações. Verifique sua conexão.");
     } finally {
       setIsSaving(false);
     }
@@ -351,22 +409,36 @@ const AtualizacaoCadastral: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <Dialog 
+        open={isEditModalOpen} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedPatient(null);
+          setIsEditModalOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edição Rápida de Paciente</DialogTitle>
+            <DialogTitle>Edição Rápida de Paciente: {selectedPatient?.nome}</DialogTitle>
           </DialogHeader>
-          <CadastroPacienteForm
-            pacienteId={selectedPatient?.id}
-            form={editForm}
-            onChange={setEditForm}
-            onSave={handleSaveQuick}
-            saving={isSaving}
-            isEdit={true}
-            errors={{}}
-          />
-          <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+          
+          <div className="py-2">
+            <CadastroPacienteForm
+              key={selectedPatient?.id || "new"}
+              pacienteId={selectedPatient?.id}
+              form={editForm}
+              onChange={setEditForm}
+              onSave={handleSaveQuick}
+              saving={isSaving}
+              isEdit={true}
+              errors={{}}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4 pt-4 border-t sticky bottom-0 bg-background pb-2">
+            <Button variant="outline" onClick={() => {
+              setIsEditModalOpen(false);
+              setSelectedPatient(null);
+            }}>Cancelar</Button>
             <Button onClick={handleSaveQuick} disabled={isSaving}>
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
               Salvar Alterações
