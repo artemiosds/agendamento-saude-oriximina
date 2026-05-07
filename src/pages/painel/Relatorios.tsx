@@ -242,11 +242,11 @@ const Relatorios: React.FC = () => {
 
       // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date');
+      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date', false);
 
       // 10. Multiprofessional Evaluations
       let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date');
+      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date', false);
 
       // 11. PTS
       let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
