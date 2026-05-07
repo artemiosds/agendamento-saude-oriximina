@@ -740,7 +740,7 @@ const Relatorios: React.FC = () => {
   const evolucaoMensal = useMemo(() => {
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const map: Record<string, number> = {};
-    filtered.filter(a => a.status === 'concluido').forEach(a => {
+    filtered.filter(a => normalizeStatus(a.status) === 'concluido').forEach(a => {
       const key = a.data.substring(0, 7);
       map[key] = (map[key] || 0) + 1;
     });
