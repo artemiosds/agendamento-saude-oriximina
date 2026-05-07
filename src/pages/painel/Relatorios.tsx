@@ -268,31 +268,32 @@ const Relatorios: React.FC = () => {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
+  const setoresUnicos = useMemo(() => {
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosDB.map(a => a.tipo)].filter(Boolean));
+    return Array.from(s).sort();
+  }, [atendimentosDB, agendamentosDB]);
+
+  const tiposUnicos = useMemo(() => {
+    const s = new Set(agendamentosDB.map(a => a.tipo).filter(Boolean));
+    return Array.from(s).sort();
+  }, [agendamentosDB]);
+
   // === FILTERS ===
   const filtered = useMemo(() => {
-    return agendamentos.filter(a => {
-      if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissionalId !== filterProf) return false;
+    return agendamentosDB.filter(a => {
+      // Basic filters (more are already applied at DB level)
       if (filterStatus !== 'all' && a.status !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
       return true;
     });
-  }, [agendamentos, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, user]);
+  }, [agendamentosDB, filterStatus, filterTipo]);
 
   const filteredAtendimentos = useMemo(() => {
     return atendimentosDB.filter(a => {
-      if (filterUnit !== 'all' && a.unidade_id !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissional_id !== filterProf) return false;
       if (filterSetor !== 'all' && a.setor !== filterSetor) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
       return true;
     });
-  }, [atendimentosDB, filterUnit, filterProf, filterSetor, dateFrom, dateTo]);
+  }, [atendimentosDB, filterSetor]);
 
   // === STATS ===
   const stats = useMemo(() => {
