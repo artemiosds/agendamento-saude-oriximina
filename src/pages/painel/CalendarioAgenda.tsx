@@ -25,6 +25,7 @@ interface CalendarioAgendaProps {
   getAvailableSlots: (profId: string, unidadeId: string, date: string) => string[];
   getAvailableDates: (profId: string, unidadeId: string) => string[];
   unidades: any[];
+  onMonthChange?: (year: number, month: number) => void;
 }
 
 export const CalendarioAgenda: React.FC<CalendarioAgendaProps> = ({
