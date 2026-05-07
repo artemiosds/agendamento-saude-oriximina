@@ -291,6 +291,8 @@ export function ConferirDadosPacienteModal({
         municipio: formToSave.municipio,
         naturalidade: formToSave.naturalidade || null,
         naturalidade_uf: formToSave.naturalidade_uf || null,
+        // Mantém a unidade original para não "perder" o paciente da unidade da recepção
+        unidade_id: paciente.unidade_id,
         custom_data: customData,
       };
 
