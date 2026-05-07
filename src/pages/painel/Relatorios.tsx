@@ -313,9 +313,12 @@ const Relatorios: React.FC = () => {
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: loadReportData,
+    onchange: () => {
+      // Small delay to avoid rapid successive calls
+      setTimeout(() => loadReportData(), 1000);
+    },
     enabled: true,
-    debounceMs: 2000,
+    debounceMs: 5000,
   });
 
   const generateMapaAtendimento = useCallback(async () => {
