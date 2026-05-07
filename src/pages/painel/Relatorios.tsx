@@ -1271,7 +1271,7 @@ ${dataRows}
             <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
           <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
-            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
+            {stats.total} agendamentos · {stats.atendimentosRealizados} atendimentos realizados
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
