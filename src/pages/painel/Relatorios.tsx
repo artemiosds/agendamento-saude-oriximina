@@ -1017,7 +1017,7 @@ ${dataRows}
     const summaryBlock = `
       <div class="summary">
         <div class="stat"><strong>${stats.total}</strong><small>Total Agendamentos</small></div>
-        <div class="stat"><strong>${tempoStats.totalAtendimentos}</strong><small>Atendimentos</small></div>
+        <div class="stat"><strong>${stats.atendimentosRealizados}</strong><small>Atendimentos</small></div>
         <div class="stat"><strong>${stats.concluidos}</strong><small>Concluídos</small></div>
         <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
         <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
