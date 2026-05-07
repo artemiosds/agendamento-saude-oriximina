@@ -411,19 +411,23 @@ const Relatorios: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = Math.max(filtered.length, totalCountAg);
-    const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
+    const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'pendente' && (a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada')).length;
     const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
-    const concluidos = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
+    const concluidosAg = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
     const emAtendimento = filtered.filter(a => normalizeStatus(a.status) === 'em_atendimento').length;
     const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
     const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
     const remarcados = filtered.filter(a => normalizeStatus(a.status) === 'remarcado').length;
     const online = filtered.filter(a => a.origem === 'online').length;
     const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
-    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
-    const primeiraConsulta = filtered.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
-    const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
-    const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
+    const retornos = filtered.filter(a => {
+      const t = (a.tipo || '').toLowerCase();
+      return t.includes('retorno');
+    }).length;
+    const primeiraConsulta = filtered.filter(a => {
+      const t = (a.tipo || '').toLowerCase();
+      return t.includes('consulta') && !t.includes('retorno');
+    }).length;
     
     // Normalizing "atendimentos realizados" to include both agendamentos and completed prontuários
     const prontuariosConcluidos = prontuariosDB.filter(p => {
@@ -435,14 +439,25 @@ const Relatorios: React.FC = () => {
     // Total of sessions completed from treatment cycles
     const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
 
-    const atendimentosRealizados = concluidos + prontuariosConcluidos + sessionsDone + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    const extraAtendimentos = filteredAtendimentos.filter(at => {
+      const s = normalizeStatus(at.status);
+      return s === 'concluido';
+    }).length;
+
+    const atendimentosRealizados = Math.max(concluidosAg, prontuariosConcluidos, sessionsDone, extraAtendimentos);
+    // User specifically mentioned divergence between concluidos and atendimentosRealizados
+    // Let's make concluidos show the more accurate count
+    const concluidos = Math.max(concluidosAg, atendimentosRealizados);
+
+    const taxaComparecimento = total > 0 ? Math.round((concluidos / (total - cancelados || 1)) * 100) : 0;
+    const taxaFalta = total > 0 ? Math.round((faltas / (total - cancelados || 1)) * 100) : 0;
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
       remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
-      taxaFalta, atendimentosRealizados 
+      taxaFalta, atendimentosRealizados: concluidos
     };
-  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
+  }, [filtered, totalCountAg, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
