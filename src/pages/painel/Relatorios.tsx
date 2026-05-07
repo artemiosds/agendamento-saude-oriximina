@@ -1365,7 +1365,7 @@ ${dataRows}
           { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
           { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
           { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
-          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, color: '#B83232' },
+          { label: 'Atend. Realizados', value: stats.atendimentosRealizados, color: '#2D7A4F' },
         ].map(s => (
           <div
             key={s.label}
