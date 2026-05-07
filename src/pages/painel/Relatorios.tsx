@@ -62,7 +62,7 @@ const normalizeStatus = (status: string): string => {
   if ([
     'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
     'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
-    'aguardando_triagem', 'confirmado_chegada'
+    'aguardando_triagem', 'confirmado_chegada', 'atraso'
   ].includes(s)) {
     return 'pendente';
   }
@@ -176,8 +176,8 @@ const Relatorios: React.FC = () => {
           q = q.eq(unitCol, filterUnit);
         } else {
           // If "All Units" is selected, handle permissions
-          const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
-          if (!isMasterGlobal && user?.unidadeId) {
+          const isMaster = user?.role === 'master';
+          if (!isMaster && user?.unidadeId) {
             q = q.eq(unitCol, user.unidadeId);
           }
         }
@@ -246,9 +246,7 @@ const Relatorios: React.FC = () => {
 
       // 8. Treatment Sessions
       let qSessions = supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qSessions = qSessions.gte('scheduled_date', dateFrom);
-      if (dateTo) qSessions = qSessions.lte('scheduled_date', dateTo);
-      if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
+      qSessions = applyFilters(qSessions, 'unit_id', 'professional_id', 'scheduled_date');
 
       // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
@@ -420,16 +418,62 @@ const Relatorios: React.FC = () => {
   const stats = useMemo(() => {
     const total = Math.max(filtered.length, totalCountAg);
     
-    // Pendentes calculation per user's list: pendente, aguardando, confirmado, agendado, apto, em_atendimento, etc.
-    // But we MUST exclude those that were already concluded, faltou or cancelado.
+    // Set of agendamento IDs that resulted in a concluded attendance
+    const concludedAgIds = new Set<string>();
+    
+    // 1. From agendamentos with concluded status
+    filtered.forEach(a => {
+      if (normalizeStatus(a.status) === 'concluido') {
+        concludedAgIds.add(a.id);
+      }
+    });
+    
+    // 2. From prontuarios (existence of a prontuario implies completion)
+    const filteredPronts = prontuariosDB.filter(p => {
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
+      if (filterProf !== 'all' && p.profissional_id !== filterProf) return false;
+      return true;
+    });
+    
+    filteredPronts.forEach(p => {
+      if (p.agendamento_id) {
+        concludedAgIds.add(p.agendamento_id);
+      }
+    });
+
+    // 3. From treatment sessions
+    const filteredSess = treatmentSessions.filter(s => {
+      if (s.status !== 'realizada') return false;
+      if (filterProf !== 'all' && s.professional_id !== filterProf) return false;
+      // We don't have unit_id easily in sessions sometimes, but we filter if we do
+      return true;
+    });
+
+    filteredSess.forEach(s => {
+      if (s.appointment_id) {
+        concludedAgIds.add(s.appointment_id);
+      }
+    });
+
+    const concluidosAg = concludedAgIds.size;
+
+    // Count completions that are NOT linked to an agendamento
+    const unlinkedPronts = filteredPronts.filter(p => !p.agendamento_id).length;
+    const unlinkedSess = filteredSess.filter(s => !s.appointment_id).length;
+    
+    // Total Realized = Concluded Agendamentos + Extra Prontuarios + Extra Sessions
+    const totalConcluidos = concluidosAg + unlinkedPronts + unlinkedSess;
+    const concluidos = totalConcluidos;
+
     const pendentes = filtered.filter(a => {
       const s = normalizeStatus(a.status);
       if (s === 'concluido' || s === 'falta' || s === 'cancelado' || s === 'remarcado') return false;
-      return true; // Everything else that isn't a final state is considered pending
+      // If there's a prontuario for it, it's not pending anymore
+      if (concludedAgIds.has(a.id)) return false;
+      return true;
     }).length;
 
     const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada').length;
-    const concluidosAg = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
     const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
     const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
     const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
@@ -445,25 +489,6 @@ const Relatorios: React.FC = () => {
       return (t.includes('consulta') || t.includes('primeira')) && !t.includes('retorno');
     }).length;
     
-    // Normalizing "atendimentos realizados" to include both agendamentos and completed prontuários
-    const prontuariosConcluidos = prontuariosDB.filter(p => {
-      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
-      if (filterProf !== 'all' && p.profissional_id !== filterProf) return false;
-      return true;
-    }).length;
-
-    const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
-
-    const extraAtendimentos = filteredAtendimentos.filter(at => {
-      const s = normalizeStatus(at.status);
-      return s === 'concluido';
-    }).length;
-
-    // Use a more inclusive "concluded" count as requested by the user
-    const totalConcluidos = Math.max(concluidosAg, prontuariosConcluidos, sessionsDone, extraAtendimentos);
-    const concluidos = totalConcluidos;
-
-    // Correcting comparecimento calculation: comparecimento = realizados / (total - cancelados)
     const validTotal = Math.max(1, total - cancelados);
     const taxaComparecimento = Math.min(100, Math.round((concluidos / validTotal) * 100));
     const taxaFalta = Math.min(100, Math.round((faltas / validTotal) * 100));
@@ -485,51 +510,95 @@ const Relatorios: React.FC = () => {
   }, [filteredAtendimentos]);
 
   const porProfissional = useMemo(() => {
-    const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    const map: Record<string, { 
+      id: string; nome: string; role: string; profissao: string; unidade: string; 
+      total: number; concluidos: number; faltas: number; cancelados: number; 
+      remarcados: number; tempoTotal: number; atendimentos: number; 
+      retornos: number; pacientesSet: Set<string>; 
+      concludedAgIds: Set<string>;
+    }> = {};
     
+    const getMapEntry = (id: string, nome: string, unitId?: string) => {
+      const key = id || nome;
+      if (!map[key]) {
+        const func = funcionarios.find(f => f.id === id);
+        const un = unidades.find(u => u.id === unitId);
+        map[key] = { 
+          id, nome, role: func?.role || 'profissional', 
+          profissao: func?.profissao || '', unidade: un?.nome || '', 
+          total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, 
+          tempoTotal: 0, atendimentos: 0, retornos: 0, 
+          pacientesSet: new Set(), concludedAgIds: new Set() 
+        };
+      }
+      return map[key];
+    };
+
+    // 1. Process Agendamentos
     filtered.forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
-      const func = funcionarios.find(f => f.id === a.profissionalId);
-      const key = a.profissionalId || a.profissionalNome;
-      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
-      const m = map[key];
+      const m = getMapEntry(a.profissionalId, a.profissionalNome, a.unidadeId);
       m.total++;
       m.pacientesSet.add(a.pacienteId);
       const statusNorm = normalizeStatus(a.status);
-      if (statusNorm === 'concluido') m.concluidos++;
+      if (statusNorm === 'concluido') {
+        m.concluidos++;
+        m.concludedAgIds.add(a.id);
+      }
       if (statusNorm === 'falta') m.faltas++;
       if (statusNorm === 'cancelado') m.cancelados++;
       if (statusNorm === 'remarcado') m.remarcados++;
       if ((a.tipo || '').toLowerCase().includes('retorno')) m.retornos++;
-      if (!m.unidade && un?.nome) m.unidade = un.nome;
     });
 
-    // Count completions from other sources for professionals
+    // 2. Process Prontuários (Primary source for "Realized")
     prontuariosDB.forEach(p => {
-      const key = p.profissional_id || p.profissional_nome;
-      if (map[key]) {
-        // If this professional had an agendamento that was counted, we don't want to double count
-        // but if it's a direct prontuário, we should. 
-        // For simplicity, if concluidos < prontuarios we use prontuarios
-        // But better is to just add those that don't have an agendamento_id or match the filter
-        map[key].concluidos = Math.max(map[key].concluidos, 0); 
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return;
+      const m = getMapEntry(p.profissional_id, p.profissional_nome, p.unidade_id);
+      m.pacientesSet.add(p.paciente_id);
+      if (p.agendamento_id) {
+        if (!m.concludedAgIds.has(p.agendamento_id)) {
+          m.concluidos++;
+          m.concludedAgIds.add(p.agendamento_id);
+        }
+      } else {
+        m.concluidos++;
       }
     });
 
+    // 3. Process Treatment Sessions
+    treatmentSessions.forEach(s => {
+      if (s.status !== 'realizada') return;
+      const m = getMapEntry(s.professional_id, 'Profissional', s.unit_id);
+      m.pacientesSet.add(s.patient_id);
+      if (s.appointment_id) {
+        if (!m.concludedAgIds.has(s.appointment_id)) {
+          m.concluidos++;
+          m.concludedAgIds.add(s.appointment_id);
+        }
+      } else {
+        m.concluidos++;
+      }
+    });
+
+    // 4. Process Atendimentos (Legacy/Extra source)
     filteredAtendimentos.forEach(at => {
-      const un = unidades.find(u => u.id === at.unidade_id);
-      const func = funcionarios.find(f => f.id === at.profissional_id);
-      const key = at.profissional_id || at.profissional_nome;
-      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const m = getMapEntry(at.profissional_id, at.profissional_nome, at.unidade_id);
+      m.pacientesSet.add(at.paciente_id);
       const statusNorm = normalizeStatus(at.status);
       if (at.duracao_minutos && at.duracao_minutos > 0 && (statusNorm === 'concluido' || at.status === 'finalizado')) {
-        map[key].tempoTotal += at.duracao_minutos;
-        map[key].atendimentos++;
-        // Sync concluidos with atendimentos realizados for consistency
-        map[key].concluidos = Math.max(map[key].concluidos, map[key].atendimentos);
+        m.tempoTotal += at.duracao_minutos;
+        m.atendimentos++;
+        if (at.agendamento_id) {
+          if (!m.concludedAgIds.has(at.agendamento_id)) {
+            m.concluidos++;
+            m.concludedAgIds.add(at.agendamento_id);
+          }
+        } else {
+          // If we can't link it, we assume it's a separate completion
+          // But usually atendimentos are linked. If not, it's a direct entry.
+          m.concluidos++;
+        }
       }
-      map[key].pacientesSet.add(at.paciente_id);
-      if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
 
     return Object.values(map)
@@ -552,14 +621,14 @@ const Relatorios: React.FC = () => {
         cancelados: d.cancelados,
         remarcados: d.remarcados,
         retornos: d.retornos,
-        atendimentos: d.atendimentos,
+        atendimentos: d.atendimentos || d.concluidos, // Fallback for tempo medio
         tempoTotal: d.tempoTotal,
         pacientesAtendidos: d.pacientesSet.size,
         tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, prontuariosDB, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, unidades, funcionarios, filterRoleProd, filterCargoProd, filterUnit]);
 
   const normalizarProfissao = (str: string) => {
     if (!str) return '';
@@ -594,36 +663,39 @@ const Relatorios: React.FC = () => {
 
   const categoriaCards = useMemo(() => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
-    const counts: Record<string, { total: number; concluidos: number }> = {};
+    const counts: Record<string, { total: number; concluidos: number; concludedAgIds: Set<string> }> = {};
 
     filtered.forEach(a => {
       const func = profMap.get(a.profissionalId);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
           if (profissionalPertenceCategoria(profissao, cat)) {
-            if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+            if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0, concludedAgIds: new Set() };
             counts[cat.key].total++;
-            if (normalizeStatus(a.status) === 'concluido') counts[cat.key].concluidos++;
+            if (normalizeStatus(a.status) === 'concluido') {
+              counts[cat.key].concluidos++;
+              counts[cat.key].concludedAgIds.add(a.id);
+            }
             break;
           }
       }
     });
 
-    // Also include completions from other sources for categories
-    filteredAtendimentos.forEach(at => {
-      const func = profMap.get(at.profissional_id);
+    // Add Prontuarios to categories
+    prontuariosDB.forEach(p => {
+      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return;
+      const func = profMap.get(p.profissional_id);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
         if (profissionalPertenceCategoria(profissao, cat)) {
-          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
-          const statusNorm = normalizeStatus(at.status);
-          if (statusNorm === 'concluido' || at.status === 'finalizado') {
-            // We only increment concluidos if it's an attendance that might not be in agendamentos
-            // or we just ensure concluidos doesn't exceed total if total is just agendamentos
-            counts[cat.key].concluidos++;
-            if (counts[cat.key].concluidos > counts[cat.key].total) {
-              counts[cat.key].total = counts[cat.key].concluidos;
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0, concludedAgIds: new Set() };
+          if (p.agendamento_id) {
+            if (!counts[cat.key].concludedAgIds.has(p.agendamento_id)) {
+              counts[cat.key].concluidos++;
+              counts[cat.key].concludedAgIds.add(p.agendamento_id);
             }
+          } else {
+            counts[cat.key].concluidos++;
           }
           break;
         }
@@ -1734,7 +1806,7 @@ ${dataRows}
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 1000).map(a => (
+                      {filtered.slice(0, 5000).map(a => (
                         <tr key={a.id} className="border-b hover:bg-muted/30">
                           <td className="py-2 px-3">{a.data}</td>
                           <td className="py-2 px-2">{a.hora}</td>
