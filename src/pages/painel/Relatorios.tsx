@@ -121,6 +121,7 @@ const Relatorios: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
 
   const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
+  const [totalCountAg, setTotalCountAg] = useState(0);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
@@ -155,7 +156,7 @@ const Relatorios: React.FC = () => {
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data') => {
+      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data', useZ = true) => {
         let q = query;
         
         // Filter by Unit
@@ -177,10 +178,10 @@ const Relatorios: React.FC = () => {
           q = q.eq(profCol, user.id);
         }
 
-        // Filter by Date Range
+        // Filter by Date Range - ENSURE INCLUSIVE DATES
         if (dateFrom) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00`);
+            q = q.gte(dateCol, `${dateFrom}T00:00:00${useZ ? '.000Z' : ''}`);
           } else {
             q = q.gte(dateCol, dateFrom);
           }
@@ -188,7 +189,7 @@ const Relatorios: React.FC = () => {
         
         if (dateTo) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59.999`);
+            q = q.lte(dateCol, `${dateTo}T23:59:59${useZ ? '.999Z' : ''}`);
           } else {
             q = q.lte(dateCol, dateTo);
           }
@@ -197,10 +198,10 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Ensure we fetch a large enough dataset to reflect reality
-      const MAX_RECORDS = 100000;
+      // Ensure we fetch a large enough dataset to reflect reality - Increase MAX_RECORDS
+      const MAX_RECORDS = 50000; 
 
-      // 1. Agendamentos
+      // 1. Agendamentos - FETCH FULL COUNT AND DATA
       let qAg = supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }).limit(MAX_RECORDS);
       qAg = applyFilters(qAg, 'unidade_id', 'profissional_id', 'data');
 
@@ -214,16 +215,16 @@ const Relatorios: React.FC = () => {
 
       // 4. Triagem
       let qTriage = supabase.from('triage_records').select('*').order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999`);
+      if (dateFrom) qTriage = qTriage.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) qTriage = qTriage.lte('criado_em', `${dateTo}T23:59:59.999Z`);
       if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
       // 5. Procedimentos
       let qProc = supabase.from('prontuario_procedimentos')
         .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
         .order('criado_em', { ascending: false }).limit(MAX_RECORDS);
-      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00`);
-      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999`);
+      if (dateFrom) qProc = qProc.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
+      if (dateTo) qProc = qProc.lte('criado_em', `${dateTo}T23:59:59.999Z`);
 
       // 6. Prontuários (Primary source for "Atendimentos Realizados")
       let qPront = supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }).limit(MAX_RECORDS);
@@ -241,11 +242,11 @@ const Relatorios: React.FC = () => {
 
       // 9. Nursing Evaluations
       let qNursing = supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date');
+      qNursing = applyFilters(qNursing, 'unit_id', 'professional_id', 'evaluation_date', false);
 
       // 10. Multiprofessional Evaluations
       let qMulti = supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }).limit(MAX_RECORDS);
-      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date');
+      qMulti = applyFilters(qMulti, 'unit_id', 'professional_id', 'evaluation_date', false);
 
       // 11. PTS
       let qPts = supabase.from('pts').select('*').order('created_at', { ascending: false }).limit(MAX_RECORDS);
@@ -265,6 +266,7 @@ const Relatorios: React.FC = () => {
           profissionalNome: a.profissional_nome,
           setorId: a.setor_id
         })));
+        setTotalCountAg(results[0].count || results[0].data?.length || 0);
       }
       if (results[1].data) setAtendimentosDB(results[1].data);
       if (results[2].data) setFilaDB(results[2].data);
@@ -319,7 +321,7 @@ const Relatorios: React.FC = () => {
 
       if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
 
-      const { data, error } = await query.limit(5000);
+      const { data, error } = await query.limit(10000);
       if (error) throw error;
 
       // Enrich with patient data
@@ -400,7 +402,7 @@ const Relatorios: React.FC = () => {
   }, [atendimentosDB, filterSetor]);
 
   const stats = useMemo(() => {
-    const total = filtered.length;
+    const total = Math.max(filtered.length, totalCountAg);
     const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
     const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
     const concluidos = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
@@ -1653,7 +1655,7 @@ ${dataRows}
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 200).map(a => (
+                      {filtered.slice(0, 1000).map(a => (
                         <tr key={a.id} className="border-b hover:bg-muted/30">
                           <td className="py-2 px-3">{a.data}</td>
                           <td className="py-2 px-2">{a.hora}</td>
