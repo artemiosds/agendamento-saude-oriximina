@@ -197,6 +197,7 @@ const Agenda: React.FC = () => {
     getAvailableDates,
     getTurnoInfo,
     bloqueios,
+    ensureAgendamentosForRange,
   } = useData();
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
@@ -269,6 +270,18 @@ const Agenda: React.FC = () => {
       } catch {}
     })();
   }, []);
+
+  // Ao navegar para datas/meses anteriores, garante o carregamento sob demanda
+  // dos agendamentos daquele mês (o load inicial só traz os últimos 7 dias).
+  React.useEffect(() => {
+    if (!selectedDate) return;
+    const [y, m] = selectedDate.split('-').map((v) => parseInt(v, 10));
+    if (!y || !m) return;
+    const start = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const end = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    ensureAgendamentosForRange(start, end);
+  }, [selectedDate, ensureAgendamentosForRange]);
 
   // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
@@ -2246,6 +2259,12 @@ const Agenda: React.FC = () => {
               getAvailableSlots={getAvailableSlots}
               getAvailableDates={getAvailableDates}
               unidades={unidades}
+              onMonthChange={(year, month) => {
+                const start = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
+                const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+                const end = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                ensureAgendamentosForRange(start, end);
+              }}
             />
 
             {!isProfissional && showUnitSelector && (
