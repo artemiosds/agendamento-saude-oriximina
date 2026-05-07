@@ -47,22 +47,22 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
 
   // Payload principal da tabela 'pacientes'
   const payload: any = {
-    nome: form.nome || form.nome_completo || existingPatient?.nome,
-    nome_mae: form.nome_mae || form.nomeMae || existingPatient?.nome_mae,
-    data_nascimento: form.data_nascimento || form.dataNascimento || existingPatient?.data_nascimento || null,
-    cpf: form.cpf || existingPatient?.cpf || null,
-    cns: (form.cns || "").replace(/\D/g, "").slice(0, 15) || existingPatient?.cns || null,
-    telefone: telNormalizado,
-    email: form.email || existingPatient?.email || null,
-    municipio: form.municipio || existingPatient?.municipio,
-    naturalidade: form.naturalidade || existingPatient?.naturalidade || null,
-    naturalidade_uf: form.naturalidade_uf || form.naturalidadeUf || existingPatient?.naturalidade_uf || null,
-    unidade_id: form.unidade_id || form.unidadeId || existingPatient?.unidade_id,
+    nome: (form.nome || form.nome_completo || existingPatient?.nome || "").trim(),
+    nome_mae: (form.nome_mae || form.nomeMae || existingPatient?.nome_mae || "").trim(),
+    data_nascimento: form.data_nascimento || form.dataNascimento || existingPatient?.data_nascimento || "",
+    cpf: (form.cpf || existingPatient?.cpf || "").replace(/\D/g, ""),
+    cns: (form.cns || "").replace(/\D/g, "").slice(0, 15) || (existingPatient?.cns || "").replace(/\D/g, ""),
+    telefone: telNormalizado || "",
+    email: (form.email || existingPatient?.email || "").trim(),
+    municipio: form.municipio || existingPatient?.municipio || "",
+    naturalidade: form.naturalidade || existingPatient?.naturalidade || "",
+    naturalidade_uf: form.naturalidade_uf || form.naturalidadeUf || existingPatient?.naturalidade_uf || "",
+    unidade_id: form.unidade_id || form.unidadeId || existingPatient?.unidade_id || "",
     
     // Flags diretas na tabela (se existirem)
-    is_gestante: customData.is_gestante,
-    is_pne: customData.is_pne,
-    is_autista: customData.is_autista,
+    is_gestante: !!customData.is_gestante,
+    is_pne: !!customData.is_pne,
+    is_autista: !!customData.is_autista,
     
     custom_data: customData,
   };
