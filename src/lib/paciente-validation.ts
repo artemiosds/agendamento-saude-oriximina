@@ -15,7 +15,7 @@ export function calculatePatientPendingFields(p: any): PendingFieldsResult {
   if (!p) return { fields: [], status: "incompleto", percentage: 0 };
   
   const missing: string[] = [];
-  const cd = p.custom_data || {};
+  const cd = p.customData || p.custom_data || {};
   
   // Basic Identification
   if (!p.nome?.trim()) missing.push("Nome");
