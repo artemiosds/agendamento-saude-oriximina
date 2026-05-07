@@ -62,7 +62,7 @@ const normalizeStatus = (status: string): string => {
   if ([
     'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
     'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
-    'aguardando_triagem', 'confirmado_chegada'
+    'aguardando_triagem', 'confirmado_chegada', 'atraso'
   ].includes(s)) {
     return 'pendente';
   }
