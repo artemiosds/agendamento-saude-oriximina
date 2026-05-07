@@ -1483,32 +1483,130 @@ ${dataRows}
 
           <TabsContent value="enfermagem" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de Enfermagem indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Avaliações de Enfermagem ({nursingEvals.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                        <th className="text-left py-2 px-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {nursingEvals.slice(0, 50).map((n, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{n.evaluation_date}</td>
+                          <td className="py-2 px-2">{n.professional_name || 'Profissional'}</td>
+                          <td className="py-2 px-2">{n.patient_name || n.patient_id}</td>
+                          <td className="py-2 px-2">{n.status || 'Finalizado'}</td>
+                        </tr>
+                      ))}
+                      {nursingEvals.length === 0 && (
+                        <tr><td colSpan={4} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="multiprofissional" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados Multiprofissionais indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Avaliações Multiprofissionais ({multiEvals.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Especialidade</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiEvals.slice(0, 50).map((m, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{m.evaluation_date}</td>
+                          <td className="py-2 px-2">{m.specialty || 'Geral'}</td>
+                          <td className="py-2 px-2">{m.patient_name || m.patient_id}</td>
+                        </tr>
+                      ))}
+                      {multiEvals.length === 0 && (
+                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="pts_report" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de PTS indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Projetos Terapêuticos Singulares - PTS ({ptsData.length})</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left py-2 px-3">Criado em</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Paciente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ptsData.slice(0, 50).map((p, i) => (
+                        <tr key={i} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3">{new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-2 px-2">{p.professional_name || 'Responsável'}</td>
+                          <td className="py-2 px-2">{p.patient_name || p.patient_id}</td>
+                        </tr>
+                      ))}
+                      {ptsData.length === 0 && (
+                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhum PTS encontrado</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="tratamentos" className="space-y-5 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Ciclos Ativos</p>
+                <p className="text-2xl font-bold text-primary">{treatmentStats.ativos}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Sessões Realizadas</p>
+                <p className="text-2xl font-bold text-success">{treatmentStats.sessRealizadas}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Faltas em Sessões</p>
+                <p className="text-2xl font-bold text-destructive">{treatmentStats.sessFaltas}</p>
+              </CardContent></Card>
+              <Card><CardContent className="p-4">
+                <p className="text-xs text-muted-foreground uppercase">Abandono</p>
+                <p className="text-2xl font-bold">{treatmentStats.taxaAbandono}%</p>
+              </CardContent></Card>
+            </div>
             <Card className="shadow-card border-0">
-              <CardContent className="p-5 text-center text-muted-foreground">
-                Dados de Tratamentos indisponíveis no momento.
+              <CardContent className="p-5">
+                <h3 className="font-semibold text-foreground mb-4">Tratamentos por Tipo</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={treatmentStats.byType}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="nome" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1516,26 +1614,117 @@ ${dataRows}
           <TabsContent value="detalhado" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-foreground">Listagem Detalhada</h3>
+                  <Badge variant="outline">{filtered.length} registros</Badge>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="text-left py-2 px-3">Data</th>
+                        <th className="text-left py-2 px-2">Hora</th>
                         <th className="text-left py-2 px-2">Paciente</th>
+                        <th className="text-left py-2 px-2">Profissional</th>
+                        <th className="text-left py-2 px-2">Tipo</th>
                         <th className="text-left py-2 px-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 100).map(a => (
+                      {filtered.slice(0, 200).map(a => (
                         <tr key={a.id} className="border-b hover:bg-muted/30">
                           <td className="py-2 px-3">{a.data}</td>
-                          <td className="py-2 px-2">{a.pacienteNome}</td>
-                          <td className="py-2 px-2">{statusLabels[normalizeStatus(a.status)] || a.status}</td>
+                          <td className="py-2 px-2">{a.hora}</td>
+                          <td className="py-2 px-2 font-medium">{a.pacienteNome}</td>
+                          <td className="py-2 px-2">{a.profissionalNome}</td>
+                          <td className="py-2 px-2">{a.tipo}</td>
+                          <td className="py-2 px-2">
+                            <Badge className={cn(
+                              normalizeStatus(a.status) === 'concluido' ? "bg-success" : 
+                              normalizeStatus(a.status) === 'falta' ? "bg-destructive" :
+                              normalizeStatus(a.status) === 'pendente' ? "bg-warning" : ""
+                            )}>
+                              {statusLabels[normalizeStatus(a.status)] || a.status}
+                            </Badge>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="mapa" className="space-y-5 mt-4">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <div className="flex flex-col md:flex-row items-end gap-3 mb-6">
+                  <div className="flex-1">
+                    <Label className="text-xs">Data De</Label>
+                    <Input type="date" value={mapaDateFrom} onChange={e => setMapaDateFrom(e.target.value)} className="h-9" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">Data Até</Label>
+                    <Input type="date" value={mapaDateTo} onChange={e => setMapaDateTo(e.target.value)} className="h-9" />
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">Profissional</Label>
+                    <Select value={mapaProf} onValueChange={setMapaProf}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button className="gradient-primary text-white gap-2 h-9" onClick={generateMapaAtendimento} disabled={mapaLoading}>
+                    {mapaLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Gerar Mapa
+                  </Button>
+                </div>
+
+                {mapaGenerated ? (
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-[10px] border-collapse">
+                      <thead>
+                        <tr className="bg-muted/50 border-b">
+                          <th className="border-r p-1 text-center">Nº</th>
+                          <th className="border-r p-1 text-left">NOME DO PACIENTE</th>
+                          <th className="border-r p-1 text-center">CNS</th>
+                          <th className="border-r p-1 text-center">TELEFONE</th>
+                          <th className="border-r p-1 text-left">PROFISSIONAL</th>
+                          <th className="border-r p-1 text-left">ESPECIALIDADE</th>
+                          <th className="border-r p-1 text-center">CID</th>
+                          <th className="border-r p-1 text-center">TIPO</th>
+                          <th className="border-r p-1 text-center">CPF</th>
+                          <th className="border-r p-1 text-center">DATA NASC.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mapaData.map((row, i) => (
+                          <tr key={i} className="border-b hover:bg-muted/30">
+                            <td className="border-r p-1 text-center">{row.num}</td>
+                            <td className="border-r p-1 text-left font-medium uppercase">{row.paciente_nome}</td>
+                            <td className="border-r p-1 text-center">{row.cns}</td>
+                            <td className="border-r p-1 text-center">{row.telefone}</td>
+                            <td className="border-r p-1 text-left">{row.profissional_nome}</td>
+                            <td className="border-r p-1 text-left uppercase">{row.especialidade}</td>
+                            <td className="border-r p-1 text-center">{row.cid}</td>
+                            <td className="border-r p-1 text-center uppercase">{row.tipo}</td>
+                            <td className="border-r p-1 text-center">{row.cpf}</td>
+                            <td className="border-r p-1 text-center">{row.data_nascimento}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                    <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p>Clique em "Gerar Mapa" para visualizar os dados de atendimento.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
