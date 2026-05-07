@@ -17,7 +17,7 @@ import { applyPhoneMask } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { updatePacienteCadastro } from "@/lib/paciente-utils";
+import { updatePacienteCadastro, normalizePatientPayload } from "@/lib/paciente-utils";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {

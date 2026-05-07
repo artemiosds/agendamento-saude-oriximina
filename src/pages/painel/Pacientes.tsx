@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { updatePacienteCadastro } from "@/lib/paciente-utils";
+import { updatePacienteCadastro, normalizePatientPayload } from "@/lib/paciente-utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
 import { useData } from "@/contexts/DataContext";
@@ -595,20 +595,22 @@ const Pacientes: React.FC = () => {
         }
 
         const insertPayload: any = {
+          ...normalizePatientPayload(dbFields),
           id,
-          ...dbFields,
           criado_em: new Date().toISOString(),
           unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
-          custom_data: {
-            ...(dbFields.custom_data || {}),
-            criado_por: user?.id || "",
-            criado_por_nome: user?.nome || "",
-            criado_por_usuario: user?.usuario || "",
-            unidade_origem_id: unidadeIdFuncionario,
-            criado_at: new Date().toISOString(),
-            atualizado_at: new Date().toISOString(),
-            motivo_alteracao: "Cadastro de paciente pela página Pacientes",
-          },
+        };
+
+        // Adiciona metadados extras ao custom_data que a normalização pode não ter
+        insertPayload.custom_data = {
+          ...(insertPayload.custom_data || {}),
+          criado_por: user?.id || "",
+          criado_por_nome: user?.nome || "",
+          criado_por_usuario: user?.usuario || "",
+          unidade_origem_id: unidadeIdFuncionario,
+          criado_at: new Date().toISOString(),
+          atualizado_at: new Date().toISOString(),
+          motivo_alteracao: "Cadastro de paciente pela página Pacientes",
         };
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
