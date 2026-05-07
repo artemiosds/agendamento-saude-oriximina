@@ -197,6 +197,7 @@ const Agenda: React.FC = () => {
     getAvailableDates,
     getTurnoInfo,
     bloqueios,
+    ensureAgendamentosForRange,
   } = useData();
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
