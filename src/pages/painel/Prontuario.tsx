@@ -546,12 +546,7 @@ const ProntuarioPage: React.FC = () => {
       const all: any[] = [];
       let fromIdx = 0;
       const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // First fetch exact total count for visibility/debug
-      let countQuery = (supabase as any).from("prontuarios").select("id", { count: "exact", head: true });
-      if (restrictUnit) countQuery = countQuery.eq("unidade_id", user!.unidadeId);
-      const { count: totalCount, error: countErr } = await countQuery;
-      if (countErr) console.error("Error counting prontuarios:", countErr);
-      if (import.meta.env.DEV) console.debug("[Prontuarios] total no banco:", totalCount);
+      // [PERF] removido count(exact) separado — duplicava latência sem uso funcional
 
       while (true) {
         let query = (supabase as any)
