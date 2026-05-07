@@ -506,8 +506,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       const PAGE = 1000;
+      // PERF: removido `custom_data` (JSONB pesado) do listing inicial.
+      // Ele é carregado sob demanda via patientService.getById ao abrir a ficha.
       const columns =
-        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino";
       let allData: any[] = [];
       let from = 0;
       while (true) {
@@ -576,7 +578,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transporte: p.transporte || "",
           turno_preferido: p.turno_preferido || "",
           especialidade_destino: p.especialidade_destino || "",
-          custom_data: p.custom_data || {},
+          custom_data: {},
         })),
       );
     } catch (err) {
@@ -586,11 +588,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      // PERF: reduced window from 30 to 14 days back to keep startup fast.
-      // Older appointments remain accessible through the Histórico/Auditoria pages
-      // which fetch on-demand.
+      // PERF: janela reduzida para 7 dias atrás (e tudo a partir de hoje).
+      // Histórico antigo é acessado sob demanda via páginas de Auditoria/Histórico.
       const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - 14);
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
       const cutoff = localDateStr(cutoffDate);
 
       let allData: any[] = [];
