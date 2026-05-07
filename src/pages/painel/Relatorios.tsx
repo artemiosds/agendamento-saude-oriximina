@@ -303,6 +303,65 @@ const Relatorios: React.FC = () => {
     debounceMs: 2000,
   });
 
+  const generateMapaAtendimento = useCallback(async () => {
+    setMapaLoading(true);
+    try {
+      let query = supabase.from('agendamentos').select('*').order('data', { ascending: true });
+
+      if (mapaDateFrom) query = query.gte('data', mapaDateFrom);
+      else if (dateFrom) query = query.gte('data', dateFrom);
+      
+      if (mapaDateTo) query = query.lte('data', mapaDateTo);
+      else if (dateTo) query = query.lte('data', dateTo);
+
+      if (mapaProf !== 'all') query = query.eq('profissional_id', mapaProf);
+      else if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+
+      if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+
+      const { data, error } = await query.limit(5000);
+      if (error) throw error;
+
+      // Enrich with patient data
+      const pacIds = Array.from(new Set(data.map(a => a.paciente_id))).filter(Boolean);
+      const { data: pacs } = await supabase.from('pacientes').select('id, cns, telefone, cpf, data_nascimento, endereco').in('id', pacIds);
+      const pacMap = new Map(pacs?.map(p => [p.id, p]));
+
+      // Enrich with professional data (for specialty)
+      const profIds = Array.from(new Set(data.map(a => a.profissional_id))).filter(Boolean);
+      const { data: profs } = await supabase.from('funcionarios').select('id, profissao').in('id', profIds);
+      const profMap = new Map(profs?.map(p => [p.id, p]));
+
+      const mapped = data.map((a: any, index: number) => {
+        const p = pacMap.get(a.paciente_id);
+        const f = profMap.get(a.profissional_id);
+        return {
+          num: index + 1,
+          paciente_nome: a.paciente_nome,
+          cns: p?.cns || '',
+          telefone: p?.telefone || '',
+          profissional_nome: a.profissional_nome,
+          profissional_id: a.profissional_id,
+          especialidade: f?.profissao || '',
+          cid: '',
+          tipo: a.tipo,
+          cpf: p?.cpf || '',
+          data_nascimento: p?.data_nascimento || '',
+          endereco: p?.endereco || '',
+          procedimento_sigtap: '',
+          nome_procedimento: ''
+        };
+      });
+
+      setMapaData(mapped);
+      setMapaGenerated(true);
+    } catch (err) {
+      console.error('Error generating mapa:', err);
+    } finally {
+      setMapaLoading(false);
+    }
+  }, [mapaDateFrom, mapaDateTo, mapaProf, dateFrom, dateTo, filterProf, filterUnit]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
