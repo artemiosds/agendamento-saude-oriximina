@@ -558,9 +558,10 @@ const Relatorios: React.FC = () => {
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { nome: name, total: 0, concluidos: 0, faltas: 0, cancelados: 0 };
       map[name].total++;
-      if (a.status === 'concluido') map[name].concluidos++;
-      if (a.status === 'falta') map[name].faltas++;
-      if (a.status === 'cancelado') map[name].cancelados++;
+      const statusNorm = normalizeStatus(a.status);
+      if (statusNorm === 'concluido') map[name].concluidos++;
+      if (statusNorm === 'falta') map[name].faltas++;
+      if (statusNorm === 'cancelado') map[name].cancelados++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filtered, unidades]);
