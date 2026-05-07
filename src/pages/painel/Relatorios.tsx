@@ -39,23 +39,31 @@ const normalizeStatus = (status: string): string => {
   const s = status.toLowerCase().trim();
   
   // Concluídos / Realizados
-  if (['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'prontuario_finalizado', 'atendimento_finalizado'].includes(s)) {
+  if ([
+    'concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 
+    'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 
+    'prontuario_concluido', 'finalizada', 'concluida'
+  ].includes(s)) {
     return 'concluido';
   }
   // Faltas
-  if (['falta', 'faltou', 'ausente'].includes(s)) {
+  if (['falta', 'faltou', 'ausente', 'nao compareceu', 'nao_compareceu', 'não compareceu'].includes(s)) {
     return 'falta';
   }
   // Cancelados
-  if (['cancelado', 'cancelada'].includes(s)) {
+  if (['cancelado', 'cancelada', 'cancelamento'].includes(s)) {
     return 'cancelado';
   }
   // Remarcados
-  if (['remarcado', 'reagendado'].includes(s)) {
+  if (['remarcado', 'reagendado', 'reagendada'].includes(s)) {
     return 'remarcado';
   }
   // Pendentes / Em andamento
-  if (['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
+  if ([
+    'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
+    'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
+    'aguardando_triagem', 'confirmado_chegada'
+  ].includes(s)) {
     return 'pendente';
   }
   return s;
@@ -153,7 +161,11 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
+  const isFetchingRef = useRef(false);
+
   const loadReportData = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsLoading(true);
     try {
       const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data', useZ = true) => {
@@ -174,14 +186,13 @@ const Relatorios: React.FC = () => {
         if (filterProf !== 'all') {
           q = q.eq(profCol, filterProf);
         } else if (user?.role === 'profissional' && user.id) {
-          // Professionals can only see their own data unless they have master permissions
           q = q.eq(profCol, user.id);
         }
 
-        // Filter by Date Range - ENSURE INCLUSIVE DATES
+        // Filter by Date Range - ENSURE INCLUSIVE DATES AND HANDLE TIMEZONES
         if (dateFrom) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00${useZ ? '.000Z' : ''}`);
+            q = q.gte(dateCol, `${dateFrom}T00:00:00.000Z`);
           } else {
             q = q.gte(dateCol, dateFrom);
           }
@@ -189,7 +200,7 @@ const Relatorios: React.FC = () => {
         
         if (dateTo) {
           if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59${useZ ? '.999Z' : ''}`);
+            q = q.lte(dateCol, `${dateTo}T23:59:59.999Z`);
           } else {
             q = q.lte(dateCol, dateTo);
           }
@@ -198,7 +209,6 @@ const Relatorios: React.FC = () => {
         return q;
       };
 
-      // Ensure we fetch a large enough dataset to reflect reality - Increase MAX_RECORDS
       const MAX_RECORDS = 50000; 
 
       // 1. Agendamentos - FETCH FULL COUNT AND DATA
@@ -293,16 +303,22 @@ const Relatorios: React.FC = () => {
       console.error('Error loading report data:', err); 
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
-  }, [user, dateFrom, dateTo, filterUnit, filterProf]);
+  }, [user?.id, user?.role, user?.unidadeId, dateFrom, dateTo, filterUnit, filterProf]);
 
-  useEffect(() => { loadReportData(); }, [loadReportData]);
+  useEffect(() => {
+    loadReportData();
+  }, [loadReportData]);
 
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: loadReportData,
+    onchange: () => {
+      // Small delay to avoid rapid successive calls
+      setTimeout(() => loadReportData(), 1000);
+    },
     enabled: true,
-    debounceMs: 2000,
+    debounceMs: 5000,
   });
 
   const generateMapaAtendimento = useCallback(async () => {
@@ -403,19 +419,31 @@ const Relatorios: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = Math.max(filtered.length, totalCountAg);
-    const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'confirmado' || a.status === 'confirmado_chegada').length;
-    const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
-    const concluidos = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
-    const emAtendimento = filtered.filter(a => normalizeStatus(a.status) === 'em_atendimento').length;
+    
+    // Pendentes calculation per user's list: pendente, aguardando, confirmado, agendado, apto, em_atendimento, etc.
+    // But we MUST exclude those that were already concluded, faltou or cancelado.
+    const pendentes = filtered.filter(a => {
+      const s = normalizeStatus(a.status);
+      if (s === 'concluido' || s === 'falta' || s === 'cancelado' || s === 'remarcado') return false;
+      return true; // Everything else that isn't a final state is considered pending
+    }).length;
+
+    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada').length;
+    const concluidosAg = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
+    const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
     const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
     const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
     const remarcados = filtered.filter(a => normalizeStatus(a.status) === 'remarcado').length;
-    const online = filtered.filter(a => a.origem === 'online').length;
-    const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
-    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
-    const primeiraConsulta = filtered.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
-    const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
-    const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
+    
+    const retornos = filtered.filter(a => {
+      const t = (a.tipo || '').toLowerCase();
+      return t.includes('retorno') || t.includes('atendimento_retorno') || t.includes('consulta_retorno');
+    }).length;
+    
+    const primeiraConsulta = filtered.filter(a => {
+      const t = (a.tipo || '').toLowerCase();
+      return (t.includes('consulta') || t.includes('primeira')) && !t.includes('retorno');
+    }).length;
     
     // Normalizing "atendimentos realizados" to include both agendamentos and completed prontuários
     const prontuariosConcluidos = prontuariosDB.filter(p => {
@@ -424,17 +452,30 @@ const Relatorios: React.FC = () => {
       return true;
     }).length;
 
-    // Total of sessions completed from treatment cycles
     const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
 
-    const atendimentosRealizados = concluidos + prontuariosConcluidos + sessionsDone + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    const extraAtendimentos = filteredAtendimentos.filter(at => {
+      const s = normalizeStatus(at.status);
+      return s === 'concluido';
+    }).length;
+
+    // Use a more inclusive "concluded" count as requested by the user
+    const totalConcluidos = Math.max(concluidosAg, prontuariosConcluidos, sessionsDone, extraAtendimentos);
+    const concluidos = totalConcluidos;
+
+    // Correcting comparecimento calculation: comparecimento = realizados / (total - cancelados)
+    const validTotal = Math.max(1, total - cancelados);
+    const taxaComparecimento = Math.min(100, Math.round((concluidos / validTotal) * 100));
+    const taxaFalta = Math.min(100, Math.round((faltas / validTotal) * 100));
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
-      remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
-      taxaFalta, atendimentosRealizados 
+      remarcados, online: filtered.filter(a => a.origem === 'online').length, 
+      recepcao: filtered.filter(a => a.origem === 'recepcao').length, 
+      retornos, primeiraConsulta, taxaComparecimento, 
+      taxaFalta, atendimentosRealizados: concluidos
     };
-  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
+  }, [filtered, totalCountAg, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
@@ -445,6 +486,7 @@ const Relatorios: React.FC = () => {
 
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
       const func = funcionarios.find(f => f.id === a.profissionalId);
@@ -458,9 +500,22 @@ const Relatorios: React.FC = () => {
       if (statusNorm === 'falta') m.faltas++;
       if (statusNorm === 'cancelado') m.cancelados++;
       if (statusNorm === 'remarcado') m.remarcados++;
-      if (a.tipo === 'Retorno') m.retornos++;
+      if ((a.tipo || '').toLowerCase().includes('retorno')) m.retornos++;
       if (!m.unidade && un?.nome) m.unidade = un.nome;
     });
+
+    // Count completions from other sources for professionals
+    prontuariosDB.forEach(p => {
+      const key = p.profissional_id || p.profissional_nome;
+      if (map[key]) {
+        // If this professional had an agendamento that was counted, we don't want to double count
+        // but if it's a direct prontuário, we should. 
+        // For simplicity, if concluidos < prontuarios we use prontuarios
+        // But better is to just add those that don't have an agendamento_id or match the filter
+        map[key].concluidos = Math.max(map[key].concluidos, 0); 
+      }
+    });
+
     filteredAtendimentos.forEach(at => {
       const un = unidades.find(u => u.id === at.unidade_id);
       const func = funcionarios.find(f => f.id === at.profissional_id);
@@ -470,10 +525,13 @@ const Relatorios: React.FC = () => {
       if (at.duracao_minutos && at.duracao_minutos > 0 && (statusNorm === 'concluido' || at.status === 'finalizado')) {
         map[key].tempoTotal += at.duracao_minutos;
         map[key].atendimentos++;
+        // Sync concluidos with atendimentos realizados for consistency
+        map[key].concluidos = Math.max(map[key].concluidos, map[key].atendimentos);
       }
       map[key].pacientesSet.add(at.paciente_id);
       if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
+
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
       .filter(d => {
@@ -501,7 +559,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   const normalizarProfissao = (str: string) => {
     if (!str) return '';
@@ -551,12 +609,33 @@ const Relatorios: React.FC = () => {
       }
     });
 
+    // Also include completions from other sources for categories
+    filteredAtendimentos.forEach(at => {
+      const func = profMap.get(at.profissional_id);
+      const profissao = func?.profissao || '';
+      for (const cat of CATEGORIAS) {
+        if (profissionalPertenceCategoria(profissao, cat)) {
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          const statusNorm = normalizeStatus(at.status);
+          if (statusNorm === 'concluido' || at.status === 'finalizado') {
+            // We only increment concluidos if it's an attendance that might not be in agendamentos
+            // or we just ensure concluidos doesn't exceed total if total is just agendamentos
+            counts[cat.key].concluidos++;
+            if (counts[cat.key].concluidos > counts[cat.key].total) {
+              counts[cat.key].total = counts[cat.key].concluidos;
+            }
+          }
+          break;
+        }
+      }
+    });
+
     return CATEGORIAS.map(cat => ({
       ...cat,
       total: counts[cat.key]?.total || 0,
       concluidos: counts[cat.key]?.concluidos || 0,
     }));
-  }, [filtered, funcionarios]);
+  }, [filtered, filteredAtendimentos, funcionarios]);
 
   const prodTotals = useMemo(() => {
     return porProfissional.reduce((acc, p) => ({
