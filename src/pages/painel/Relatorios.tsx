@@ -510,12 +510,12 @@ const Relatorios: React.FC = () => {
       const func = profMap.get(a.profissionalId);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
-        if (profissionalPertenceCategoria(profissao, cat)) {
-          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
-          counts[cat.key].total++;
-          if (a.status === 'concluido') counts[cat.key].concluidos++;
-          break;
-        }
+          if (profissionalPertenceCategoria(profissao, cat)) {
+            if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+            counts[cat.key].total++;
+            if (normalizeStatus(a.status) === 'concluido') counts[cat.key].concluidos++;
+            break;
+          }
       }
     });
 
