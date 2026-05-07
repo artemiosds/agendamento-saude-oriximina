@@ -1098,7 +1098,7 @@ ${dataRows}
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
         .order('data', { ascending: true })
-        .limit(2000);
+        .limit(10000);
 
       if (mapaProf !== 'all') {
         query = query.eq('profissional_id', mapaProf);
