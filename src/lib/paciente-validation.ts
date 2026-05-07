@@ -57,7 +57,7 @@ export function calculatePatientPendingFields(p: any): PendingFieldsResult {
   }
   
   // Explicitly marked as revised in custom_data
-  if (cd.revisado_em && status !== "sem_unidade") {
+  if ((cd.revisado_em || cd.revisadoEm) && status !== "sem_unidade") {
     status = "revisado";
   }
 
