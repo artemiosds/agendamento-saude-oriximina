@@ -38,19 +38,24 @@ const normalizeStatus = (status: string): string => {
   if (!status) return 'pendente';
   const s = status.toLowerCase().trim();
   
+  // Concluídos / Realizados
   if (['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'prontuario_finalizado', 'atendimento_finalizado'].includes(s)) {
     return 'concluido';
   }
+  // Faltas
   if (['falta', 'faltou', 'ausente'].includes(s)) {
     return 'falta';
   }
+  // Cancelados
   if (['cancelado', 'cancelada'].includes(s)) {
     return 'cancelado';
   }
+  // Remarcados
   if (['remarcado', 'reagendado'].includes(s)) {
     return 'remarcado';
   }
-  if (['pendente', 'aguardando', 'confirmado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
+  // Pendentes / Em andamento
+  if (['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
     return 'pendente';
   }
   return s;
