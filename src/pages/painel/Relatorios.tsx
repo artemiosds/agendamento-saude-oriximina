@@ -321,7 +321,7 @@ const Relatorios: React.FC = () => {
 
       if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
 
-      const { data, error } = await query.limit(5000);
+      const { data, error } = await query.limit(10000);
       if (error) throw error;
 
       // Enrich with patient data
