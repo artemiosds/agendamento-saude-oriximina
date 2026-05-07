@@ -1202,6 +1202,7 @@ ${dataRows}
               { value: 'pts_report', label: 'PTS' },
               { value: 'tratamentos', label: 'Tratamentos' },
               { value: 'detalhado', label: 'Detalhado' },
+              { value: 'mapa', label: 'Mapa Atendimento' },
             ].map(tab => (
               <TabsTrigger
                 key={tab.value}
