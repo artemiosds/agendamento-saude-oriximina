@@ -1103,7 +1103,8 @@ ${dataRows}
       if (mapaProf !== 'all') {
         query = query.eq('profissional_id', mapaProf);
       }
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+      const isMasterGlobal = user?.role === 'master' && (!user?.unidadeId || user?.usuario === 'admin.sms');
+      if (!isMasterGlobal && user?.unidadeId) {
         query = query.eq('unidade_id', user.unidadeId);
       }
 
