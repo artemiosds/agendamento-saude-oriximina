@@ -6,9 +6,12 @@ export async function getPublicIp(): Promise<string> {
   if (cachedIp) return cachedIp;
   if (fetchPromise) return fetchPromise;
 
+  // PERF: tenta a chamada externa apenas 1x por sessão.
+  // Se falhar/timeout, cacheia "IP não disponível" para nunca mais tentar
+  // (caso contrário cada logAction reabriria a rede).
   fetchPromise = (async () => {
     try {
-      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2500) });
       const data = await res.json();
       cachedIp = data.ip || 'IP não disponível';
     } catch {
