@@ -27,6 +27,29 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
 
+interface AgendamentoDB {
+  id: string;
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
+  unidade_id: string;
+  sala_id: string;
+  setor_id: string;
+  data: string;
+  hora: string;
+  status: string;
+  tipo: string;
+  origem: string;
+  // Aliases for camelCase
+  unidadeId?: string;
+  profissionalId?: string;
+  pacienteId?: string;
+  pacienteNome?: string;
+  profissionalNome?: string;
+  setorId?: string;
+}
+
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
   profissional_id: string; profissional_nome: string; unidade_id: string;
@@ -47,7 +70,7 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
+  const { pacientes, funcionarios, unidades } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
@@ -60,8 +83,16 @@ const Relatorios: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
+  const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
@@ -71,6 +102,8 @@ const Relatorios: React.FC = () => {
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
+  
+  const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
@@ -91,104 +124,123 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
-  const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
-    return Array.from(s).sort();
-  }, [atendimentosDB, agendamentos]);
-
-  const tiposUnicos = useMemo(() => {
-    const s = new Set(agendamentos.map(a => a.tipo).filter(Boolean));
-    return Array.from(s).sort();
-  }, [agendamentos]);
-
   const loadReportData = useCallback(async () => {
+    if (!dateFrom || !dateTo) return;
+    
+    setIsLoading(true);
     try {
-      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-      // Universal unit isolation (admin.sms sees all)
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qAt = qAt.eq('unidade_id', user.unidadeId);
-        qFila = qFila.eq('unidade_id', user.unidadeId);
-      }
-      if (user?.role === 'profissional' && user.id) {
-        qAt = qAt.eq('profissional_id', user.id);
-        qFila = qFila.eq('profissional_id', user.id);
-      }
-      if (user?.role === 'tecnico' && user.id) {
-        qTriage = qTriage.eq('tecnico_id', user.id);
-      }
+      // Build filters
+      const startOfDay = `${dateFrom}`;
+      const endOfDay = `${dateTo}`;
 
-      let qProc = (supabase as any).from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
+      // 1. Agendamentos
+      let qAg = supabase
+        .from('agendamentos')
+        .select('*')
+        .gte('data', startOfDay)
+        .lte('data', endOfDay);
 
-      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-      const loadAllTreatmentSessions = async () => {
-        const pageSize = 1000;
-        let from = 0;
-        let allSessions: any[] = [];
+      // 2. Atendimentos
+      let qAt = supabase
+        .from('atendimentos')
+        .select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status')
+        .gte('data', startOfDay)
+        .lte('data', endOfDay);
 
-        while (true) {
-          let query = supabase
-            .from('treatment_sessions')
-            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-            .range(from, from + pageSize - 1);
+      // 3. Fila Espera
+      let qFila = supabase
+        .from('fila_espera')
+        .select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em')
+        .gte('criado_em', `${startOfDay}T00:00:00`)
+        .lte('criado_em', `${endOfDay}T23:59:59`);
 
-          if (user?.role === 'profissional') {
-            query = query.eq('professional_id', user.id);
-          }
+      // 4. Triagens
+      let qTriage = supabase
+        .from('triage_records')
+        .select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em')
+        .gte('criado_em', `${startOfDay}T00:00:00`)
+        .lte('criado_em', `${endOfDay}T23:59:59`);
 
-          const { data, error } = await query;
-          if (error) throw error;
-          if (!data || data.length === 0) break;
+      // 5. Procedimentos
+      let qProc = supabase
+        .from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)')
+        .gte('criado_em', `${startOfDay}T00:00:00`)
+        .lte('criado_em', `${endOfDay}T23:59:59`);
 
-          allSessions = allSessions.concat(data);
+      // Apply common filters
+      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id') => {
+        let q = query;
+        if (filterUnit !== 'all') q = q.eq(unitCol, filterUnit);
+        else if (user?.unidadeId && user?.usuario !== 'admin.sms') q = q.eq(unitCol, user.unidadeId);
 
-          if (data.length < pageSize) break;
-          from += pageSize;
-        }
-
-        return allSessions;
+        if (filterProf !== 'all') q = q.eq(profCol, filterProf);
+        else if (user?.role === 'profissional' && user.id) q = q.eq(profCol, user.id);
+        
+        return q;
       };
 
-      if (user?.role === 'profissional') {
-        qCycles = qCycles.eq('professional_id', user.id);
-      }
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qCycles = qCycles.eq('unit_id', user.unidadeId);
-      }
+      qAg = applyFilters(qAg, 'unidade_id', 'profissional_id');
+      qAt = applyFilters(qAt, 'unidade_id', 'profissional_id');
+      qFila = applyFilters(qFila, 'unidade_id', 'profissional_id');
+      
+      // Triagem doesn't have unidade_id in triage_records, usually linked via agendamento
+      if (user?.role === 'tecnico' && user.id) qTriage = qTriage.eq('tecnico_id', user.id);
 
-      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
-      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
-      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qNursing = qNursing.eq('unit_id', user.unidadeId);
-        qMulti = qMulti.eq('unit_id', user.unidadeId);
-        qPts = qPts.eq('unit_id', user.unidadeId);
-      }
+      // 6. Treatment Cycles & Sessions
+      let qCycles = supabase
+        .from('treatment_cycles')
+        .select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at')
+        .gte('start_date', startOfDay)
+        .lte('start_date', endOfDay);
+      qCycles = applyFilters(qCycles, 'unit_id', 'professional_id');
+
+      let qSessions = supabase
+        .from('treatment_sessions')
+        .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+        .gte('scheduled_date', startOfDay)
+        .lte('scheduled_date', endOfDay);
+      if (user?.role === 'profissional') qSessions = qSessions.eq('professional_id', user.id);
+
+      // 7. Evaluations
+      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at')
+        .gte('evaluation_date', startOfDay).lte('evaluation_date', endOfDay);
+      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at')
+        .gte('evaluation_date', startOfDay).lte('evaluation_date', endOfDay);
+      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at')
+        .gte('created_at', `${startOfDay}T00:00:00`).lte('created_at', `${endOfDay}T23:59:59`);
+      
+      qNursing = applyFilters(qNursing, 'unit_id', 'patient_id'); // patient_id used as placeholder if no prof_id
+      qMulti = applyFilters(qMulti, 'unit_id', 'id');
+      qPts = applyFilters(qPts, 'unit_id', 'professional_id');
 
       const [
+        { data: agData },
         { data: atData },
         { data: filaData },
         { data: triageData },
         { data: procData },
         { data: cyclesData },
-        sessionsData,
+        { data: sessionsData },
         { data: nursingData },
         { data: multiData },
         { data: ptsDataResult },
       ] = await Promise.all([
-        qAt,
-        qFila,
-        qTriage,
-        qProc,
-        qCycles,
-        loadAllTreatmentSessions(),
-        qNursing,
-        qMulti,
-        qPts,
+        qAg, qAt, qFila, qTriage, qProc, qCycles, qSessions, qNursing, qMulti, qPts
       ]);
 
+      if (agData) {
+        // Map database columns to camelCase expected by the component logic
+        setAgendamentosDB(agData.map(a => ({
+          ...a,
+          unidadeId: a.unidade_id,
+          profissionalId: a.profissional_id,
+          pacienteId: a.paciente_id,
+          pacienteNome: a.paciente_nome,
+          profissionalNome: a.profissional_nome,
+          setorId: a.setor_id
+        })));
+      }
       if (atData) setAtendimentosDB(atData);
       if (filaData) setFilaDB(filaData);
       if (triageData) setTriagensDB(triageData as TriagemDB[]);
@@ -207,9 +259,14 @@ const Relatorios: React.FC = () => {
       if (nursingData) setNursingEvals(nursingData);
       if (multiData) setMultiEvals(multiData);
       if (ptsDataResult) setPtsData(ptsDataResult);
+      
       setLastUpdated(new Date());
-    } catch (err) { console.error('Error loading report data:', err); }
-  }, [user]);
+    } catch (err) { 
+      console.error('Error loading report data:', err); 
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, dateFrom, dateTo, filterUnit, filterProf]);
 
   useEffect(() => { loadReportData(); }, [loadReportData]);
 
@@ -233,31 +290,32 @@ const Relatorios: React.FC = () => {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
+  const setoresUnicos = useMemo(() => {
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosDB.map(a => a.tipo)].filter(Boolean));
+    return Array.from(s).sort();
+  }, [atendimentosDB, agendamentosDB]);
+
+  const tiposUnicos = useMemo(() => {
+    const s = new Set(agendamentosDB.map(a => a.tipo).filter(Boolean));
+    return Array.from(s).sort();
+  }, [agendamentosDB]);
+
   // === FILTERS ===
   const filtered = useMemo(() => {
-    return agendamentos.filter(a => {
-      if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissionalId !== filterProf) return false;
+    return agendamentosDB.filter(a => {
+      // Basic filters (more are already applied at DB level)
       if (filterStatus !== 'all' && a.status !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
       return true;
     });
-  }, [agendamentos, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, user]);
+  }, [agendamentosDB, filterStatus, filterTipo]);
 
   const filteredAtendimentos = useMemo(() => {
     return atendimentosDB.filter(a => {
-      if (filterUnit !== 'all' && a.unidade_id !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissional_id !== filterProf) return false;
       if (filterSetor !== 'all' && a.setor !== filterSetor) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
       return true;
     });
-  }, [atendimentosDB, filterUnit, filterProf, filterSetor, dateFrom, dateTo]);
+  }, [atendimentosDB, filterSetor]);
 
   // === STATS ===
   const stats = useMemo(() => {
@@ -1171,7 +1229,7 @@ ${dataRows}
           <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
           <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
             <Select value={filterUnit} onValueChange={setFilterUnit}>
@@ -1212,6 +1270,16 @@ ${dataRows}
           </div>
           <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
           <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
+          <div className="flex items-end">
+            <Button 
+              className="w-full h-9 gradient-primary text-primary-foreground gap-2" 
+              onClick={loadReportData}
+              disabled={isLoading}
+            >
+              {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Buscar
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1239,8 +1307,20 @@ ${dataRows}
         ))}
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <div className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-50 flex items-center justify-center rounded-xl min-h-[400px]">
+            <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-xl border animate-in fade-in zoom-in duration-300">
+              <RefreshCw className="w-10 h-10 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="font-bold text-lg" style={{ color: '#1B3A5C' }}>Buscando dados...</p>
+                <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos para relatórios grandes.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
           {[
             { value: 'geral', label: 'Geral' },
@@ -2437,7 +2517,8 @@ th{background:#f1f5f9;font-weight:600;}
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 };
