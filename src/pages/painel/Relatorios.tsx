@@ -39,23 +39,31 @@ const normalizeStatus = (status: string): string => {
   const s = status.toLowerCase().trim();
   
   // Concluídos / Realizados
-  if (['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'prontuario_finalizado', 'atendimento_finalizado'].includes(s)) {
+  if ([
+    'concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 
+    'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 
+    'prontuario_concluido', 'finalizada', 'concluida'
+  ].includes(s)) {
     return 'concluido';
   }
   // Faltas
-  if (['falta', 'faltou', 'ausente'].includes(s)) {
+  if (['falta', 'faltou', 'ausente', 'nao compareceu', 'nao_compareceu', 'não compareceu'].includes(s)) {
     return 'falta';
   }
   // Cancelados
-  if (['cancelado', 'cancelada'].includes(s)) {
+  if (['cancelado', 'cancelada', 'cancelamento'].includes(s)) {
     return 'cancelado';
   }
   // Remarcados
-  if (['remarcado', 'reagendado'].includes(s)) {
+  if (['remarcado', 'reagendado', 'reagendada'].includes(s)) {
     return 'remarcado';
   }
   // Pendentes / Em andamento
-  if (['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem'].includes(s)) {
+  if ([
+    'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
+    'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
+    'aguardando_triagem', 'confirmado_chegada'
+  ].includes(s)) {
     return 'pendente';
   }
   return s;
