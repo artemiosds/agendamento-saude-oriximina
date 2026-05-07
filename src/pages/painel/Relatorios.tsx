@@ -422,14 +422,17 @@ const Relatorios: React.FC = () => {
       return true;
     }).length;
 
-    const atendimentosRealizados = concluidos + prontuariosConcluidos + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
+    // Total of sessions completed from treatment cycles
+    const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
+
+    const atendimentosRealizados = concluidos + prontuariosConcluidos + sessionsDone + filteredAtendimentos.filter(at => normalizeStatus(at.status) === 'concluido' || at.status === 'finalizado').length;
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
       remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
       taxaFalta, atendimentosRealizados 
     };
-  }, [filtered, filteredAtendimentos, prontuariosDB, filterUnit, filterProf]);
+  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
