@@ -1655,7 +1655,7 @@ ${dataRows}
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.slice(0, 200).map(a => (
+                      {filtered.slice(0, 1000).map(a => (
                         <tr key={a.id} className="border-b hover:bg-muted/30">
                           <td className="py-2 px-3">{a.data}</td>
                           <td className="py-2 px-2">{a.hora}</td>
