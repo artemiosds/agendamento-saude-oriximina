@@ -416,22 +416,30 @@ const Relatorios: React.FC = () => {
 
   const stats = useMemo(() => {
     const total = Math.max(filtered.length, totalCountAg);
-    const confirmados = filtered.filter(a => normalizeStatus(a.status) === 'pendente' && (a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada')).length;
-    const pendentes = filtered.filter(a => normalizeStatus(a.status) === 'pendente').length;
+    
+    // Pendentes calculation per user's list: pendente, aguardando, confirmado, agendado, apto, em_atendimento, etc.
+    // But we MUST exclude those that were already concluded, faltou or cancelado.
+    const pendentes = filtered.filter(a => {
+      const s = normalizeStatus(a.status);
+      if (s === 'concluido' || s === 'falta' || s === 'cancelado' || s === 'remarcado') return false;
+      return true; // Everything else that isn't a final state is considered pending
+    }).length;
+
+    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada').length;
     const concluidosAg = filtered.filter(a => normalizeStatus(a.status) === 'concluido').length;
-    const emAtendimento = filtered.filter(a => normalizeStatus(a.status) === 'em_atendimento').length;
+    const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
     const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
     const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
     const remarcados = filtered.filter(a => normalizeStatus(a.status) === 'remarcado').length;
-    const online = filtered.filter(a => a.origem === 'online').length;
-    const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
+    
     const retornos = filtered.filter(a => {
       const t = (a.tipo || '').toLowerCase();
-      return t.includes('retorno');
+      return t.includes('retorno') || t.includes('atendimento_retorno') || t.includes('consulta_retorno');
     }).length;
+    
     const primeiraConsulta = filtered.filter(a => {
       const t = (a.tipo || '').toLowerCase();
-      return t.includes('consulta') && !t.includes('retorno');
+      return (t.includes('consulta') || t.includes('primeira')) && !t.includes('retorno');
     }).length;
     
     // Normalizing "atendimentos realizados" to include both agendamentos and completed prontuários
@@ -441,7 +449,6 @@ const Relatorios: React.FC = () => {
       return true;
     }).length;
 
-    // Total of sessions completed from treatment cycles
     const sessionsDone = treatmentSessions.filter(s => s.status === 'realizada').length;
 
     const extraAtendimentos = filteredAtendimentos.filter(at => {
@@ -449,17 +456,20 @@ const Relatorios: React.FC = () => {
       return s === 'concluido';
     }).length;
 
-    const atendimentosRealizados = Math.max(concluidosAg, prontuariosConcluidos, sessionsDone, extraAtendimentos);
-    // User specifically mentioned divergence between concluidos and atendimentosRealizados
-    // Let's make concluidos show the more accurate count
-    const concluidos = Math.max(concluidosAg, atendimentosRealizados);
+    // Use a more inclusive "concluded" count as requested by the user
+    const totalConcluidos = Math.max(concluidosAg, prontuariosConcluidos, sessionsDone, extraAtendimentos);
+    const concluidos = totalConcluidos;
 
-    const taxaComparecimento = total > 0 ? Math.round((concluidos / (total - cancelados || 1)) * 100) : 0;
-    const taxaFalta = total > 0 ? Math.round((faltas / (total - cancelados || 1)) * 100) : 0;
+    // Correcting comparecimento calculation: comparecimento = realizados / (total - cancelados)
+    const validTotal = Math.max(1, total - cancelados);
+    const taxaComparecimento = Math.min(100, Math.round((concluidos / validTotal) * 100));
+    const taxaFalta = Math.min(100, Math.round((faltas / validTotal) * 100));
     
     return { 
       total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
-      remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, 
+      remarcados, online: filtered.filter(a => a.origem === 'online').length, 
+      recepcao: filtered.filter(a => a.origem === 'recepcao').length, 
+      retornos, primeiraConsulta, taxaComparecimento, 
       taxaFalta, atendimentosRealizados: concluidos
     };
   }, [filtered, totalCountAg, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
