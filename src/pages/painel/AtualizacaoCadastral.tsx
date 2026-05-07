@@ -91,26 +91,51 @@ const AtualizacaoCadastral: React.FC = () => {
 
   const handleEditQuick = (p: any) => {
     setSelectedPatient(p);
+    // Ensure data alignment with CadastroPacienteForm expected structure
     setEditForm({
       ...emptyPacienteForm,
-      nome: p.nome,
+      nome: p.nome || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nomeMae || "",
+      nomeMae: p.nomeMae || p.nome_mae || "",
       telefone: p.telefone || "",
-      dataNascimento: p.dataNascimento || "",
+      dataNascimento: p.dataNascimento || p.data_nascimento || "",
       email: p.email || "",
       endereco: p.endereco || "",
       municipio: p.municipio || "",
       naturalidade: p.naturalidade || "",
-      naturalidadeUf: p.naturalidade_uf || "",
-      menorIdade: !!p.menor_idade,
-      nomeResponsavel: p.nome_responsavel || "",
-      cpfResponsavel: p.cpf_responsavel || "",
-      isGestante: !!p.is_gestante,
-      isPne: !!p.is_pne,
-      isAutista: !!p.is_autista,
-      customData: p.custom_data || {},
+      naturalidadeUf: p.naturalidadeUf || p.naturalidade_uf || "",
+      menorIdade: !!(p.menorIdade || p.menor_idade),
+      nomeResponsavel: p.nomeResponsavel || p.nome_responsavel || "",
+      cpfResponsavel: p.cpfResponsavel || p.cpf_responsavel || "",
+      isGestante: !!p.isGestante || !!p.is_gestante,
+      isPne: !!p.isPne || !!p.is_pne,
+      isAutista: !!p.isAutista || !!p.is_autista,
+      
+      // Fields from other sources that might be in different naming conventions
+      tipoCondicao: p.tipoCondicao || p.tipo_condicao || "",
+      mobilidade: p.mobilidade || "",
+      usaDispositivo: !!(p.usaDispositivo || p.usa_dispositivo),
+      tipoDispositivo: p.tipoDispositivo || p.tipo_dispositivo || "",
+      comunicacao: p.comunicacao || "",
+      comportamento: p.comportamento || "",
+      usaEquipamentos: !!(p.usaEquipamentos || p.usa_equipamentos),
+      equipamentos: p.equipamentos || [],
+      observacaoEquipamentos: p.observacaoEquipamentos || p.observacao_equipamentos || "",
+      outroServicoSus: !!(p.outroServicoSus || p.outro_servico_sus),
+      transporte: p.transporte || "",
+      turnoPreferido: p.turnoPreferido || p.turno_preferido || "",
+      especialidadeDestino: p.especialidadeDestino || p.especialidade_destino || "",
+      ubsOrigem: p.ubsOrigem || p.ubs_origem || "",
+      profissionalSolicitante: p.profissionalSolicitante || p.profissional_solicitante || "",
+      tipoEncaminhamento: p.tipoEncaminhamento || p.tipo_encaminhamento || "",
+      cid: p.cid || "",
+      diagnosticoResumido: p.diagnosticoResumido || p.diagnostico_resumido || "",
+      justificativa: p.justificativa || "",
+      dataEncaminhamento: p.dataEncaminhamento || p.data_encaminhamento || "",
+      documentoUrl: p.documentoUrl || p.documento_url || "",
+      
+      customData: p.customData || p.custom_data || {},
     });
     setIsEditModalOpen(true);
   };
