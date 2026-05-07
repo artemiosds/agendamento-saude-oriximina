@@ -266,6 +266,7 @@ const Relatorios: React.FC = () => {
           profissionalNome: a.profissional_nome,
           setorId: a.setor_id
         })));
+        setTotalCountAg(results[0].count || results[0].data?.length || 0);
       }
       if (results[1].data) setAtendimentosDB(results[1].data);
       if (results[2].data) setFilaDB(results[2].data);
