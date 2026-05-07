@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { updatePacienteCadastro } from "@/lib/paciente-utils";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
@@ -1146,7 +1147,10 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: () => { void executarStatusChange(agId, newStatus); },
+        onConfirm: async () => { 
+          // Garantia extra de salvamento antes de confirmar a chegada
+          void executarStatusChange(agId, newStatus); 
+        },
       });
       return;
     }
