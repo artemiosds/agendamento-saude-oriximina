@@ -21,11 +21,11 @@ export function useRealtimeSync<T = Record<string, unknown>>({
   schema = "public",
   filter,
   enabled = true,
-  debounceMs = 300,
+  debounceMs = 500,
   channelKey,
   onEvent,
   poll,
-  pollIntervalMs = 30000,
+  pollIntervalMs = 120000,
 }: UseRealtimeSyncOptions<T>) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
