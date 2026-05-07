@@ -20,13 +20,13 @@ export function calculatePatientPendingFields(p: any): PendingFieldsResult {
   // Basic Identification
   if (!p.nome?.trim()) missing.push("Nome");
   if (!p.cpf?.trim()) missing.push("CPF");
-  if (!p.data_nascimento) missing.push("Data de Nascimento");
-  if (!p.nome_mae?.trim()) missing.push("Nome da Mãe");
+  if (!(p.dataNascimento || p.data_nascimento)) missing.push("Data de Nascimento");
+  if (!(p.nomeMae || p.nome_mae)?.trim()) missing.push("Nome da Mãe");
   if (!cd.sexo) missing.push("Sexo");
   
   // SUS / BPA Requirements
   if (!p.cns?.trim()) missing.push("CNS");
-  if (!cd.raca_cor) missing.push("Raça/Cor");
+  if (!(cd.racaCor || cd.raca_cor)) missing.push("Raça/Cor");
   if (!cd.nacionalidade) missing.push("Nacionalidade");
   if (!p.naturalidade?.trim()) missing.push("Naturalidade");
   
@@ -40,7 +40,7 @@ export function calculatePatientPendingFields(p: any): PendingFieldsResult {
   if (!p.municipio?.trim()) missing.push("Município");
   
   // System
-  const hasUnidade = !!p.unidade_id;
+  const hasUnidade = !!(p.unidadeId || p.unidade_id);
   if (!hasUnidade) missing.push("Unidade Vinculada");
   
   const importantFieldsCount = 15;
