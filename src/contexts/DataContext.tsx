@@ -506,8 +506,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       const PAGE = 1000;
+      // PERF: lista leve no startup. Campos detalhados (custom_data, endereço completo,
+      // dados de encaminhamento, dispositivos etc.) são carregados sob demanda via
+      // patientService.getById quando a ficha do paciente é aberta.
       const columns =
-        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,unidade_id,is_gestante,is_pne,is_autista,menor_idade,criado_em,especialidade_destino";
       let allData: any[] = [];
       let from = 0;
       while (true) {
@@ -541,42 +544,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           telefone: p.telefone || "",
           dataNascimento: p.data_nascimento || "",
           email: p.email || "",
-          endereco: p.endereco || "",
-          observacoes: p.observacoes || "",
-          descricaoClinica: p.descricao_clinica || "",
-          cid: p.cid || "",
+          endereco: "",
+          observacoes: "",
+          descricaoClinica: "",
+          cid: "",
           criadoEm: p.criado_em || "",
           unidadeId: p.unidade_id || "",
           isGestante: !!p.is_gestante,
           isPne: !!p.is_pne,
           isAutista: !!p.is_autista,
-          naturalidade: p.naturalidade || "",
-          naturalidade_uf: p.naturalidade_uf || "",
-          municipio: p.municipio || "",
+          naturalidade: "",
+          naturalidade_uf: "",
+          municipio: "",
           menor_idade: !!p.menor_idade,
-          nome_responsavel: p.nome_responsavel || "",
-          cpf_responsavel: p.cpf_responsavel || "",
-          ubs_origem: p.ubs_origem || "",
-          profissional_solicitante: p.profissional_solicitante || "",
-          tipo_encaminhamento: p.tipo_encaminhamento || "",
-          diagnostico_resumido: p.diagnostico_resumido || "",
-          justificativa: p.justificativa || "",
-          data_encaminhamento: p.data_encaminhamento || "",
-          documento_url: p.documento_url || "",
-          tipo_condicao: p.tipo_condicao || "",
-          mobilidade: p.mobilidade || "",
-          usa_dispositivo: !!p.usa_dispositivo,
-          tipo_dispositivo: p.tipo_dispositivo || "",
-          comunicacao: p.comunicacao || "",
-          comportamento: p.comportamento || "",
-          usa_equipamentos: !!p.usa_equipamentos,
-          equipamentos: p.equipamentos || [],
-          observacao_equipamentos: p.observacao_equipamentos || "",
-          outro_servico_sus: !!p.outro_servico_sus,
-          transporte: p.transporte || "",
-          turno_preferido: p.turno_preferido || "",
+          nome_responsavel: "",
+          cpf_responsavel: "",
+          ubs_origem: "",
+          profissional_solicitante: "",
+          tipo_encaminhamento: "",
+          diagnostico_resumido: "",
+          justificativa: "",
+          data_encaminhamento: "",
+          documento_url: "",
+          tipo_condicao: "",
+          mobilidade: "",
+          usa_dispositivo: false,
+          tipo_dispositivo: "",
+          comunicacao: "",
+          comportamento: "",
+          usa_equipamentos: false,
+          equipamentos: [],
+          observacao_equipamentos: "",
+          outro_servico_sus: false,
+          transporte: "",
+          turno_preferido: "",
           especialidade_destino: p.especialidade_destino || "",
-          custom_data: p.custom_data || {},
+          custom_data: {},
         })),
       );
     } catch (err) {
@@ -586,11 +589,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      // PERF: reduced window from 30 to 14 days back to keep startup fast.
-      // Older appointments remain accessible through the Histórico/Auditoria pages
-      // which fetch on-demand.
+      // PERF: janela reduzida para 7 dias atrás (e tudo a partir de hoje).
+      // Histórico antigo é acessado sob demanda via páginas de Auditoria/Histórico.
       const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - 14);
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
       const cutoff = localDateStr(cutoffDate);
 
       let allData: any[] = [];
