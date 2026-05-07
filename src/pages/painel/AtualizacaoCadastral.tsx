@@ -409,22 +409,36 @@ const AtualizacaoCadastral: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <Dialog 
+        open={isEditModalOpen} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedPatient(null);
+          setIsEditModalOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edição Rápida de Paciente</DialogTitle>
+            <DialogTitle>Edição Rápida de Paciente: {selectedPatient?.nome}</DialogTitle>
           </DialogHeader>
-          <CadastroPacienteForm
-            pacienteId={selectedPatient?.id}
-            form={editForm}
-            onChange={setEditForm}
-            onSave={handleSaveQuick}
-            saving={isSaving}
-            isEdit={true}
-            errors={{}}
-          />
-          <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+          
+          <div className="py-2">
+            <CadastroPacienteForm
+              key={selectedPatient?.id || "new"}
+              pacienteId={selectedPatient?.id}
+              form={editForm}
+              onChange={setEditForm}
+              onSave={handleSaveQuick}
+              saving={isSaving}
+              isEdit={true}
+              errors={{}}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4 pt-4 border-t sticky bottom-0 bg-background pb-2">
+            <Button variant="outline" onClick={() => {
+              setIsEditModalOpen(false);
+              setSelectedPatient(null);
+            }}>Cancelar</Button>
             <Button onClick={handleSaveQuick} disabled={isSaving}>
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
               Salvar Alterações
