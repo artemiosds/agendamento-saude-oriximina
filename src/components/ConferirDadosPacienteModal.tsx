@@ -515,9 +515,11 @@ export function ConferirDadosPacienteModal({
                     <MunicipioCombobox
                       value={form.naturalidade}
                       uf={form.naturalidade_uf}
-                      onChange={(cidade, uf) => {
-                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
+                      onChange={async (cidade, uf) => {
+                        const newForm = { ...form, naturalidade: cidade, naturalidade_uf: uf };
+                        setForm(newForm);
                         setDirty(true);
+                        if (paciente) await handleSave(true, newForm);
                       }}
                       placeholder="Selecione o município de naturalidade"
                     />
