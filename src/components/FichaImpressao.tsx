@@ -576,7 +576,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
           {/* IDENTIFICAÇÃO */}
           <div className="border rounded p-3 bg-slate-50/30">
             <h3 className="text-[10px] font-bold uppercase text-[#0c4a6e] border-b pb-1 mb-2">1. Identificação</h3>
-            <p className="mb-1"><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> <span className="font-bold">{data.paciente.nome_completo || '—'}</span></p>
+            <p className="mb-1"><span className="text-[9px] font-bold uppercase text-muted-foreground">Nome:</span> <span className="font-bold">{data.paciente.nome || '—'}</span></p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CPF:</span> {data.paciente.cpf || '—'}</p>
               <p><span className="text-[9px] font-bold uppercase text-muted-foreground">CNS:</span> {formatCNS(data.paciente.cns) || '—'}</p>
