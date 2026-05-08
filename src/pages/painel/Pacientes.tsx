@@ -113,7 +113,7 @@ const PACIENTE_COLUMNS =
 
 const mapPacienteRow = (p: any) => ({
   id: p.id,
-  nome: p.nome,
+  nome: p.nome || p.nome_completo || "",
   cpf: p.cpf || "",
   cns: p.cns || "",
   nomeMae: p.nome_mae || "",
@@ -447,7 +447,7 @@ const Pacientes: React.FC = () => {
     const cd = (p as any).custom_data || {};
     setForm({
       ...emptyPacienteForm,
-      nome: p.nome || "",
+      nome: p.nome || (p as any).nome_completo || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
       nomeMae: (p as any).nome_mae || p.nomeMae || "",
