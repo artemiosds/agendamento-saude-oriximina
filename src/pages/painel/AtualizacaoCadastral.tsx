@@ -19,7 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { sanitizePacientePayload } from "@/lib/paciente-utils";
+import { sanitizePacientePayload, updatePacienteCadastro } from "@/lib/paciente-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import CadastroPacienteForm, { emptyPacienteForm } from "@/components/CadastroPacienteForm";

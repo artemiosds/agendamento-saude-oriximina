@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { updatePacienteCadastro } from "@/lib/paciente-utils";
+import { updatePacienteCadastro, normalizePatientPayload, sanitizePacientePayload } from "@/lib/paciente-utils";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
