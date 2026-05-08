@@ -65,7 +65,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       const { data, error } = await supabase
         .from('pacientes')
         .select(
-          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+          'id, nome_completo, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
         .eq('id', value)
         .maybeSingle();
