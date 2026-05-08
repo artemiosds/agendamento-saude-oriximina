@@ -329,8 +329,14 @@ const Relatorios: React.FC = () => {
       setPtsData(rPts.data);
       
       setLastUpdated(new Date());
-    } catch (err) { 
-      console.error('Error loading report data:', err); 
+    } catch (err: any) { 
+      console.error('[Relatorios] Erro real ao carregar dados do relatório', {
+        origem: 'loadReportData',
+        error: err,
+        message: err?.message,
+        details: err?.details,
+        code: err?.code
+      }); 
     } finally {
       setIsLoading(false);
       isFetchingRef.current = false;
