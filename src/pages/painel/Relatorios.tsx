@@ -91,15 +91,10 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
-  const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
-    return Array.from(s).sort();
-  }, [atendimentosDB, agendamentosFull]);
-
-  const tiposUnicos = useMemo(() => {
-    const s = new Set(agendamentosFull.map(a => a.tipo).filter(Boolean));
-    return Array.from(s).sort();
-  }, [agendamentosFull]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
+  const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
 
   const normalizeStatus = useCallback((status: string): 'concluido' | 'pendente' | 'falta' | 'cancelado' | 'remarcado' | 'retorno' | string => {
     if (!status) return 'pendente';
@@ -122,10 +117,15 @@ const Relatorios: React.FC = () => {
     return s;
   }, []);
 
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
-  const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
-  const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
+  const setoresUnicos = useMemo(() => {
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
+    return Array.from(s).sort();
+  }, [atendimentosDB, agendamentosFull]);
+
+  const tiposUnicos = useMemo(() => {
+    const s = new Set(agendamentosFull.map(a => a.tipo).filter(Boolean));
+    return Array.from(s).sort();
+  }, [agendamentosFull]);
 
   const loadReportData = useCallback(async () => {
     if (isFetching) return;
