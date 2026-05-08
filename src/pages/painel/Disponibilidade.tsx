@@ -203,28 +203,36 @@ const Disponibilidade: React.FC = () => {
 
     if (isTurno) {
       setModo('por_turno');
-      // Reconstruct turno days from records
-      const newTurnoDays: TurnoDayConfig[] = Array.from({ length: 7 }, () => ({ ativo: false, turnosAtivos: [] }));
-      const vagasMap: TurnoVagas = {};
+      // Reconstruct DiaConfig from records
+      const newConfigDias: DiaConfig[] = Array.from({ length: 7 }, (_, i) => ({
+        diaSemana: i,
+        ativo: false,
+        blocos: []
+      }));
 
       records.forEach(r => {
-        // For turno records, salaId stores the turno ID
+        // For turno records, salaId stores the turno ID or custom name
         const turnoId = r.salaId || '';
-        if (turnoId) {
-          vagasMap[turnoId] = r.vagasPorDia;
-          r.diasSemana.forEach(dayNum => {
-            if (dayNum >= 0 && dayNum <= 6) {
-              newTurnoDays[dayNum].ativo = true;
-              if (!newTurnoDays[dayNum].turnosAtivos.includes(turnoId)) {
-                newTurnoDays[dayNum].turnosAtivos.push(turnoId);
-              }
-            }
-          });
-        }
+        const turnoObj = turnosGlobais.find(t => t.id === turnoId);
+        const tipo: 'padrao' | 'custom' = turnoObj ? 'padrao' : 'custom';
+        
+        r.diasSemana.forEach(dayNum => {
+          if (dayNum >= 0 && dayNum <= 6) {
+            newConfigDias[dayNum].ativo = true;
+            newConfigDias[dayNum].blocos.push({
+              id: r.id,
+              nome: turnoObj?.nome || turnoId || 'Turno',
+              tipo,
+              horaInicio: r.horaInicio,
+              horaFim: r.horaFim,
+              vagas: r.vagasPorDia,
+              ativo: true
+            });
+          }
+        });
       });
 
-      setTurnoDays(newTurnoDays);
-      setTurnoVagas(vagasMap);
+      setConfigDias(newConfigDias);
     } else {
       setModo('por_hora');
       const newSchedules = defaultDaySchedules.map(ds => ({ ...ds, ativo: false }));
