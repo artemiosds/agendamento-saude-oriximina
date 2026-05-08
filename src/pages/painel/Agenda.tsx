@@ -986,8 +986,15 @@ const Agenda: React.FC = () => {
             queryClient
           );
         }
-      } catch (err) {
-        console.warn("[Agenda] Erro ao persistir dados do paciente antes de agendar:", err);
+      } catch (err: any) {
+        console.error("[Agenda] Erro real ao persistir dados do paciente antes de agendar", {
+          pacienteId: newAg.pacienteId,
+          error: err,
+          message: err?.message,
+          code: err?.code
+        });
+        toast.error("Não foi possível salvar os dados do paciente. Verifique se há campos obrigatórios vazios.");
+        return; // Aborta agendamento se falhar salvamento do paciente
       }
     }
 
@@ -1234,8 +1241,15 @@ const Agenda: React.FC = () => {
               queryClient
             );
           }
-        } catch (err) {
-          console.warn("[Agenda] Erro ao persistir dados do paciente antes da chegada:", err);
+        } catch (err: any) {
+          console.error("[Agenda] Erro real ao persistir dados do paciente antes da chegada", {
+            pacienteId: ag.pacienteId,
+            error: err,
+            message: err?.message,
+            code: err?.code
+          });
+          toast.error("Não foi possível salvar os dados do paciente. Verifique os campos e tente novamente.");
+          return; // Aborta confirmação de chegada se falhar salvamento do paciente
         }
 
         // Triage routing is OPT-IN. Default = direct to professional's queue.
@@ -1340,8 +1354,14 @@ const Agenda: React.FC = () => {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
-    } catch (err) {
-      console.error("Error updating appointment status:", err);
+    } catch (err: any) {
+      console.error("[Agenda] Erro real ao atualizar status do agendamento", {
+        agId,
+        newStatus,
+        error: err,
+        message: err?.message,
+        code: err?.code
+      });
       toast.error("Erro ao atualizar status do agendamento.");
       return;
     }
@@ -1960,7 +1980,7 @@ const Agenda: React.FC = () => {
                     <BuscaPaciente
                       pacientes={pacientes}
                       value={newAg.pacienteId}
-                      onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
+                      onChange={(id, nome) => handlePacienteSelecionadoNovoAg(id)}
                     />
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />

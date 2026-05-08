@@ -559,6 +559,7 @@ const Pacientes: React.FC = () => {
           queryClient
         );
         
+        await refreshPacientes();
         setSaving(false);
         setDialogOpen(false);
         toast.success("Paciente atualizado!");
@@ -644,8 +645,9 @@ const Pacientes: React.FC = () => {
         setSaving(false);
         toast.success("Paciente cadastrado com sucesso!");
       }
-    } catch {
-      toast.error("Erro ao salvar paciente.");
+    } catch (err: any) {
+      console.error("[Pacientes] Erro real ao salvar paciente", err);
+      toast.error("Não foi possível salvar o paciente. Verifique os campos obrigatórios e tente novamente.");
     } finally {
       setSaving(false);
     }

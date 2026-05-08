@@ -8,7 +8,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  * 
  * 1. Colunas de Topo (Tabela `pacientes`):
  *    - id (text, PK)
- *    - nome (text, NOT NULL)
+ *    - nome_completo (text, NOT NULL) - Nome real da coluna conforme schema lido
  *    - cpf (text, NOT NULL)
  *    - cns (text, NOT NULL)
  *    - telefone (text, NOT NULL)
@@ -70,7 +70,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  */
 
 const PACIENTE_TEXT_NOT_NULL = new Set([
-  "nome", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
+  "nome_completo", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
   "nome_mae", "municipio", "naturalidade", "naturalidade_uf", "unidade_id",
   "data_nascimento", "descricao_clinica", "cid", "especialidade_destino",
   "turno_preferido", "transporte", "observacao_equipamentos",
@@ -92,14 +92,37 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined) continue;
+    
+    // Se o valor for null e a coluna for NOT NULL no banco, convertemos para o padrão seguro
     if (v === null) {
-      if (PACIENTE_TEXT_NOT_NULL.has(k)) { out[k] = ""; continue; }
-      if (PACIENTE_BOOL_NOT_NULL.has(k)) { out[k] = false; continue; }
-      if (k === "equipamentos") { out[k] = []; continue; }
-      if (k === "custom_data") { out[k] = {}; continue; }
+      if (PACIENTE_TEXT_NOT_NULL.has(k)) {
+        out[k] = "";
+        continue;
+      }
+      if (PACIENTE_BOOL_NOT_NULL.has(k)) {
+        out[k] = false;
+        continue;
+      }
+      if (k === "equipamentos") {
+        out[k] = [];
+        continue;
+      }
+      if (k === "custom_data") {
+        out[k] = {};
+        continue;
+      }
+      // Para colunas que aceitam NULL, mantemos null se o banco permitir (is_nullable=YES)
+      // Mas para 'pacientes', quase tudo é NOT NULL conforme o schema lido.
+      out[k] = ""; 
       continue;
     }
-    out[k] = v;
+
+    // Garante que campos de texto NOT NULL nunca sejam vazios (sempre string, nunca null)
+    if (PACIENTE_TEXT_NOT_NULL.has(k) && (v === null || v === undefined)) {
+      out[k] = "";
+    } else {
+      out[k] = v;
+    }
   }
   return out as T;
 }
@@ -109,31 +132,34 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
  * para o padrão de persistência do sistema.
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
-  // Helper para resolver valor priorizando o form, depois o banco, com fallback seguro
   const resolve = (f: string, f2?: string) => {
-    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    let v = form[f] ?? form[f2 || ""];
+    
+    if ((v === null || v === undefined) && existingPatient) {
+      v = existingPatient[f] ?? existingPatient[f2 || ""];
+    }
+
     if (v === undefined || v === null) return "";
-    return typeof v === 'string' ? v.trim() : v;
+    return typeof v === 'string' ? v.trim() : String(v);
   };
 
   const resolveBool = (f: string, f2?: string) => {
-    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    let v = form[f] ?? form[f2 || ""];
+    if ((v === null || v === undefined) && existingPatient) {
+      v = existingPatient[f] ?? existingPatient[f2 || ""];
+    }
     return !!v;
   };
 
-  // 1. Extração do Custom Data (Dados Estruturados e Sociais)
   const existingCd = existingPatient?.custom_data || {};
   const customData = {
     ...existingCd,
-    // Dados Sociais
     sexo: form.sexo ?? existingCd.sexo ?? "",
     raca_cor: form.raca_cor ?? form.racaCor ?? existingCd.raca_cor ?? existingCd.racaCor ?? "",
     etnia: form.etnia ?? existingCd.etnia ?? "",
     etnia_outra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etnia_outra ?? existingCd.etniaOutra ?? "",
     nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
-    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.pais_nascimento ?? "",
-    
-    // Endereço Estruturado
+    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.paisNascimento ?? "",
     cep: form.cep ?? existingCd.cep ?? "",
     tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
     tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
@@ -142,38 +168,28 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     complemento: form.complemento ?? existingCd.complemento ?? "",
     bairro: form.bairro ?? existingCd.bairro ?? "",
     uf: form.uf ?? existingCd.uf ?? "PA",
-    
-    // Contato Extra
     telefone_secundario: form.telefone_secundario ?? form.telefoneSecundario ?? existingCd.telefone_secundario ?? existingCd.telefoneSecundario ?? "",
-    
-    // Auditoria Interna
     data_ultima_validacao: new Date().toISOString(),
   };
 
-  // 2. Montagem do Payload de Topo (Tabela `pacientes`)
-  // IMPORTANTE: Mapear para os nomes reais das colunas do banco
   const payload: any = {
-    nome: resolve("nome_completo", "nome"), // Garante mapeamento para nome_completo se existir
+    nome_completo: resolve("nome_completo", "nome"), 
     nome_mae: resolve("nome_mae", "nomeMae"),
     data_nascimento: resolve("data_nascimento", "dataNascimento"),
     cpf: String(resolve("cpf")).replace(/\D/g, ""),
     cns: String(resolve("cns")).replace(/\D/g, "").slice(0, 15),
     telefone: normalizePhone(String(resolve("telefone"))) || String(resolve("telefone")),
-    email: String(resolve("email")).toLowerCase(),
+    email: String(resolve("email")).toLowerCase().trim(),
     municipio: resolve("municipio"),
     naturalidade: resolve("naturalidade"),
     naturalidade_uf: resolve("naturalidade_uf", "naturalidadeUf"),
     unidade_id: resolve("unidade_id", "unidadeId"),
-    
-    // Flags de Prioridade/Clínicas
     is_gestante: resolveBool("is_gestante", "isGestante"),
     is_pne: resolveBool("is_pne", "isPne"),
     is_autista: resolveBool("is_autista", "isAutista"),
     menor_idade: resolveBool("menor_idade", "menorIdade"),
     nome_responsavel: resolve("nome_responsavel", "nomeResponsavel"),
     cpf_responsavel: String(resolve("cpf_responsavel", "cpfResponsavel")).replace(/\D/g, ""),
-    
-    // Dados Clínicos e de Encaminhamento
     cid: resolve("cid"),
     descricao_clinica: resolve("descricao_clinica", "descricaoClinica"),
     ubs_origem: resolve("ubs_origem", "ubsOrigem"),
@@ -184,8 +200,6 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     data_encaminhamento: resolve("data_encaminhamento", "dataEncaminhamento"),
     documento_url: resolve("documento_url", "documentoUrl"),
     especialidade_destino: resolve("especialidade_destino", "especialidadeDestino"),
-    
-    // Condição e Mobilidade
     tipo_condicao: resolve("tipo_condicao", "tipoCondicao"),
     mobilidade: resolve("mobilidade"),
     usa_dispositivo: resolveBool("usa_dispositivo", "usaDispositivo"),
@@ -198,29 +212,26 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     outro_servico_sus: resolveBool("outro_servico_sus", "outroServicoSus"),
     transporte: resolve("transporte"),
     turno_preferido: resolve("turno_preferido", "turnoPreferido"),
-    
-    // Custom Data Acoplado
     custom_data: customData,
   };
 
-  // Se a coluna real no banco for 'nome' (retrocompatibilidade ou divergência), duplicamos
-  // Mas conforme schema lido, a coluna é 'nome'.
-  // VAMOS USAR O QUE O DB DISSE: id, nome, cpf, telefone, data_nascimento, email, endereco, etc.
-  payload.nome = resolve("nome", "nome_completo");
-
-  // 3. Sincronização do Campo `endereco` (Texto Livre) com o Estruturado
-  const parts = [
-    customData.tipo_logradouro_dne,
-    customData.logradouro,
-    customData.numero ? `nº ${customData.numero}` : "",
-    customData.complemento,
-    customData.bairro,
-    payload.municipio,
-    customData.uf,
-    customData.cep ? `CEP ${customData.cep}` : ""
-  ].filter(p => p && String(p).trim() !== "");
-  
-  payload.endereco = parts.join(", ");
+  const hasStructuredAddress = customData.logradouro || customData.bairro || customData.cep;
+  if (!hasStructuredAddress && form.endereco) {
+    payload.endereco = form.endereco;
+  } else {
+    const parts = [
+      customData.tipo_logradouro_dne,
+      customData.logradouro,
+      customData.numero ? `nº ${customData.numero}` : "",
+      customData.complemento,
+      customData.bairro,
+      payload.municipio,
+      customData.uf,
+      customData.cep ? `CEP ${customData.cep}` : ""
+    ].filter(p => p && String(p).trim() !== "");
+    
+    payload.endereco = parts.join(", ");
+  }
 
   return sanitizePacientePayload(payload);
 }
@@ -277,7 +288,7 @@ export async function persistPaciente(
       hint: result.error?.hint,
       code: result.error?.code,
       payloadResumo: { 
-        nome: payload.nome, 
+        nome_completo: payload.nome_completo, 
         cpf: payload.cpf ? '***' : '',
         unidade_id: payload.unidade_id 
       }

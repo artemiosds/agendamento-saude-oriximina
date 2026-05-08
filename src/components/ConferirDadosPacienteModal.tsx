@@ -294,10 +294,13 @@ export function ConferirDadosPacienteModal({
         placeholder={placeholder}
         value={form[name] ?? ""}
         onChange={(e) => updateField(name, e.target.value)}
+        onBlur={() => {
+          if (dirty && !saving) handleSave(true).catch(() => {});
+        }}
         className="h-11 sm:h-10 text-base sm:text-sm"
       />
     </div>
-  ), [form, updateField]);
+  ), [form, updateField, dirty, saving]);
 
   const renderFieldSelect = useCallback((
     label: string, name: string,
@@ -305,7 +308,14 @@ export function ConferirDadosPacienteModal({
   ) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select value={form[name] || ""} onValueChange={async (v) => await updateField(name, v)}>
+      <Select 
+        value={form[name] || ""} 
+        onValueChange={async (v) => {
+          await updateField(name, v);
+          // Força salvamento imediato para selects
+          await handleSave(true, { ...form, [name]: v });
+        }}
+      >
         <SelectTrigger className="h-11 sm:h-10 text-base sm:text-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
@@ -316,7 +326,7 @@ export function ConferirDadosPacienteModal({
         </SelectContent>
       </Select>
     </div>
-  ), [form, updateField]);
+  ), [form, updateField, dirty, saving]);
 
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";

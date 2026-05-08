@@ -13,7 +13,7 @@ interface BuscaPacienteProps {
 
 const mapPaciente = (row: any): Paciente => ({
   id: row.id,
-  nome: row.nome,
+  nome: row.nome_completo || row.nome,
   cpf: row.cpf || '',
   cns: row.cns || '',
   nomeMae: row.nome_mae || '',
@@ -65,7 +65,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       const { data, error } = await supabase
         .from('pacientes')
         .select(
-          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+          'id, nome_completo, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
         .eq('id', value)
         .maybeSingle();
@@ -104,10 +104,10 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       const { data, error } = await supabase
         .from('pacientes')
         .select(
-          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+          'id, nome_completo, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
-        .or(`nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
-        .order('nome', { ascending: true })
+        .or(`nome_completo.ilike.%${ilikeTerm}%,nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
+        .order('nome_completo', { ascending: true })
         .limit(10);
 
       if (!cancelled) {
