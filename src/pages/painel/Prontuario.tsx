@@ -1121,31 +1121,42 @@ const ProntuarioPage: React.FC = () => {
         // Prepare the new list of links to insert
         const linksToInsert = selectedProcIds.map((pid) => {
           const proc = procedimentos.find(p => p.id === pid);
+          // Prioritize proc.uuid (the real UUID from the DB), fallback to pid if it looks like a UUID
+          const finalProcId = proc?.uuid || (pid.length > 30 ? pid : null);
+          
+          if (!finalProcId) {
+            console.warn(`[Prontuario] Procedimento ID ignorado (não é UUID): ${pid}`);
+            return null;
+          }
+
           return {
             prontuario_id: prontuarioId,
-            procedimento_id: proc?.uuid || pid, // Use UUID if found
+            procedimento_id: finalProcId,
             cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
             quantidade: procDetails[pid]?.quantidade || 1,
             observacao: procDetails[pid]?.observacao || "",
           };
-        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
+        }).filter(Boolean);
 
         // Simple strategy: delete and re-insert if different
-        // We compare existing vs new to see if we need to do anything
         const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
-          procedimento_id: l.procedimento_id,
-          quantidade: l.quantidade,
-          observacao: l.observacao,
-          cids_selecionados: l.cids_selecionados
+          procedimento_id: l!.procedimento_id,
+          quantidade: l!.quantidade,
+          observacao: l!.observacao,
+          cids_selecionados: l!.cids_selecionados
         })));
 
         if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          if (deleteError) {
+            console.error("Erro ao deletar procedimentos antigos:", deleteError);
+            throw new Error("Não foi possível atualizar os procedimentos (erro de permissão ou vínculo).");
+          }
           if (linksToInsert.length > 0) {
             const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(linksToInsert);
             if (insertError) {
-              console.error("Erro ao inserir procedimentos do prontuário:", insertError);
-              throw new Error("Não foi possível salvar os procedimentos do prontuário.");
+              console.error("Erro ao inserir procedimentos do prontuário:", insertError, linksToInsert);
+              throw new Error("Não foi possível salvar os procedimentos do prontuário. Verifique se todos os procedimentos são válidos.");
             }
           }
         }
