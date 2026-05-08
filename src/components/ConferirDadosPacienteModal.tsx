@@ -598,12 +598,18 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {/* Botão salvar (quando houver alterações) */}
+              {/* Botão salvar (fallback discreto) */}
               {dirty && (
                 <div className="flex justify-end pt-1">
-                  <Button size="sm" onClick={() => { handleSave().catch(() => {}); }} disabled={saving}>
-                    <Save className="w-3.5 h-3.5 mr-1.5" />
-                    {saving ? "Salvando…" : "Salvar alterações"}
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="text-[11px] h-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => { handleSave().catch(() => {}); }} 
+                    disabled={saving}
+                  >
+                    <Save className="w-3 h-3 mr-1.5" />
+                    {saving ? "Salvando…" : "Salvar agora"}
                   </Button>
                 </div>
               )}
