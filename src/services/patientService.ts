@@ -27,8 +27,9 @@ export const patientService = {
   },
 
   async search(query: string, unidadeId?: string) {
+    // Busca básica por nome, cpf, cns, telefone (colunas reais existentes)
     let q = supabase.from('pacientes').select('*')
-      .or(`nome.ilike.%${query}%,nome_completo.ilike.%${query}%,cpf.ilike.%${query}%,cns.ilike.%${query}%`)
+      .or(`nome.ilike.%${query}%,cpf.ilike.%${query}%,cns.ilike.%${query}%,telefone.ilike.%${query}%`)
       .limit(50);
     if (unidadeId) q = q.eq('unidade_id', unidadeId);
     const { data } = await q;
@@ -39,32 +40,34 @@ export const patientService = {
     if (!paciente) return {};
     const cd = paciente.custom_data || {};
     return {
-      nome: paciente.nome_completo || paciente.nome || "",
+      nome: paciente.nome || "",
       nome_mae: paciente.nome_mae || "",
       data_nascimento: paciente.data_nascimento || "",
       cpf: paciente.cpf || "",
       cns: paciente.cns || "",
       telefone_principal: paciente.telefone || "",
       email: paciente.email || "",
-      cep: paciente.cep || "",
-      logradouro: paciente.logradouro || "",
-      numero: paciente.numero || "",
-      complemento: paciente.complemento || cd.complemento || "",
-      bairro: paciente.bairro || "",
+      endereco: paciente.endereco || "",
       municipio: paciente.municipio || "",
-      uf: paciente.uf || "",
       naturalidade: paciente.naturalidade || "",
       naturalidade_uf: paciente.naturalidade_uf || "",
+      // Campos do custom_data
       sexo: cd.sexo || "",
-      raca_cor: cd.racaCor || cd.raca_cor || "",
+      raca_cor: cd.raca_cor || cd.racaCor || "",
       etnia: cd.etnia || "",
-      etnia_outra: cd.etniaOutra || cd.etnia_outra || "",
+      etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
       nacionalidade: cd.nacionalidade || "brasileiro",
-      pais_nascimento: cd.paisNascimento || cd.pais_nascimento || "",
-      tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || cd.tipoLogradouro || "",
-      tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
-      telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
-      observacoes: cd.observacoes || "",
+      pais_nascimento: cd.pais_nascimento || cd.paisNascimento || "",
+      tipo_logradouro_dne: cd.tipo_logradouro_dne || cd.tipoLogradouroDne || cd.tipoLogradouro || "",
+      tipo_logradouro_codigo: cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || "",
+      logradouro: cd.logradouro || "",
+      numero: cd.numero || "",
+      complemento: cd.complemento || "",
+      bairro: cd.bairro || "",
+      uf: cd.uf || "PA",
+      cep: cd.cep || "",
+      telefone_secundario: cd.telefone_secundario || cd.telefoneSecundario || "",
+      observacoes: cd.observacoes || paciente.observacoes || "",
       unidade_id: paciente.unidade_id || "",
     };
   },
@@ -73,10 +76,11 @@ export const patientService = {
     const sanitized: any = {};
     Object.keys(payload).forEach(key => {
       const value = payload[key];
+      // Remover campos undefined
       if (value === undefined) return;
       
-      // Emails, telefones, CPF, CNS vazios viram string vazia ""
-      if (['email', 'telefone', 'cpf', 'cns', 'telefone_secundario', 'telefone_principal'].includes(key)) {
+      // Garantir que campos de texto importantes não sejam null se o banco/sistema espera string
+      if (['email', 'telefone', 'cpf', 'cns'].includes(key)) {
         sanitized[key] = (value === null || value === undefined) ? "" : String(value);
       } else {
         sanitized[key] = value;
@@ -92,6 +96,7 @@ export const patientService = {
     const telNormalizado = formData.telefone_principal ? (normalizePhone(formData.telefone_principal) || formData.telefone_principal) : "";
     const telSecNormalizado = formData.telefone_secundario ? (normalizePhone(formData.telefone_secundario) || formData.telefone_secundario) : "";
 
+    // Mapear campos para custom_data
     const updatedCustomData = {
       ...cd,
       sexo: formData.sexo ?? cd.sexo ?? "",
@@ -99,12 +104,11 @@ export const patientService = {
       racaCor: formData.raca_cor ?? cd.racaCor ?? "",
       etnia: formData.etnia ?? cd.etnia ?? "",
       etnia_outra: formData.etnia_outra ?? cd.etnia_outra ?? "",
-      etniaOutra: formData.etnia_outra ?? cd.etniaOutra ?? "",
+      etniaOutra: formData.etnia_out_ra ?? cd.etniaOutra ?? "",
       nacionalidade: formData.nacionalidade ?? cd.nacionalidade ?? "brasileiro",
       pais_nascimento: formData.pais_nascimento ?? cd.pais_nascimento ?? "",
       paisNascimento: formData.pais_nascimento ?? cd.paisNascimento ?? "",
       tipo_logradouro_dne: formData.tipo_logradouro_dne ?? cd.tipo_logradouro_dne ?? "",
-      tipo_logradouro_codigo: formData.tipo_logradouro_codigo ?? cd.tipo_logradouro_codigo ?? "",
       tipoLogradouroDne: formData.tipo_logradouro_dne ?? cd.tipoLogradouroDne ?? "",
       tipoLogradouroCodigo: formData.tipo_logradouro_codigo ?? cd.tipoLogradouroCodigo ?? "",
       tipoLogradouro: formData.tipo_logradouro_dne ?? cd.tipoLogradouro ?? "",
@@ -121,27 +125,21 @@ export const patientService = {
       dados_conferidos_em: new Date().toISOString(),
     };
 
+    // Payload final com apenas as colunas REAIS da tabela pacientes
     const payload = {
       nome: formData.nome,
-      nome_completo: formData.nome,
       nome_mae: formData.nome_mae,
       data_nascimento: formData.data_nascimento || null,
-      sexo: formData.sexo,
       cpf: formData.cpf || "",
       cns: (formData.cns || "").replace(/\D/g, "").slice(0, 15) || "",
       telefone: telNormalizado || "",
       email: formData.email || "",
-      cep: formData.cep || "",
-      logradouro: formData.logradouro || "",
-      numero: formData.numero || "",
-      bairro: formData.bairro || "",
       municipio: formData.municipio || "",
-      uf: formData.uf || "",
       naturalidade: formData.naturalidade || "",
       naturalidade_uf: formData.naturalidade_uf || "",
-      raca_cor: formData.raca_cor,
-      nacionalidade: formData.nacionalidade,
       unidade_id: formData.unidade_id,
+      endereco: formData.endereco || formData.logradouro || "",
+      observacoes: formData.observacoes || "",
       custom_data: updatedCustomData,
     };
 
@@ -149,9 +147,6 @@ export const patientService = {
   },
 
   async updatePatientFields(pacienteId: string, fields: any, origem: string = "Indefinida") {
-    console.log(`[Paciente] Iniciando updatePatientFields - Origem: ${origem}`, { pacienteId, fields });
-    
-    // Buscar paciente atual para não perder custom_data
     const { data: current, error: fetchError } = await supabase
       .from('pacientes')
       .select('*')
@@ -160,7 +155,6 @@ export const patientService = {
     
     if (fetchError) throw fetchError;
 
-    // Criar payload de atualização parcial
     const currentForm = this.mapPacienteDbToForm(current);
     const updatedForm = { ...currentForm, ...fields };
     const updatePayload = this.mapPacienteFormToDb(updatedForm, current);
@@ -173,18 +167,11 @@ export const patientService = {
       .single();
 
     if (error) {
-      console.error("[Paciente] Erro no autosave", {
-        origem,
-        pacienteId,
-        fields,
-        errorMessage: error?.message,
-        errorDetails: error?.details,
-        errorHint: error?.hint,
-        errorCode: error?.code
+      console.error("[Paciente] Erro no updatePatientFields", {
+        origem, pacienteId, errorMessage: error.message, errorCode: error.code
       });
       throw error;
     }
-
     return data;
   },
 
@@ -204,7 +191,12 @@ export const patientService = {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("[Paciente] Erro no savePacienteCadastro", {
+        origem, pacienteId, errorMessage: error.message
+      });
+      throw error;
+    }
     return data;
   }
 };
