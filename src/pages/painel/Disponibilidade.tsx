@@ -269,13 +269,19 @@ const Disponibilidade: React.FC = () => {
     }
     // Initialize turno vagas with defaults
     if (newModo === 'por_turno') {
-      const defaultVagas: TurnoVagas = {};
-      activeTurnos.forEach(t => { defaultVagas[t.id] = turnoVagas[t.id] || 20; });
-      setTurnoVagas(defaultVagas);
-      // Set default turnosAtivos for active days
-      setTurnoDays(prev => prev.map(td => ({
-        ...td,
-        turnosAtivos: td.ativo && td.turnosAtivos.length === 0 ? activeTurnos.map(t => t.id) : td.turnosAtivos,
+      const activeGlobalTurnos = turnosGlobais.filter(t => t.ativo);
+      setConfigDias(prev => prev.map(pd => ({
+        ...pd,
+        blocos: pd.ativo && pd.blocos.length === 0 
+          ? activeGlobalTurnos.map(t => ({
+              nome: t.nome,
+              tipo: 'padrao',
+              horaInicio: t.horaInicio,
+              horaFim: t.horaFim,
+              vagas: 20,
+              ativo: true
+            }))
+          : pd.blocos
       })));
     }
   };
