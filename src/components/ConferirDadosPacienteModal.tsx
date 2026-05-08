@@ -523,8 +523,17 @@ export function ConferirDadosPacienteModal({
                       value={form.naturalidade}
                       uf={form.naturalidade_uf}
                       onChange={(cidade, uf) => {
-                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
+                        const newFormData = { ...form, naturalidade: cidade, naturalidade_uf: uf };
+                        setForm(newFormData);
                         setDirty(true);
+                        setSaveStatus("idle");
+                        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                        autoSaveTimerRef.current = setTimeout(() => {
+                          handleSave(true, newFormData).catch(err => {
+                            console.error("[ConferirDados] Erro no autosave:", err);
+                            setSaveStatus("error");
+                          });
+                        }, 1200);
                       }}
                       placeholder="Selecione o município de naturalidade"
                     />
