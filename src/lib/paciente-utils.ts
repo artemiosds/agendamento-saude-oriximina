@@ -261,33 +261,46 @@ export async function persistPaciente(
   }
 
   if (result.error) {
-    console.error(`[persistPaciente] Erro (${origem}):`, result.error);
+    console.error(`[Paciente] Erro ao salvar cadastro`, {
+      origem,
+      pacienteId,
+      error: result.error,
+      payloadResumo: { nome: payload.nome, cpf: payload.cpf ? '***' : '' }
+    });
     throw result.error;
   }
 
-  // Auditoria e Cache
-  if (pacienteId) {
-    const changes: any = {};
+  // Auditoria
+  const changes: any = {};
+  if (pacienteId && existing) {
     Object.keys(payload).forEach(k => {
       if (k !== "custom_data" && String(payload[k]) !== String(existing?.[k])) {
         changes[k] = { de: existing?.[k], para: payload[k] };
       }
     });
-    if (Object.keys(changes).length > 0) {
-      await auditService.log({
-        acao: pacienteId ? "atualizar" : "cadastrar",
-        entidade: "paciente",
-        entidadeId: result.data.id,
-        modulo: origem,
-        user,
-        detalhes: { changes },
-      }).catch(() => {});
-    }
+  }
+
+  if (!pacienteId || Object.keys(changes).length > 0) {
+    await auditService.log({
+      acao: pacienteId ? "editar" : "cadastrar",
+      entidade: "paciente",
+      entidadeId: result.data.id,
+      modulo: "pacientes",
+      user,
+      detalhes: { 
+        origem,
+        acao: pacienteId ? "edicao" : "criacao",
+        changes: Object.keys(changes).length > 0 ? changes : undefined
+      },
+    }).catch(() => {});
   }
 
   if (queryClient) {
     await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
     if (pacienteId) await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(pacienteId) });
+    await queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+    await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+    await queryClient.invalidateQueries({ queryKey: ['fila_espera'] });
   }
 
   return result.data;
