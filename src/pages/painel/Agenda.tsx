@@ -1354,8 +1354,14 @@ const Agenda: React.FC = () => {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
-    } catch (err) {
-      console.error("Error updating appointment status:", err);
+    } catch (err: any) {
+      console.error("[Agenda] Erro real ao atualizar status do agendamento", {
+        agId,
+        newStatus,
+        error: err,
+        message: err?.message,
+        code: err?.code
+      });
       toast.error("Erro ao atualizar status do agendamento.");
       return;
     }
