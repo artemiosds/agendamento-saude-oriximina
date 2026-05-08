@@ -986,8 +986,15 @@ const Agenda: React.FC = () => {
             queryClient
           );
         }
-      } catch (err) {
-        console.warn("[Agenda] Erro ao persistir dados do paciente antes de agendar:", err);
+      } catch (err: any) {
+        console.error("[Agenda] Erro real ao persistir dados do paciente antes de agendar", {
+          pacienteId: newAg.pacienteId,
+          error: err,
+          message: err?.message,
+          code: err?.code
+        });
+        toast.error("Não foi possível salvar os dados do paciente. Verifique se há campos obrigatórios vazios.");
+        return; // Aborta agendamento se falhar salvamento do paciente
       }
     }
 
