@@ -4,11 +4,71 @@ import { auditService } from "@/services/auditService";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
 /**
- * Colunas NOT NULL (sem permitir null) na tabela `pacientes`.
- * Para essas, null/undefined deve ser convertido para "" (texto) ou false (boolean)
- * antes do INSERT/UPDATE para evitar erros do tipo
- * "null value in column ... violates not-null constraint".
+ * Inventário de Campos do Paciente (Engenharia de Dados)
+ * 
+ * 1. Colunas de Topo (Tabela `pacientes`):
+ *    - id (text, PK)
+ *    - nome (text, NOT NULL)
+ *    - cpf (text, NOT NULL)
+ *    - cns (text, NOT NULL)
+ *    - telefone (text, NOT NULL)
+ *    - data_nascimento (text, NOT NULL)
+ *    - email (text, NOT NULL)
+ *    - endereco (text, NOT NULL) - Texto livre (retrocompatibilidade)
+ *    - nome_mae (text, NOT NULL)
+ *    - municipio (text, NOT NULL)
+ *    - naturalidade (text, NOT NULL)
+ *    - naturalidade_uf (text, NOT NULL)
+ *    - unidade_id (text, NOT NULL)
+ *    - menor_idade (boolean, NOT NULL)
+ *    - nome_responsavel (text, NOT NULL)
+ *    - cpf_responsavel (text, NOT NULL)
+ *    - is_gestante (boolean, NOT NULL)
+ *    - is_pne (boolean, NOT NULL)
+ *    - is_autista (boolean, NOT NULL)
+ *    - cid (text, NOT NULL)
+ *    - descricao_clinica (text, NOT NULL)
+ *    - ubs_origem (text, NOT NULL)
+ *    - profissional_solicitante (text, NOT NULL)
+ *    - tipo_encaminhamento (text, NOT NULL)
+ *    - diagnostico_resumido (text, NOT NULL)
+ *    - justificativa (text, NOT NULL)
+ *    - data_encaminhamento (text, NOT NULL)
+ *    - documento_url (text, NOT NULL)
+ *    - tipo_condicao (text, NOT NULL)
+ *    - mobilidade (text, NOT NULL)
+ *    - usa_dispositivo (boolean, NOT NULL)
+ *    - tipo_dispositivo (text, NOT NULL)
+ *    - comunicacao (text, NOT NULL)
+ *    - comportamento (text, NOT NULL)
+ *    - usa_equipamentos (boolean, NOT NULL)
+ *    - equipamentos (text[], NOT NULL)
+ *    - observacao_equipamentos (text, NOT NULL)
+ *    - outro_servico_sus (boolean, NOT NULL)
+ *    - transporte (text, NOT NULL)
+ *    - turno_preferido (text, NOT NULL)
+ *    - especialidade_destino (text, NOT NULL)
+ *    - custom_data (jsonb, NOT NULL)
+ * 
+ * 2. Campos dentro de `custom_data` (Fonte de Verdade para Estruturados):
+ *    - sexo
+ *    - raca_cor
+ *    - etnia
+ *    - etnia_outra
+ *    - nacionalidade
+ *    - pais_nascimento
+ *    - tipo_logradouro_dne (descrição)
+ *    - tipo_logradouro_codigo (código)
+ *    - logradouro
+ *    - numero
+ *    - complemento
+ *    - bairro
+ *    - uf
+ *    - cep
+ *    - telefone_secundario
+ *    - revisado_em
  */
+
 const PACIENTE_TEXT_NOT_NULL = new Set([
   "nome", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
   "nome_mae", "municipio", "naturalidade", "naturalidade_uf", "unidade_id",
@@ -17,7 +77,7 @@ const PACIENTE_TEXT_NOT_NULL = new Set([
   "tipo_condicao", "mobilidade", "tipo_dispositivo", "comunicacao", "comportamento",
   "nome_responsavel", "cpf_responsavel", "ubs_origem", "profissional_solicitante",
   "tipo_encaminhamento", "diagnostico_resumido", "justificativa",
-  "data_encaminhamento", "documento_url", "raca_cor", "naturalidade_uf", "municipio"
+  "data_encaminhamento", "documento_url"
 ]);
 
 const PACIENTE_BOOL_NOT_NULL = new Set([
@@ -26,20 +86,17 @@ const PACIENTE_BOOL_NOT_NULL = new Set([
 ]);
 
 /**
- * Saneia um payload destinado à tabela `pacientes`:
- * - Remove chaves com valor `undefined` (preserva valor antigo no banco).
- * - Converte `null` em "" para colunas TEXT NOT NULL.
- * - Converte `null` em false para colunas BOOLEAN NOT NULL.
- * Resultado: nunca enviar null para colunas NOT NULL.
+ * Saneia um payload para a tabela `pacientes` garantindo integridade de colunas NOT NULL.
  */
 export function sanitizePacientePayload<T extends Record<string, any>>(payload: T): T {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(payload)) {
-    if (v === undefined) continue; // preserva valor existente
+    if (v === undefined) continue;
     if (v === null) {
       if (PACIENTE_TEXT_NOT_NULL.has(k)) { out[k] = ""; continue; }
       if (PACIENTE_BOOL_NOT_NULL.has(k)) { out[k] = false; continue; }
-      // Para outras colunas, omita o null (deixa default ou valor antigo)
+      if (k === "equipamentos") { out[k] = []; continue; }
+      if (k === "custom_data") { out[k] = {}; continue; }
       continue;
     }
     out[k] = v;
@@ -48,188 +105,195 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
 }
 
 /**
- * Normaliza os dados do paciente vindos do formulário para o formato do banco.
+ * Normaliza os dados do paciente vindos do formulário (que pode conter camelCase ou snake_case)
+ * para o padrão de persistência do sistema.
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
-  // Garante strings básicas
-  const getVal = (f: string, f2?: string) => {
-    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""] ?? "";
+  // Helper para resolver valor priorizando o form, depois o banco, com fallback seguro
+  const resolve = (f: string, f2?: string) => {
+    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    if (v === undefined || v === null) return "";
     return typeof v === 'string' ? v.trim() : v;
   };
 
-  const telNormalizado = normalizePhone(getVal("telefone")) || getVal("telefone");
-  const telSecNormalizado = normalizePhone(getVal("telefone_secundario", "telefoneSecundario")) || getVal("telefone_secundario", "telefoneSecundario");
+  const resolveBool = (f: string, f2?: string) => {
+    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    return !!v;
+  };
 
-  // Campos que residem no custom_data
+  // 1. Extração do Custom Data (Dados Estruturados e Sociais)
   const existingCd = existingPatient?.custom_data || {};
-  
-  // Mapeia todas as variações possíveis de nomes de campos (camelCase e snake_case)
   const customData = {
     ...existingCd,
+    // Dados Sociais
     sexo: form.sexo ?? existingCd.sexo ?? "",
     raca_cor: form.raca_cor ?? form.racaCor ?? existingCd.raca_cor ?? existingCd.racaCor ?? "",
-    racaCor: form.raca_cor ?? form.racaCor ?? existingCd.racaCor ?? existingCd.raca_cor ?? "",
     etnia: form.etnia ?? existingCd.etnia ?? "",
-    etniaOutra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etniaOutra ?? existingCd.etnia_outra ?? "",
+    etnia_outra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etnia_outra ?? existingCd.etniaOutra ?? "",
     nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
-    paisNascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.paisNascimento ?? existingCd.pais_nascimento ?? "",
+    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.pais_nascimento ?? "",
     
-    // Endereço estruturado
-    tipoLogradouroDne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouro ?? "",
-    tipoLogradouroCodigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? "",
-    tipoLogradouro: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipoLogradouro ?? "",
+    // Endereço Estruturado (A origem do problema de "sumir" está aqui)
+    cep: form.cep ?? existingCd.cep ?? "",
+    tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
+    tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
     logradouro: form.logradouro ?? existingCd.logradouro ?? "",
     numero: form.numero ?? existingCd.numero ?? "",
     complemento: form.complemento ?? existingCd.complemento ?? "",
     bairro: form.bairro ?? existingCd.bairro ?? "",
     uf: form.uf ?? existingCd.uf ?? "PA",
-    cep: form.cep ?? existingCd.cep ?? "",
     
-    telefoneSecundario: telSecNormalizado,
+    // Contato Extra
+    telefone_secundario: form.telefone_secundario ?? form.telefoneSecundario ?? existingCd.telefone_secundario ?? existingCd.telefoneSecundario ?? "",
     
-    // Flags especiais
-    is_gestante: form.isGestante !== undefined ? !!form.isGestante : (form.is_gestante !== undefined ? !!form.is_gestante : !!existingCd.is_gestante),
-    is_pne: form.isPne !== undefined ? !!form.isPne : (form.is_pne !== undefined ? !!form.is_pne : !!existingCd.is_pne),
-    is_autista: form.isAutista !== undefined ? !!form.isAutista : (form.is_autista !== undefined ? !!form.is_autista : !!existingCd.is_autista),
-
-    data_ultima_validacao_cadastro: new Date().toISOString(),
+    // Auditoria Interna
+    data_ultima_validacao: new Date().toISOString(),
   };
 
-  // Payload principal da tabela 'pacientes'
+  // 2. Montagem do Payload de Topo (Tabela `pacientes`)
   const payload: any = {
-    nome: getVal("nome", "nome_completo"),
-    nome_mae: getVal("nome_mae", "nomeMae"),
-    data_nascimento: getVal("data_nascimento", "dataNascimento"),
-    cpf: String(getVal("cpf")).replace(/\D/g, ""),
-    cns: String(getVal("cns")).replace(/\D/g, "").slice(0, 15),
-    telefone: telNormalizado || "",
-    email: getVal("email"),
-    municipio: getVal("municipio"),
-    naturalidade: getVal("naturalidade"),
-    naturalidade_uf: getVal("naturalidade_uf", "naturalidadeUf"),
-    unidade_id: getVal("unidade_id", "unidadeId"),
+    nome: resolve("nome", "nome_completo"),
+    nome_mae: resolve("nome_mae", "nomeMae"),
+    data_nascimento: resolve("data_nascimento", "dataNascimento"),
+    cpf: String(resolve("cpf")).replace(/\D/g, ""),
+    cns: String(resolve("cns")).replace(/\D/g, "").slice(0, 15),
+    telefone: normalizePhone(String(resolve("telefone"))) || String(resolve("telefone")),
+    email: String(resolve("email")).toLowerCase(),
+    municipio: resolve("municipio"),
+    naturalidade: resolve("naturalidade"),
+    naturalidade_uf: resolve("naturalidade_uf", "naturalidadeUf"),
+    unidade_id: resolve("unidade_id", "unidadeId"),
     
-    // Flags diretas na tabela
-    is_gestante: !!customData.is_gestante,
-    is_pne: !!customData.is_pne,
-    is_autista: !!customData.is_autista,
+    // Flags de Prioridade/Clínicas
+    is_gestante: resolveBool("is_gestante", "isGestante"),
+    is_pne: resolveBool("is_pne", "isPne"),
+    is_autista: resolveBool("is_autista", "isAutista"),
+    menor_idade: resolveBool("menor_idade", "menorIdade"),
+    nome_responsavel: resolve("nome_responsavel", "nomeResponsavel"),
+    cpf_responsavel: String(resolve("cpf_responsavel", "cpfResponsavel")).replace(/\D/g, ""),
     
-    // Outros campos comuns que podem vir do form
-    descricao_clinica: getVal("descricao_clinica", "descricaoClinica"),
-    cid: getVal("cid"),
-    especialidade_destino: getVal("especialidade_destino", "especialidadeDestino"),
-    menor_idade: form.menor_idade ?? form.menorIdade ?? existingPatient?.menor_idade ?? !!existingPatient?.menor_idade,
-    nome_responsavel: getVal("nome_responsavel", "nomeResponsavel"),
-    cpf_responsavel: String(getVal("cpf_responsavel", "cpfResponsavel")).replace(/\D/g, ""),
-    ubs_origem: getVal("ubs_origem", "ubsOrigem"),
+    // Dados Clínicos e de Encaminhamento
+    cid: resolve("cid"),
+    descricao_clinica: resolve("descricao_clinica", "descricaoClinica"),
+    ubs_origem: resolve("ubs_origem", "ubsOrigem"),
+    profissional_solicitante: resolve("profissional_solicitante", "profissionalSolicitante"),
+    tipo_encaminhamento: resolve("tipo_encaminhamento", "tipoEncaminhamento"),
+    diagnostico_resumido: resolve("diagnostico_resumido", "diagnosticoResumido"),
+    justificativa: resolve("justificativa"),
+    data_encaminhamento: resolve("data_encaminhamento", "dataEncaminhamento"),
+    documento_url: resolve("documento_url", "documentoUrl"),
+    especialidade_destino: resolve("especialidade_destino", "especialidadeDestino"),
     
+    // Condição e Mobilidade
+    tipo_condicao: resolve("tipo_condicao", "tipoCondicao"),
+    mobilidade: resolve("mobilidade"),
+    usa_dispositivo: resolveBool("usa_dispositivo", "usaDispositivo"),
+    tipo_dispositivo: resolve("tipo_dispositivo", "tipoDispositivo"),
+    comunicacao: resolve("comunicacao"),
+    comportamento: resolve("comportamento"),
+    usa_equipamentos: resolveBool("usa_equipamentos", "usaEquipamentos"),
+    equipamentos: Array.isArray(form.equipamentos) ? form.equipamentos : (existingPatient?.equipamentos || []),
+    observacao_equipamentos: resolve("observacao_equipamentos", "observacaoEquipamentos"),
+    outro_servico_sus: resolveBool("outro_servico_sus", "outroServicoSus"),
+    transporte: resolve("transporte"),
+    turno_preferido: resolve("turno_preferido", "turnoPreferido"),
+    
+    // Custom Data Acoplado
     custom_data: customData,
   };
 
-  // Retrocompatibilidade do campo 'endereco' (texto livre)
-  const enderecoTexto = [
+  // 3. Sincronização do Campo `endereco` (Texto Livre) com o Estruturado
+  const parts = [
+    customData.tipo_logradouro_dne,
     customData.logradouro,
-    customData.numero,
+    customData.numero ? `nº ${customData.numero}` : "",
+    customData.complemento,
     customData.bairro,
-    payload.municipio ? `${payload.municipio} - ${customData.uf || ""}` : ""
-  ].filter(Boolean).join(", ");
+    payload.municipio,
+    customData.uf,
+    customData.cep ? `CEP ${customData.cep}` : ""
+  ].filter(p => p && String(p).trim() !== "");
   
-  if (enderecoTexto) {
-    payload.endereco = enderecoTexto;
-  }
+  payload.endereco = parts.join(", ");
 
   return sanitizePacientePayload(payload);
 }
 
 /**
- * Função única para atualizar cadastro de paciente com dupla garantia.
+ * Função centralizada para persistência de dados de pacientes (INSERT e UPDATE).
  */
-export async function updatePacienteCadastro(
-  pacienteId: string, 
-  dados: any, 
-  origem: string, 
+export async function persistPaciente(
+  pacienteId: string | null,
+  dados: any,
+  origem: string,
   user: any,
   queryClient?: any
 ) {
-  if (!pacienteId) {
-    throw new Error("Não foi possível salvar: paciente não identificado.");
+  let existing: any = null;
+  
+  if (pacienteId) {
+    const { data } = await supabase.from("pacientes").select("*").eq("id", pacienteId).maybeSingle();
+    existing = data;
   }
 
-  // 1. Buscar dados atuais para merge seguro (não apagar campos vazios acidentalmente)
-  const { data: existing, error: fetchError } = await supabase
-    .from("pacientes")
-    .select("*")
-    .eq("id", pacienteId)
-    .maybeSingle();
+  const payload = normalizePatientPayload(dados, existing);
 
-  if (fetchError) throw fetchError;
-  if (!existing) throw new Error("Paciente não encontrado no banco de dados.");
+  let result;
+  if (pacienteId && existing) {
+    // UPDATE
+    result = await supabase.from("pacientes").update(payload).eq("id", pacienteId).select().single();
+  } else {
+    // INSERT
+    const id = pacienteId || `p${Date.now()}`;
+    const insertPayload = {
+      ...payload,
+      id,
+      criado_em: new Date().toISOString(),
+    };
+    // Garante metadados de criação no custom_data
+    insertPayload.custom_data = {
+      ...(insertPayload.custom_data || {}),
+      criado_por: user?.id || "",
+      criado_por_nome: user?.nome || "",
+      unidade_origem_id: user?.unidadeId || "",
+    };
+    result = await supabase.from("pacientes").insert(insertPayload).select().single();
+  }
 
-  // 2. Normalizar payload com merge
-  const updatePayload = normalizePatientPayload(dados, existing);
+  if (result.error) {
+    console.error(`[persistPaciente] Erro (${origem}):`, result.error);
+    throw result.error;
+  }
 
-  // 3. Update no banco — payload já saneado por normalizePatientPayload/sanitizePacientePayload
-  const { data: updated, error: updateError } = await supabase
-    .from("pacientes")
-    .update(updatePayload)
-    .eq("id", pacienteId)
-    .select()
-    .single();
-
-  if (updateError) {
-    console.error("[updatePacienteCadastro] Erro Supabase:", {
-      origem,
-      pacienteId,
-      code: (updateError as any)?.code,
-      message: updateError.message,
-      details: (updateError as any)?.details,
-      hint: (updateError as any)?.hint,
-      payloadKeys: Object.keys(updatePayload),
+  // Auditoria e Cache
+  if (pacienteId) {
+    const changes: any = {};
+    Object.keys(payload).forEach(k => {
+      if (k !== "custom_data" && String(payload[k]) !== String(existing?.[k])) {
+        changes[k] = { de: existing?.[k], para: payload[k] };
+      }
     });
-    throw updateError;
-  }
-
-  // 4. Auditoria
-  const camposAlterados: Record<string, { de: any; para: any }> = {};
-  const coreFields = ["nome", "cpf", "cns", "telefone", "municipio", "unidade_id"];
-  coreFields.forEach((k) => {
-    const antes = (existing as any)[k] ?? "";
-    const depois = (updatePayload as any)[k] ?? "";
-    if (String(antes) !== String(depois)) {
-      camposAlterados[k] = { de: antes, para: depois };
+    if (Object.keys(changes).length > 0) {
+      await auditService.log({
+        acao: pacienteId ? "atualizar" : "cadastrar",
+        entidade: "paciente",
+        entidadeId: result.data.id,
+        modulo: origem,
+        user,
+        detalhes: { changes },
+      }).catch(() => {});
     }
-  });
-
-  if (Object.keys(camposAlterados).length > 0) {
-    await auditService.log({
-      acao: "atualizar",
-      entidade: "paciente",
-      entidadeId: pacienteId,
-      modulo: origem,
-      user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
-      detalhes: { 
-        origem, 
-        campos_alterados: camposAlterados 
-      },
-    }).catch(err => console.error("Erro ao registrar auditoria:", err));
   }
 
-  // 5. Invalidação de Cache
   if (queryClient) {
-    const keys = [
-      queryKeys.pacientes.all,
-      queryKeys.pacientes.detail(pacienteId),
-      queryKeys.agendamentos.all,
-      queryKeys.fila.all,
-      queryKeys.atendimentos.all,
-      queryKeys.prontuarios.byPaciente(pacienteId),
-      ['pacientes', 'page'],
-      ['pacientes', 'linked-unidade'],
-      ['pacientes', 'diagnostics']
-    ];
-    
-    await Promise.all(keys.map(key => queryClient.invalidateQueries({ queryKey: key })));
+    await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+    if (pacienteId) await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(pacienteId) });
   }
 
-  return updated;
+  return result.data;
+}
+
+// Mantém compatibilidade com funções antigas enquanto migra
+export async function updatePacienteCadastro(id: string, dados: any, origem: string, user: any, queryClient?: any) {
+  return persistPaciente(id, dados, origem, user, queryClient);
 }
