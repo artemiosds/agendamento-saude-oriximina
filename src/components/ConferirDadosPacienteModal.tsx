@@ -143,20 +143,19 @@ export function ConferirDadosPacienteModal({
     setLoading(true);
     setLoadError(null);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("pacientes")
         .select("*")
         .eq("id", id)
-        .maybeSingle()
-        .abortSignal(controller.signal);
-      clearTimeout(timeout);
+        .maybeSingle();
+      
       if (error) throw error;
       if (!data) throw new Error("Paciente não encontrado");
+      
       console.log("[ConferirDados] Dados carregados com sucesso");
-      const cd = data.custom_data || {};
       setPaciente(data);
+      
+      const cd = (data.custom_data as any) || {};
       setForm({
         nome: data.nome || "",
         nome_mae: data.nome_mae || "",
@@ -167,7 +166,7 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
-        unidade_id: data.unidade_id || "", // Importante para persistencia
+        unidade_id: data.unidade_id || "",
         naturalidade: data.naturalidade || "",
         naturalidade_uf: data.naturalidade_uf || "",
         
