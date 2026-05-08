@@ -165,6 +165,13 @@ export const emptyPacienteForm: PacienteFormData = {
   observacaoEquipamentos: "", outroServicoSus: false, transporte: "", turnoPreferido: "",
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
+  
+  // Re-idratados
+  sexo: "", racaCor: "", etnia: "", etniaOutra: "", nacionalidade: "brasileiro", 
+  paisNascimento: "", cep: "", tipoLogradouroDne: "", tipoLogradouroCodigo: "",
+  logradouro: "", numero: "", complemento: "", bairro: "", uf: "PA", 
+  telefoneSecundario: "",
+
   customData: {},
 };
 
