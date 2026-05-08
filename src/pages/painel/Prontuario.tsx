@@ -1213,14 +1213,14 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (!effectiveEditId) {
-        await logAction({
+        logAction({
           acao: "prontuario_criado",
           entidade: "prontuario",
           entidadeId: prontuarioId || "",
           modulo: "prontuario",
           user,
           detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
-        }).catch(e => console.error("[Prontuario] Erro ao registrar log de criação:", e));
+        });
       }
 
       // Refresh data without blocking or failing the main save
