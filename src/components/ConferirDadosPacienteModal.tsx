@@ -470,7 +470,8 @@ export function ConferirDadosPacienteModal({
                         };
                         setForm(newForm);
                         setDirty(true);
-                        if (paciente) await handleSave(true, newForm);
+                        // Autosave silencioso após mudança estrutural
+                        handleSave(true, newForm).catch(() => {});
                       }}
                     />
                   </div>
