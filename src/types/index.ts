@@ -108,7 +108,6 @@ export interface Setor {
 export interface Paciente {
   id: string;
   nome: string;
-  nome_completo?: string;
   cpf: string;
   cns: string;
   nomeMae: string;
@@ -124,40 +123,6 @@ export interface Paciente {
   isGestante?: boolean;
   isPne?: boolean;
   isAutista?: boolean;
-  // Campos DB-native mapping (snake_case)
-  nome_mae?: string;
-  data_nascimento?: string;
-  descricao_clinica?: string;
-  especialidade_destino?: string;
-  municipio?: string;
-  naturalidade?: string;
-  naturalidade_uf?: string;
-  menor_idade?: boolean;
-  nome_responsavel?: string;
-  cpf_responsavel?: string;
-  ubs_origem?: string;
-  profissional_solicitante?: string;
-  tipo_encaminhamento?: string;
-  diagnostico_resumido?: string;
-  justificativa?: string;
-  data_encaminhamento?: string;
-  documento_url?: string;
-  tipo_condicao?: string;
-  mobilidade?: string;
-  usa_dispositivo?: boolean;
-  tipo_dispositivo?: string;
-  comunicacao?: string;
-  comportamento?: string;
-  usa_equipamentos?: boolean;
-  equipamentos?: string[];
-  observacao_equipamentos?: string;
-  outro_servico_sus?: boolean;
-  transporte?: string;
-  turno_preferido?: string;
-  is_gestante?: boolean;
-  is_pne?: boolean;
-  is_autista?: boolean;
-  custom_data?: any;
 }
 
 export interface Agendamento {

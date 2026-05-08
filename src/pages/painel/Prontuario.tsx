@@ -217,12 +217,11 @@ const ProntuarioPage: React.FC = () => {
 
   // Computed: can we finalize this appointment? Based on agendamento status, not just activeAtendimento
   const canFinalize = useMemo(() => {
-    if (!can('prontuario', 'finalize')) return false;
     if (activeAtendimento) return true;
     if (!form.agendamento_id) return false;
     const ag = agendamentos.find((a: any) => a.id === form.agendamento_id);
     return ag && ag.status === 'em_atendimento';
-  }, [activeAtendimento, form.agendamento_id, agendamentos, can]);
+  }, [activeAtendimento, form.agendamento_id, agendamentos]);
   const [triagem, setTriagem] = useState<TriagemData | null>(null);
   const [showHistorico, setShowHistorico] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -278,8 +277,8 @@ const ProntuarioPage: React.FC = () => {
   }, [loadCidsForProc]);
 
   const isProfissional = user?.role === "profissional";
-  const canEdit = can('prontuario', 'edit');
-  const canDelete = can('prontuario', 'delete');
+  const canEdit = can('prontuario', 'can_edit');
+  const canDelete = can('prontuario', 'can_delete');
   const tempoLimite = user?.tempoAtendimento || 30;
   const { getEnabledFields: getStructureSections } = useProntuarioStructure();
   const structureSections = getStructureSections();
@@ -540,30 +539,18 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = async () => {
     setLoading(true);
     try {
-      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // PERF: quando aberto a partir de um paciente específico (Agenda → Prontuário,
-      // Pacientes → Prontuário, etc.), buscamos apenas os prontuários daquele paciente.
-      // Isso reduz de ~2.300 para ~10 registros e elimina a lentidão de abertura.
-      const queryPacienteId = searchParams.get("pacienteId");
-
-      if (queryPacienteId) {
-        let query = (supabase as any)
-          .from("prontuarios")
-          .select("*")
-          .eq("paciente_id", queryPacienteId)
-          .order("data_atendimento", { ascending: false });
-        if (restrictUnit) query = query.eq("unidade_id", user!.unidadeId);
-        const { data, error } = await query;
-        if (error) console.error("Error loading prontuarios:", error);
-        setProntuarios(data || []);
-        setLoading(false);
-        return;
-      }
-
-      // Sem paciente específico (listagem geral): paginação recursiva completa.
+      // All professionals can VIEW all prontuários — edit is restricted in the UI
+      // Recursive pagination to bypass Supabase's default 1000-row limit
       const PAGE_SIZE = 1000;
       const all: any[] = [];
       let fromIdx = 0;
+      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+      // First fetch exact total count for visibility/debug
+      let countQuery = (supabase as any).from("prontuarios").select("id", { count: "exact", head: true });
+      if (restrictUnit) countQuery = countQuery.eq("unidade_id", user!.unidadeId);
+      const { count: totalCount, error: countErr } = await countQuery;
+      if (countErr) console.error("Error counting prontuarios:", countErr);
+      if (import.meta.env.DEV) console.debug("[Prontuarios] total no banco:", totalCount);
 
       while (true) {
         let query = (supabase as any)
@@ -592,7 +579,7 @@ const ProntuarioPage: React.FC = () => {
 
   useEffect(() => {
     loadProntuarios();
-  }, [user?.id, user?.role, searchParams.get("pacienteId")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dialogOpenRef = useRef(false);
   useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
@@ -1040,25 +1027,9 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
-      
-      // Sanitização básica: garante que campos obrigatórios não sejam undefined
-      Object.keys(record).forEach(key => {
-        if (record[key] === undefined) {
-          record[key] = null;
-        }
-      });
-
       if (effectiveEditId) {
-        console.log("[Prontuario] Atualizando prontuário:", { id: effectiveEditId, profissionalId: record.profissional_id });
         const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
-        if (error) {
-          console.error("[Prontuario] Erro ao atualizar prontuário principal:", {
-            error,
-            effectiveEditId,
-            record
-          });
-          throw error;
-        }
+        if (error) throw error;
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1112,24 +1083,12 @@ const ProntuarioPage: React.FC = () => {
           },
         });
       } else {
-        console.log("[Prontuario] Inserindo novo prontuário:", {
-          paciente: record.paciente_nome,
-          profissionalId: record.profissional_id,
-          unidadeId: record.unidade_id
-        });
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
           .select("id")
           .single();
-          
-        if (error) {
-          console.error("[Prontuario] Erro ao inserir prontuário principal:", {
-            error,
-            record
-          });
-          throw error;
-        }
+        if (error) throw error;
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
@@ -1140,108 +1099,83 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        console.log("[Prontuario] Iniciando salvamento de procedimentos para prontuário:", prontuarioId);
-        
-        try {
-          // Prepare the new list of links to insert
-          const linksToInsert = selectedProcIds.map((pid) => {
-            const proc = procedimentos.find(p => p.id === pid);
-            // Prioritize proc.uuid (the real UUID from the DB), fallback to pid if it looks like a UUID
-            const finalProcId = proc?.uuid || (pid.length > 30 ? pid : null);
-            
-            if (!finalProcId) {
-              console.warn(`[Prontuario] Procedimento ID ignorado (não é UUID): ${pid}`);
-              return null;
-            }
+        // First, fetch current procedures to avoid unnecessary deletion if no changes
+        const { data: existingProcs } = await (supabase as any)
+          .from("prontuario_procedimentos")
+          .select("procedimento_id, quantidade, observacao, cids_selecionados")
+          .eq("prontuario_id", prontuarioId);
 
-            return {
-              prontuario_id: prontuarioId,
-              procedimento_id: finalProcId,
-              // Campos obrigatórios conforme schema do banco (verificados via information_schema)
-              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-              quantidade: procDetails[pid]?.quantidade || 1,
-              observacao: procDetails[pid]?.observacao || "",
-            };
-          }).filter(Boolean);
+        // Prepare the new list of links to insert
+        const linksToInsert = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontuarioId,
+            procedimento_id: proc?.uuid || pid, // Use UUID if found
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30); // Ensure it's a UUID
 
-          // Estratégia: Sempre deletar os antigos e inserir os novos para este prontuário
-          // Isso resolve problemas de desincronização entre estado da tela e banco
-          const { error: deleteError } = await (supabase as any)
-            .from("prontuario_procedimentos")
-            .delete()
-            .eq("prontuario_id", prontuarioId);
-            
-          if (deleteError) {
-            console.error("[Prontuario] Erro ao deletar procedimentos antigos:", deleteError);
-            // Não bloqueia o prontuário inteiro, mas avisa o usuário no console
-          }
+        // Simple strategy: delete and re-insert if different
+        // We compare existing vs new to see if we need to do anything
+        const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
+          procedimento_id: l.procedimento_id,
+          quantidade: l.quantidade,
+          observacao: l.observacao,
+          cids_selecionados: l.cids_selecionados
+        })));
 
+        if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
           if (linksToInsert.length > 0) {
-            const { error: insertError } = await (supabase as any)
-              .from("prontuario_procedimentos")
-              .insert(linksToInsert);
-              
+            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(linksToInsert);
             if (insertError) {
-              console.error("[Prontuario] Erro ao inserir procedimentos do prontuário:", {
-                error: insertError,
-                payload: linksToInsert,
-                prontuarioId
-              });
-              // Mensagem específica para erro de procedimentos sem bloquear o fluxo principal
-              toast.error("Os dados clínicos foram salvos, mas houve um erro ao salvar os procedimentos. Verifique se as permissões estão corretas.");
-            } else {
-              console.log("[Prontuario] Procedimentos salvos com sucesso:", linksToInsert.length);
+              console.error("Erro ao inserir procedimentos do prontuário:", insertError);
+              throw new Error("Não foi possível salvar os procedimentos do prontuário.");
             }
           }
-        } catch (procErr) {
-          console.error("[Prontuario] Erro inesperado no fluxo de procedimentos:", procErr);
         }
       }
 
       const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
 
       if (shouldRegisterSession) {
-        try {
-          const procedureDone =
-            procTexto ||
-            form.procedimentos_texto?.trim() ||
-            form.outro_procedimento?.trim() ||
-            form.queixa_principal?.trim() ||
-            'Sessão registrada';
+        const procedureDone =
+          procTexto ||
+          form.procedimentos_texto?.trim() ||
+          form.outro_procedimento?.trim() ||
+          form.queixa_principal?.trim() ||
+          'Sessão registrada';
 
-          const result = await treatmentService.registerCompletedSession({
-            cycle: sessaoCycle,
-            session: currentSessionForRegistration,
-            soap: soapPayload,
-            procedureDone,
-            userId: user?.id,
-            appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
-          });
+        const result = await treatmentService.registerCompletedSession({
+          cycle: sessaoCycle,
+          session: currentSessionForRegistration,
+          soap: soapPayload,
+          procedureDone,
+          userId: user?.id,
+          appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+        });
 
-          if (result.cycleStatus === 'concluido') {
-            toast.info('🎉 Ciclo de tratamento concluído!');
-          }
-
-          logAction({
-            acao: 'sessao_registrada',
-            entidade: 'treatment_session',
-            entidadeId: currentSessionForRegistration.id,
-            modulo: 'prontuario',
-            user,
-            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
-          });
-          
-          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
-        } catch (sessionErr: any) {
-          console.error("[Prontuario] Erro ao registrar sessão:", sessionErr);
-          toast.error("O prontuário foi salvo, mas houve um erro ao registrar a sessão no ciclo de tratamento.");
+        if (result.cycleStatus === 'concluido') {
+          toast.info('🎉 Ciclo de tratamento concluído!');
         }
+
+        await logAction({
+          acao: 'sessao_registrada',
+          entidade: 'treatment_session',
+          entidadeId: currentSessionForRegistration.id,
+          modulo: 'prontuario',
+          user,
+          detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+        });
+        toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
       } else {
         toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
 
       if (!effectiveEditId) {
-        logAction({
+        await logAction({
           acao: "prontuario_criado",
           entidade: "prontuario",
           entidadeId: prontuarioId || "",
@@ -1251,14 +1185,13 @@ const ProntuarioPage: React.FC = () => {
         });
       }
 
-      // Refresh data without blocking or failing the main save
-      void Promise.all([
+      await Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
           ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
-      ]).catch(refreshErr => console.error("[Prontuario] Erro ao atualizar listas após salvar:", refreshErr));
+      ]);
 
       setSessionRegistrationRequested(false);
       // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
@@ -1276,8 +1209,14 @@ const ProntuarioPage: React.FC = () => {
       setPreviousForm(null);
       return true;
     } catch (err: any) {
-      // Remoção do rollback perigoso: se o prontuário foi salvo no banco, não devemos deletá-lo
-      // caso ocorra um erro posterior (como falha no log ou no refresh da lista).
+      if (insertedNewProntuario && prontuarioId) {
+        try {
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
+        } catch (rollbackError) {
+          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
+        }
+      }
       console.error("Erro ao salvar prontuário/sessão:", {
         error: err,
         message: err?.message,
@@ -1373,26 +1312,21 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
-        try {
-          const links = selectedProcIds.map((pid) => {
-            const proc = procedimentos.find(p => p.id === pid);
-            return {
-              prontuario_id: prontId,
-              procedimento_id: proc?.uuid || pid,
-              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-              quantidade: procDetails[pid]?.quantidade || 1,
-              observacao: procDetails[pid]?.observacao || "",
-            };
-          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-          
-          // Use delete + insert strategy for autosave too
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-          if (links.length > 0) {
-            await (supabase as any).from("prontuario_procedimentos").insert(links);
-          }
-        } catch (autoProcErr) {
-          console.error("[autosave] erro ao salvar procedimentos:", autoProcErr);
-          // Don't fail the whole autosave for procedure errors
+        const links = selectedProcIds.map((pid) => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
+            prontuario_id: prontId,
+            procedimento_id: proc?.uuid || pid,
+            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+        
+        // Use a single transaction (delete + insert)
+        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+        if (links.length > 0) {
+          await (supabase as any).from("prontuario_procedimentos").insert(links);
         }
       }
       setAutosaveStatus('saved');
@@ -3221,17 +3155,12 @@ const ProntuarioPage: React.FC = () => {
 
               {canFinalize ? (
                 <>
-                  <Button 
-                    onClick={() => { void handleSave(); }} 
-                    disabled={saving || !can('prontuario', 'save_draft')} 
-                    variant="outline" 
-                    className="flex-1"
-                  >
+                  <Button onClick={() => { void handleSave(); }} disabled={saving} variant="outline" className="flex-1">
                     {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}Salvar Rascunho
                   </Button>
                   <Button
                     onClick={handleFinalizarAtendimento}
-                    disabled={saving || !can('prontuario', 'finalize')}
+                    disabled={saving}
                     className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
@@ -3241,7 +3170,7 @@ const ProntuarioPage: React.FC = () => {
               ) : (
                 <Button
                   onClick={() => { void handleSave(); }}
-                  disabled={saving || !can('prontuario', 'create')}
+                  disabled={saving}
                   className="flex-1 gradient-primary text-primary-foreground"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

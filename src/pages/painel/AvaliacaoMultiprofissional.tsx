@@ -197,7 +197,7 @@ const AvaliacaoMultiprofissional: React.FC = () => {
     setSaving(false);
   };
 
-  const canDecide = can('avaliacao_multi', 'can_execute');
+  const canDecide = can('enfermagem', 'can_execute');
   const favoraveis = existingEvals.filter(e => e.parecer === 'favoravel').length;
   const desfavoraveis = existingEvals.filter(e => e.parecer === 'desfavoravel').length;
 

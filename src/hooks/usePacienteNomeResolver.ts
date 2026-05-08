@@ -17,7 +17,7 @@ export function usePacienteNomeResolver() {
   const pacienteMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of pacientes) {
-      map.set(p.id, p.nome_completo || p.nome);
+      map.set(p.id, p.nome);
     }
     return map;
   }, [pacientes]);

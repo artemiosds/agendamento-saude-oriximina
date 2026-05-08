@@ -175,7 +175,7 @@ const FilaEspera: React.FC = () => {
   const { notify } = useWebhookNotify();
   const { chamarProximoDaFila, confirmarEncaixe, expirarReserva, getNextInQueue } = useFilaAutomatica();
   const { ensurePortalAccess } = useEnsurePortalAccess();
-  const canManage = can('fila_espera', 'can_edit');
+  const canManage = can('fila', 'can_edit');
   const { unidadesVisiveis, profissionaisVisiveis, isMaster, defaultUnidadeId, showUnitSelector } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
 

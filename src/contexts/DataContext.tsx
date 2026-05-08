@@ -167,7 +167,6 @@ interface DataContextType {
   refreshFuncionarios: () => Promise<void>;
   refreshDisponibilidades: () => Promise<void>;
   refreshAgendamentos: () => Promise<void>;
-  ensureAgendamentosForRange: (startISO: string, endISO: string) => Promise<void>;
   refreshPacientes: () => Promise<void>;
   refreshFila: () => Promise<void>;
   refreshBloqueios: () => Promise<void>;
@@ -274,8 +273,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   funcionariosRef.current = funcionarios;
   const configuracoesRef = useRef(configuracoes);
   configuracoesRef.current = configuracoes;
-  // Tracks already-fetched agendamento date ranges to avoid duplicate network calls
-  const loadedRangesRef = useRef<Set<string>>(new Set());
 
   const invalidateCache = useCallback(
     (...keys: (readonly string[])[]) => {
@@ -509,10 +506,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       const PAGE = 1000;
-      // PERF: removido `custom_data` (JSONB pesado) do listing inicial.
-      // Ele é carregado sob demanda via patientService.getById ao abrir a ficha.
       const columns =
-        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino";
+        "id,nome,cpf,cns,nome_mae,telefone,data_nascimento,email,endereco,observacoes,descricao_clinica,cid,criado_em,is_gestante,is_pne,is_autista,unidade_id,naturalidade,naturalidade_uf,municipio,menor_idade,nome_responsavel,cpf_responsavel,ubs_origem,profissional_solicitante,tipo_encaminhamento,diagnostico_resumido,justificativa,data_encaminhamento,documento_url,tipo_condicao,mobilidade,usa_dispositivo,tipo_dispositivo,comunicacao,comportamento,usa_equipamentos,equipamentos,observacao_equipamentos,outro_servico_sus,transporte,turno_preferido,especialidade_destino,custom_data";
       let allData: any[] = [];
       let from = 0;
       while (true) {
@@ -581,7 +576,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           transporte: p.transporte || "",
           turno_preferido: p.turno_preferido || "",
           especialidade_destino: p.especialidade_destino || "",
-          custom_data: {},
+          custom_data: p.custom_data || {},
         })),
       );
     } catch (err) {
@@ -591,15 +586,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadAgendamentos = useCallback(async () => {
     try {
-      // PERF: janela inicial limitada (7 dias atrás → 45 dias à frente).
-      // Histórico antigo e futuro distante carregam sob demanda via
-      // ensureAgendamentosForRange quando o usuário navega na agenda.
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 7);
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 45);
-      const cutoff = localDateStr(startDate);
-      const endCutoff = localDateStr(endDate);
+      // PERF: reduced window from 30 to 14 days back to keep startup fast.
+      // Older appointments remain accessible through the Histórico/Auditoria pages
+      // which fetch on-demand.
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 14);
+      const cutoff = localDateStr(cutoffDate);
 
       let allData: any[] = [];
       let from = 0;
@@ -611,7 +603,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
           )
           .gte("data", cutoff)
-          .lte("data", endCutoff)
           .order("data", { ascending: false })
           .range(from, from + PAGE - 1);
         // Unit isolation
@@ -646,8 +637,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           horaChegada: a.hora_chegada || "",
         })),
       );
-      // Mark initial window as loaded to avoid duplicate fetches by ensureAgendamentosForRange
-      loadedRangesRef.current.add(`${cutoff}|${endCutoff}`);
     } catch (err) {
       console.error("Error loading agendamentos:", err);
     }
@@ -768,10 +757,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Guard: don't load until auth user is resolved to avoid loading unfiltered data
-    if (!authUser?.id) return;
+    if (!authUser) return;
     loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authUser?.id, authUser?.unidadeId, authUser?.usuario]);
+  }, [loadAll, authUser]);
 
   const upsertById = <T extends { id: string }>(prev: T[], nextItem: T) => {
     const index = prev.findIndex((item) => item.id === nextItem.id);
@@ -874,59 +862,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (id) setPacientes((prev) => removeById(prev, id));
         return;
       }
-      // PERF: upsert SINGLE row instead of full reload (1650 rows + 40 cols).
-      // Unit isolation: skip events from other units.
-      const row = payload.new as any;
-      if (!row?.id) return;
-      if (!isGlobalAdmin && userUnidadeId && row.unidade_id && row.unidade_id !== userUnidadeId) return;
-      setPacientes((prev) =>
-        upsertById(prev, {
-          id: row.id,
-          nome: row.nome,
-          cpf: row.cpf || "",
-          cns: row.cns || "",
-          nomeMae: row.nome_mae || "",
-          telefone: row.telefone || "",
-          dataNascimento: row.data_nascimento || "",
-          email: row.email || "",
-          endereco: row.endereco || "",
-          observacoes: row.observacoes || "",
-          descricaoClinica: row.descricao_clinica || "",
-          cid: row.cid || "",
-          criadoEm: row.criado_em || "",
-          unidadeId: row.unidade_id || "",
-          isGestante: !!row.is_gestante,
-          isPne: !!row.is_pne,
-          isAutista: !!row.is_autista,
-          naturalidade: row.naturalidade || "",
-          naturalidade_uf: row.naturalidade_uf || "",
-          municipio: row.municipio || "",
-          menor_idade: !!row.menor_idade,
-          nome_responsavel: row.nome_responsavel || "",
-          cpf_responsavel: row.cpf_responsavel || "",
-          ubs_origem: row.ubs_origem || "",
-          profissional_solicitante: row.profissional_solicitante || "",
-          tipo_encaminhamento: row.tipo_encaminhamento || "",
-          diagnostico_resumido: row.diagnostico_resumido || "",
-          justificativa: row.justificativa || "",
-          data_encaminhamento: row.data_encaminhamento || "",
-          documento_url: row.documento_url || "",
-          tipo_condicao: row.tipo_condicao || "",
-          mobilidade: row.mobilidade || "",
-          usa_dispositivo: !!row.usa_dispositivo,
-          tipo_dispositivo: row.tipo_dispositivo || "",
-          comunicacao: row.comunicacao || "",
-          comportamento: row.comportamento || "",
-          usa_equipamentos: !!row.usa_equipamentos,
-          equipamentos: row.equipamentos || [],
-          observacao_equipamentos: row.observacao_equipamentos || "",
-          outro_servico_sus: !!row.outro_servico_sus,
-          transporte: row.transporte || "",
-          turno_preferido: row.turno_preferido || "",
-          especialidade_destino: row.especialidade_destino || "",
-          custom_data: {},
-        } as any),
-      );
+      // For INSERT/UPDATE: reload full list so all consumers (Prontuário,
+      // Agenda, Triagem, Tratamentos, PTS, BPA) get fresh data including
+      // custom_data, municipio, etc.
+      loadPacientes();
     },
     poll: loadPacientes,
   });
@@ -2033,69 +1972,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshAgendamentos = useCallback(async () => {
     await loadAgendamentos();
   }, [loadAgendamentos]);
-
-  // Carrega agendamentos de uma janela arbitrária (ex.: meses anteriores) sob demanda
-  // e faz merge com o estado atual sem remover registros já carregados.
-  const ensureAgendamentosForRange = useCallback(async (startISO: string, endISO: string) => {
-    if (!startISO || !endISO) return;
-    const key = `${startISO}|${endISO}`;
-    if (loadedRangesRef.current.has(key)) return;
-    loadedRangesRef.current.add(key);
-    try {
-      let allData: any[] = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
-        let query = supabase
-          .from("agendamentos" as any)
-          .select(
-            "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
-          )
-          .gte("data", startISO)
-          .lte("data", endISO)
-          .order("data", { ascending: false })
-          .range(from, from + PAGE - 1);
-        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-        const { data, error } = await query;
-        if (error || !data || data.length === 0) break;
-        allData = allData.concat(data);
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
-      if (allData.length === 0) return;
-      const mapped = allData.map((a: any) => ({
-        id: a.id,
-        pacienteId: a.paciente_id,
-        pacienteNome: a.paciente_nome,
-        unidadeId: a.unidade_id,
-        salaId: a.sala_id || "",
-        setorId: a.setor_id || "",
-        profissionalId: a.profissional_id,
-        profissionalNome: a.profissional_nome,
-        data: a.data,
-        hora: a.hora,
-        status: a.status,
-        tipo: a.tipo,
-        observacoes: a.observacoes || "",
-        origem: (a.origem || "recepcao") as any,
-        agendadoPorExterno: (a as any).agendado_por_externo || "",
-        googleEventId: a.google_event_id || "",
-        syncStatus: a.sync_status || "",
-        criadoEm: a.criado_em || "",
-        criadoPor: a.criado_por || "",
-        horaChegada: (a as any).hora_chegada || "",
-      }));
-      setAgendamentos((prev) => {
-        const byId = new Map(prev.map((a) => [a.id, a]));
-        for (const a of mapped) byId.set(a.id, a as any);
-        return Array.from(byId.values());
-      });
-    } catch (err) {
-      console.error("ensureAgendamentosForRange error:", err);
-      loadedRangesRef.current.delete(key);
-    }
-  }, [isGlobalAdmin, userUnidadeId]);
-
   const refreshPacientes = useCallback(async () => {
     await loadPacientes();
   }, [loadPacientes]);
@@ -2145,7 +2021,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
-    ensureAgendamentosForRange,
     refreshPacientes,
     refreshFila,
     refreshBloqueios,
@@ -2190,7 +2065,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshFuncionarios,
     refreshDisponibilidades,
     refreshAgendamentos,
-    ensureAgendamentosForRange,
     refreshPacientes,
     refreshFila,
     refreshBloqueios,

@@ -7,17 +7,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope, Paperclip, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Save, User, MapPin, Phone, Globe, Calendar, Stethoscope, Paperclip } from "lucide-react";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
-import { applyPhoneMask } from "@/lib/phoneUtils";
+import { applyPhoneMask, normalizePhone } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/queries/queryKeys";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { updatePacienteCadastro, normalizePatientPayload } from "@/lib/paciente-utils";
+import { auditService } from "@/services/auditService";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {
@@ -133,7 +134,6 @@ export function ConferirDadosPacienteModal({
   const [form, setForm] = useState<any>({});
   const [lastSavedJson, setLastSavedJson] = useState<string>("");
   const formRef = useRef<any>({});
-  const autoSaveTimeoutRef = useRef<any>(null);
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
@@ -143,19 +143,20 @@ export function ConferirDadosPacienteModal({
     setLoading(true);
     setLoadError(null);
     try {
-      const { data, error } = await supabase
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const { data, error } = await (supabase as any)
         .from("pacientes")
         .select("*")
         .eq("id", id)
-        .maybeSingle();
-      
+        .maybeSingle()
+        .abortSignal(controller.signal);
+      clearTimeout(timeout);
       if (error) throw error;
       if (!data) throw new Error("Paciente não encontrado");
-      
       console.log("[ConferirDados] Dados carregados com sucesso");
+      const cd = data.custom_data || {};
       setPaciente(data);
-      
-      const cd = (data.custom_data as any) || {};
       setForm({
         nome: data.nome || "",
         nome_mae: data.nome_mae || "",
@@ -166,29 +167,23 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
-        unidade_id: data.unidade_id || "",
         naturalidade: data.naturalidade || "",
         naturalidade_uf: data.naturalidade_uf || "",
-        
-        // Re-idratação estruturada
         sexo: cd.sexo || "",
-        raca_cor: cd.raca_cor || cd.racaCor || "",
+        raca_cor: cd.racaCor || cd.raca_cor || "",
         etnia: cd.etnia || "",
-        etnia_outra: cd.etnia_outra || cd.etniaOutra || "",
+        etnia_outra: cd.etniaOutra || "",
         nacionalidade: cd.nacionalidade || "brasileiro",
-        pais_nascimento: cd.pais_nascimento || cd.paisNascimento || "",
-        tipo_logradouro_dne: cd.tipo_logradouro_dne || cd.tipoLogradouroDne || "",
-        tipo_logradouro_codigo: cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || "",
+        pais_nascimento: cd.paisNascimento || "",
+        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || cd.tipoLogradouro || "",
+        tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
         logradouro: cd.logradouro || "",
         numero: cd.numero || "",
         complemento: cd.complemento || "",
         bairro: cd.bairro || "",
         uf: cd.uf || "PA",
         cep: cd.cep || "",
-        telefone_secundario: cd.telefone_secundario || cd.telefoneSecundario || "",
-        is_gestante: !!(data.is_gestante || cd.is_gestante),
-        is_pne: !!(data.is_pne || cd.is_pne),
-        is_autista: !!(data.is_autista || cd.is_autista),
+        telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
       });
     } catch (err: any) {
       console.error("[ConferirDados] Erro ao carregar:", err);
@@ -220,61 +215,133 @@ export function ConferirDadosPacienteModal({
     });
   }, [paciente, form]);
 
-  const updateField = async (name: string, value: string) => {
+  const updateField = (name: string, value: string) => {
     const masked = MASKS[name] ? MASKS[name](value) : value;
     const newForm = { ...form, [name]: masked };
     setForm(newForm);
     setDirty(true);
     
-    // Autosave com debounce de 1s
+    // Autosave: salvar imediatamente ao alterar qualquer campo
+    // Debounce manual opcional, mas o pedido é "salva automaticamente e reflete de imediato"
     if (paciente) {
-      if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
-      autoSaveTimeoutRef.current = setTimeout(() => {
-        handleSave(true, newForm).catch(() => {});
-      }, 1000);
+      handleSave(true, newForm).catch(err => {
+        console.error("[ConferirDados] Erro no autosave:", err);
+      });
     }
   };
 
   const handleSave = async (silent = false, currentForm?: any) => {
     if (!paciente) return;
-    
-    // Se for autosave silencioso, cancela qualquer autosave pendente
-    if (silent && autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-    
     const formToSave = currentForm || form;
     
-    // Evitar salvar se os dados não mudaram (comparação profunda simples via JSON)
+    // Evitar salvar se os dados não mudaram (autosave excessivo)
     const currentJson = JSON.stringify(formToSave);
     if (silent && currentJson === lastSavedJson) return;
     
     setSaving(true);
+    setLastSavedJson(currentJson);
     try {
-      console.log(`[ConferirDados] Iniciando salvamento (${silent ? 'autosave' : 'manual'})...`);
-      
-      const updated = await updatePacienteCadastro(
-        paciente.id,
-        formToSave,
-        modo === "chegada" ? "Confirmar Chegada" : "Conferir Dados do Paciente",
-        user,
-        queryClient
-      );
+      // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
+      const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
+      const telSecNormalizado = formToSave.telefone_secundario
+        ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
+        : "";
 
-      setLastSavedJson(currentJson);
+      const customData = {
+        ...(paciente.custom_data || {}),
+        sexo: formToSave.sexo,
+        // Persistir Raça/Cor em ambas as chaves (compat com BPA)
+        racaCor: formToSave.raca_cor,
+        raca_cor: formToSave.raca_cor,
+        etnia: formToSave.etnia,
+        etniaOutra: formToSave.etnia_outra,
+        nacionalidade: formToSave.nacionalidade,
+        paisNascimento: formToSave.pais_nascimento,
+        // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
+        tipoLogradouroDne: formToSave.tipo_logradouro_dne,
+        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo,
+        tipoLogradouro: formToSave.tipo_logradouro_dne,
+        // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
+        logradouro: formToSave.logradouro,
+        numero: formToSave.numero,
+        complemento: formToSave.complemento,
+        bairro: formToSave.bairro,
+        uf: formToSave.uf,
+        cep: formToSave.cep,
+        telefoneSecundario: telSecNormalizado,
+        // Auditoria de conferência
+        data_ultima_validacao_cadastro: new Date().toISOString(),
+        dados_conferidos_em: new Date().toISOString(),
+        dados_conferidos_por: user?.nome || user?.id || "",
+      };
+
+      const updatePayload: any = {
+        nome: formToSave.nome,
+        nome_mae: formToSave.nome_mae,
+        data_nascimento: formToSave.data_nascimento || "",
+        cpf: formToSave.cpf,
+        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15),
+        telefone: telNormalizado,
+        email: formToSave.email,
+        // Não sobrescrever endereço legado: preserva o valor atual do paciente.
+        endereco: paciente.endereco || "",
+        municipio: formToSave.municipio,
+        naturalidade: formToSave.naturalidade || "",
+        naturalidade_uf: formToSave.naturalidade_uf || "",
+        custom_data: customData,
+      };
+
+      const { error } = await (supabase as any)
+        .from("pacientes")
+        .update(updatePayload)
+        .eq("id", paciente.id);
+      if (error) throw error;
+
+      // Captura diff para auditoria (campos alterados)
+      const camposAlterados: Record<string, { de: any; para: any }> = {};
+      const compareFields: Array<keyof typeof updatePayload> = [
+        "nome", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "endereco", "municipio",
+      ];
+      compareFields.forEach((k) => {
+        const antes = (paciente as any)[k] ?? "";
+        const depois = (updatePayload as any)[k] ?? "";
+        if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
+      });
       setDirty(false);
 
-      // Atualiza contexto global
-      await refreshPacientes();
+      // CRÍTICO: invalidar caches + recarregar contexto global para refletir
+      // imediatamente em Paciente, Agenda, Prontuário, Tratamento, PTS, Triagem, BPA.
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.triagem.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
+      try { await refreshPacientes(); } catch {}
 
-      // Atualiza estado local do paciente
-      setPaciente(updated);
+      // Auditoria (best-effort, não bloqueia fluxo)
+      if (Object.keys(camposAlterados).length > 0) {
+        // Atualiza o estado do paciente para refletir o que foi salvo
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+        
+        auditService.log({
+          acao: "atualizar",
+          entidade: "paciente",
+          entidadeId: paciente.id,
+          modulo: "Conferir Dados do Paciente",
+          user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
+          detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
+        }).catch(() => {});
+      } else {
+        // Se não houver alterações (ex: apenas abertura ou salvamento de campos iguais), 
+        // ainda precisamos garantir que o estado local do paciente não está defasado
+        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+      }
 
-      if (!silent) toast.success("Dados do paciente atualizados com sucesso!");
+      if (!silent) toast.success("Dados atualizados em todo o sistema!");
     } catch (e: any) {
-      console.error("[ConferirDados] Erro ao salvar paciente:", e);
-      const msg = e?.message || e?.details || "Erro desconhecido";
-      if (!silent) toast.error(`Erro ao salvar: ${msg}`);
+      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
       throw e;
     } finally {
       setSaving(false);
@@ -294,13 +361,10 @@ export function ConferirDadosPacienteModal({
         placeholder={placeholder}
         value={form[name] ?? ""}
         onChange={(e) => updateField(name, e.target.value)}
-        onBlur={() => {
-          if (dirty && !saving) handleSave(true).catch(() => {});
-        }}
         className="h-11 sm:h-10 text-base sm:text-sm"
       />
     </div>
-  ), [form, updateField, dirty, saving]);
+  ), [form, updateField]);
 
   const renderFieldSelect = useCallback((
     label: string, name: string,
@@ -308,14 +372,7 @@ export function ConferirDadosPacienteModal({
   ) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Select 
-        value={form[name] || ""} 
-        onValueChange={async (v) => {
-          await updateField(name, v);
-          // Força salvamento imediato para selects
-          await handleSave(true, { ...form, [name]: v });
-        }}
-      >
+      <Select value={form[name] || ""} onValueChange={(v) => updateField(name, v)}>
         <SelectTrigger className="h-11 sm:h-10 text-base sm:text-sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
@@ -326,7 +383,7 @@ export function ConferirDadosPacienteModal({
         </SelectContent>
       </Select>
     </div>
-  ), [form, updateField, dirty, saving]);
+  ), [form, updateField]);
 
   const isIndigena = form.raca_cor === "indigena";
   const isEstrangeiro = form.nacionalidade === "estrangeiro";
@@ -435,11 +492,9 @@ export function ConferirDadosPacienteModal({
                     <MunicipioCombobox
                       value={form.naturalidade}
                       uf={form.naturalidade_uf}
-                      onChange={async (cidade, uf) => {
-                        const newForm = { ...form, naturalidade: cidade, naturalidade_uf: uf };
-                        setForm(newForm);
+                      onChange={(cidade, uf) => {
+                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
                         setDirty(true);
-                        if (paciente) await handleSave(true, newForm);
                       }}
                       placeholder="Selecione o município de naturalidade"
                     />
@@ -473,16 +528,13 @@ export function ConferirDadosPacienteModal({
                     <LogradouroDneAutocomplete
                       value={form.tipo_logradouro_dne}
                       codigo={form.tipo_logradouro_codigo}
-                      onChange={async (descricao, codigo) => {
-                        const newForm = {
-                          ...form,
+                      onChange={(descricao, codigo) => {
+                        setForm((p: any) => ({
+                          ...p,
                           tipo_logradouro_dne: descricao,
                           tipo_logradouro_codigo: codigo,
-                        };
-                        setForm(newForm);
+                        }));
                         setDirty(true);
-                        // Autosave silencioso após mudança estrutural
-                        handleSave(true, newForm).catch(() => {});
                       }}
                     />
                   </div>
@@ -516,33 +568,15 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {/* Botão salvar manual (dupla garantia) */}
-              <div className="flex justify-between items-center pt-2 border-t mt-4">
-                <div className="flex items-center gap-2">
-                  {saving ? (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-pulse">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Salvando...
-                    </div>
-                  ) : !dirty && lastSavedJson ? (
-                    <div className="flex items-center gap-1.5 text-xs text-success">
-                      <CheckCircle2 className="w-3 h-3" /> Salvo
-                    </div>
-                  ) : dirty ? (
-                    <div className="flex items-center gap-1.5 text-xs text-warning">
-                      <AlertTriangle className="w-3 h-3" /> Alterações pendentes
-                    </div>
-                  ) : null}
+              {/* Botão salvar (quando houver alterações) */}
+              {dirty && (
+                <div className="flex justify-end pt-1">
+                  <Button size="sm" onClick={() => { handleSave().catch(() => {}); }} disabled={saving}>
+                    <Save className="w-3.5 h-3.5 mr-1.5" />
+                    {saving ? "Salvando…" : "Salvar alterações"}
+                  </Button>
                 </div>
-                <Button 
-                  size="sm" 
-                  onClick={() => { handleSave().catch(() => {}); }} 
-                  disabled={saving}
-                  variant={dirty ? "default" : "outline"}
-                >
-                  <Save className="w-3.5 h-3.5 mr-1.5" />
-                  {saving ? "Salvando…" : "Salvar alterações"}
-                </Button>
-              </div>
+              )}
             </div>
           </div>
         )}

@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { updatePacienteCadastro, normalizePatientPayload, sanitizePacientePayload } from "@/lib/paciente-utils";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
@@ -176,7 +175,6 @@ const tipoBadge: Record<string, { label: string; class: string; icon: string }> 
 };
 
 const Agenda: React.FC = () => {
-  const { user } = useAuth();
   const {
     agendamentos,
     updateAgendamento,
@@ -198,11 +196,11 @@ const Agenda: React.FC = () => {
     getAvailableDates,
     getTurnoInfo,
     bloqueios,
-    ensureAgendamentosForRange,
   } = useData();
   const [lastProntuarios, setLastProntuarios] = React.useState<
     Record<string, { data: string; profissional: string; procedimentos: string; queixa: string; tipo: string }>
   >({});
+  const { user } = useAuth();
   const { can } = usePermissions();
   const gcal = useGoogleCalendar();
   const { notify } = useWebhookNotify();
@@ -210,7 +208,6 @@ const Agenda: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const navigate = useNavigate();
   const resolvePaciente = usePacienteNomeResolver();
-  const canStart = can('agenda', 'start_appointment');
   const [selectedDate, setSelectedDate] = useState(todayLocalStr());
   const [filterUnit, setFilterUnit] = useState("all");
   const [filterProf, setFilterProf] = useState("all");
@@ -271,18 +268,6 @@ const Agenda: React.FC = () => {
       } catch {}
     })();
   }, []);
-
-  // Ao navegar para datas/meses anteriores, garante o carregamento sob demanda
-  // dos agendamentos daquele mês (o load inicial só traz os últimos 7 dias).
-  React.useEffect(() => {
-    if (!selectedDate) return;
-    const [y, m] = selectedDate.split('-').map((v) => parseInt(v, 10));
-    if (!y || !m) return;
-    const start = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-01`;
-    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const end = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    ensureAgendamentosForRange(start, end);
-  }, [selectedDate, ensureAgendamentosForRange]);
 
   // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
@@ -375,7 +360,7 @@ const Agenda: React.FC = () => {
     profissionalId: string;
     observacoes: string;
   } | null>(null);
-  const canEdit = can('agenda', 'edit');
+  const canEdit = can('agenda', 'can_edit');
 
   // ── Modal de conferência de dados (Novo Agendamento + Confirmar Chegada) ──
   const [conferenciaModal, setConferenciaModal] = useState<{
@@ -460,7 +445,7 @@ const Agenda: React.FC = () => {
     });
   }, [agendamentos, user, isProfissional, nowMinutes]);
   const canRetorno = isProfissional && user?.podeAgendarRetorno === true;
-  const canAprovar = can('agenda', 'approve_online');
+  const canAprovar = can('agenda', 'can_execute');
   const profissionais = profissionaisVisiveis;
 
   // NOVO: agendamentos online pendentes de aprovação
@@ -966,38 +951,6 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
-    // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
-    // Antes de criar o agendamento, garantimos que os dados conferidos do paciente foram persistidos.
-    if (newAg.pacienteId) {
-      try {
-        const { data: currentP } = await supabase
-          .from("pacientes")
-          .select("*")
-          .eq("id", newAg.pacienteId)
-          .maybeSingle();
-        
-        if (currentP) {
-          await updatePacienteCadastro(
-            newAg.pacienteId,
-            currentP,
-            "Novo Agendamento (Persistência)",
-            user,
-            // @ts-ignore
-            queryClient
-          );
-        }
-      } catch (err: any) {
-        console.error("[Agenda] Erro real ao persistir dados do paciente antes de agendar", {
-          pacienteId: newAg.pacienteId,
-          error: err,
-          message: err?.message,
-          code: err?.code
-        });
-        toast.error("Não foi possível salvar os dados do paciente. Verifique se há campos obrigatórios vazios.");
-        return; // Aborta agendamento se falhar salvamento do paciente
-      }
-    }
-
     addAgendamento(agData);
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
@@ -1179,10 +1132,7 @@ const Agenda: React.FC = () => {
           profissionalCbo: (profSel as any)?.custom_data?.cbo || "",
           unidadeNome: unidSel?.nomeExibicao || unidSel?.nome || "",
         },
-        onConfirm: async () => { 
-          // Garantia extra de salvamento antes de confirmar a chegada
-          void executarStatusChange(agId, newStatus); 
-        },
+        onConfirm: () => { void executarStatusChange(agId, newStatus); },
       });
       return;
     }
@@ -1221,36 +1171,6 @@ const Agenda: React.FC = () => {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         // Update local arrival map immediately for correct sorting
         setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
-
-        // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
-        // Antes de confirmar a chegada, garantimos que os dados conferidos foram persistidos.
-        try {
-          const { data: currentP } = await supabase
-            .from("pacientes")
-            .select("*")
-            .eq("id", ag.pacienteId)
-            .maybeSingle();
-          
-          if (currentP) {
-            await updatePacienteCadastro(
-              ag.pacienteId,
-              currentP,
-              "Confirmar Chegada (Finalização)",
-              user,
-              // @ts-ignore
-              queryClient
-            );
-          }
-        } catch (err: any) {
-          console.error("[Agenda] Erro real ao persistir dados do paciente antes da chegada", {
-            pacienteId: ag.pacienteId,
-            error: err,
-            message: err?.message,
-            code: err?.code
-          });
-          toast.error("Não foi possível salvar os dados do paciente. Verifique os campos e tente novamente.");
-          return; // Aborta confirmação de chegada se falhar salvamento do paciente
-        }
 
         // Triage routing is OPT-IN. Default = direct to professional's queue.
         // Only routes to triage when explicitly enabled (per professional or globally).
@@ -1354,14 +1274,8 @@ const Agenda: React.FC = () => {
         await updateAgendamento(agId, { status: newStatus as any });
         await Promise.all([refreshAgendamentos(), refreshFila()]);
       }
-    } catch (err: any) {
-      console.error("[Agenda] Erro real ao atualizar status do agendamento", {
-        agId,
-        newStatus,
-        error: err,
-        message: err?.message,
-        code: err?.code
-      });
+    } catch (err) {
+      console.error("Error updating appointment status:", err);
       toast.error("Erro ao atualizar status do agendamento.");
       return;
     }
@@ -1980,7 +1894,7 @@ const Agenda: React.FC = () => {
                     <BuscaPaciente
                       pacientes={pacientes}
                       value={newAg.pacienteId}
-                      onChange={(id, nome) => handlePacienteSelecionadoNovoAg(id)}
+                      onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
                     />
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />
@@ -2331,12 +2245,6 @@ const Agenda: React.FC = () => {
               getAvailableSlots={getAvailableSlots}
               getAvailableDates={getAvailableDates}
               unidades={unidades}
-              onMonthChange={(year, month) => {
-                const start = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-01`;
-                const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-                const end = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-                ensureAgendamentosForRange(start, end);
-              }}
             />
 
             {!isProfissional && showUnitSelector && (
@@ -2514,11 +2422,10 @@ const Agenda: React.FC = () => {
 
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
                 // Para apto_atendimento, libera independente da data (permite registrar atendimentos retroativos)
-                const canStartAction =
+                const canStart =
                   isProfissional &&
                   STATUS_LIBERADOS.includes(ag.status) &&
-                  (ag.status === "apto_atendimento" || ehHoje) &&
-                  canStart;
+                  (ag.status === "apto_atendimento" || ehHoje);
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
@@ -2770,7 +2677,7 @@ const Agenda: React.FC = () => {
                                 <TooltipContent>Aguardando técnico de enfermagem concluir a triagem</TooltipContent>
                               </Tooltip>
                             )}
-                            {canStartAction && (
+                            {canStart && (
                               <Button
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"
@@ -2864,10 +2771,6 @@ const Agenda: React.FC = () => {
                             if (isProfissional) {
                               return sa.key === "falta" && ag.profissionalId === user?.id;
                             }
-                            
-                            // Permissões granulares para status específicos
-                            if (sa.key === 'confirmado_chegada' && !can('agenda', 'confirm_arrival')) return false;
-                            
                             return true;
                           }).map((sa) => (
                             <Button

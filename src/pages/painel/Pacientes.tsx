@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { updatePacienteCadastro, normalizePatientPayload, sanitizePacientePayload } from "@/lib/paciente-utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
 import { useData } from "@/contexts/DataContext";
@@ -113,7 +112,7 @@ const PACIENTE_COLUMNS =
 
 const mapPacienteRow = (p: any) => ({
   id: p.id,
-  nome: p.nome || p.nome_completo || "",
+  nome: p.nome,
   cpf: p.cpf || "",
   cns: p.cns || "",
   nomeMae: p.nome_mae || "",
@@ -205,11 +204,11 @@ const Pacientes: React.FC = () => {
   const { ensurePortalAccess } = useEnsurePortalAccess();
   const { can } = usePermissions();
   const isProfissional = user?.role === "profissional";
-  const canDelete = can("pacientes", "delete");
-  const canImportCSV = can("pacientes", "create");
-  const canAddToFila = can("fila_espera", "create");
-  const canCreate = can("pacientes", "create");
-  const canEdit = can("pacientes", "edit");
+  const canDelete = can("pacientes", "can_delete");
+  const canImportCSV = can("pacientes", "can_create");
+  const canAddToFila = can("fila", "can_create");
+  const canCreate = can("pacientes", "can_create");
+  const canEdit = can("pacientes", "can_edit");
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const profissionais = profissionaisVisiveis;
   const { getNativeLabel: L } = useCustomFields('paciente', user?.unidadeId);
@@ -312,10 +311,70 @@ const Pacientes: React.FC = () => {
     staleTime: 0,
   });
 
-  // [PERF] Diagnóstico de recepção desativado: carregava 6 tabelas inteiras a cada acesso
-  // (causa da lentidão na página de pacientes). Mantido como referência caso precise depurar
-  // manualmente um caso específico — habilitar pontualmente via flag.
-  const shouldLoadUnitDiagnostics = false;
+  const shouldLoadUnitDiagnostics = !!user && !isGlobalAdminUser && !isProfissional && !!unidadeIdFuncionario;
+
+  useQuery({
+    queryKey: queryKeys.pacientes.diagnostics({ unidadeId: unidadeIdFuncionario || "", role: user?.role || "" }),
+    enabled: shouldLoadUnitDiagnostics && funcionarios.length > 0,
+    staleTime: 0,
+    queryFn: async () => {
+      const unitId = normalizeUnitId(unidadeIdFuncionario);
+      const [allPacientes, agendaLinks, filaLinks, prontuarioLinks, nursingLinks, ptsLinks, treatmentLinks] = await Promise.all([
+        fetchAllRows((from, to) =>
+          supabase.from("pacientes").select("id,unidade_id,custom_data").range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("agendamentos").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("fila_espera").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("prontuarios").select("paciente_id,unidade_id").eq("unidade_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("nursing_evaluations").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("pts").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
+        fetchAllRows((from, to) =>
+          supabase.from("treatment_cycles").select("patient_id,unit_id").eq("unit_id", unitId).range(from, to),
+        ),
+      ]);
+      const staffIds = new Set(
+        funcionarios.filter((f) => normalizeUnitId(f.unidadeId) === unitId).map((f) => f.id),
+      );
+      const linkedIds = new Set(
+        [
+          ...agendaLinks.map((row) => row.paciente_id),
+          ...filaLinks.map((row) => row.paciente_id),
+          ...prontuarioLinks.map((row) => row.paciente_id),
+          ...nursingLinks.map((row) => row.patient_id),
+          ...ptsLinks.map((row) => row.patient_id),
+          ...treatmentLinks.map((row) => row.patient_id),
+        ].filter(Boolean),
+      );
+      const semUnidade = allPacientes.filter((p) => !normalizeUnitId(p.unidade_id));
+      const diagnostico = {
+        masterTotal: allPacientes.length,
+        pacientesComVinculoNaUnidadeRecepcao: linkedIds.size,
+        unidadeIdIgualRecepcao: allPacientes.filter((p) => normalizeUnitId(p.unidade_id) === unitId).length,
+        unidadeIdVazioOuNull: semUnidade.length,
+        unidadeIdDiferente: allPacientes.filter((p) => {
+          const pacienteUnitId = normalizeUnitId(p.unidade_id);
+          return pacienteUnitId && pacienteUnitId !== unitId;
+        }).length,
+        criadosPorUsuariosDaUnidadeSemUnidade: semUnidade.filter((p) => {
+          const customData = p.custom_data || {};
+          return staffIds.has(customData.criado_por) || staffIds.has(customData.atualizado_por) || customData.unidade_origem_id === unitId;
+        }).length,
+        vinculadosFilaAgendaSemUnidadeCadastro: semUnidade.filter((p) => linkedIds.has(p.id)).length,
+      };
+      console.info("[Pacientes][Diagnóstico Recepção]", diagnostico);
+      return diagnostico;
+    },
+  });
 
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
@@ -326,8 +385,10 @@ const Pacientes: React.FC = () => {
   // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
   // Não filtrar por setor, sala, criado_por, profissional, fila ou agendamento.
   const visiblePacientes = useMemo(() => {
-    // Profissionais agora visualizam todos os pacientes da sua unidade (não apenas os
-    // vinculados aos próprios agendamentos), permitindo busca/consulta completa.
+    if (isProfissional && user) {
+      const myPacienteIds = new Set(agendamentos.filter((a) => a.profissionalId === user.id).map((a) => a.pacienteId));
+      return pacientes.filter((p) => myPacienteIds.has(p.id));
+    }
     if (!isGlobalAdminUser && unidadeIdFuncionario) {
       const unitId = normalizeUnitId(unidadeIdFuncionario);
       // Mostra pacientes da unidade + pacientes sem unidade vinculada (legados/órfãos)
@@ -444,24 +505,23 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
-    const cd = (p as any).custom_data || {};
     setForm({
       ...emptyPacienteForm,
-      nome: p.nome || (p as any).nome_completo || "",
-      cpf: p.cpf || "",
+      nome: p.nome,
+      cpf: p.cpf,
       cns: p.cns || "",
-      nomeMae: (p as any).nome_mae || p.nomeMae || "",
-      telefone: p.telefone || "",
-      dataNascimento: (p as any).data_nascimento || p.dataNascimento || "",
-      email: p.email || "",
+      nomeMae: p.nomeMae || "",
+      telefone: p.telefone,
+      dataNascimento: p.dataNascimento,
+      email: p.email,
       endereco: p.endereco || "",
-      municipio: (p as any).municipio || p.municipio || "",
-      descricaoClinica: (p as any).descricao_clinica || p.descricaoClinica || "",
+      descricaoClinica: p.descricaoClinica || "",
       cid: p.cid || "",
       especialidadeDestino: (p as any).especialidade_destino || "",
+      municipio: (p as any).municipio || "",
       naturalidade: (p as any).naturalidade || "",
       naturalidadeUf: (p as any).naturalidade_uf || "",
-      menorIdade: !!(p as any).menor_idade,
+      menorIdade: (p as any).menor_idade || false,
       nomeResponsavel: (p as any).nome_responsavel || "",
       cpfResponsavel: (p as any).cpf_responsavel || "",
       ubsOrigem: (p as any).ubs_origem || "",
@@ -473,38 +533,20 @@ const Pacientes: React.FC = () => {
       documentoUrl: (p as any).documento_url || "",
       tipoCondicao: (p as any).tipo_condicao || "",
       mobilidade: (p as any).mobilidade || "",
-      usaDispositivo: !!(p as any).usa_dispositivo,
+      usaDispositivo: (p as any).usa_dispositivo || false,
       tipoDispositivo: (p as any).tipo_dispositivo || "",
       comunicacao: (p as any).comunicacao || "",
       comportamento: (p as any).comportamento || "",
-      usaEquipamentos: !!(p as any).usa_equipamentos,
+      usaEquipamentos: (p as any).usa_equipamentos || false,
       equipamentos: (p as any).equipamentos || [],
       observacaoEquipamentos: (p as any).observacao_equipamentos || "",
-      outroServicoSus: !!(p as any).outro_servico_sus,
+      outroServicoSus: (p as any).outro_servico_sus || false,
       transporte: (p as any).transporte || "",
       turnoPreferido: (p as any).turno_preferido || "",
-      isGestante: !!((p as any).is_gestante || p.isGestante),
-      isPne: !!((p as any).is_pne || p.isPne),
-      isAutista: !!((p as any).is_artista || p.isAutista),
-      
-      // Reidratação estruturada do custom_data
-      sexo: cd.sexo || "",
-      racaCor: cd.racaCor || cd.raca_cor || "",
-      etnia: cd.etnia || "",
-      etniaOutra: cd.etniaOutra || cd.etnia_outra || "",
-      nacionalidade: cd.nacionalidade || "brasileiro",
-      paisNascimento: cd.paisNascimento || cd.pais_nascimento || "",
-      cep: cd.cep || "",
-      tipoLogradouroDne: cd.tipo_logradouro_dne || cd.tipoLogradouroDne || "",
-      tipoLogradouroCodigo: cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || "",
-      logradouro: cd.logradouro || "",
-      numero: cd.numero || "",
-      complemento: cd.complemento || "",
-      bairro: cd.bairro || "",
-      uf: cd.uf || "PA",
-      telefoneSecundario: cd.telefone_secundario || cd.telefoneSecundario || "",
-      
-      customData: cd,
+      isGestante: (p as any).isGestante || (p as any).is_gestante || false,
+      isPne: (p as any).isPne || (p as any).is_pne || false,
+      isAutista: (p as any).isAutista || (p as any).is_autista || false,
+      customData: (p as any).custom_data || {},
     });
     setErrors({});
     setDialogOpen(true);
@@ -541,27 +583,81 @@ const Pacientes: React.FC = () => {
     const normalizedPhone = normalizePhone(rawPhone!) || "";
 
     const dbFields: any = {
-      ...form,
-      unidade_id: user?.role === "recepcao" || (!isGlobalAdminUser && unidadeIdFuncionario) 
-        ? unidadeIdFuncionario 
-        : (form as any).unidadeId || (form as any).unidade_id,
+      nome: form.nome,
+      cpf: form.cpf,
+      cns: (form.cns || "").replace(/\D/g, "").slice(0, 15),
+      nome_mae: form.nomeMae,
+      telefone: normalizedPhone,
+      data_nascimento: form.dataNascimento,
+      email: form.email,
+      endereco: form.endereco,
+      descricao_clinica: form.descricaoClinica || form.diagnosticoResumido,
+      cid: form.cid,
+      especialidade_destino: form.especialidadeDestino,
+      municipio: form.municipio,
+      naturalidade: form.naturalidade || "",
+      naturalidade_uf: form.naturalidadeUf || "",
+      menor_idade: form.menorIdade,
+      nome_responsavel: form.nomeResponsavel,
+      cpf_responsavel: form.cpfResponsavel,
+      ubs_origem: form.ubsOrigem,
+      profissional_solicitante: form.profissionalSolicitante,
+      tipo_encaminhamento: form.tipoEncaminhamento,
+      diagnostico_resumido: form.diagnosticoResumido,
+      justificativa: form.justificativa,
+      data_encaminhamento: form.dataEncaminhamento,
+      documento_url: form.documentoUrl,
+      tipo_condicao: form.tipoCondicao,
+      mobilidade: form.mobilidade,
+      usa_dispositivo: form.usaDispositivo,
+      tipo_dispositivo: form.tipoDispositivo,
+      comunicacao: form.comunicacao,
+      comportamento: form.comportamento,
+      usa_equipamentos: form.usaEquipamentos,
+      equipamentos: form.equipamentos,
+      observacao_equipamentos: form.observacaoEquipamentos,
+      outro_servico_sus: form.outroServicoSus,
+      transporte: form.transporte,
+      turno_preferido: form.turnoPreferido,
+      is_gestante: form.isGestante,
+      is_pne: form.isPne,
+      is_autista: form.isAutista,
+      custom_data: {
+        ...(form.customData || {}),
+        atualizado_em: new Date().toISOString(),
+        atualizado_por: user?.id || "",
+        atualizado_por_nome: user?.nome || "",
+        atualizado_por_usuario: user?.usuario || "",
+        motivo_alteracao: "Atualização cadastral pela página Pacientes",
+      },
     };
+
+    if (user?.role === "recepcao") {
+      if (!unidadeIdFuncionario) {
+        toast.error("Usuário da recepção sem unidade vinculada. Corrija o cadastro do usuário.");
+        setSaving(false);
+        return;
+      }
+      dbFields.unidade_id = unidadeIdFuncionario;
+    } else if (!isGlobalAdminUser && unidadeIdFuncionario) {
+      dbFields.unidade_id = unidadeIdFuncionario;
+    }
 
     try {
       if (editId) {
-        // Usa a função centralizada persistPaciente que lida com normalização robusta
-        const { persistPaciente } = await import("@/lib/paciente-utils");
-        await persistPaciente(
-          editId,
-          dbFields,
-          "Pacientes",
-          user,
-          queryClient
-        );
-        
-        await refreshPacientes();
-        setSaving(false);
+        // Close dialog immediately (optimistic)
         setDialogOpen(false);
+        setSaving(false);
+        Promise.resolve(supabase.from("pacientes").update(dbFields).eq("id", editId))
+          .then(({ error }) => { if (error) console.error("Erro ao atualizar paciente:", error); })
+          .catch((err) => console.error("Erro ao atualizar paciente:", err))
+          .finally(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
+            refreshPacientes();
+          });
         toast.success("Paciente atualizado!");
       } else {
         // === DUPLICATE DETECTION ===
@@ -615,40 +711,48 @@ const Pacientes: React.FC = () => {
           return;
         }
 
-        // Usa a função centralizada persistPaciente que garante normalização idêntica ao Update
-        const { persistPaciente } = await import("@/lib/paciente-utils");
-        
-        persistPaciente(
-          null,
-          dbFields,
-          "Pacientes",
-          user,
-          queryClient
-        ).then(async (newRecord) => {
-          const id = newRecord.id;
-          // Flush pending referrals + attachments queued in CadastroPacienteForm
-          try {
-            const refHandle = (window as any).__patientReferralRef?.current;
-            if (refHandle?.hasPending?.()) {
-              await refHandle.flushPending(id);
-            }
-          } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
-          
-          queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-          refreshPacientes();
-        }).catch((err) => {
-          console.error("Erro ao cadastrar paciente:", err);
-          toast.error("Erro ao cadastrar paciente.");
-        });
-
+        const insertPayload: any = {
+          id,
+          ...dbFields,
+          criado_em: new Date().toISOString(),
+          unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
+          custom_data: {
+            ...(dbFields.custom_data || {}),
+            criado_por: user?.id || "",
+            criado_por_nome: user?.nome || "",
+            criado_por_usuario: user?.usuario || "",
+            unidade_origem_id: unidadeIdFuncionario,
+            criado_at: new Date().toISOString(),
+            atualizado_at: new Date().toISOString(),
+            motivo_alteracao: "Cadastro de paciente pela página Pacientes",
+          },
+        };
+        // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
+        Promise.resolve(supabase.from("pacientes").insert(insertPayload))
+          .then(async ({ error }) => {
+            if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
+            // Flush pending referrals + attachments queued in CadastroPacienteForm
+            try {
+              const refHandle = (window as any).__patientReferralRef?.current;
+              if (refHandle?.hasPending?.()) {
+                await refHandle.flushPending(id);
+              }
+            } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
+          })
+          .catch((err) => console.error("Erro ao cadastrar paciente:", err))
+          .finally(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
+            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
+            refreshPacientes();
+          });
         toast.success("Paciente cadastrado com sucesso!");
       }
-    } catch (err: any) {
-      console.error("[Pacientes] Erro ao salvar paciente:", err);
-      const msg = err?.message || err?.details || "Verifique os campos obrigatórios.";
-      toast.error(`Não foi possível salvar o paciente: ${msg}`);
+    } catch {
+      toast.error("Erro ao salvar paciente.");
     } finally {
       setSaving(false);
     }
@@ -673,7 +777,7 @@ const Pacientes: React.FC = () => {
         acao: "excluir",
         entidade: "paciente",
         entidadeId: p.id,
-        detalhes: { nome: p.nome || p.nome_completo || "", cpf: p.cpf },
+        detalhes: { nome: p.nome, cpf: p.cpf },
         user,
       });
       await refreshPacientes();
@@ -916,14 +1020,12 @@ const Pacientes: React.FC = () => {
         }
         actions={
           <>
-            {can('pacientes', 'update_cadastral') && (
-              <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
-                <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
-              </Button>
-            )}
-            {can('pacientes', 'import') && (
+            <Button variant="outline" onClick={() => navigate("/painel/atualizacao-cadastral")}>
+              <AlertTriangle className="w-4 h-4 mr-2 text-orange-500" /> Pendências Cadastrais
+            </Button>
+            {canImportCSV && (
               <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <FileUp className="w-4 h-4 mr-2" /> Importar CSV
+                <FileDown className="w-4 h-4 mr-2" /> Importar CSV
               </Button>
             )}
             {canCreate && (
@@ -954,16 +1056,14 @@ const Pacientes: React.FC = () => {
                 >
                   Ver pendências
                 </Button>
-                {can('pacientes', 'export') && (
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="bg-background"
-                    onClick={() => exportCSV("pendentes")}
-                  >
-                    Exportar pendentes
-                  </Button>
-                )}
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="bg-background"
+                  onClick={() => exportCSV("pendentes")}
+                >
+                  Exportar pendentes
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -1376,26 +1476,12 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
               <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="CID" valor={cidVal} />
-              <PCampo label="Sexo" valor={(detalhePaciente as any).custom_data?.sexo} />
-              <PCampo label="Raça/Cor" valor={(detalhePaciente as any).custom_data?.raca_cor || (detalhePaciente as any).custom_data?.racaCor} />
-              <PCampo label="Nacionalidade" valor={(detalhePaciente as any).custom_data?.nacionalidade} />
-              <PCampo label="Naturalidade" valor={detalhePaciente.naturalidade} />
-            </PSecao>
-
-            <PSecao titulo="Endereço">
-              <PCampo label="CEP" valor={(detalhePaciente as any).custom_data?.cep} />
-              <PCampo label="Logradouro" valor={[(detalhePaciente as any).custom_data?.tipo_logradouro_dne || (detalhePaciente as any).custom_data?.tipoLogradouroDne, (detalhePaciente as any).custom_data?.logradouro].filter(Boolean).join(' ')} />
-              <PCampo label="Número" valor={(detalhePaciente as any).custom_data?.numero} />
-              <PCampo label="Complemento" valor={(detalhePaciente as any).custom_data?.complemento} />
-              <PCampo label="Bairro" valor={(detalhePaciente as any).custom_data?.bairro} />
-              <PCampo label="Município" valor={detalhePaciente.municipio} />
-              <PCampo label="UF" valor={(detalhePaciente as any).custom_data?.uf} />
             </PSecao>
 
             <PSecao titulo="Contato">
-              <PCampo label={L('telefone', 'Telefone principal')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
-              <PCampo label="Telefone secundário" valor={formatTelefoneBR((detalhePaciente as any).custom_data?.telefone_secundario || (detalhePaciente as any).custom_data?.telefoneSecundario)} />
+              <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
+              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
             <PSecao titulo="Histórico">

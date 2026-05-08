@@ -1584,20 +1584,12 @@ export type Database = {
       }
       permissoes: {
         Row: {
-          can_approve: boolean | null
-          can_attach: boolean | null
-          can_cancel: boolean | null
-          can_configure: boolean | null
           can_create: boolean
           can_delete: boolean
           can_edit: boolean
           can_execute: boolean
-          can_export: boolean | null
-          can_print: boolean | null
-          can_sign: boolean | null
           can_view: boolean
           created_at: string
-          granular_actions: Json | null
           id: string
           modulo: string
           perfil: string
@@ -1605,20 +1597,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          can_approve?: boolean | null
-          can_attach?: boolean | null
-          can_cancel?: boolean | null
-          can_configure?: boolean | null
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
           can_execute?: boolean
-          can_export?: boolean | null
-          can_print?: boolean | null
-          can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
-          granular_actions?: Json | null
           id?: string
           modulo: string
           perfil: string
@@ -1626,20 +1610,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          can_approve?: boolean | null
-          can_attach?: boolean | null
-          can_cancel?: boolean | null
-          can_configure?: boolean | null
           can_create?: boolean
           can_delete?: boolean
           can_edit?: boolean
           can_execute?: boolean
-          can_export?: boolean | null
-          can_print?: boolean | null
-          can_sign?: boolean | null
           can_view?: boolean
           created_at?: string
-          granular_actions?: Json | null
           id?: string
           modulo?: string
           perfil?: string
@@ -1650,20 +1626,12 @@ export type Database = {
       }
       permissoes_usuario: {
         Row: {
-          can_approve: boolean | null
-          can_attach: boolean | null
-          can_cancel: boolean | null
-          can_configure: boolean | null
-          can_create: boolean | null
-          can_delete: boolean | null
-          can_edit: boolean | null
-          can_execute: boolean | null
-          can_export: boolean | null
-          can_print: boolean | null
-          can_sign: boolean | null
-          can_view: boolean | null
+          can_create: boolean
+          can_delete: boolean
+          can_edit: boolean
+          can_execute: boolean
+          can_view: boolean
           created_at: string
-          granular_actions: Json | null
           id: string
           modulo: string
           unidade_id: string
@@ -1671,20 +1639,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          can_approve?: boolean | null
-          can_attach?: boolean | null
-          can_cancel?: boolean | null
-          can_configure?: boolean | null
-          can_create?: boolean | null
-          can_delete?: boolean | null
-          can_edit?: boolean | null
-          can_execute?: boolean | null
-          can_export?: boolean | null
-          can_print?: boolean | null
-          can_sign?: boolean | null
-          can_view?: boolean | null
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
           created_at?: string
-          granular_actions?: Json | null
           id?: string
           modulo: string
           unidade_id?: string
@@ -1692,20 +1652,12 @@ export type Database = {
           user_id: string
         }
         Update: {
-          can_approve?: boolean | null
-          can_attach?: boolean | null
-          can_cancel?: boolean | null
-          can_configure?: boolean | null
-          can_create?: boolean | null
-          can_delete?: boolean | null
-          can_edit?: boolean | null
-          can_execute?: boolean | null
-          can_export?: boolean | null
-          can_print?: boolean | null
-          can_sign?: boolean | null
-          can_view?: boolean | null
+          can_create?: boolean
+          can_delete?: boolean
+          can_edit?: boolean
+          can_execute?: boolean
+          can_view?: boolean
           created_at?: string
-          granular_actions?: Json | null
           id?: string
           modulo?: string
           unidade_id?: string

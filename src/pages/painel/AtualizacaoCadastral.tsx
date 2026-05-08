@@ -19,7 +19,6 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { sanitizePacientePayload, updatePacienteCadastro } from "@/lib/paciente-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import CadastroPacienteForm, { emptyPacienteForm } from "@/components/CadastroPacienteForm";
@@ -92,51 +91,26 @@ const AtualizacaoCadastral: React.FC = () => {
 
   const handleEditQuick = (p: any) => {
     setSelectedPatient(p);
-    // Ensure data alignment with CadastroPacienteForm expected structure
     setEditForm({
       ...emptyPacienteForm,
-      nome: p.nome_completo || p.nome || "",
+      nome: p.nome,
       cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nomeMae || p.nome_mae || "",
+      nomeMae: p.nomeMae || "",
       telefone: p.telefone || "",
-      dataNascimento: p.dataNascimento || p.data_nascimento || "",
+      dataNascimento: p.dataNascimento || "",
       email: p.email || "",
       endereco: p.endereco || "",
       municipio: p.municipio || "",
       naturalidade: p.naturalidade || "",
-      naturalidadeUf: p.naturalidadeUf || p.naturalidade_uf || "",
-      menorIdade: !!(p.menorIdade || p.menor_idade),
-      nomeResponsavel: p.nomeResponsavel || p.nome_responsavel || "",
-      cpfResponsavel: p.cpfResponsavel || p.cpf_responsavel || "",
-      isGestante: !!p.isGestante || !!p.is_gestante,
-      isPne: !!p.isPne || !!p.is_pne,
-      isAutista: !!p.isAutista || !!p.is_autista,
-      
-      // Fields from other sources that might be in different naming conventions
-      tipoCondicao: p.tipoCondicao || p.tipo_condicao || "",
-      mobilidade: p.mobilidade || "",
-      usaDispositivo: !!(p.usaDispositivo || p.usa_dispositivo),
-      tipoDispositivo: p.tipoDispositivo || p.tipo_dispositivo || "",
-      comunicacao: p.comunicacao || "",
-      comportamento: p.comportamento || "",
-      usaEquipamentos: !!(p.usaEquipamentos || p.usa_equipamentos),
-      equipamentos: p.equipamentos || [],
-      observacaoEquipamentos: p.observacaoEquipamentos || p.observacao_equipamentos || "",
-      outroServicoSus: !!(p.outroServicoSus || p.outro_servico_sus),
-      transporte: p.transporte || "",
-      turnoPreferido: p.turnoPreferido || p.turno_preferido || "",
-      especialidadeDestino: p.especialidadeDestino || p.especialidade_destino || "",
-      ubsOrigem: p.ubsOrigem || p.ubs_origem || "",
-      profissionalSolicitante: p.profissionalSolicitante || p.profissional_solicitante || "",
-      tipoEncaminhamento: p.tipoEncaminhamento || p.tipo_encaminhamento || "",
-      cid: p.cid || "",
-      diagnosticoResumido: p.diagnosticoResumido || p.diagnostico_resumido || "",
-      justificativa: p.justificativa || "",
-      dataEncaminhamento: p.dataEncaminhamento || p.data_encaminhamento || "",
-      documentoUrl: p.documentoUrl || p.documento_url || "",
-      
-      customData: p.customData || p.custom_data || {},
+      naturalidadeUf: p.naturalidade_uf || "",
+      menorIdade: !!p.menor_idade,
+      nomeResponsavel: p.nome_responsavel || "",
+      cpfResponsavel: p.cpf_responsavel || "",
+      isGestante: !!p.is_gestante,
+      isPne: !!p.is_pne,
+      isAutista: !!p.is_autista,
+      customData: p.custom_data || {},
     });
     setIsEditModalOpen(true);
   };
@@ -145,25 +119,51 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
-      console.log("[AtualizacaoCadastral] Iniciando salvamento centralizado...");
-      
-      // Usa o utilitário centralizado que já lida com merge, normalização, saneamento e auditoria
-      await updatePacienteCadastro(
-        selectedPatient.id,
-        editForm,
-        "Central de Atualização Cadastral",
-        user,
-        queryClient
-      );
+      const { error } = await supabase
+        .from("pacientes")
+        .update({
+          nome: editForm.nome,
+          cpf: editForm.cpf,
+          cns: editForm.cns.replace(/\D/g, "").slice(0, 15),
+          nome_mae: editForm.nomeMae,
+          telefone: editForm.telefone,
+          data_nascimento: editForm.dataNascimento,
+          email: editForm.email,
+          endereco: editForm.endereco,
+          municipio: editForm.municipio,
+          naturalidade: editForm.naturalidade,
+          naturalidade_uf: editForm.naturalidadeUf,
+          menor_idade: editForm.menorIdade,
+          nome_responsavel: editForm.nomeResponsavel,
+          cpf_responsavel: editForm.cpfResponsavel,
+          is_gestante: editForm.isGestante,
+          is_pne: editForm.isPne,
+          is_autista: editForm.isAutista,
+          custom_data: {
+            ...(editForm.customData || {}),
+            atualizado_em: new Date().toISOString(),
+            atualizado_por: user?.id || "",
+          }
+        })
+        .eq("id", selectedPatient.id);
+
+      if (error) throw error;
 
       toast.success("Dados do paciente atualizados!");
       setIsEditModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      refreshPacientes();
       
-      // O utilitário centralizado já invalida o cache, mas reforçamos o refresh local
-      await refreshPacientes();
-    } catch (err: any) {
-      console.error("[AtualizacaoCadastral] Erro na atualização:", err);
-      toast.error("Erro ao salvar: " + (err.message || "Erro desconhecido"));
+      logAction({
+        acao: "editar",
+        entidade: "paciente",
+        entidadeId: selectedPatient.id,
+        detalhes: { acao: "edicao_rapida_central_pendencias", nome: editForm.nome },
+        user
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar alterações.");
     } finally {
       setIsSaving(false);
     }
@@ -351,36 +351,22 @@ const AtualizacaoCadastral: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Dialog 
-        open={isEditModalOpen} 
-        onOpenChange={(open) => {
-          if (!open) setSelectedPatient(null);
-          setIsEditModalOpen(open);
-        }}
-      >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edição Rápida de Paciente: {selectedPatient?.nome}</DialogTitle>
+            <DialogTitle>Edição Rápida de Paciente</DialogTitle>
           </DialogHeader>
-          
-          <div className="py-2">
-            <CadastroPacienteForm
-              key={selectedPatient?.id || "new"}
-              pacienteId={selectedPatient?.id}
-              form={editForm}
-              onChange={setEditForm}
-              onSave={handleSaveQuick}
-              saving={isSaving}
-              isEdit={true}
-              errors={{}}
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 mt-4 pt-4 border-t sticky bottom-0 bg-background pb-2">
-            <Button variant="outline" onClick={() => {
-              setIsEditModalOpen(false);
-              setSelectedPatient(null);
-            }}>Cancelar</Button>
+          <CadastroPacienteForm
+            pacienteId={selectedPatient?.id}
+            form={editForm}
+            onChange={setEditForm}
+            onSave={handleSaveQuick}
+            saving={isSaving}
+            isEdit={true}
+            errors={{}}
+          />
+          <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
             <Button onClick={handleSaveQuick} disabled={isSaving}>
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
               Salvar Alterações

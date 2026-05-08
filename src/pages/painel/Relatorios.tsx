@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { cn } from "@/lib/utils";
 import { usePacienteNomeResolver } from '@/hooks/usePacienteNomeResolver';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,73 +22,10 @@ import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
 const statusLabels: Record<string, string> = {
-  pendente: 'Pendente', 
-  confirmado: 'Confirmado', 
-  confirmado_chegada: 'Chegou',
-  em_atendimento: 'Em Atendimento', 
-  concluido: 'Concluído', 
-  falta: 'Falta',
-  cancelado: 'Cancelado', 
-  remarcado: 'Remarcado', 
-  atraso: 'Atraso',
+  pendente: 'Pendente', confirmado: 'Confirmado', confirmado_chegada: 'Chegou',
+  em_atendimento: 'Em Atendimento', concluido: 'Concluído', falta: 'Falta',
+  cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
-
-const normalizeStatus = (status: string): string => {
-  if (!status) return 'pendente';
-  const s = status.toLowerCase().trim();
-  
-  // Concluídos / Realizados (Foco na Produção Real)
-  if ([
-    'concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 
-    'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 
-    'prontuario_concluido', 'finalizada', 'concluida', 'atendimento_encerrado', 'encerrado'
-  ].includes(s)) {
-    return 'concluido';
-  }
-  // Faltas
-  if (['falta', 'faltou', 'ausente', 'nao compareceu', 'nao_compareceu', 'não compareceu'].includes(s)) {
-    return 'falta';
-  }
-  // Cancelamentos
-  if (['cancelado', 'cancelada', 'cancelamento', 'rejeitado', 'rejeitada', 'excluido'].includes(s)) {
-    return 'cancelado';
-  }
-  // Remarcações
-  if (['remarcado', 'remarcada', 'reagendado', 'reagendada'].includes(s)) {
-    return 'remarcado';
-  }
-  // Pendentes / Em andamento (Tudo o que ainda não virou produção nem perda definitiva)
-  if ([
-    'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
-    'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
-    'aguardando_triagem', 'confirmado_chegada', 'atraso', 'chegou'
-  ].includes(s)) {
-    return 'pendente';
-  }
-  return s;
-};
-
-interface AgendamentoDB {
-  id: string;
-  paciente_id: string;
-  paciente_nome: string;
-  profissional_id: string;
-  profissional_nome: string;
-  unidade_id: string;
-  sala_id: string;
-  setor_id: string;
-  data: string;
-  hora: string;
-  status: string;
-  tipo: string;
-  origem: string;
-  unidadeId?: string;
-  profissionalId?: string;
-  pacienteId?: string;
-  pacienteNome?: string;
-  profissionalNome?: string;
-  setorId?: string;
-}
 
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
@@ -111,7 +47,7 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { pacientes, funcionarios, unidades } = useData();
+  const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
@@ -124,27 +60,21 @@ const Relatorios: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSetor, setFilterSetor] = useState('all');
   const [filterTipo, setFilterTipo] = useState('all');
-  
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-
-  const [agendamentosDB, setAgendamentosDB] = useState<AgendamentoDB[]>([]);
-  const [totalCountAg, setTotalCountAg] = useState(0);
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
   const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
   const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
-  const [prontuariosDB, setProntuariosDB] = useState<any[]>([]);
   const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
   const [multiEvals, setMultiEvals] = useState<any[]>([]);
   const [ptsData, setPtsData] = useState<any[]>([]);
-  
-  const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
 
+  // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
@@ -161,269 +91,137 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
-  const isFetchingRef = useRef(false);
+  const setoresUnicos = useMemo(() => {
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
+    return Array.from(s).sort();
+  }, [atendimentosDB, agendamentos]);
+
+  const tiposUnicos = useMemo(() => {
+    const s = new Set(agendamentos.map(a => a.tipo).filter(Boolean));
+    return Array.from(s).sort();
+  }, [agendamentos]);
 
   const loadReportData = useCallback(async () => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-    setIsLoading(true);
     try {
-      const applyFilters = (query: any, unitCol = 'unidade_id', profCol = 'profissional_id', dateCol = 'data', useZ = true) => {
-        let q = query;
-        
-        // Filter by Unit
-        if (filterUnit !== 'all') {
-          q = q.eq(unitCol, filterUnit);
-        } else {
-          // If "All Units" is selected, handle permissions
-          const isMaster = user?.role === 'master';
-          if (!isMaster && user?.unidadeId) {
-            q = q.eq(unitCol, user.unidadeId);
-          }
-        }
-        
-        // Filter by Professional
-        if (filterProf !== 'all') {
-          q = q.eq(profCol, filterProf);
-        } else if (user?.role === 'profissional' && user.id) {
-          q = q.eq(profCol, user.id);
-        }
-
-        // Filter by Date Range - ENSURE INCLUSIVE DATES AND HANDLE TIMEZONES
-        if (dateFrom) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.gte(dateCol, `${dateFrom}T00:00:00.000Z`);
-          } else {
-            q = q.gte(dateCol, dateFrom);
-          }
-        }
-        
-        if (dateTo) {
-          if (dateCol.includes('criado_em') || dateCol.includes('created_at') || dateCol.includes('_at')) {
-            q = q.lte(dateCol, `${dateTo}T23:59:59.999Z`);
-          } else {
-            q = q.lte(dateCol, dateTo);
-          }
-        }
-
-        return q;
-      };
-
-      // CRITICAL: PostgREST has a hard 1000-row limit per request.
-      // We must paginate via .range() to fetch ALL rows for accurate totals.
-      const PAGE_SIZE = 1000;
-      const fetchAll = async (buildQuery: () => any): Promise<{ data: any[]; count: number }> => {
-        const all: any[] = [];
-        let from = 0;
-        let totalCount = 0;
-        // Loop until we get less than PAGE_SIZE rows back
-        // Safety cap at 100k to prevent runaway
-        for (let i = 0; i < 100; i++) {
-          const q = buildQuery().range(from, from + PAGE_SIZE - 1);
-          const { data, count, error } = await q;
-          if (error) {
-            console.error('fetchAll error:', error);
-            break;
-          }
-          if (typeof count === 'number') totalCount = count;
-          if (!data || data.length === 0) break;
-          all.push(...data);
-          if (data.length < PAGE_SIZE) break;
-          from += PAGE_SIZE;
-        }
-        return { data: all, count: totalCount || all.length };
-      };
-
-      const buildAg = () => applyFilters(
-        supabase.from('agendamentos').select('*', { count: 'exact' }).order('data', { ascending: false }),
-        'unidade_id', 'profissional_id', 'data'
-      );
-      const buildAt = () => applyFilters(
-        supabase.from('atendimentos').select('*').order('data', { ascending: false }),
-        'unidade_id', 'profissional_id', 'data'
-      );
-      const buildFila = () => applyFilters(
-        supabase.from('fila_espera').select('*').order('criado_em', { ascending: false }),
-        'unidade_id', 'profissional_id', 'criado_em'
-      );
-      const buildTriage = () => {
-        let q = supabase.from('triage_records').select('*').order('criado_em', { ascending: false });
-        if (dateFrom) q = q.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
-        if (dateTo) q = q.lte('criado_em', `${dateTo}T23:59:59.999Z`);
-        if (user?.role === 'tecnico' && user.id) q = q.eq('tecnico_id', user.id);
-        return q;
-      };
-      const buildProc = () => {
-        let q = supabase.from('prontuario_procedimentos')
-          .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento,profissional_id)')
-          .order('criado_em', { ascending: false });
-        if (dateFrom) q = q.gte('criado_em', `${dateFrom}T00:00:00.000Z`);
-        if (dateTo) q = q.lte('criado_em', `${dateTo}T23:59:59.999Z`);
-        return q;
-      };
-      const buildPront = () => applyFilters(
-        supabase.from('prontuarios').select('*').order('data_atendimento', { ascending: false }),
-        'unidade_id', 'profissional_id', 'data_atendimento'
-      );
-      const buildCycles = () => applyFilters(
-        supabase.from('treatment_cycles').select('*').order('start_date', { ascending: false }),
-        'unit_id', 'professional_id', 'start_date'
-      );
-      const buildSessions = () => applyFilters(
-        supabase.from('treatment_sessions').select('*').order('scheduled_date', { ascending: false }),
-        'unit_id', 'professional_id', 'scheduled_date'
-      );
-      const buildNursing = () => applyFilters(
-        supabase.from('nursing_evaluations').select('*').order('evaluation_date', { ascending: false }),
-        'unit_id', 'professional_id', 'evaluation_date', false
-      );
-      const buildMulti = () => applyFilters(
-        supabase.from('multiprofessional_evaluations').select('*').order('evaluation_date', { ascending: false }),
-        'unit_id', 'professional_id', 'evaluation_date', false
-      );
-      const buildPts = () => applyFilters(
-        supabase.from('pts').select('*').order('created_at', { ascending: false }),
-        'unit_id', 'professional_id', 'created_at'
-      );
-
-      const [rAg, rAt, rFila, rTriage, rProc, rPront, rCycles, rSessions, rNursing, rMulti, rPts] = await Promise.all([
-        fetchAll(buildAg),
-        fetchAll(buildAt),
-        fetchAll(buildFila),
-        fetchAll(buildTriage),
-        fetchAll(buildProc),
-        fetchAll(buildPront),
-        fetchAll(buildCycles),
-        fetchAll(buildSessions),
-        fetchAll(buildNursing),
-        fetchAll(buildMulti),
-        fetchAll(buildPts),
-      ]);
-
-      setAgendamentosDB(rAg.data.map((a: any) => ({
-        ...a,
-        unidadeId: a.unidade_id,
-        profissionalId: a.profissional_id,
-        pacienteId: a.paciente_id,
-        pacienteNome: a.paciente_nome,
-        profissionalNome: a.profissional_nome,
-        setorId: a.setor_id,
-      })));
-      setTotalCountAg(rAg.count || rAg.data.length);
-      setAtendimentosDB(rAt.data);
-      setFilaDB(rFila.data);
-      setTriagensDB(rTriage.data as TriagemDB[]);
-      setProcedimentosDB(rProc.data.map((r: any) => ({
-        prontuario_id: r.prontuario_id,
-        procedimento_id: r.procedimento_id,
-        proc_nome: r.procedimentos?.nome || '',
-        prof_nome: r.prontuarios?.profissional_nome || '',
-        unidade_id: r.prontuarios?.unidade_id || '',
-        data: r.prontuarios?.data_atendimento || '',
-      })));
-      setProntuariosDB(rPront.data);
-      setTreatmentCycles(rCycles.data);
-      setTreatmentSessions(rSessions.data);
-      setNursingEvals(rNursing.data);
-      setMultiEvals(rMulti.data);
-      setPtsData(rPts.data);
-      
-      setLastUpdated(new Date());
-    } catch (err: any) { 
-      console.error('[Relatorios] Erro real ao carregar dados do relatório', {
-        origem: 'loadReportData',
-        error: err,
-        message: err?.message,
-        details: err?.details,
-        code: err?.code
-      }); 
-    } finally {
-      setIsLoading(false);
-      isFetchingRef.current = false;
-    }
-  }, [user?.id, user?.role, user?.unidadeId, dateFrom, dateTo, filterUnit, filterProf]);
-
-  useEffect(() => {
-    loadReportData();
-  }, [loadReportData]);
-
-  useRealtimeSubscription({
-    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: () => {
-      // Small delay to avoid rapid successive calls
-      setTimeout(() => loadReportData(), 1000);
-    },
-    enabled: true,
-    debounceMs: 5000,
-  });
-
-  const generateMapaAtendimento = useCallback(async () => {
-    setMapaLoading(true);
-    try {
-      let query = supabase.from('agendamentos').select('*').order('data', { ascending: true });
-
-      if (mapaDateFrom) query = query.gte('data', mapaDateFrom);
-      else if (dateFrom) query = query.gte('data', dateFrom);
-      
-      if (mapaDateTo) query = query.lte('data', mapaDateTo);
-      else if (dateTo) query = query.lte('data', dateTo);
-
-      if (mapaProf !== 'all') query = query.eq('profissional_id', mapaProf);
-      else if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
-
-      if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
-
-      // Paginate to bypass 1000-row PostgREST limit
-      const PAGE = 1000;
-      const data: any[] = [];
-      for (let i = 0; i < 50; i++) {
-        const { data: page, error } = await query.range(i * PAGE, (i + 1) * PAGE - 1);
-        if (error) throw error;
-        if (!page || page.length === 0) break;
-        data.push(...page);
-        if (page.length < PAGE) break;
+      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
+      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
+      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
+      // Universal unit isolation (admin.sms sees all)
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qAt = qAt.eq('unidade_id', user.unidadeId);
+        qFila = qFila.eq('unidade_id', user.unidadeId);
+      }
+      if (user?.role === 'profissional' && user.id) {
+        qAt = qAt.eq('profissional_id', user.id);
+        qFila = qFila.eq('profissional_id', user.id);
+      }
+      if (user?.role === 'tecnico' && user.id) {
+        qTriage = qTriage.eq('tecnico_id', user.id);
       }
 
-      // Enrich with patient data
-      const pacIds = Array.from(new Set(data.map(a => a.paciente_id))).filter(Boolean);
-      const { data: pacs } = await supabase.from('pacientes').select('id, cns, telefone, cpf, data_nascimento, endereco').in('id', pacIds);
-      const pacMap = new Map(pacs?.map(p => [p.id, p]));
+      let qProc = (supabase as any).from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
 
-      // Enrich with professional data (for specialty)
-      const profIds = Array.from(new Set(data.map(a => a.profissional_id))).filter(Boolean);
-      const { data: profs } = await supabase.from('funcionarios').select('id, profissao').in('id', profIds);
-      const profMap = new Map(profs?.map(p => [p.id, p]));
+      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
+      const loadAllTreatmentSessions = async () => {
+        const pageSize = 1000;
+        let from = 0;
+        let allSessions: any[] = [];
 
-      const mapped = data.map((a: any, index: number) => {
-        const p = pacMap.get(a.paciente_id);
-        const f = profMap.get(a.profissional_id);
-        return {
-          num: index + 1,
-          paciente_nome: a.paciente_nome,
-          cns: p?.cns || '',
-          telefone: p?.telefone || '',
-          profissional_nome: a.profissional_nome,
-          profissional_id: a.profissional_id,
-          especialidade: f?.profissao || '',
-          cid: '',
-          tipo: a.tipo,
-          cpf: p?.cpf || '',
-          data_nascimento: p?.data_nascimento || '',
-          endereco: p?.endereco || '',
-          procedimento_sigtap: '',
-          nome_procedimento: ''
-        };
-      });
+        while (true) {
+          let query = supabase
+            .from('treatment_sessions')
+            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
+            .range(from, from + pageSize - 1);
 
-      setMapaData(mapped);
-      setMapaGenerated(true);
-    } catch (err) {
-      console.error('Error generating mapa:', err);
-    } finally {
-      setMapaLoading(false);
-    }
-  }, [mapaDateFrom, mapaDateTo, mapaProf, dateFrom, dateTo, filterProf, filterUnit]);
+          if (user?.role === 'profissional') {
+            query = query.eq('professional_id', user.id);
+          }
 
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+
+          allSessions = allSessions.concat(data);
+
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
+
+        return allSessions;
+      };
+
+      if (user?.role === 'profissional') {
+        qCycles = qCycles.eq('professional_id', user.id);
+      }
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qCycles = qCycles.eq('unit_id', user.unidadeId);
+      }
+
+      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
+      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
+      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        qNursing = qNursing.eq('unit_id', user.unidadeId);
+        qMulti = qMulti.eq('unit_id', user.unidadeId);
+        qPts = qPts.eq('unit_id', user.unidadeId);
+      }
+
+      const [
+        { data: atData },
+        { data: filaData },
+        { data: triageData },
+        { data: procData },
+        { data: cyclesData },
+        sessionsData,
+        { data: nursingData },
+        { data: multiData },
+        { data: ptsDataResult },
+      ] = await Promise.all([
+        qAt,
+        qFila,
+        qTriage,
+        qProc,
+        qCycles,
+        loadAllTreatmentSessions(),
+        qNursing,
+        qMulti,
+        qPts,
+      ]);
+
+      if (atData) setAtendimentosDB(atData);
+      if (filaData) setFilaDB(filaData);
+      if (triageData) setTriagensDB(triageData as TriagemDB[]);
+      if (procData) {
+        setProcedimentosDB(procData.map((r: any) => ({
+          prontuario_id: r.prontuario_id,
+          procedimento_id: r.procedimento_id,
+          proc_nome: r.procedimentos?.nome || '',
+          prof_nome: r.prontuarios?.profissional_nome || '',
+          unidade_id: r.prontuarios?.unidade_id || '',
+          data: r.prontuarios?.data_atendimento || '',
+        })));
+      }
+      if (cyclesData) setTreatmentCycles(cyclesData);
+      if (sessionsData) setTreatmentSessions(sessionsData);
+      if (nursingData) setNursingEvals(nursingData);
+      if (multiData) setMultiEvals(multiData);
+      if (ptsDataResult) setPtsData(ptsDataResult);
+      setLastUpdated(new Date());
+    } catch (err) { console.error('Error loading report data:', err); }
+  }, [user]);
+
+  useEffect(() => { loadReportData(); }, [loadReportData]);
+
+  // Realtime subscription for auto-refresh
+  useRealtimeSubscription({
+    tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
+    onchange: loadReportData,
+    enabled: true,
+    debounceMs: 2000,
+  });
+
+  // Update "last updated" label every 10s
   useEffect(() => {
     const interval = setInterval(() => {
       const diffSec = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
@@ -435,118 +233,50 @@ const Relatorios: React.FC = () => {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosDB.map(a => a.tipo)].filter(Boolean));
-    return Array.from(s).sort();
-  }, [atendimentosDB, agendamentosDB]);
-
-  const tiposUnicos = useMemo(() => {
-    const s = new Set(agendamentosDB.map(a => a.tipo).filter(Boolean));
-    return Array.from(s).sort();
-  }, [agendamentosDB]);
-
+  // === FILTERS ===
   const filtered = useMemo(() => {
-    return agendamentosDB.filter(a => {
-      if (filterStatus !== 'all' && normalizeStatus(a.status) !== filterStatus) return false;
+    return agendamentos.filter(a => {
+      if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
+      if (filterProf !== 'all' && a.profissionalId !== filterProf) return false;
+      if (filterStatus !== 'all' && a.status !== filterStatus) return false;
       if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
-      if (filterSetor !== 'all' && (a.setor_id !== filterSetor && a.tipo !== filterSetor)) return false;
+      if (dateFrom && a.data < dateFrom) return false;
+      if (dateTo && a.data > dateTo) return false;
+      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
+      if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
       return true;
     });
-  }, [agendamentosDB, filterStatus, filterTipo, filterSetor]);
+  }, [agendamentos, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, user]);
 
   const filteredAtendimentos = useMemo(() => {
     return atendimentosDB.filter(a => {
+      if (filterUnit !== 'all' && a.unidade_id !== filterUnit) return false;
+      if (filterProf !== 'all' && a.profissional_id !== filterProf) return false;
       if (filterSetor !== 'all' && a.setor !== filterSetor) return false;
+      if (dateFrom && a.data < dateFrom) return false;
+      if (dateTo && a.data > dateTo) return false;
       return true;
     });
-  }, [atendimentosDB, filterSetor]);
+  }, [atendimentosDB, filterUnit, filterProf, filterSetor, dateFrom, dateTo]);
 
+  // === STATS ===
   const stats = useMemo(() => {
-    const total = Math.max(filtered.length, totalCountAg);
-    
-    // Set of agendamento IDs that resulted in a concluded attendance
-    const concludedAgIds = new Set<string>();
-    
-    // 1. From agendamentos with concluded status
-    filtered.forEach(a => {
-      if (normalizeStatus(a.status) === 'concluido') {
-        concludedAgIds.add(a.id);
-      }
-    });
-    
-    // 2. From prontuarios (existence of a prontuario implies completion)
-    const filteredPronts = prontuariosDB.filter(p => {
-      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
-      if (filterProf !== 'all' && p.profissional_id !== filterProf) return false;
-      return true;
-    });
-    
-    filteredPronts.forEach(p => {
-      if (p.agendamento_id) {
-        concludedAgIds.add(p.agendamento_id);
-      }
-    });
-
-    // 3. From treatment sessions
-    const filteredSess = treatmentSessions.filter(s => {
-      if (s.status !== 'realizada') return false;
-      if (filterProf !== 'all' && s.professional_id !== filterProf) return false;
-      // We don't have unit_id easily in sessions sometimes, but we filter if we do
-      return true;
-    });
-
-    filteredSess.forEach(s => {
-      if (s.appointment_id) {
-        concludedAgIds.add(s.appointment_id);
-      }
-    });
-
-    const concluidosAg = concludedAgIds.size;
-
-    // Count completions that are NOT linked to an agendamento
-    const unlinkedPronts = filteredPronts.filter(p => !p.agendamento_id).length;
-    const unlinkedSess = filteredSess.filter(s => !s.appointment_id).length;
-    
-    // Total Realized = Concluded Agendamentos + Extra Prontuarios + Extra Sessions
-    const totalConcluidos = concluidosAg + unlinkedPronts + unlinkedSess;
-    const concluidos = totalConcluidos;
-
-    const pendentes = filtered.filter(a => {
-      const s = normalizeStatus(a.status);
-      if (s === 'concluido' || s === 'falta' || s === 'cancelado' || s === 'remarcado') return false;
-      // If there's a prontuario for it, it's not pending anymore
-      if (concludedAgIds.has(a.id)) return false;
-      return true;
-    }).length;
-
-    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmada' || a.status === 'confirmado_chegada').length;
+    const total = filtered.length;
+    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
+    const pendentes = filtered.filter(a => a.status === 'pendente').length;
+    const concluidos = filtered.filter(a => a.status === 'concluido').length;
     const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
-    const faltas = filtered.filter(a => normalizeStatus(a.status) === 'falta').length;
-    const cancelados = filtered.filter(a => normalizeStatus(a.status) === 'cancelado').length;
-    const remarcados = filtered.filter(a => normalizeStatus(a.status) === 'remarcado').length;
-    
-    const retornos = filtered.filter(a => {
-      const t = (a.tipo || '').toLowerCase();
-      return t.includes('retorno') || t.includes('atendimento_retorno') || t.includes('consulta_retorno');
-    }).length;
-    
-    const primeiraConsulta = filtered.filter(a => {
-      const t = (a.tipo || '').toLowerCase();
-      return (t.includes('consulta') || t.includes('primeira')) && !t.includes('retorno');
-    }).length;
-    
-    const validTotal = Math.max(1, total - cancelados);
-    const taxaComparecimento = Math.min(100, Math.round((concluidos / validTotal) * 100));
-    const taxaFalta = Math.min(100, Math.round((faltas / validTotal) * 100));
-    
-    return { 
-      total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, 
-      remarcados, online: filtered.filter(a => a.origem === 'online').length, 
-      recepcao: filtered.filter(a => a.origem === 'recepcao').length, 
-      retornos, primeiraConsulta, taxaComparecimento, 
-      taxaFalta, atendimentosRealizados: concluidos
-    };
-  }, [filtered, totalCountAg, filteredAtendimentos, prontuariosDB, treatmentSessions, filterUnit, filterProf]);
+    const faltas = filtered.filter(a => a.status === 'falta').length;
+    const cancelados = filtered.filter(a => a.status === 'cancelado').length;
+    const remarcados = filtered.filter(a => a.status === 'remarcado').length;
+    const online = filtered.filter(a => a.origem === 'online').length;
+    const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
+    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
+    const primeiraConsulta = filtered.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
+    const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
+    const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
+    return { total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, taxaFalta };
+  }, [filtered]);
 
   const tempoStats = useMemo(() => {
     const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
@@ -555,98 +285,36 @@ const Relatorios: React.FC = () => {
     return { totalAtendimentos: finalizados.length, tempoMedio: media, totalMinutos };
   }, [filteredAtendimentos]);
 
+  // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
-    const map: Record<string, { 
-      id: string; nome: string; role: string; profissao: string; unidade: string; 
-      total: number; concluidos: number; faltas: number; cancelados: number; 
-      remarcados: number; tempoTotal: number; atendimentos: number; 
-      retornos: number; pacientesSet: Set<string>; 
-      concludedAgIds: Set<string>;
-    }> = {};
-    
-    const getMapEntry = (id: string, nome: string, unitId?: string) => {
-      const key = id || nome;
-      if (!map[key]) {
-        const func = funcionarios.find(f => f.id === id);
-        const un = unidades.find(u => u.id === unitId);
-        map[key] = { 
-          id, nome, role: func?.role || 'profissional', 
-          profissao: func?.profissao || '', unidade: un?.nome || '', 
-          total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, 
-          tempoTotal: 0, atendimentos: 0, retornos: 0, 
-          pacientesSet: new Set(), concludedAgIds: new Set() 
-        };
-      }
-      return map[key];
-    };
-
-    // 1. Process Agendamentos
+    const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     filtered.forEach(a => {
-      const m = getMapEntry(a.profissionalId, a.profissionalNome, a.unidadeId);
+      const un = unidades.find(u => u.id === a.unidadeId);
+      const func = funcionarios.find(f => f.id === a.profissionalId);
+      const key = a.profissionalId || a.profissionalNome;
+      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      const m = map[key];
       m.total++;
       m.pacientesSet.add(a.pacienteId);
-      const statusNorm = normalizeStatus(a.status);
-      if (statusNorm === 'concluido') {
-        m.concluidos++;
-        m.concludedAgIds.add(a.id);
-      }
-      if (statusNorm === 'falta') m.faltas++;
-      if (statusNorm === 'cancelado') m.cancelados++;
-      if (statusNorm === 'remarcado') m.remarcados++;
-      if ((a.tipo || '').toLowerCase().includes('retorno')) m.retornos++;
+      if (a.status === 'concluido') m.concluidos++;
+      if (a.status === 'falta') m.faltas++;
+      if (a.status === 'cancelado') m.cancelados++;
+      if (a.status === 'remarcado') m.remarcados++;
+      if (a.tipo === 'Retorno') m.retornos++;
+      if (!m.unidade && un?.nome) m.unidade = un.nome;
     });
-
-    // 2. Process Prontuários (Primary source for "Realized")
-    prontuariosDB.forEach(p => {
-      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return;
-      const m = getMapEntry(p.profissional_id, p.profissional_nome, p.unidade_id);
-      m.pacientesSet.add(p.paciente_id);
-      if (p.agendamento_id) {
-        if (!m.concludedAgIds.has(p.agendamento_id)) {
-          m.concluidos++;
-          m.concludedAgIds.add(p.agendamento_id);
-        }
-      } else {
-        m.concluidos++;
-      }
-    });
-
-    // 3. Process Treatment Sessions
-    treatmentSessions.forEach(s => {
-      if (s.status !== 'realizada') return;
-      const m = getMapEntry(s.professional_id, 'Profissional', s.unit_id);
-      m.pacientesSet.add(s.patient_id);
-      if (s.appointment_id) {
-        if (!m.concludedAgIds.has(s.appointment_id)) {
-          m.concluidos++;
-          m.concludedAgIds.add(s.appointment_id);
-        }
-      } else {
-        m.concluidos++;
-      }
-    });
-
-    // 4. Process Atendimentos (Legacy/Extra source)
     filteredAtendimentos.forEach(at => {
-      const m = getMapEntry(at.profissional_id, at.profissional_nome, at.unidade_id);
-      m.pacientesSet.add(at.paciente_id);
-      const statusNorm = normalizeStatus(at.status);
-      if (at.duracao_minutos && at.duracao_minutos > 0 && (statusNorm === 'concluido' || at.status === 'finalizado')) {
-        m.tempoTotal += at.duracao_minutos;
-        m.atendimentos++;
-        if (at.agendamento_id) {
-          if (!m.concludedAgIds.has(at.agendamento_id)) {
-            m.concluidos++;
-            m.concludedAgIds.add(at.agendamento_id);
-          }
-        } else {
-          // If we can't link it, we assume it's a separate completion
-          // But usually atendimentos are linked. If not, it's a direct entry.
-          m.concluidos++;
-        }
+      const un = unidades.find(u => u.id === at.unidade_id);
+      const func = funcionarios.find(f => f.id === at.profissional_id);
+      const key = at.profissional_id || at.profissional_nome;
+      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+      if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
+        map[key].tempoTotal += at.duracao_minutos;
+        map[key].atendimentos++;
       }
+      map[key].pacientesSet.add(at.paciente_id);
+      if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
     });
-
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
       .filter(d => {
@@ -667,19 +335,21 @@ const Relatorios: React.FC = () => {
         cancelados: d.cancelados,
         remarcados: d.remarcados,
         retornos: d.retornos,
-        atendimentos: d.atendimentos || d.concluidos, // Fallback for tempo medio
+        atendimentos: d.atendimentos,
         tempoTotal: d.tempoTotal,
         pacientesAtendidos: d.pacientesSet.size,
         tempoMedio: d.atendimentos > 0 ? Math.round(d.tempoTotal / d.atendimentos) : 0,
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, prontuariosDB, treatmentSessions, unidades, funcionarios, filterRoleProd, filterCargoProd, filterUnit]);
+  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
+  // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
     if (!str) return '';
     return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
   };
+  const removeAccents = normalizarProfissao;
 
   const CATEGORIAS: Array<{ key: string; icon: LucideIcon; label: string; cor: string; bgLight: string; termos: string[] }> = [
     { key: 'medico', icon: Stethoscope, label: 'Médicos', cor: '#1B3A5C', bgLight: '#EEF2F7',
@@ -709,40 +379,16 @@ const Relatorios: React.FC = () => {
 
   const categoriaCards = useMemo(() => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
-    const counts: Record<string, { total: number; concluidos: number; concludedAgIds: Set<string> }> = {};
+    const counts: Record<string, { total: number; concluidos: number }> = {};
 
     filtered.forEach(a => {
       const func = profMap.get(a.profissionalId);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
-          if (profissionalPertenceCategoria(profissao, cat)) {
-            if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0, concludedAgIds: new Set() };
-            counts[cat.key].total++;
-            if (normalizeStatus(a.status) === 'concluido') {
-              counts[cat.key].concluidos++;
-              counts[cat.key].concludedAgIds.add(a.id);
-            }
-            break;
-          }
-      }
-    });
-
-    // Add Prontuarios to categories
-    prontuariosDB.forEach(p => {
-      if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return;
-      const func = profMap.get(p.profissional_id);
-      const profissao = func?.profissao || '';
-      for (const cat of CATEGORIAS) {
         if (profissionalPertenceCategoria(profissao, cat)) {
-          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0, concludedAgIds: new Set() };
-          if (p.agendamento_id) {
-            if (!counts[cat.key].concludedAgIds.has(p.agendamento_id)) {
-              counts[cat.key].concluidos++;
-              counts[cat.key].concludedAgIds.add(p.agendamento_id);
-            }
-          } else {
-            counts[cat.key].concluidos++;
-          }
+          if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
+          counts[cat.key].total++;
+          if (a.status === 'concluido') counts[cat.key].concluidos++;
           break;
         }
       }
@@ -753,8 +399,9 @@ const Relatorios: React.FC = () => {
       total: counts[cat.key]?.total || 0,
       concluidos: counts[cat.key]?.concluidos || 0,
     }));
-  }, [filtered, filteredAtendimentos, funcionarios]);
+  }, [filtered, funcionarios]);
 
+  // === PROD TOTALS ===
   const prodTotals = useMemo(() => {
     return porProfissional.reduce((acc, p) => ({
       total: acc.total + p.total,
@@ -766,6 +413,7 @@ const Relatorios: React.FC = () => {
     }), { total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, retornos: 0 });
   }, [porProfissional]);
 
+  // === SEGMENTED BAR CHART DATA ===
   const prodChartData = useMemo(() => {
     return porProfissional.filter(p => p.total > 0).map(p => ({
       nome: p.nome.length > 20 ? p.nome.substring(0, 20) + '…' : p.nome,
@@ -777,6 +425,7 @@ const Relatorios: React.FC = () => {
     }));
   }, [porProfissional]);
 
+  // === BY UNIT ===
   const porUnidade = useMemo(() => {
     const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number }> = {};
     filtered.forEach(a => {
@@ -784,16 +433,16 @@ const Relatorios: React.FC = () => {
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { nome: name, total: 0, concluidos: 0, faltas: 0, cancelados: 0 };
       map[name].total++;
-      const statusNorm = normalizeStatus(a.status);
-      if (statusNorm === 'concluido') map[name].concluidos++;
-      if (statusNorm === 'falta') map[name].faltas++;
-      if (statusNorm === 'cancelado') map[name].cancelados++;
+      if (a.status === 'concluido') map[name].concluidos++;
+      if (a.status === 'falta') map[name].faltas++;
+      if (a.status === 'cancelado') map[name].cancelados++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filtered, unidades]);
 
+  // === FALTAS REPORT ===
   const faltasReport = useMemo(() => {
-    const faltaAgs = filtered.filter(a => normalizeStatus(a.status) === 'falta');
+    const faltaAgs = filtered.filter(a => a.status === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
     faltaAgs.forEach(a => {
       const pac = pacientes.find(p => p.id === a.pacienteId);
@@ -806,13 +455,14 @@ const Relatorios: React.FC = () => {
     return Object.values(porPaciente).sort((a, b) => b.total - a.total);
   }, [filtered, pacientes, unidades]);
 
+  // === PATIENTS REPORT ===
   const pacientesReport = useMemo(() => {
     const pacIds = new Set(filtered.map(a => a.pacienteId));
     return Array.from(pacIds).map(pid => {
       const pac = pacientes.find(p => p.id === pid);
       const ags = filtered.filter(a => a.pacienteId === pid);
-      const concluidos = ags.filter(a => normalizeStatus(a.status) === 'concluido').length;
-      const faltas = ags.filter(a => normalizeStatus(a.status) === 'falta').length;
+      const concluidos = ags.filter(a => a.status === 'concluido').length;
+      const faltas = ags.filter(a => a.status === 'falta').length;
       const retornos = ags.filter(a => a.tipo === 'Retorno').length;
       return {
         id: pid,
@@ -828,6 +478,7 @@ const Relatorios: React.FC = () => {
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
   }, [filtered, pacientes]);
 
+  // === FILA REPORT ===
   const filaReport = useMemo(() => {
     const filteredFila = filaDB.filter(f => {
       if (filterUnit !== 'all' && f.unidade_id !== filterUnit) return false;
@@ -840,6 +491,7 @@ const Relatorios: React.FC = () => {
     return { items: filteredFila.sort((a, b) => a.posicao - b.posicao), aguardando, chamados, desistencias, total: filteredFila.length };
   }, [filaDB, filterUnit, filterProf]);
 
+  // === TRIAGEM REPORT ===
   const triagemReport = useMemo(() => {
     const filteredTriagens = triagensDB.filter(t => {
       if (dateFrom && t.criado_em && t.criado_em < dateFrom) return false;
@@ -850,6 +502,7 @@ const Relatorios: React.FC = () => {
     const confirmadas = filteredTriagens.filter(t => t.confirmado_em).length;
     const pendentes = total - confirmadas;
 
+    // Por técnico
     const porTecnico: Record<string, { id: string; nome: string; total: number; confirmadas: number; pendentes: number }> = {};
     filteredTriagens.forEach(t => {
       const tec = funcionarios.find(f => f.id === t.tecnico_id);
@@ -863,14 +516,14 @@ const Relatorios: React.FC = () => {
     return { total, confirmadas, pendentes, porTecnico: Object.values(porTecnico).sort((a, b) => b.total - a.total) };
   }, [triagensDB, funcionarios, dateFrom, dateTo]);
 
+  // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     const map: Record<string, { data: string; agendamentos: number; concluidos: number; faltas: number }> = {};
     filtered.forEach(a => {
       if (!map[a.data]) map[a.data] = { data: a.data, agendamentos: 0, concluidos: 0, faltas: 0 };
       map[a.data].agendamentos++;
-      const statusNorm = normalizeStatus(a.status);
-      if (statusNorm === 'concluido') map[a.data].concluidos++;
-      if (statusNorm === 'falta') map[a.data].faltas++;
+      if (a.status === 'concluido') map[a.data].concluidos++;
+      if (a.status === 'falta') map[a.data].faltas++;
     });
     return Object.values(map).sort((a, b) => a.data.localeCompare(b.data)).slice(-30);
   }, [filtered]);
@@ -885,6 +538,7 @@ const Relatorios: React.FC = () => {
     { name: 'Remarcados', value: stats.remarcados },
   ].filter(d => d.value > 0), [stats]);
 
+  // === TIMELINE GROUPED (dia/semana/mês) ===
   const timelineGrouped = useMemo(() => {
     const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
     filtered.forEach(a => {
@@ -897,7 +551,7 @@ const Relatorios: React.FC = () => {
         startOfWeek.setDate(d.getDate() - d.getDay());
         key = startOfWeek.toISOString().split('T')[0];
       } else {
-        key = a.data.substring(0, 7);
+        key = a.data.substring(0, 7); // YYYY-MM
       }
       if (!map[key]) {
         const label = timelineGroup === 'mes'
@@ -907,14 +561,14 @@ const Relatorios: React.FC = () => {
           : key.substring(5);
         map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
       }
-      const statusNorm = normalizeStatus(a.status);
-      if (statusNorm === 'concluido') map[key].concluidos++;
-      if (statusNorm === 'falta') map[key].faltas++;
-      if (statusNorm === 'cancelado') map[key].cancelados++;
+      if (a.status === 'concluido') map[key].concluidos++;
+      if (a.status === 'falta') map[key].faltas++;
+      if (a.status === 'cancelado') map[key].cancelados++;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
   }, [filtered, timelineGroup]);
 
+  // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
     const map: Record<string, number> = {};
     for (let h = 7; h <= 18; h++) {
@@ -932,6 +586,7 @@ const Relatorios: React.FC = () => {
     return Object.entries(map).map(([hora, total]) => ({ hora, total }));
   }, [filtered]);
 
+  // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
     const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
     const novos = filtered.length - retornos;
@@ -941,6 +596,7 @@ const Relatorios: React.FC = () => {
     ].filter(d => d.value > 0);
   }, [filtered]);
 
+  // === FALTAS POR UNIDADE (pie) ===
   const faltasPorUnidade = useMemo(() => {
     const map: Record<string, { name: string; value: number }> = {};
     filtered.filter(a => a.status === 'falta').forEach(a => {
@@ -952,10 +608,11 @@ const Relatorios: React.FC = () => {
     return Object.values(map).sort((a, b) => b.value - a.value);
   }, [filtered, unidades]);
 
+  // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
   const evolucaoMensal = useMemo(() => {
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const map: Record<string, number> = {};
-    filtered.filter(a => normalizeStatus(a.status) === 'concluido').forEach(a => {
+    filtered.filter(a => a.status === 'concluido').forEach(a => {
       const key = a.data.substring(0, 7);
       map[key] = (map[key] || 0) + 1;
     });
@@ -965,6 +622,7 @@ const Relatorios: React.FC = () => {
     });
   }, [filtered]);
 
+  // === RANKING PRODUTIVIDADE (barras horizontais) ===
   const rankingProdutividade = useMemo(() => {
     return porProfissional.map(p => ({
       nome: p.nome,
@@ -974,6 +632,7 @@ const Relatorios: React.FC = () => {
     })).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
   }, [porProfissional]);
 
+  // === PROCEDURE STATS ===
   const procedimentoStats = useMemo(() => {
     const filteredProcs = procedimentosDB.filter(p => {
       if (filterUnit !== 'all' && p.unidade_id !== filterUnit) return false;
@@ -998,6 +657,7 @@ const Relatorios: React.FC = () => {
     };
   }, [procedimentosDB, filterUnit, dateFrom, dateTo, unidades]);
 
+  // === TREATMENT STATS ===
   const treatmentStats = useMemo(() => {
     const filteredCycles = treatmentCycles.filter(c => {
       if (filterUnit !== 'all' && c.unit_id !== filterUnit) return false;
@@ -1023,14 +683,17 @@ const Relatorios: React.FC = () => {
     const sessCanceladas = filteredSessions.filter(s => s.status === 'cancelada').length;
     const totalSessions = filteredSessions.length;
 
+    // Average sessions per patient
     const pacientesMap = new Map<string, number>();
     filteredCycles.forEach(c => pacientesMap.set(c.patient_id, (pacientesMap.get(c.patient_id) || 0) + c.sessions_done));
     const avgSessoesPorPaciente = pacientesMap.size > 0
       ? Math.round(Array.from(pacientesMap.values()).reduce((a, b) => a + b, 0) / pacientesMap.size)
       : 0;
 
+    // Abandonment rate: cycles that were active but patient stopped (no sessions in last 30 days for active cycles)
     const taxaAbandono = total > 0 ? Math.round(((suspensos) / total) * 100) : 0;
 
+    // By professional
     const byProf: Record<string, { nome: string; ativos: number; finalizados: number; sessoes: number }> = {};
     filteredCycles.forEach(c => {
       const prof = funcionarios.find(f => f.id === c.professional_id);
@@ -1041,6 +704,7 @@ const Relatorios: React.FC = () => {
       byProf[c.professional_id].sessoes += c.sessions_done;
     });
 
+    // By unit
     const byUnit: Record<string, { nome: string; total: number; ativos: number }> = {};
     filteredCycles.forEach(c => {
       const un = unidades.find(u => u.id === c.unit_id);
@@ -1050,6 +714,7 @@ const Relatorios: React.FC = () => {
       if (c.status === 'em_andamento') byUnit[c.unit_id].ativos++;
     });
 
+    // By treatment type
     const byType: Record<string, number> = {};
     filteredCycles.forEach(c => {
       byType[c.treatment_type || 'Outros'] = (byType[c.treatment_type || 'Outros'] || 0) + 1;
@@ -1065,6 +730,7 @@ const Relatorios: React.FC = () => {
     };
   }, [treatmentCycles, treatmentSessions, filterUnit, filterProf, dateFrom, dateTo, funcionarios, unidades]);
 
+  // === NURSING EVALUATIONS REPORT ===
   const nursingReport = useMemo(() => {
     const filteredNursing = nursingEvals.filter((n: any) => {
       if (filterUnit !== 'all' && n.unit_id !== filterUnit) return false;
@@ -1081,6 +747,7 @@ const Relatorios: React.FC = () => {
     return { total, aptos, inaptos, multiprof, byPriority: Object.entries(byPriority).map(([k, v]) => ({ nome: k === 'alta' ? 'Alta' : k === 'media' ? 'Média' : 'Baixa', total: v })) };
   }, [nursingEvals, filterUnit, dateFrom, dateTo]);
 
+  // === MULTIPROFESSIONAL EVALUATIONS REPORT ===
   const multiReport = useMemo(() => {
     const filteredMulti = multiEvals.filter((m: any) => {
       if (filterUnit !== 'all' && m.unit_id !== filterUnit) return false;
@@ -1096,6 +763,7 @@ const Relatorios: React.FC = () => {
     return { total, bySpecialty: Object.entries(bySpecialty).map(([k, v]) => ({ nome: k, total: v })), byParecer: Object.entries(byParecer).map(([k, v]) => ({ nome: k === 'favoravel' ? 'Favorável' : 'Desfavorável', total: v })) };
   }, [multiEvals, filterUnit, dateFrom, dateTo]);
 
+  // === PTS REPORT ===
   const ptsReport = useMemo(() => {
     const filteredPts = ptsData.filter((p: any) => {
       if (filterUnit !== 'all' && p.unit_id !== filterUnit) return false;
@@ -1117,7 +785,7 @@ const Relatorios: React.FC = () => {
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
         const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[normalizeStatus(a.status)] || a.status, a.origem, at?.hora_inicio || '', at?.hora_fim || '', at?.duracao_minutos?.toString() || ''];
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, at?.hora_inicio || '', at?.hora_fim || '', at?.duracao_minutos?.toString() || ''];
       });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
@@ -1131,18 +799,23 @@ const Relatorios: React.FC = () => {
     } else if (type === 'pacientes') {
       headers = ['Paciente', 'E-mail', 'Telefone', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'];
       rows = pacientesReport.map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.retornos.toString(), p.ultimaConsulta]);
+    } else if (type === 'fila') {
+      headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada', 'Hora Chamada'];
+      rows = filaReport.items.map(f => {
+        const un = unidades.find(u => u.id === f.unidade_id);
+        return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
+      });
     }
 
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
+    a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, unidades, filteredAtendimentos]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, filteredAtendimentos]);
 
+  // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
     let headers: string[] = [];
     let rows: string[][] = [];
@@ -1151,7 +824,7 @@ const Relatorios: React.FC = () => {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[normalizeStatus(a.status)] || a.status, a.origem];
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
       });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Pacientes', 'Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Tempo Médio (min)', 'Taxa Conclusão (%)'];
@@ -1162,8 +835,15 @@ const Relatorios: React.FC = () => {
     } else if (type === 'pacientes') {
       headers = ['Paciente', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Última Consulta'];
       rows = pacientesReport.map(p => [p.nome, p.telefone, p.totalAgendamentos.toString(), p.concluidos.toString(), p.faltas.toString(), p.ultimaConsulta]);
+    } else if (type === 'fila') {
+      headers = ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Hora Chegada'];
+      rows = filaReport.items.map(f => {
+        const un = unidades.find(u => u.id === f.unidade_id);
+        return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
+      });
     }
 
+    // Build XML Spreadsheet (Excel-compatible)
     const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const headerCells = headers.map(h => `<Cell ss:StyleID="header"><Data ss:Type="String">${escXml(h)}</Data></Cell>`).join('');
     const dataRows = rows.map(r =>
@@ -1196,8 +876,9 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, unidades]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
+  // === EXPORT PDF ===
   const exportPDF = useCallback((type: string) => {
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
     const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
@@ -1208,7 +889,7 @@ ${dataRows}
     const summaryBlock = `
       <div class="summary">
         <div class="stat"><strong>${stats.total}</strong><small>Total Agendamentos</small></div>
-        <div class="stat"><strong>${stats.atendimentosRealizados}</strong><small>Atendimentos</small></div>
+        <div class="stat"><strong>${tempoStats.totalAtendimentos}</strong><small>Atendimentos</small></div>
         <div class="stat"><strong>${stats.concluidos}</strong><small>Concluídos</small></div>
         <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
         <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
@@ -1221,7 +902,7 @@ ${dataRows}
       const rows = filtered.map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
         const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
-        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[normalizeStatus(a.status)] || a.status}</td><td>${at?.hora_inicio || '-'}</td><td>${at?.hora_fim || '-'}</td><td>${at?.duracao_minutos ? at.duracao_minutos + 'min' : '-'}</td></tr>`;
+        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>${at?.hora_inicio || '-'}</td><td>${at?.hora_fim || '-'}</td><td>${at?.duracao_minutos ? at.duracao_minutos + 'min' : '-'}</td></tr>`;
       }).join('');
       const prodRows = porProfissional.map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
@@ -1252,38 +933,202 @@ ${dataRows}
       body = `${summaryBlock}
         <h2>Relatório de Pacientes</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
-
-    const titleMap: Record<string, string> = { 
-      geral: 'Relatório Geral', 
-      agendamentos: 'Relatório de Agendamentos', 
-      detalhado: 'Relatório Detalhado', 
-      produtividade: 'Relatório de Produtividade', 
-      faltas: 'Relatório de Faltas', 
-      pacientes: 'Relatório de Pacientes',
-      mapa: 'Mapa de Atendimento Mensal'
-    };
-
-    if (type === 'mapa' && mapaData.length > 0) {
-      const rows = mapaData.map(row => 
-        `<tr><td>${row.num}</td><td>${row.paciente_nome}</td><td>${row.cns}</td><td>${row.profissional_nome}</td><td>${row.especialidade}</td><td>${row.tipo}</td><td>${row.cpf}</td><td>${row.data_nascimento}</td></tr>`
-      ).join('');
+    } else if (type === 'fila') {
+      const filaRows = filaReport.items.map(f => {
+        const unName = unidades.find(u => u.id === f.unidade_id)?.nome || '';
+        return `<tr><td>${f.posicao}</td><td>${f.paciente_nome}</td><td>${unName}</td><td>${f.setor}</td><td>${f.prioridade}</td><td>${f.status}</td><td>${f.hora_chegada}</td><td>${f.hora_chamada || '-'}</td></tr>`;
+      }).join('');
       body = `
-        <h2>Mapa de Atendimento Mensal</h2>
-        <table>
-          <thead>
-            <tr><th>Nº</th><th>Paciente</th><th>CNS</th><th>Profissional</th><th>Especialidade</th><th>Tipo</th><th>CPF</th><th>Nascimento</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+        <div class="summary">
+          <div class="stat"><strong>${filaReport.total}</strong><small>Total na Fila</small></div>
+          <div class="stat"><strong>${filaReport.aguardando}</strong><small>Aguardando</small></div>
+          <div class="stat"><strong>${filaReport.chamados}</strong><small>Chamados</small></div>
+          <div class="stat"><strong>${filaReport.desistencias}</strong><small>Desistências</small></div>
+        </div>
+        <h2>Fila de Espera</h2>
+        <table><thead><tr><th>Posição</th><th>Paciente</th><th>Unidade</th><th>Setor</th><th>Prioridade</th><th>Status</th><th>Chegada</th><th>Chamada</th></tr></thead><tbody>${filaRows}</tbody></table>`;
     }
+
+    const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
 
     openPrintDocument(
       titleMap[type] || 'Relatório',
-      body || '<p>Nenhum dado para exportar nesta aba.</p>',
+      body,
       { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
     );
-  }, [filtered, porProfissional, faltasReport, pacientesReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, mapaData]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+
+  // === MAPA DE ATENDIMENTO ===
+  const generateMapa = useCallback(async () => {
+    if (!mapaDateFrom || !mapaDateTo) return;
+    setMapaLoading(true);
+    try {
+      let query = supabase
+        .from('agendamentos')
+        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
+        .eq('status', 'concluido')
+        .gte('data', mapaDateFrom)
+        .lte('data', mapaDateTo)
+        .order('data', { ascending: true })
+        .limit(2000);
+
+      if (mapaProf !== 'all') {
+        query = query.eq('profissional_id', mapaProf);
+      }
+      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+        query = query.eq('unidade_id', user.unidadeId);
+      }
+
+      const { data: agend } = await query;
+
+      if (!agend || agend.length === 0) {
+        setMapaData([]);
+        setMapaGenerated(true);
+        setMapaLoading(false);
+        return;
+      }
+
+      const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
+      const { data: pacs } = await supabase
+        .from('pacientes')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco')
+        .in('id', pacienteIds);
+
+      const pacMap = new Map((pacs || []).map(p => [p.id, p]));
+
+      // Get profissional specialties from funcionarios
+      const profIds = [...new Set(agend.map(a => a.profissional_id).filter(Boolean))];
+      const profMap = new Map(funcionarios.filter(f => profIds.includes(f.id)).map(f => [f.id, f]));
+
+      const rows = agend.map((a, i) => {
+        const pac = pacMap.get(a.paciente_id);
+        const prof = profMap.get(a.profissional_id);
+        return {
+          num: i + 1,
+          paciente_nome: a.paciente_nome || '',
+          cns: pac?.cns || '',
+          telefone: pac?.telefone || '',
+          profissional_nome: a.profissional_nome || '',
+          profissional_id: a.profissional_id || '',
+          especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
+          cid: pac?.cid || '',
+          tipo: a.tipo || '',
+          cpf: pac?.cpf || '',
+          data_nascimento: pac?.data_nascimento || '',
+          endereco: pac?.endereco || '',
+          procedimento_sigtap: (a as any).procedimento_sigtap || '',
+          nome_procedimento: (a as any).nome_procedimento || '',
+        };
+      });
+
+      setMapaData(rows);
+      setMapaGenerated(true);
+    } catch (e) {
+      console.error('Erro ao gerar mapa:', e);
+    } finally {
+      setMapaLoading(false);
+    }
+  }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
+
+  const formatDateBR = (d: string) => {
+    if (!d) return '';
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  };
+
+  const exportMapaPDF = useCallback(() => {
+    if (mapaData.length === 0) return;
+    const now = new Date().toLocaleString('pt-BR');
+    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+    const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
+
+    const tableRows = mapaData.map((r, i) => {
+      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${fmtCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+    }).join('');
+
+    const body = `
+      <h2>Mapa de Atendimentos Concluídos</h2>
+      <table>
+        <thead><tr>
+          <th style="width:30px;text-align:center">Nº</th>
+          <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
+          <th>CNS</th><th>Telefone</th><th>Profissional</th>
+          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
+      </table>
+      <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const logoUrl = logoSmsFallback;
+    const logoUrlRight = logoCerFallback;
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
+<style>
+  @page { size: A4 landscape; margin: 10mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; padding:16px; color:#1e293b; font-size:10px; line-height:1.4; }
+  .doc-header { display:flex; align-items:center; gap:14px; padding:12px 16px; margin-bottom:12px;
+    background:linear-gradient(135deg,#0c4a6e,#0369a1); border-radius:6px; color:#fff;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .doc-header img { width:48px; height:48px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
+  .doc-header .header-text { flex:1; }
+  .doc-header h1 { font-size:13px; font-weight:700; }
+  .doc-header .subtitle { font-size:10px; opacity:.85; margin-top:1px; }
+  .doc-header .doc-title { font-size:11px; font-weight:700; margin-top:4px; text-transform:uppercase; }
+  .doc-header .emit-date { text-align:right; font-size:8px; opacity:.75; white-space:nowrap; }
+  .periodo { text-align:center; font-size:11px; color:#334155; margin-bottom:10px; font-weight:600; }
+  h2 { font-size:12px; color:#0369a1; margin:10px 0 6px; padding-bottom:3px; border-bottom:2px solid #e0f2fe; }
+  table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+  th,td { border:1px solid #e2e8f0; padding:4px 6px; text-align:left; font-size:9px; }
+  th { background:#f1f5f9; font-weight:600; color:#334155; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tr:nth-child(even) { background:#f9f9f9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  tfoot td { border-top:2px solid #0369a1; }
+  @media print { body { padding:6px; } .no-print { display:none !important; } }
+</style></head><body>
+  <div class="doc-header">
+    <img src="${logoUrl}" alt="Logo SMS" />
+    <div class="header-text">
+      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
+      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div>
+      <div class="doc-title">Mapa de Atendimentos Concluídos</div>
+    </div>
+    <img src="${logoUrlRight}" alt="Logo CER II" style="max-height:48px;max-width:90px;object-fit:contain;" />
+    <div class="emit-date">Data de emissão:<br/>${now}</div>
+  </div>
+  <div class="periodo">Período: ${periodo}</div>
+  ${body}
+</body></html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+  }, [mapaData, mapaDateFrom, mapaDateTo, user]);
+
+  const exportMapaCSV = useCallback(() => {
+    if (mapaData.length === 0) return;
+    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
+    const rows = mapaData.map(r => [
+      r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
+      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
+      r.cid,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mapa-atendimentos-${mapaDateFrom}-a-${mapaDateTo}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [mapaData, mapaDateFrom, mapaDateTo]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
@@ -1291,40 +1136,42 @@ ${dataRows}
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" /> Relatórios
+          <h1 className="text-2xl font-bold font-display flex items-center gap-2" style={{ color: '#1B3A5C' }}>
+            <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
-          <p className="text-muted-foreground text-sm">
-            {stats.total} agendamentos · {stats.atendimentosRealizados} atendimentos realizados
+          <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
+            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-xs flex items-center gap-1 mr-2 text-muted-foreground">
+          <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
             <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
           </span>
-          <Button variant="outline" size="sm" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <FileText className="w-4 h-4 mr-1" />PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPDF(activeTab)}>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </Button>
         </div>
       </div>
 
-      <div className="rounded-xl border p-4 bg-card shadow-sm">
+      {/* Filters */}
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DDE3ED', background: '#FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2"><Filter className="w-4 h-4 text-muted-foreground" /><span className="font-semibold text-sm text-foreground">Filtros</span></div>
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">Limpar filtros</Button>
+          <div className="flex items-center gap-2"><Filter className="w-4 h-4" style={{ color: '#6B7280' }} /><span className="font-semibold text-sm" style={{ color: '#1B3A5C' }}>Filtros</span></div>
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs" style={{ color: '#6B7280' }}>Limpar filtros</Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div>
             <Label className="text-xs">Unidade</Label>
             <Select value={filterUnit} onValueChange={setFilterUnit}>
@@ -1365,507 +1212,714 @@ ${dataRows}
           </div>
           <div><Label className="text-xs">De</Label><Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9" /></div>
           <div><Label className="text-xs">Até</Label><Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9" /></div>
-          <div className="flex items-end">
-            <Button 
-              className="w-full h-9 gradient-primary text-primary-foreground gap-2" 
-              onClick={loadReportData}
-              disabled={isLoading}
-            >
-              {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              Buscar
-            </Button>
-          </div>
         </div>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-2">
         {[
-          { label: 'Total', value: stats.total, color: 'text-primary' },
-          { label: 'Concluídos', value: stats.concluidos, color: 'text-success' },
-          { label: 'Pendentes', value: stats.pendentes, color: 'text-warning' },
-          { label: 'Faltas', value: stats.faltas, color: 'text-destructive' },
-          { label: 'Cancelados', value: stats.cancelados, color: 'text-muted-foreground' },
-          { label: 'Remarcados', value: stats.remarcados, color: 'text-warning' },
-          { label: 'Retornos', value: stats.retornos, color: 'text-primary' },
-          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: 'text-info' },
-          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: 'text-success' },
-          { label: 'Atend. Realizados', value: stats.atendimentosRealizados, color: 'text-success' },
+          { label: 'Total', value: stats.total, color: '#1B3A5C' },
+          { label: 'Concluídos', value: stats.concluidos, color: '#2D7A4F' },
+          { label: 'Pendentes', value: stats.pendentes, color: '#C17B1A' },
+          { label: 'Faltas', value: stats.faltas, color: '#B83232' },
+          { label: 'Cancelados', value: stats.cancelados, color: '#6B7280' },
+          { label: 'Remarcados', value: stats.remarcados, color: '#C17B1A' },
+          { label: 'Retornos', value: stats.retornos, color: '#1B3A5C' },
+          { label: 'Tempo Médio', value: `${tempoStats.tempoMedio}m`, color: '#2E8B8B' },
+          { label: 'Comparecim.', value: `${stats.taxaComparecimento}%`, color: '#2D7A4F' },
+          { label: 'Taxa Falta', value: `${stats.taxaFalta}%`, color: '#B83232' },
         ].map(s => (
-          <div key={s.label} className="rounded-xl border bg-card text-center px-2 py-3 shadow-sm">
-            <p className={`text-lg font-bold font-display leading-none ${s.color}`}>{s.value}</p>
+          <div
+            key={s.label}
+            className="rounded-xl border border-border/60 bg-card text-center px-2 py-3 shadow-sm"
+          >
+            <p className="text-lg font-bold font-display leading-none" style={{ color: s.color }}>{s.value}</p>
             <p className="text-[9px] uppercase tracking-wider mt-1 text-muted-foreground truncate">{s.label}</p>
           </div>
         ))}
       </div>
 
-      <div className="relative">
-        {isLoading && (
-          <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-50 flex items-center justify-center rounded-xl min-h-[400px]">
-            <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-xl border animate-in fade-in zoom-in duration-300">
-              <RefreshCw className="w-10 h-10 animate-spin text-primary" />
-              <div className="text-center">
-                <p className="font-bold text-lg text-primary">Buscando dados...</p>
-                <p className="text-sm text-muted-foreground">Isso pode levar alguns segundos para relatórios grandes.</p>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
-            {[
-              { value: 'geral', label: 'Geral' },
-              { value: 'produtividade', label: 'Produtividade' },
-              { value: 'procedimentos', label: 'Procedimentos' },
-              { value: 'faltas', label: 'Faltas' },
-              { value: 'pacientes', label: 'Pacientes' },
-              { value: 'fila', label: 'Fila de Espera' },
-              { value: 'triagem', label: 'Triagem' },
-              { value: 'enfermagem', label: 'Enfermagem' },
-              { value: 'multiprofissional', label: 'Multiprofissional' },
-              { value: 'pts_report', label: 'PTS' },
-              { value: 'tratamentos', label: 'Tratamentos' },
-              { value: 'detalhado', label: 'Detalhado' },
-              { value: 'mapa', label: 'Mapa Atendimento' },
-            ].map(tab => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px rounded-none data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent"
-              >
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <TabsContent value="geral" className="space-y-5 mt-4">
-            <ChartCard
-              title="Atendimentos por Período"
-              actions={
-                <div className="flex gap-1">
-                  {(['dia', 'semana', 'mes'] as const).map(g => (
-                    <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
-                      {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
-                    </Button>
-                  ))}
-                </div>
-              }
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-transparent border-b rounded-none h-auto p-0 gap-0">
+          {[
+            { value: 'geral', label: 'Geral' },
+            { value: 'produtividade', label: 'Produtividade' },
+            { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'faltas', label: 'Faltas' },
+            { value: 'pacientes', label: 'Pacientes' },
+            { value: 'fila', label: 'Fila de Espera' },
+            { value: 'triagem', label: 'Triagem' },
+            { value: 'enfermagem', label: 'Enfermagem' },
+            { value: 'multiprofissional', label: 'Multiprofissional' },
+            { value: 'pts_report', label: 'PTS' },
+            { value: 'tratamentos', label: 'Tratamentos' },
+            { value: 'detalhado', label: 'Detalhado' },
+            { value: 'mapa', label: '📍 Mapa Atendimento' },
+          ].map(tab => (
+            <button
+              key={tab.value}
+              onClick={() => setActiveTab(tab.value)}
+              className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+              style={{
+                color: activeTab === tab.value ? '#1B3A5C' : '#6B7280',
+                borderBottomColor: activeTab === tab.value ? '#2E8B8B' : 'transparent',
+                fontWeight: activeTab === tab.value ? 600 : 500,
+              }}
             >
-              {timelineGrouped.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={timelineGrouped}>
+              {tab.label}
+            </button>
+          ))}
+        </TabsList>
+
+        {/* === GERAL === */}
+        <TabsContent value="geral" className="space-y-5 mt-4">
+          <ChartCard
+            title="Atendimentos por Período"
+            actions={
+              <div className="flex gap-1">
+                {(['dia', 'semana', 'mes'] as const).map(g => (
+                  <Button key={g} size="sm" variant={timelineGroup === g ? 'default' : 'outline'} className={timelineGroup === g ? 'gradient-primary text-primary-foreground h-7 text-xs' : 'h-7 text-xs'} onClick={() => setTimelineGroup(g)}>
+                    {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                  </Button>
+                ))}
+              </div>
+            }
+          >
+            {timelineGrouped.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={timelineGrouped}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+            )}
+          </ChartCard>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Horários de Pico">
+              {peakHoursData.some(d => d.total > 0) ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={peakHoursData}>
                     <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="concluidos" name="Concluídos" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="faltas" name="Faltas" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="cancelados" name="Cancelados" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
+                    <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado para o período selecionado</p>
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
               )}
             </ChartCard>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              <ChartCard title="Horários de Pico">
-                {peakHoursData.some(d => d.total > 0) ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={peakHoursData}>
-                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="hora" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="total" name="Agendamentos" fill="#3b82f6" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-                )}
-              </ChartCard>
+            <ChartCard title="Novos vs Retorno">
+              {novosVsRetorno.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      <Cell fill="#3b82f6" />
+                      <Cell fill="#14b8a6" />
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+          </div>
 
-              <ChartCard title="Novos vs Retorno">
-                {novosVsRetorno.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={novosVsRetorno} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        <Cell fill="#3b82f6" />
-                        <Cell fill="#14b8a6" />
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
-                )}
-              </ChartCard>
-            </div>
-          </TabsContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Agendamentos por Profissional">
+              <ResponsiveContainer width="100%" height={Math.max(200, porProfissional.length * 40)}>
+                <BarChart data={porProfissional} layout="vertical">
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="nome" type="category" width={120} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                  <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                  <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
+                  <Legend />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-          <TabsContent value="produtividade" className="space-y-5 mt-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
-              {categoriaCards.map(c => {
-                const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
-                const isActive = filterCargoProd === c.key;
-                const catDef = CATEGORIAS.find(cat => cat.key === c.key);
-                const IconComp = catDef?.icon || Stethoscope;
-                return (
-                  <div
-                    key={c.key}
-                    className={cn("cursor-pointer rounded-xl border p-4 transition-all hover:shadow-md", isActive ? "border-primary bg-primary/5" : "bg-card")}
-                    onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
-                  >
-                    <div className="flex items-center gap-2.5 mb-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center bg-muted">
-                        <IconComp className="w-4 h-4" />
-                      </div>
-                      <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">{c.label}</span>
-                    </div>
-                    <div className="flex items-baseline gap-4">
-                      <div><p className="text-2xl font-bold">{c.total}</p><p className="text-[10px] text-muted-foreground">Total</p></div>
-                      <div><p className="text-lg font-bold text-success">{c.concluidos}</p><p className="text-[10px] text-muted-foreground">Concluídos</p></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Card className="shadow-card border-0">
+            <ChartCard title="Distribuição por Status">
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {statusData.map((entry, i) => <Cell key={`status-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            {porUnidade.length > 1 && (
+              <ChartCard title="Por Unidade">
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={porUnidade}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
+                    <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
+                    <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="#94a3b8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            )}
+
+            <Card className="group relative rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
               <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground">Produtividade por Profissional</h3>
-                  <Button size="sm" variant="outline" onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}>
-                    {prodViewMode === 'tabela' ? 'Ver Gráfico' : 'Ver Tabela'}
-                  </Button>
-                </div>
-                {prodViewMode === 'tabela' ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left py-2 px-3">Profissional</th>
-                          <th className="text-center py-2 px-2">Total</th>
-                          <th className="text-center py-2 px-2">Concluídos</th>
-                          <th className="text-center py-2 px-2">Faltas</th>
-                          <th className="text-center py-2 px-2">Taxa Conclusão</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {porProfissional.map(p => (
-                          <tr key={p.id} className="border-b hover:bg-muted/30">
-                            <td className="py-2 px-3">{p.nome}</td>
-                            <td className="py-2 px-2 text-center">{p.total}</td>
-                            <td className="py-2 px-2 text-center text-success">{p.concluidos}</td>
-                            <td className="py-2 px-2 text-center text-destructive">{p.faltas}</td>
-                            <td className="py-2 px-2 text-center">{p.taxaConclusao}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <h3 className="font-semibold font-display text-foreground text-[16px] mb-4">Origem dos Agendamentos</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-4 bg-accent rounded-xl">
+                    <p className="text-2xl font-bold text-foreground">{stats.online}</p>
+                    <p className="text-sm text-muted-foreground">Online</p>
+                    <p className="text-xs text-muted-foreground">{stats.total > 0 ? Math.round((stats.online / stats.total) * 100) : 0}%</p>
                   </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={prodChartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis dataKey="nome" type="category" width={150} />
-                      <Tooltip />
-                      <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="#14b8a6" />
-                      <Bar dataKey="faltas" name="Faltas" stackId="a" fill="#f97316" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
+                  <div className="text-center p-4 bg-muted rounded-xl">
+                    <p className="text-2xl font-bold text-foreground">{stats.recepcao}</p>
+                    <p className="text-sm text-muted-foreground">Recepção</p>
+                    <p className="text-xs text-muted-foreground">{stats.total > 0 ? Math.round((stats.recepcao / stats.total) * 100) : 0}%</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          </div>
+        </TabsContent>
 
-          <TabsContent value="procedimentos" className="space-y-5 mt-4">
+        {/* === PRODUTIVIDADE === */}
+        <TabsContent value="produtividade" className="space-y-5 mt-4">
+          {/* Category cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-3">
+            {categoriaCards.map(c => {
+              const taxa = c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0;
+              const isActive = filterCargoProd === c.key;
+              const catDef = CATEGORIAS.find(cat => cat.key === c.key);
+              const IconComp = catDef?.icon || Stethoscope;
+              const bgLight = catDef?.bgLight || '#F8FAFC';
+              return (
+                <div
+                  key={c.key}
+                  className="cursor-pointer rounded-xl border transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                  style={{
+                    borderColor: isActive ? c.cor : 'hsl(var(--border))',
+                    borderLeftWidth: 4,
+                    borderLeftColor: c.cor,
+                    padding: '16px 18px',
+                    background: isActive ? bgLight : 'hsl(var(--card))',
+                    boxShadow: isActive ? `0 4px 16px ${c.cor}30` : '0 1px 4px rgba(0,0,0,0.05)',
+                  }}
+                  onClick={() => setFilterCargoProd(isActive ? 'all' : c.key)}
+                >
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: `${c.cor}15` }}>
+                      <IconComp className="w-[18px] h-[18px]" style={{ color: c.cor }} />
+                    </div>
+                    <span className="text-xs uppercase tracking-wider font-semibold font-display text-muted-foreground leading-tight">{c.label}</span>
+                  </div>
+                  <div className="flex items-baseline gap-4">
+                    <div>
+                      <p className="text-3xl font-bold font-display leading-none" style={{ color: 'hsl(var(--foreground))' }}>{c.total}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Total</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold" style={{ color: '#2D7A4F' }}>{c.concluidos}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Concluídos</p>
+                    </div>
+                  </div>
+                  <div className="mt-2.5">
+                    <div className="w-full overflow-hidden rounded-full" style={{ height: 4, background: 'hsl(var(--muted))' }}>
+                      <div style={{ height: '100%', width: `${taxa}%`, backgroundColor: c.cor, borderRadius: 9999, transition: 'width 0.3s' }} />
+                    </div>
+                    <p className="text-right mt-0.5 text-[11px] text-muted-foreground">{taxa}%</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <Card className="group rounded-2xl border-0 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
+            <CardContent className="p-5">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Produtividade por Profissional</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={filterRoleProd} onValueChange={setFilterRoleProd}>
+                    <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Filtrar perfil" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os perfis</SelectItem>
+                      <SelectItem value="profissional">Profissional</SelectItem>
+                      <SelectItem value="coordenador">Coordenador</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant={prodViewMode === 'tabela' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setProdViewMode(prodViewMode === 'tabela' ? 'grafico' : 'tabela')}
+                  >
+                    {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    const now = new Date().toLocaleString('pt-BR');
+                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+                    const prodRows = porProfissional.map(p => {
+                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
+                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
+                    }).join('');
+                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) return;
+                    const logoUrl = logoSmsFallback;
+                    const logoUrlRight = logoCerFallback;
+                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
+.header img{max-height:48px;max-width:90px;object-fit:contain;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:9px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
+</body></html>`);
+                    printWindow.document.close();
+                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
+                </div>
+              </div>
+
+              {prodViewMode === 'tabela' ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ background: '#F4F6FA' }}>
+                        <th className="text-left py-3 px-4 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Profissional</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Total</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Concluídos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Faltas</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Cancelados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Remarcados</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Retornos</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Tempo Médio</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Conclusão</th>
+                        <th className="text-center py-3 px-2 uppercase tracking-wider font-semibold font-display" style={{ color: '#1B3A5C', fontSize: 13 }}>Taxa Retorno</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porProfissional.map((p, idx) => {
+                        const catMatch = CATEGORIAS.find(cat => profissionalPertenceCategoria(p.profissao, cat));
+                        const catBadge = catMatch
+                          ? { label: catMatch.label, cor: catMatch.cor }
+                          : { label: 'Outros', cor: '#888' };
+                        const taxaConcStyle = p.taxaConclusao >= 70
+                          ? { background: '#ECFDF5', color: '#2D7A4F' }
+                          : p.taxaConclusao >= 40
+                          ? { background: '#FFFBEB', color: '#C17B1A' }
+                          : { background: '#FEF2F2', color: '#B83232' };
+                        const taxaRetStyle = p.taxaRetorno > 30
+                          ? { background: '#EEF2F7', color: '#1B3A5C' }
+                          : {};
+                        return (
+                          <tr
+                            key={p.id || p.nome}
+                            className="border-b last:border-0 transition-colors"
+                            style={{ background: idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = '#EEF2F7')}
+                            onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 1 ? '#FAFBFD' : '#FFFFFF')}
+                          >
+                            <td className="py-3 px-4 font-medium" style={{ color: '#1B3A5C' }}>
+                              <div className="flex items-center gap-2">
+                                {p.nome}
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white" style={{ backgroundColor: catBadge.cor }}>{catBadge.label}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-center font-semibold" style={{ color: '#1B3A5C' }}>{p.total}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2D7A4F' }}>{p.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{p.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{p.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{p.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{p.retornos}</td>
+                            <td className="py-3 px-2 text-center font-medium" style={{ color: '#2E8B8B' }}>{p.tempoMedio ? `${p.tempoMedio}min` : '-'}</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcStyle, borderRadius: 20 }}>{p.taxaConclusao}%</span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaRetStyle, borderRadius: 20, color: taxaRetStyle.color || '#6B7280' }}>{p.taxaRetorno}%</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {porProfissional.length === 0 && <tr><td colSpan={10} className="text-center py-8" style={{ color: '#6B7280' }}>Nenhum dado encontrado para o período selecionado</td></tr>}
+                    </tbody>
+                    {porProfissional.length > 0 && (() => {
+                      const taxaConcGeral = prodTotals.total > 0 ? Math.round((prodTotals.concluidos / prodTotals.total) * 100) : 0;
+                      const taxaRetGeral = prodTotals.total > 0 ? Math.round((prodTotals.retornos / prodTotals.total) * 100) : 0;
+                      const taxaConcGeralStyle = taxaConcGeral >= 70
+                        ? { background: '#ECFDF5', color: '#2D7A4F' }
+                        : taxaConcGeral >= 40
+                        ? { background: '#FFFBEB', color: '#C17B1A' }
+                        : { background: '#FEF2F2', color: '#B83232' };
+                      return (
+                        <tfoot>
+                          <tr style={{ background: '#F4F6FA', borderTop: '2px solid #1B3A5C' }} className="font-bold">
+                            <td className="py-3 px-4" style={{ color: '#1B3A5C' }}>TOTAL GERAL</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.total}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#2D7A4F' }}>{prodTotals.concluidos}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#B83232' }}>{prodTotals.faltas}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#6B7280' }}>{prodTotals.cancelados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#C17B1A' }}>{prodTotals.remarcados}</td>
+                            <td className="py-3 px-2 text-center" style={{ color: '#1B3A5C' }}>{prodTotals.retornos}</td>
+                            <td className="py-3 px-2 text-center">-</td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ ...taxaConcGeralStyle, borderRadius: 20 }}>{taxaConcGeral}%</span>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ color: '#6B7280', borderRadius: 20 }}>{taxaRetGeral}%</span>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      );
+                    })()}
+                  </table>
+                </div>
+              ) : (
+                <div>
+                  {prodChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={Math.max(300, prodChartData.length * 45)}>
+                      <BarChart data={prodChartData} layout="vertical" margin={{ left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis dataKey="nome" type="category" width={140} tick={{ fontSize: 10 }} />
+                        <Tooltip content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload;
+                          return (
+                            <div className="bg-background border border-border p-2 rounded shadow text-xs">
+                              <p className="font-semibold mb-1">{d?.nomeCompleto}</p>
+                              {payload.map((p: any) => (
+                                <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
+                              ))}
+                            </div>
+                          );
+                        }} />
+                        <Legend />
+                        <Bar dataKey="concluidos" name="Concluídos" stackId="a" fill="hsl(152,60%,42%)" />
+                        <Bar dataKey="faltas" name="Faltas" stackId="a" fill="hsl(0,72%,51%)" />
+                        <Bar dataKey="cancelados" name="Cancelados" stackId="a" fill="hsl(200,18%,46%)" />
+                        <Bar dataKey="remarcados" name="Remarcados" stackId="a" fill="hsl(45,93%,47%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Gráfico — Evolução Mensal */}
+          <ChartCard title="Evolução Mensal">
+            {evolucaoMensal.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={evolucaoMensal}>
+                  <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="total" name="Atendimentos" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.1} strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+            )}
+          </ChartCard>
+
+          {/* Ranking + Tendência */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <ChartCard title="Ranking de Produtividade (Top 5)">
+              {rankingProdutividade.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={rankingProdutividade.slice(0, 5)} layout="vertical" margin={{ left: 10 }}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <YAxis dataKey="nome" type="category" width={130} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" name="Concluídos" fill="#14b8a6" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Tendência de Concluídos (Últimos 6 meses)">
+              {evolucaoMensal.length > 0 ? (
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={evolucaoMensal.slice(-6)}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="total" name="Concluídos" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-muted-foreground py-12">Nenhum dado encontrado</p>
+              )}
+            </ChartCard>
+          </div>
+        </TabsContent>
+
+
+        {/* === FALTAS === */}
+        <TabsContent value="faltas" className="space-y-5 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{stats.faltas}</p><p className="text-xs text-muted-foreground">Total de Faltas</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{faltasReport.length}</p><p className="text-xs text-muted-foreground">Pacientes com Faltas</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{stats.taxaFalta}%</p><p className="text-xs text-muted-foreground">Taxa de Faltas</p></CardContent></Card>
+          </div>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Faltas por Paciente</h3>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => exportCSV('faltas')}><Download className="w-3 h-3 mr-1" />CSV</Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">E-mail</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Telefone</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Profissional</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Unidade</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Datas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {faltasReport.map((f) => (
+                      <tr key={`falta-${f.nome}-${f.profissional}`} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2.5 px-3 text-foreground font-medium">{f.nome}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.email || '-'}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.telefone || '-'}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground">{f.profissional}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground">{f.unidade}</td>
+                        <td className="py-2.5 px-2 text-center"><Badge variant="destructive">{f.total}</Badge></td>
+                        <td className="py-2.5 px-2 text-xs text-muted-foreground">{f.datas.join(', ')}</td>
+                      </tr>
+                    ))}
+                    {faltasReport.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma falta registrada no período</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Gráfico 6 — Faltas por Unidade */}
+          {faltasPorUnidade.length > 0 && (
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Procedimentos Mais Realizados</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={procedimentoStats.byProcedure.slice(0, 15)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="nome" type="category" width={200} />
-                    <Tooltip />
-                    <Bar dataKey="total" fill="#3b82f6" />
-                  </BarChart>
+                <h3 className="font-semibold font-display text-foreground mb-4">Faltas por Unidade</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie data={faltasPorUnidade} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={true}>
+                      {faltasPorUnidade.map((entry, i) => <Cell key={`unidade-${entry.name}`} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => [`${value} faltas`, 'Total']} />
+                    <Legend />
+                  </PieChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
+        </TabsContent>
 
-          <TabsContent value="faltas" className="space-y-5 mt-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Faltas por Paciente</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Paciente</th>
-                        <th className="text-center py-2 px-2">Total Faltas</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {faltasReport.map(f => (
-                        <tr key={f.nome} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{f.nome}</td>
-                          <td className="py-2 px-2 text-center font-bold text-destructive">{f.total}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        {/* === PACIENTES === */}
+        <TabsContent value="pacientes" className="space-y-5 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length}</p><p className="text-xs text-muted-foreground">Pacientes no Período</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-info">{stats.primeiraConsulta}</p><p className="text-xs text-muted-foreground">Primeira Consulta</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-secondary">{stats.retornos}</p><p className="text-xs text-muted-foreground">Retornos</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{pacientesReport.length > 0 ? (filtered.length / pacientesReport.length).toFixed(1) : 0}</p><p className="text-xs text-muted-foreground">Agend./Paciente</p></CardContent></Card>
+          </div>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
                 </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">E-mail</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Telefone</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Agendamentos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Concluídos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Faltas</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Retornos</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Última Consulta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pacientesReport.slice(0, 100).map(p => (
+                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2.5 px-3 text-foreground font-medium">{p.nome}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.email || '-'}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{p.telefone || '-'}</td>
+                        <td className="py-2.5 px-2 text-center font-semibold">{p.totalAgendamentos}</td>
+                        <td className="py-2.5 px-2 text-center text-success">{p.concluidos}</td>
+                        <td className="py-2.5 px-2 text-center text-destructive">{p.faltas}</td>
+                        <td className="py-2.5 px-2 text-center text-info">{p.retornos}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground">{p.ultimaConsulta}</td>
+                      </tr>
+                    ))}
+                    {pacientesReport.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum paciente encontrado</td></tr>}
+                  </tbody>
+                </table>
+                {pacientesReport.length > 100 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 100 de {pacientesReport.length} — exporte para ver todos</p>}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === FILA DE ESPERA === */}
+        <TabsContent value="fila" className="space-y-5 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-foreground">{filaReport.total}</p><p className="text-xs text-muted-foreground">Total na Fila</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-warning">{filaReport.aguardando}</p><p className="text-xs text-muted-foreground">Aguardando</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-success">{filaReport.chamados}</p><p className="text-xs text-muted-foreground">Chamados / Atendidos</p></CardContent></Card>
+            <Card className="shadow-card border-0"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-destructive">{filaReport.desistencias}</p><p className="text-xs text-muted-foreground">Desistências</p></CardContent></Card>
+          </div>
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground flex items-center gap-2 mb-4"><ListOrdered className="w-5 h-5 text-primary" /> Registros da Fila</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">#</th>
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Setor</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Prioridade</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Status</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Chegada</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Chamada</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filaReport.items.map(f => (
+                      <tr key={f.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2.5 px-2 text-center text-muted-foreground">{f.posicao}</td>
+                        <td className="py-2.5 px-3 text-foreground font-medium">{f.paciente_nome}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground">{f.setor || '-'}</td>
+                        <td className="py-2.5 px-2">
+                          <Badge variant={f.prioridade === 'urgente' ? 'destructive' : f.prioridade === 'alta' ? 'default' : 'secondary'} className="text-xs">{f.prioridade_perfil || f.prioridade}</Badge>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <Badge variant={f.status === 'aguardando' ? 'outline' : f.status === 'atendido' ? 'default' : 'secondary'} className="text-xs">{f.status}</Badge>
+                        </td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.hora_chegada}</td>
+                        <td className="py-2.5 px-2 text-muted-foreground text-xs">{f.hora_chamada || '-'}</td>
+                      </tr>
+                    ))}
+                    {filaReport.items.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum registro na fila</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === TRIAGEM === */}
+        <TabsContent value="triagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-primary">{triagemReport.total}</p>
+                <p className="text-xs text-muted-foreground">Total Triagens</p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="pacientes" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Pacientes Atendidos</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Paciente</th>
-                        <th className="text-center py-2 px-2">Total Agendamentos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pacientesReport.slice(0, 50).map(p => (
-                        <tr key={p.id} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{p.nome}</td>
-                          <td className="py-2 px-2 text-center font-bold">{p.totalAgendamentos}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-success">{triagemReport.confirmadas}</p>
+                <p className="text-xs text-muted-foreground">Confirmadas</p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="fila" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Fila de Espera</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Paciente</th>
-                        <th className="text-left py-2 px-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filaReport.items.map(f => (
-                        <tr key={f.id} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{f.paciente_nome}</td>
-                          <td className="py-2 px-2">{f.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-warning">{triagemReport.pendentes}</p>
+                <p className="text-xs text-muted-foreground">Pendentes/Rascunho</p>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="triagem" className="space-y-5 mt-4">
             <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Triagens por Técnico</h3>
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-info">{tecnicos.length}</p>
+                <p className="text-xs text-muted-foreground">Técnicos Ativos</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <HeartPulse className="w-5 h-5 text-primary" /> Produtividade por Técnico de Enfermagem
+              </h3>
+              {triagemReport.porTecnico.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhum registro de triagem encontrado no período.</p>
+              ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Técnico</th>
-                        <th className="text-center py-2 px-2">Total</th>
+                        <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Técnico(a)</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Confirmadas</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pendentes</th>
+                        <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Taxa Conclusão</th>
                       </tr>
                     </thead>
                     <tbody>
                       {triagemReport.porTecnico.map(t => (
-                        <tr key={t.id} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{t.nome}</td>
-                          <td className="py-2 px-2 text-center font-bold">{t.total}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="enfermagem" className="space-y-5 mt-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Avaliações de Enfermagem ({nursingEvals.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Data</th>
-                        <th className="text-left py-2 px-2">Profissional</th>
-                        <th className="text-left py-2 px-2">Paciente</th>
-                        <th className="text-left py-2 px-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {nursingEvals.slice(0, 50).map((n, i) => (
-                        <tr key={i} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{n.evaluation_date}</td>
-                          <td className="py-2 px-2">{n.professional_name || 'Profissional'}</td>
-                          <td className="py-2 px-2">{n.patient_name || n.patient_id}</td>
-                          <td className="py-2 px-2">{n.status || 'Finalizado'}</td>
-                        </tr>
-                      ))}
-                      {nursingEvals.length === 0 && (
-                        <tr><td colSpan={4} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="multiprofissional" className="space-y-5 mt-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Avaliações Multiprofissionais ({multiEvals.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Data</th>
-                        <th className="text-left py-2 px-2">Especialidade</th>
-                        <th className="text-left py-2 px-2">Paciente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {multiEvals.slice(0, 50).map((m, i) => (
-                        <tr key={i} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{m.evaluation_date}</td>
-                          <td className="py-2 px-2">{m.specialty || 'Geral'}</td>
-                          <td className="py-2 px-2">{m.patient_name || m.patient_id}</td>
-                        </tr>
-                      ))}
-                      {multiEvals.length === 0 && (
-                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhuma avaliação encontrada</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="pts_report" className="space-y-5 mt-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Projetos Terapêuticos Singulares - PTS ({ptsData.length})</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Criado em</th>
-                        <th className="text-left py-2 px-2">Profissional</th>
-                        <th className="text-left py-2 px-2">Paciente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ptsData.slice(0, 50).map((p, i) => (
-                        <tr key={i} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{new Date(p.created_at).toLocaleDateString('pt-BR')}</td>
-                          <td className="py-2 px-2">{p.professional_name || 'Responsável'}</td>
-                          <td className="py-2 px-2">{p.patient_name || p.patient_id}</td>
-                        </tr>
-                      ))}
-                      {ptsData.length === 0 && (
-                        <tr><td colSpan={3} className="py-10 text-center text-muted-foreground">Nenhum PTS encontrado</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="tratamentos" className="space-y-5 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground uppercase">Ciclos Ativos</p>
-                <p className="text-2xl font-bold text-primary">{treatmentStats.ativos}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground uppercase">Sessões Realizadas</p>
-                <p className="text-2xl font-bold text-success">{treatmentStats.sessRealizadas}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground uppercase">Faltas em Sessões</p>
-                <p className="text-2xl font-bold text-destructive">{treatmentStats.sessFaltas}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground uppercase">Abandono</p>
-                <p className="text-2xl font-bold">{treatmentStats.taxaAbandono}%</p>
-              </CardContent></Card>
-            </div>
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <h3 className="font-semibold text-foreground mb-4">Tratamentos por Tipo</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={treatmentStats.byType}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="nome" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="detalhado" className="space-y-5 mt-4">
-            <Card className="shadow-card border-0">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-foreground">Listagem Detalhada</h3>
-                  <Badge variant="outline">{filtered.length} registros</Badge>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left py-2 px-3">Data</th>
-                        <th className="text-left py-2 px-2">Hora</th>
-                        <th className="text-left py-2 px-2">Paciente</th>
-                        <th className="text-left py-2 px-2">Profissional</th>
-                        <th className="text-left py-2 px-2">Tipo</th>
-                        <th className="text-left py-2 px-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.slice(0, 5000).map(a => (
-                        <tr key={a.id} className="border-b hover:bg-muted/30">
-                          <td className="py-2 px-3">{a.data}</td>
-                          <td className="py-2 px-2">{a.hora}</td>
-                          <td className="py-2 px-2 font-medium">{a.pacienteNome}</td>
-                          <td className="py-2 px-2">{a.profissionalNome}</td>
-                          <td className="py-2 px-2">{a.tipo}</td>
-                          <td className="py-2 px-2">
-                            <Badge className={cn(
-                              normalizeStatus(a.status) === 'concluido' ? "bg-success" : 
-                              normalizeStatus(a.status) === 'falta' ? "bg-destructive" :
-                              normalizeStatus(a.status) === 'pendente' ? "bg-warning" : ""
-                            )}>
-                              {statusLabels[normalizeStatus(a.status)] || a.status}
+                        <tr key={t.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2.5 px-3 font-medium text-foreground">{t.nome}</td>
+                          <td className="text-center py-2.5 px-2 text-foreground font-semibold">{t.total}</td>
+                          <td className="text-center py-2.5 px-2 text-success font-medium">{t.confirmadas}</td>
+                          <td className="text-center py-2.5 px-2 text-warning font-medium">{t.pendentes}</td>
+                          <td className="text-center py-2.5 px-2">
+                            <Badge variant="outline" className="text-xs">
+                              {t.total > 0 ? Math.round((t.confirmadas / t.total) * 100) : 0}%
                             </Badge>
                           </td>
                         </tr>
@@ -1873,84 +1927,517 @@ ${dataRows}
                     </tbody>
                   </table>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              )}
+            </CardContent>
+          </Card>
 
-          <TabsContent value="mapa" className="space-y-5 mt-4">
+          {triagemReport.porTecnico.length > 0 && (
             <Card className="shadow-card border-0">
               <CardContent className="p-5">
-                <div className="flex flex-col md:flex-row items-end gap-3 mb-6">
-                  <div className="flex-1">
-                    <Label className="text-xs">Data De</Label>
-                    <Input type="date" value={mapaDateFrom} onChange={e => setMapaDateFrom(e.target.value)} className="h-9" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs">Data Até</Label>
-                    <Input type="date" value={mapaDateTo} onChange={e => setMapaDateTo(e.target.value)} className="h-9" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs">Profissional</Label>
-                    <Select value={mapaProf} onValueChange={setMapaProf}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        {profissionais.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button className="gradient-primary text-white gap-2 h-9" onClick={generateMapaAtendimento} disabled={mapaLoading}>
-                    {mapaLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    Gerar Mapa
-                  </Button>
-                </div>
-
-                {mapaGenerated ? (
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full text-[10px] border-collapse">
-                      <thead>
-                        <tr className="bg-muted/50 border-b">
-                          <th className="border-r p-1 text-center">Nº</th>
-                          <th className="border-r p-1 text-left">NOME DO PACIENTE</th>
-                          <th className="border-r p-1 text-center">CNS</th>
-                          <th className="border-r p-1 text-center">TELEFONE</th>
-                          <th className="border-r p-1 text-left">PROFISSIONAL</th>
-                          <th className="border-r p-1 text-left">ESPECIALIDADE</th>
-                          <th className="border-r p-1 text-center">CID</th>
-                          <th className="border-r p-1 text-center">TIPO</th>
-                          <th className="border-r p-1 text-center">CPF</th>
-                          <th className="border-r p-1 text-center">DATA NASC.</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mapaData.map((row, i) => (
-                          <tr key={i} className="border-b hover:bg-muted/30">
-                            <td className="border-r p-1 text-center">{row.num}</td>
-                            <td className="border-r p-1 text-left font-medium uppercase">{row.paciente_nome}</td>
-                            <td className="border-r p-1 text-center">{row.cns}</td>
-                            <td className="border-r p-1 text-center">{row.telefone}</td>
-                            <td className="border-r p-1 text-left">{row.profissional_nome}</td>
-                            <td className="border-r p-1 text-left uppercase">{row.especialidade}</td>
-                            <td className="border-r p-1 text-center">{row.cid}</td>
-                            <td className="border-r p-1 text-center uppercase">{row.tipo}</td>
-                            <td className="border-r p-1 text-center">{row.cpf}</td>
-                            <td className="border-r p-1 text-center">{row.data_nascimento}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-xl">
-                    <MapPin className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p>Clique em "Gerar Mapa" para visualizar os dados de atendimento.</p>
-                  </div>
-                )}
+                <h3 className="font-semibold font-display text-foreground mb-4">Triagens por Técnico</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={triagemReport.porTecnico}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(214,20%,90%)" />
+                    <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="confirmadas" name="Confirmadas" fill="hsl(152,60%,42%)" />
+                    <Bar dataKey="pendentes" name="Pendentes" fill="hsl(45,93%,47%)" />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+          )}
+        </TabsContent>
+
+        {/* === DETALHADO === */}
+        <TabsContent value="detalhado" className="space-y-5 mt-4">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
+                  <Button variant="ghost" size="sm" onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Data</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Hora</th>
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Paciente</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Profissional</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Unidade</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Tipo</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Status</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Origem</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Início</th>
+                      <th className="text-left py-2.5 px-2 text-muted-foreground font-medium">Fim</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Duração</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.slice(0, 200).map(a => {
+                      const un = unidades.find(u => u.id === a.unidadeId);
+                      const at = atendimentosDB.find(at => at.agendamento_id === a.id);
+                      return (
+                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 px-2 text-foreground">{a.data}</td>
+                          <td className="py-2 px-2 text-foreground">{a.hora}</td>
+                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
+                          <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
+                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
+                          <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_inicio || '-'}</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_fim || '-'}</td>
+                          <td className="py-2 px-2 text-center text-primary font-medium">{at?.duracao_minutos ? `${at.duracao_minutos}min` : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                    {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
+                  </tbody>
+                </table>
+                {filtered.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {filtered.length} — exporte para ver todos</p>}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* === PROCEDIMENTOS === */}
+        <TabsContent value="procedimentos" className="space-y-5 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-primary">{procedimentoStats.total}</p>
+                <p className="text-xs text-muted-foreground">Total de Procedimentos</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-success">{procedimentoStats.byProcedure.length}</p>
+                <p className="text-xs text-muted-foreground">Tipos Diferentes</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-info">{procedimentoStats.byProfessional.length}</p>
+                <p className="text-xs text-muted-foreground">Profissionais</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Ranking by procedure */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos Mais Realizados</h3>
+              {procedimentoStats.byProcedure.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum procedimento registrado no período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(200, procedimentoStats.byProcedure.length * 35)}>
+                  <BarChart data={procedimentoStats.byProcedure.slice(0, 15)} layout="vertical" margin={{ left: 120 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={110} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* By professional */}
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Profissional</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b">
+                    <th className="text-left py-2 px-2 text-xs text-muted-foreground">Profissional</th>
+                    <th className="text-center py-2 px-2 text-xs text-muted-foreground">Total</th>
+                  </tr></thead>
+                  <tbody>
+                    {procedimentoStats.byProfessional.map(p => (
+                      <tr key={p.nome} className="border-b border-border/50">
+                        <td className="py-2 px-2">{p.nome}</td>
+                        <td className="py-2 px-2 text-center font-semibold text-primary">{p.total}</td>
+                      </tr>
+                    ))}
+                    {procedimentoStats.byProfessional.length === 0 && (
+                      <tr><td colSpan={2} className="text-center py-4 text-muted-foreground">Sem dados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* By unit */}
+          {procedimentoStats.byUnit.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Procedimentos por Unidade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={procedimentoStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {procedimentoStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === TRATAMENTOS === */}
+        <TabsContent value="tratamentos" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            {[
+              { label: 'Total Ciclos', value: treatmentStats.total, color: 'text-foreground' },
+              { label: 'Ativos', value: treatmentStats.ativos, color: 'text-success' },
+              { label: 'Finalizados', value: treatmentStats.finalizados, color: 'text-muted-foreground' },
+              { label: 'Suspensos', value: treatmentStats.suspensos, color: 'text-destructive' },
+              { label: 'Méd. Sessões/Pac.', value: treatmentStats.avgSessoesPorPaciente, color: 'text-primary' },
+              { label: 'Taxa Abandono', value: `${treatmentStats.taxaAbandono}%`, color: 'text-warning' },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Total Sessões', value: treatmentStats.totalSessions },
+              { label: 'Realizadas', value: treatmentStats.sessRealizadas },
+              { label: 'Faltas', value: treatmentStats.sessFaltas },
+              { label: 'Canceladas', value: treatmentStats.sessCanceladas },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {treatmentStats.byType.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Tipo</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={treatmentStats.byType} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="nome" width={150} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="total" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byProfessional.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Profissional</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b">
+                      <th className="text-left py-2 px-2">Profissional</th>
+                      <th className="text-center py-2 px-2">Ativos</th>
+                      <th className="text-center py-2 px-2">Finalizados</th>
+                      <th className="text-center py-2 px-2">Sessões</th>
+                    </tr></thead>
+                    <tbody>
+                      {treatmentStats.byProfessional.map((p, i) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2 px-2 font-medium">{p.nome}</td>
+                          <td className="py-2 px-2 text-center text-success">{p.ativos}</td>
+                          <td className="py-2 px-2 text-center text-muted-foreground">{p.finalizados}</td>
+                          <td className="py-2 px-2 text-center font-bold">{p.sessoes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {treatmentStats.byUnit.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Tratamentos por Unidade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={treatmentStats.byUnit} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {treatmentStats.byUnit.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === ENFERMAGEM === */}
+        <TabsContent value="enfermagem" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Total Avaliações', value: nursingReport.total },
+              { label: 'Aptos', value: nursingReport.aptos },
+              { label: 'Inaptos', value: nursingReport.inaptos },
+              { label: 'Multiprofissional', value: nursingReport.multiprof },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {nursingReport.byPriority.length > 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4">Avaliações por Prioridade</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie data={nursingReport.byPriority} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                      {nursingReport.byPriority.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === MULTIPROFISSIONAL === */}
+        <TabsContent value="multiprofissional" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-2.5 text-center">
+                <p className="text-lg font-bold text-foreground">{multiReport.total}</p>
+                <p className="text-[10px] text-muted-foreground">Total Avaliações</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {multiReport.bySpecialty.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Especialidade</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={multiReport.bySpecialty}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="nome" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="total" fill="hsl(262, 83%, 58%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+            {multiReport.byParecer.length > 0 && (
+              <Card className="shadow-card border-0">
+                <CardContent className="p-5">
+                  <h3 className="font-semibold font-display text-foreground mb-4">Por Parecer</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={multiReport.byParecer} dataKey="total" nameKey="nome" cx="50%" cy="50%" outerRadius={90} label={({ nome, total }) => `${nome}: ${total}`}>
+                        {multiReport.byParecer.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* === PTS === */}
+        <TabsContent value="pts_report" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Total PTS', value: ptsReport.total },
+              { label: 'Ativos', value: ptsReport.ativos },
+              { label: 'Concluídos', value: ptsReport.concluidos },
+            ].map(s => (
+              <Card key={s.label} className="shadow-card border-0">
+                <CardContent className="p-2.5 text-center">
+                  <p className="text-lg font-bold text-foreground">{s.value}</p>
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {ptsReport.total === 0 && (
+            <Card className="shadow-card border-0">
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Nenhum PTS registrado no período selecionado.
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* === MAPA DE ATENDIMENTO === */}
+        <TabsContent value="mapa" className="space-y-5 mt-4">
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" /> Mapa de Atendimentos Concluídos
+              </h3>
+              <div className="flex flex-wrap items-end gap-3 mb-4">
+                <div>
+                  <Label className="text-xs">Data Inicial *</Label>
+                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <div>
+                  <Label className="text-xs">Data Final *</Label>
+                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                </div>
+                <div>
+                  <Label className="text-xs">Profissional</Label>
+                  <Select value={mapaProf} onValueChange={v => { setMapaProf(v); setMapaGenerated(false); }}>
+                    <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {[...profissionais, ...tecnicos]
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                  <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <FileText className="w-4 h-4 mr-1" />PDF
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                  <Download className="w-4 h-4 mr-1" />CSV
+                </Button>
+                <Button variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" onClick={() => {
+                  const now = new Date().toLocaleString('pt-BR');
+                  const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                  const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                  const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
+                  const tableRows = mapaData.map((r, i) => {
+                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                  }).join('');
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const logoUrl = logoSmsFallback;
+                  const logoUrlRight = logoCerFallback;
+                  printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
+<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
+.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
+.header img{max-height:48px;max-width:90px;object-fit:contain;}
+.header h1{font-size:13px;font-weight:700;}
+.header .sub{font-size:10px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:10px;}
+th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
+th{background:#f1f5f9;font-weight:600;}
+@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+</body></html>`);
+                  printWindow.document.close();
+                  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+                }}>
+                  <Printer className="w-4 h-4 mr-1" />Imprimir
+                </Button>
+              </div>
+
+              {mapaGenerated && mapaData.length === 0 && (
+                <p className="text-center text-muted-foreground py-8">Nenhum atendimento concluído encontrado no período selecionado.</p>
+              )}
+
+              {mapaGenerated && mapaData.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-border/60">
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-muted/60">
+                        <th className="border border-border px-2 py-1.5 text-center w-8">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-center w-10">Foto</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
+                        <th className="border border-border px-2 py-1.5 text-left">CNS</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mapaData.map((r, i) => {
+                        const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                        const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
+                        const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                        return (
+                          <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                            <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
+                            <td className="border border-border px-2 py-1 text-center">
+                              <div className="relative group inline-block">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white mx-auto" style={{ backgroundColor: hashColor }} title={r.profissional_nome}>
+                                  {initials}
+                                </div>
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-foreground text-background text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                  {r.profissional_nome}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
+                            <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
+                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
+                            <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{procSigtap}</td>
+                            <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/60 font-semibold">
+                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
