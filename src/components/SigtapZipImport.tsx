@@ -505,7 +505,7 @@ const SigtapZipImport: React.FC = () => {
           <Tabs value={source} onValueChange={(v) => setSource(v as Source)} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="github" className="gap-2">
-                <Github className="w-4 h-4" /> Repositório GitHub
+                <ExternalLink className="w-4 h-4" /> Repositório GitHub
               </TabsTrigger>
               <TabsTrigger value="upload" className="gap-2">
                 <Upload className="w-4 h-4" /> Upload de ZIP
