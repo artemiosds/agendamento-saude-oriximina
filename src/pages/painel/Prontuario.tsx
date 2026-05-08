@@ -1127,12 +1127,34 @@ const ProntuarioPage: React.FC = () => {
         })));
 
         if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-          if (linksToInsert.length > 0) {
-            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(linksToInsert);
+          // Verify each procedure UUID is valid before deleting/inserting
+          const validLinks = linksToInsert.filter(l => {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id);
+            if (!isUuid) {
+              console.warn(`[Prontuario] Pulando procedimento com ID inválido (não é UUID): ${l.procedimento_id}`);
+            }
+            return isUuid;
+          });
+
+          const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          if (deleteError) {
+            console.error("[Prontuario] Erro real ao remover procedimentos antigos", {
+              error: deleteError,
+              prontuarioId,
+              action: "delete_procedures"
+            });
+            // We don't throw here to allow the main record to remain saved, but we warn the user
+            toast.error("Erro ao atualizar lista de procedimentos. O prontuário principal foi salvo.");
+          } else if (validLinks.length > 0) {
+            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
             if (insertError) {
-              console.error("Erro ao inserir procedimentos do prontuário:", insertError);
-              throw new Error("Não foi possível salvar os procedimentos do prontuário.");
+              console.error("[Prontuario] Erro real ao salvar procedimentos", {
+                error: insertError,
+                prontuarioId,
+                validLinks,
+                action: "insert_procedures"
+              });
+              toast.error("O prontuário foi salvo, mas houve um erro ao vincular os procedimentos.");
             }
           }
         }
@@ -1324,9 +1346,16 @@ const ProntuarioPage: React.FC = () => {
         }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
         
         // Use a single transaction (delete + insert)
-        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (links.length > 0) {
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+        const validLinks = links.filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
+        
+        const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+        if (!deleteError && validLinks.length > 0) {
+          const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
+          if (insertError) {
+            console.error('[autosave] Erro ao inserir procedimentos:', insertError);
+          }
+        } else if (deleteError) {
+          console.error('[autosave] Erro ao remover procedimentos:', deleteError);
         }
       }
       setAutosaveStatus('saved');
@@ -1538,14 +1567,25 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-        if (selectedProcIds.length > 0) {
-          const links = selectedProcIds.map(pid => ({
+        const validLinks = selectedProcIds.map(pid => {
+          const proc = procedimentos.find(p => p.id === pid);
+          return {
             prontuario_id: prontuarioId,
-            procedimento_id: pid,
+            procedimento_id: proc?.uuid || pid,
             cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-          }));
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+            quantidade: procDetails[pid]?.quantidade || 1,
+            observacao: procDetails[pid]?.observacao || "",
+          };
+        }).filter(l => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(l.procedimento_id));
+
+        const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+        if (!deleteError && validLinks.length > 0) {
+          const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(validLinks);
+          if (insertError) {
+            console.error("[RegistrarSessao] Erro ao inserir procedimentos:", insertError);
+          }
+        } else if (deleteError) {
+          console.error("[RegistrarSessao] Erro ao remover procedimentos:", deleteError);
         }
       }
 
