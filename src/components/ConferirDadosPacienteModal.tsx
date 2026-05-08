@@ -568,12 +568,21 @@ export function ConferirDadosPacienteModal({
                       value={form.tipo_logradouro_dne}
                       codigo={form.tipo_logradouro_codigo}
                       onChange={(descricao, codigo) => {
-                        setForm((p: any) => ({
-                          ...p,
+                        const newFormData = {
+                          ...form,
                           tipo_logradouro_dne: descricao,
                           tipo_logradouro_codigo: codigo,
-                        }));
+                        };
+                        setForm(newFormData);
                         setDirty(true);
+                        setSaveStatus("idle");
+                        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                        autoSaveTimerRef.current = setTimeout(() => {
+                          handleSave(true, newFormData).catch(err => {
+                            console.error("[ConferirDados] Erro no autosave:", err);
+                            setSaveStatus("error");
+                          });
+                        }, 1200);
                       }}
                     />
                   </div>
