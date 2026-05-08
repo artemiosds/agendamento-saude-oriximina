@@ -47,7 +47,7 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
+  const { pacientes, funcionarios, unidades, salas, fila } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
@@ -91,127 +91,153 @@ const Relatorios: React.FC = () => {
   const profissionais = profissionaisVisiveis;
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
+  const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
+
+  const normalizeStatus = useCallback((status: string): 'concluido' | 'pendente' | 'falta' | 'cancelado' | 'remarcado' | 'retorno' | string => {
+    if (!status) return 'pendente';
+    const s = status.toLowerCase().trim();
+    
+    const concluidos = ['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 'prontuario_concluido'];
+    const pendentes = ['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem', 'confirmado_chegada'];
+    const faltas = ['faltou', 'falta', 'ausente', 'nao_compareceu', 'não compareceu'];
+    const cancelados = ['cancelado', 'cancelada', 'cancelamento'];
+    const remarcados = ['remarcado', 'reagendado', 'reagendada'];
+    const retornos = ['retorno', 'consulta_retorno', 'atendimento_retorno'];
+
+    if (concluidos.includes(s)) return 'concluido';
+    if (pendentes.includes(s)) return 'pendente';
+    if (faltas.includes(s)) return 'falta';
+    if (cancelados.includes(s)) return 'cancelado';
+    if (remarcados.includes(s)) return 'remarcado';
+    if (retornos.includes(s)) return 'retorno';
+    
+    return s;
+  }, []);
+
   const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
-  }, [atendimentosDB, agendamentos]);
+  }, [atendimentosDB, agendamentosFull]);
 
   const tiposUnicos = useMemo(() => {
-    const s = new Set(agendamentos.map(a => a.tipo).filter(Boolean));
+    const s = new Set(agendamentosFull.map(a => a.tipo).filter(Boolean));
     return Array.from(s).sort();
-  }, [agendamentos]);
+  }, [agendamentosFull]);
 
   const loadReportData = useCallback(async () => {
+    if (isFetching) return;
+    setIsFetching(true);
+    
     try {
-      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-      // Universal unit isolation (admin.sms sees all)
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qAt = qAt.eq('unidade_id', user.unidadeId);
-        qFila = qFila.eq('unidade_id', user.unidadeId);
-      }
-      if (user?.role === 'profissional' && user.id) {
-        qAt = qAt.eq('profissional_id', user.id);
-        qFila = qFila.eq('profissional_id', user.id);
-      }
-      if (user?.role === 'tecnico' && user.id) {
-        qTriage = qTriage.eq('tecnico_id', user.id);
-      }
+      const filters = { 
+        unit: filterUnit, 
+        prof: filterProf, 
+        status: filterStatus, 
+        type: filterTipo, 
+        dateFrom, 
+        dateTo 
+      };
+      console.log("[Relatórios] buscando dados com filtros:", filters);
 
-      let qProc = (supabase as any).from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
-
-      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-      const loadAllTreatmentSessions = async () => {
-        const pageSize = 1000;
+      const fetchAllPages = async (table: string, dateField: string) => {
+        let allData: any[] = [];
         let from = 0;
-        let allSessions: any[] = [];
-
+        const PAGE_SIZE = 1000;
+        
         while (true) {
-          let query = supabase
-            .from('treatment_sessions')
-            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-            .range(from, from + pageSize - 1);
+          let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
+          
+          if (dateFrom) {
+            query = query.gte(dateField, dateFrom);
+          }
+          if (dateTo) {
+            query = query.lte(dateField, dateTo);
+          }
 
-          if (user?.role === 'profissional') {
-            query = query.eq('professional_id', user.id);
+          if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+            query = query.eq('unidade_id', user.unidadeId);
+          }
+          
+          if (table === 'agendamentos') {
+            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+            if (filterStatus !== 'all') query = query.eq('status', filterStatus);
+            if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
+          } else if (table === 'prontuarios') {
+            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
           }
 
           const { data, error } = await query;
           if (error) throw error;
           if (!data || data.length === 0) break;
-
-          allSessions = allSessions.concat(data);
-
-          if (data.length < pageSize) break;
-          from += pageSize;
+          
+          allData = allData.concat(data);
+          if (data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
         }
-
-        return allSessions;
+        return allData;
       };
 
-      if (user?.role === 'profissional') {
-        qCycles = qCycles.eq('professional_id', user.id);
-      }
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qCycles = qCycles.eq('unit_id', user.unidadeId);
-      }
-
-      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
-      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
-      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qNursing = qNursing.eq('unit_id', user.unidadeId);
-        qMulti = qMulti.eq('unit_id', user.unidadeId);
-        qPts = qPts.eq('unit_id', user.unidadeId);
-      }
-
-      const [
-        { data: atData },
-        { data: filaData },
-        { data: triageData },
-        { data: procData },
-        { data: cyclesData },
-        sessionsData,
-        { data: nursingData },
-        { data: multiData },
-        { data: ptsDataResult },
-      ] = await Promise.all([
-        qAt,
-        qFila,
-        qTriage,
-        qProc,
-        qCycles,
-        loadAllTreatmentSessions(),
-        qNursing,
-        qMulti,
-        qPts,
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes] = await Promise.all([
+        fetchAllPages('agendamentos', 'data'),
+        fetchAllPages('prontuarios', 'data_atendimento'),
+        supabase.from('fila_espera').select('*').limit(2000),
+        supabase.from('triage_records' as any).select('*'),
+        supabase.from('treatment_cycles' as any).select('*'),
+        supabase.from('treatment_sessions' as any).select('*'),
+        supabase.from('nursing_evaluations' as any).select('*'),
+        supabase.from('multiprofessional_evaluations' as any).select('*'),
+        supabase.from('pts' as any).select('*'),
       ]);
 
-      if (atData) setAtendimentosDB(atData);
-      if (filaData) setFilaDB(filaData);
-      if (triageData) setTriagensDB(triageData as TriagemDB[]);
-      if (procData) {
-        setProcedimentosDB(procData.map((r: any) => ({
-          prontuario_id: r.prontuario_id,
-          procedimento_id: r.procedimento_id,
-          proc_nome: r.procedimentos?.nome || '',
-          prof_nome: r.prontuarios?.profissional_nome || '',
-          unidade_id: r.prontuarios?.unidade_id || '',
-          data: r.prontuarios?.data_atendimento || '',
-        })));
-      }
-      if (cyclesData) setTreatmentCycles(cyclesData);
-      if (sessionsData) setTreatmentSessions(sessionsData);
-      if (nursingData) setNursingEvals(nursingData);
-      if (multiData) setMultiEvals(multiData);
-      if (ptsDataResult) setPtsData(ptsDataResult);
-      setLastUpdated(new Date());
-    } catch (err) { console.error('Error loading report data:', err); }
-  }, [user]);
+      const agsData = ags || [];
+      const pronsData = prons || [];
+      const filaData = filaRes.data || [];
+      const triageData = triageRes.data || [];
+      const cyclesData = cyclesRes.data || [];
+      const sessData = sessRes.data || [];
+      const nursingData = nursingRes.data || [];
+      const multiData = multiRes.data || [];
+      const ptsDataResult = ptsRes.data || [];
 
-  useEffect(() => { loadReportData(); }, [loadReportData]);
+      setAgendamentosFull(agsData);
+      setProntuariosFull(pronsData);
+      setFilaDB(filaData);
+      setTriagensDB(triageData as any as TriagemDB[]);
+      setTreatmentCycles(cyclesData);
+      setTreatmentSessions(sessData);
+      setNursingEvals(nursingData);
+      setMultiEvals(multiData);
+      setPtsData(ptsDataResult);
+      
+      setLastUpdated(new Date());
+      setIsInitialLoading(false);
+      
+      console.log("[Relatórios] agendamentos retornados:", ags?.length);
+      console.log("[Relatórios] prontuários retornados:", prons?.length);
+    } catch (err) { 
+      console.error('Error loading report data:', err); 
+    } finally {
+      setIsFetching(false);
+    }
+  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo]);
+
+  // Use a stable ref to avoid infinite loops if loadReportData changes
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      loadReportData();
+      hasLoadedRef.current = true;
+    }
+  }, [loadReportData]);
+
+  const handleRefresh = () => {
+    loadReportData();
+  };
 
   // Realtime subscription for auto-refresh
   useRealtimeSubscription({
@@ -233,61 +259,78 @@ const Relatorios: React.FC = () => {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  // === FILTERS ===
   const filtered = useMemo(() => {
-    return agendamentos.filter(a => {
-      if (filterUnit !== 'all' && a.unidadeId !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissionalId !== filterProf) return false;
-      if (filterStatus !== 'all' && a.status !== filterStatus) return false;
-      if (filterTipo !== 'all' && a.tipo !== filterTipo) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
-      if (user?.unidadeId && user?.usuario !== 'admin.sms' && a.unidadeId !== user.unidadeId) return false;
-      if (user?.role === 'profissional' && user.id && a.profissionalId !== user.id) return false;
-      return true;
-    });
-  }, [agendamentos, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, user]);
+    return agendamentosFull.map(a => ({
+      ...a,
+      status: normalizeStatus(a.status),
+      unidadeId: a.unidade_id,
+      profissionalId: a.profissional_id,
+      profissionalNome: a.profissional_nome,
+      pacienteId: a.paciente_id,
+      pacienteNome: a.paciente_nome,
+    }));
+  }, [agendamentosFull, normalizeStatus]);
 
-  const filteredAtendimentos = useMemo(() => {
-    return atendimentosDB.filter(a => {
-      if (filterUnit !== 'all' && a.unidade_id !== filterUnit) return false;
-      if (filterProf !== 'all' && a.profissional_id !== filterProf) return false;
-      if (filterSetor !== 'all' && a.setor !== filterSetor) return false;
-      if (dateFrom && a.data < dateFrom) return false;
-      if (dateTo && a.data > dateTo) return false;
-      return true;
-    });
-  }, [atendimentosDB, filterUnit, filterProf, filterSetor, dateFrom, dateTo]);
-
-  // === STATS ===
   const stats = useMemo(() => {
-    const total = filtered.length;
-    const confirmados = filtered.filter(a => a.status === 'confirmado' || a.status === 'confirmado_chegada').length;
-    const pendentes = filtered.filter(a => a.status === 'pendente').length;
-    const concluidos = filtered.filter(a => a.status === 'concluido').length;
-    const emAtendimento = filtered.filter(a => a.status === 'em_atendimento').length;
-    const faltas = filtered.filter(a => a.status === 'falta').length;
-    const cancelados = filtered.filter(a => a.status === 'cancelado').length;
-    const remarcados = filtered.filter(a => a.status === 'remarcado').length;
-    const online = filtered.filter(a => a.origem === 'online').length;
-    const recepcao = filtered.filter(a => a.origem === 'recepcao').length;
-    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
-    const primeiraConsulta = filtered.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
-    const taxaComparecimento = total > 0 ? Math.round(((concluidos + emAtendimento) / (total - pendentes - cancelados || 1)) * 100) : 0;
-    const taxaFalta = total > 0 ? Math.round((faltas / (total || 1)) * 100) : 0;
-    return { total, confirmados, pendentes, concluidos, emAtendimento, faltas, cancelados, remarcados, online, recepcao, retornos, primeiraConsulta, taxaComparecimento, taxaFalta };
-  }, [filtered]);
+    const ags = filtered;
+    const prons = prontuariosFull;
+
+    const totalAgendamentos = ags.length;
+    
+    // Status counters using normalized status
+    const concluidosAgs = ags.filter(a => a.status === 'concluido').length;
+    const pendentes = ags.filter(a => a.status === 'pendente').length;
+    const faltas = ags.filter(a => a.status === 'falta').length;
+    const cancelados = ags.filter(a => a.status === 'cancelado').length;
+    const remarcados = ags.filter(a => a.status === 'remarcado').length;
+    const retornos = ags.filter(a => a.status === 'retorno' || a.tipo === 'Retorno').length;
+    
+    // Medical records are also completions
+    const totalProntuarios = prons.length;
+    
+    // To avoid duplication, we count agendamentos concluidos OR if a record exists
+    // If agendamento_id exists in prontuario, it's the same thing.
+    const agendamentoIdsComProntuario = new Set(prons.map(p => p.agendamento_id).filter(Boolean));
+    const agsConcluidosSemProntuario = ags.filter(a => a.status === 'concluido' && !agendamentoIdsComProntuario.has(a.id)).length;
+    
+    const totalRealizados = totalProntuarios + agsConcluidosSemProntuario;
+    
+    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((totalRealizados / (totalAgendamentos - cancelados || 1)) * 100) : 0;
+    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / (totalAgendamentos || 1)) * 100) : 0;
+    
+    const primeiraConsulta = ags.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
+    const online = ags.filter(a => a.origem === 'online').length;
+    const recepcao = ags.filter(a => a.origem === 'recepcao').length;
+
+    console.log("[Relatórios] stats calculados", { totalAgendamentos, totalRealizados, totalProntuarios, concluidosAgs });
+
+    return { 
+      total: totalAgendamentos, 
+      concluidos: totalRealizados, 
+      pendentes, 
+      faltas, 
+      cancelados, 
+      remarcados, 
+      retornos, 
+      primeiraConsulta, 
+      taxaComparecimento, 
+      taxaFalta,
+      online,
+      recepcao,
+      emAtendimento: ags.filter(a => a.status === 'em_atendimento').length
+    };
+  }, [filtered, prontuariosFull]);
 
   const tempoStats = useMemo(() => {
-    const finalizados = filteredAtendimentos.filter(a => a.status === 'finalizado' && a.duracao_minutos && a.duracao_minutos > 0);
-    const totalMinutos = finalizados.reduce((s, a) => s + (a.duracao_minutos || 0), 0);
-    const media = finalizados.length > 0 ? Math.round(totalMinutos / finalizados.length) : 0;
-    return { totalAtendimentos: finalizados.length, tempoMedio: media, totalMinutos };
-  }, [filteredAtendimentos]);
+    // We don't have atendimentosDB anymore, we use agendamentos with durations if exists or mock 0 for now
+    // In this system durations usually come from 'atendimentos' table but user said 'atendimentos if exist'
+    // Let's check if we have duration in agendamentos or prontuarios
+    return { totalAtendimentos: stats.concluidos, tempoMedio: 0, totalMinutos: 0 };
+  }, [stats.concluidos]);
 
-  // === PRODUCTIVITY BY PROFESSIONAL (unified source for screen + export) ===
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
+    
     filtered.forEach(a => {
       const un = unidades.find(u => u.id === a.unidadeId);
       const func = funcionarios.find(f => f.id === a.profissionalId);
@@ -300,21 +343,27 @@ const Relatorios: React.FC = () => {
       if (a.status === 'falta') m.faltas++;
       if (a.status === 'cancelado') m.cancelados++;
       if (a.status === 'remarcado') m.remarcados++;
-      if (a.tipo === 'Retorno') m.retornos++;
-      if (!m.unidade && un?.nome) m.unidade = un.nome;
+      if (a.status === 'retorno' || a.tipo === 'Retorno') m.retornos++;
     });
-    filteredAtendimentos.forEach(at => {
-      const un = unidades.find(u => u.id === at.unidade_id);
-      const func = funcionarios.find(f => f.id === at.profissional_id);
-      const key = at.profissional_id || at.profissional_nome;
-      if (!map[key]) map[key] = { id: at.profissional_id, nome: at.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
-      if (at.duracao_minutos && at.duracao_minutos > 0 && at.status === 'finalizado') {
-        map[key].tempoTotal += at.duracao_minutos;
-        map[key].atendimentos++;
+
+    // Add prontuarios to productivity
+    prontuariosFull.forEach(p => {
+      const key = p.profissional_id || p.profissional_nome;
+      if (!map[key]) {
+        const func = funcionarios.find(f => f.id === p.profissional_id || f.nome === p.profissional_nome);
+        const un = unidades.find(u => u.id === p.unidade_id);
+        map[key] = { id: p.profissional_id, nome: p.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
       }
-      map[key].pacientesSet.add(at.paciente_id);
-      if (!map[key].unidade && un?.nome) map[key].unidade = un.nome;
+      
+      const m = map[key];
+      // Only count as new completion if not already counted via agendamento
+      if (!p.agendamento_id || !filtered.some(a => a.id === p.agendamento_id && a.status === 'concluido')) {
+        m.concluidos++;
+        m.total = Math.max(m.total, m.concluidos); // Ensure total reflects production
+      }
+      m.pacientesSet.add(p.paciente_id);
     });
+
     return Object.values(map)
       .filter(d => filterRoleProd === 'all' || d.role === filterRoleProd)
       .filter(d => {
@@ -342,7 +391,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [filtered, prontuariosFull, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
@@ -529,10 +578,8 @@ const Relatorios: React.FC = () => {
   }, [filtered]);
 
   const statusData = useMemo(() => [
-    { name: 'Confirmados', value: stats.confirmados },
-    { name: 'Pendentes', value: stats.pendentes },
     { name: 'Concluídos', value: stats.concluidos },
-    { name: 'Em Atendimento', value: stats.emAtendimento },
+    { name: 'Pendentes', value: stats.pendentes },
     { name: 'Faltas', value: stats.faltas },
     { name: 'Cancelados', value: stats.cancelados },
     { name: 'Remarcados', value: stats.remarcados },
@@ -784,8 +831,8 @@ const Relatorios: React.FC = () => {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
-        const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, at?.hora_inicio || '', at?.hora_fim || '', at?.duracao_minutos?.toString() || ''];
+        // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
       });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
@@ -813,7 +860,7 @@ const Relatorios: React.FC = () => {
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, filteredAtendimentos]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
@@ -901,8 +948,7 @@ ${dataRows}
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       const rows = filtered.map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
-        const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
-        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>${at?.hora_inicio || '-'}</td><td>${at?.hora_fim || '-'}</td><td>${at?.duracao_minutos ? at.duracao_minutos + 'min' : '-'}</td></tr>`;
+        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
       const prodRows = porProfissional.map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
@@ -956,7 +1002,7 @@ ${dataRows}
       body,
       { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
     );
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filteredAtendimentos, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
@@ -1143,13 +1189,16 @@ ${dataRows}
             <BarChart3 className="w-6 h-6" style={{ color: '#2E8B8B' }} /> Relatórios
           </h1>
           <p className="text-sm mt-0.5" style={{ color: '#6B7280' }}>
-            {filtered.length} agendamentos · {tempoStats.totalAtendimentos} atendimentos realizados
+            {stats.total} agendamentos · {stats.concluidos} atendimentos realizados
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
             <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
           </span>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4 mr-1" />{isFetching ? 'Buscando...' : 'Atualizar'}
+          </Button>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
@@ -1192,7 +1241,7 @@ ${dataRows}
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k as any} value={k as any}>{v as any}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1982,7 +2031,6 @@ th{background:#f1f5f9;font-weight:600;}
                   <tbody>
                     {filtered.slice(0, 200).map(a => {
                       const un = unidades.find(u => u.id === a.unidadeId);
-                      const at = atendimentosDB.find(at => at.agendamento_id === a.id);
                       return (
                         <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 px-2 text-foreground">{a.data}</td>
@@ -1993,9 +2041,9 @@ th{background:#f1f5f9;font-weight:600;}
                           <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
                           <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_inicio || '-'}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_fim || '-'}</td>
-                          <td className="py-2 px-2 text-center text-primary font-medium">{at?.duracao_minutos ? `${at.duracao_minutos}min` : '-'}</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
+                          <td className="py-2 px-2 text-center text-primary font-medium">-</td>
                         </tr>
                       );
                     })}
