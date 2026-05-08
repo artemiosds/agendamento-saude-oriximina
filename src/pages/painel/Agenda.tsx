@@ -1190,6 +1190,29 @@ const Agenda: React.FC = () => {
         // Update local arrival map immediately for correct sorting
         setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
 
+        // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
+        // Antes de confirmar a chegada, garantimos que os dados conferidos foram persistidos.
+        try {
+          const { data: currentP } = await supabase
+            .from("pacientes")
+            .select("*")
+            .eq("id", ag.pacienteId)
+            .maybeSingle();
+          
+          if (currentP) {
+            await updatePacienteCadastro(
+              ag.pacienteId,
+              currentP,
+              "Confirmar Chegada (Finalização)",
+              user,
+              // @ts-ignore
+              queryClient
+            );
+          }
+        } catch (err) {
+          console.warn("[Agenda] Erro ao persistir dados do paciente antes da chegada:", err);
+        }
+
         // Triage routing is OPT-IN. Default = direct to professional's queue.
         // Only routes to triage when explicitly enabled (per professional or globally).
         let triagemHabilitada = false;
