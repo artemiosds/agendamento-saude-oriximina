@@ -8,7 +8,7 @@ import logoCerFallback from '@/assets/logo-cer-ii.png';
 
 interface FichaData {
   paciente: {
-    nome_completo: string;
+    nome: string;
     cpf: string;
     cns: string;
     data_nascimento: string;
@@ -350,7 +350,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Ficha CER II - ${v(p.nome_completo)}</title>
+  <title>Ficha CER II - ${v(p.nome)}</title>
   <style>${PRINT_CSS}</style>
 </head>
 <body>
@@ -382,7 +382,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   <div class="bloco">
     <div class="bloco-titulo">1. Identificação do Paciente</div>
     <div class="bloco-body">
-      <div class="campo campo-full"><b>Nome Completo:</b> <span style="font-size:11px;font-weight:700">${v(p.nome_completo) || '—'}</span></div>
+      <div class="campo campo-full"><b>Nome Completo:</b> <span style="font-size:11px;font-weight:700">${v(p.nome) || '—'}</span></div>
       <div class="campo campo-full"><b>Nome da Mãe:</b> <span>${v(p.nome_mae) || '—'}</span></div>
       <div class="grid-5">
         <div class="campo"><b>CPF:</b> <span>${v(p.cpf) || '—'}</span></div>

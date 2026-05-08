@@ -45,7 +45,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
 
 interface FichaDados {
   paciente: {
-    nome_completo: string;
+    nome: string;
     cpf: string;
     cns: string;
     data_nascimento: string;
@@ -898,7 +898,7 @@ const Pacientes: React.FC = () => {
         
         return {
           paciente: {
-            nome_completo: data.nome || "",
+            nome: data.nome || "",
             cpf: data.cpf || "",
             cns: data.cns || "",
             data_nascimento: data.data_nascimento || "",
