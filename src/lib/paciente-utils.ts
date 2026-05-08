@@ -133,7 +133,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
     pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.pais_nascimento ?? "",
     
-    // Endereço Estruturado (A origem do problema de "sumir" está aqui)
+    // Endereço Estruturado
     cep: form.cep ?? existingCd.cep ?? "",
     tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
     tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
