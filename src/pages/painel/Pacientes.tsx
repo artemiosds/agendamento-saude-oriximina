@@ -444,50 +444,50 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
-    const cd = p.custom_data || {};
+    const cd = (p as any).custom_data || {};
     setForm({
       ...emptyPacienteForm,
       nome: p.nome || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nome_mae || "",
+      nomeMae: (p as any).nome_mae || p.nomeMae || "",
       telefone: p.telefone || "",
-      dataNascimento: p.data_nascimento || "",
+      dataNascimento: (p as any).data_nascimento || p.dataNascimento || "",
       email: p.email || "",
       endereco: p.endereco || "",
-      descricaoClinica: p.descricao_clinica || "",
+      descricaoClinica: (p as any).descricao_clinica || p.descricaoClinica || "",
       cid: p.cid || "",
-      especialidadeDestino: p.especialidade_destino || "",
-      municipio: p.municipio || "",
-      naturalidade: p.naturalidade || "",
-      naturalidadeUf: p.naturalidade_uf || "",
-      menorIdade: !!p.menor_idade,
-      nomeResponsavel: p.nome_responsavel || "",
-      cpfResponsavel: p.cpf_responsavel || "",
-      ubsOrigem: p.ubs_origem || "",
-      profissionalSolicitante: p.profissional_solicitante || "",
-      tipoEncaminhamento: p.tipo_encaminhamento || "",
-      diagnosticoResumido: p.diagnostico_resumido || "",
-      justificativa: p.justificativa || "",
-      dataEncaminhamento: p.data_encaminhamento || "",
-      documentoUrl: p.documento_url || "",
-      tipoCondicao: p.tipo_condicao || "",
-      mobilidade: p.mobilidade || "",
-      usaDispositivo: !!p.usa_dispositivo,
-      tipoDispositivo: p.tipo_dispositivo || "",
-      comunicacao: p.comunicacao || "",
-      comportamento: p.comportamento || "",
-      usaEquipamentos: !!p.usa_equipamentos,
-      equipamentos: p.equipamentos || [],
-      observacaoEquipamentos: p.observacao_equipamentos || "",
-      outroServicoSus: !!p.outro_servico_sus,
-      transporte: p.transporte || "",
-      turnoPreferido: p.turno_preferido || "",
-      isGestante: !!p.is_gestante,
-      isPne: !!p.is_pne,
-      isAutista: !!p.is_autista,
+      especialidadeDestino: (p as any).especialidade_destino || "",
+      municipio: (p as any).municipio || "",
+      naturalidade: (p as any).naturalidade || "",
+      naturalidadeUf: (p as any).naturalidade_uf || "",
+      menorIdade: !!(p as any).menor_idade,
+      nomeResponsavel: (p as any).nome_responsavel || "",
+      cpfResponsavel: (p as any).cpf_responsavel || "",
+      ubsOrigem: (p as any).ubs_origem || "",
+      profissionalSolicitante: (p as any).profissional_solicitante || "",
+      tipoEncaminhamento: (p as any).tipo_encaminhamento || "",
+      diagnosticoResumido: (p as any).diagnostico_resumido || "",
+      justificativa: (p as any).justificativa || "",
+      dataEncaminhamento: (p as any).data_encaminhamento || "",
+      documentoUrl: (p as any).documento_url || "",
+      tipoCondicao: (p as any).tipo_condicao || "",
+      mobilidade: (p as any).mobilidade || "",
+      usaDispositivo: !!(p as any).usa_dispositivo,
+      tipoDispositivo: (p as any).tipo_dispositivo || "",
+      comunicacao: (p as any).comunicacao || "",
+      comportamento: (p as any).comportamento || "",
+      usaEquipamentos: !!(p as any).usa_equipamentos,
+      equipamentos: (p as any).equipamentos || [],
+      observacaoEquipamentos: (p as any).observacao_equipamentos || "",
+      outroServicoSus: !!(p as any).outro_servico_sus,
+      transporte: (p as any).transporte || "",
+      turnoPreferido: (p as any).turno_preferido || "",
+      isGestante: !!((p as any).is_gestante || p.isGestante),
+      isPne: !!((p as any).is_pne || p.isPne),
+      isAutista: !!((p as any).is_artista || p.isAutista),
       
-      // Re-idratação estruturada do custom_data para o formulário
+      // Reidratação estruturada do custom_data
       sexo: cd.sexo || "",
       racaCor: cd.racaCor || cd.raca_cor || "",
       etnia: cd.etnia || "",
@@ -495,8 +495,8 @@ const Pacientes: React.FC = () => {
       nacionalidade: cd.nacionalidade || "brasileiro",
       paisNascimento: cd.paisNascimento || cd.pais_nascimento || "",
       cep: cd.cep || "",
-      tipoLogradouroDne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || "",
-      tipoLogradouroCodigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
+      tipoLogradouroDne: cd.tipo_logradouro_dne || cd.tipoLogradouroDne || "",
+      tipoLogradouroCodigo: cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || "",
       logradouro: cd.logradouro || "",
       numero: cd.numero || "",
       complemento: cd.complemento || "",
@@ -1373,12 +1373,26 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
               <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="CID" valor={cidVal} />
+              <PCampo label="Sexo" valor={(detalhePaciente as any).custom_data?.sexo} />
+              <PCampo label="Raça/Cor" valor={(detalhePaciente as any).custom_data?.raca_cor || (detalhePaciente as any).custom_data?.racaCor} />
+              <PCampo label="Nacionalidade" valor={(detalhePaciente as any).custom_data?.nacionalidade} />
+              <PCampo label="Naturalidade" valor={detalhePaciente.naturalidade} />
+            </PSecao>
+
+            <PSecao titulo="Endereço">
+              <PCampo label="CEP" valor={(detalhePaciente as any).custom_data?.cep} />
+              <PCampo label="Logradouro" valor={[(detalhePaciente as any).custom_data?.tipo_logradouro_dne || (detalhePaciente as any).custom_data?.tipoLogradouroDne, (detalhePaciente as any).custom_data?.logradouro].filter(Boolean).join(' ')} />
+              <PCampo label="Número" valor={(detalhePaciente as any).custom_data?.numero} />
+              <PCampo label="Complemento" valor={(detalhePaciente as any).custom_data?.complemento} />
+              <PCampo label="Bairro" valor={(detalhePaciente as any).custom_data?.bairro} />
+              <PCampo label="Município" valor={detalhePaciente.municipio} />
+              <PCampo label="UF" valor={(detalhePaciente as any).custom_data?.uf} />
             </PSecao>
 
             <PSecao titulo="Contato">
-              <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label={L('telefone', 'Telefone principal')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label="Telefone secundário" valor={formatTelefoneBR((detalhePaciente as any).custom_data?.telefone_secundario || (detalhePaciente as any).custom_data?.telefoneSecundario)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
-              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
             <PSecao titulo="Histórico">

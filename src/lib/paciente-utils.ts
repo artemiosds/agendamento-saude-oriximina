@@ -133,7 +133,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
     pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.pais_nascimento ?? "",
     
-    // Endereço Estruturado (A origem do problema de "sumir" está aqui)
+    // Endereço Estruturado
     cep: form.cep ?? existingCd.cep ?? "",
     tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
     tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
@@ -261,33 +261,46 @@ export async function persistPaciente(
   }
 
   if (result.error) {
-    console.error(`[persistPaciente] Erro (${origem}):`, result.error);
+    console.error(`[Paciente] Erro ao salvar cadastro`, {
+      origem,
+      pacienteId,
+      error: result.error,
+      payloadResumo: { nome: payload.nome, cpf: payload.cpf ? '***' : '' }
+    });
     throw result.error;
   }
 
-  // Auditoria e Cache
-  if (pacienteId) {
-    const changes: any = {};
+  // Auditoria
+  const changes: any = {};
+  if (pacienteId && existing) {
     Object.keys(payload).forEach(k => {
       if (k !== "custom_data" && String(payload[k]) !== String(existing?.[k])) {
         changes[k] = { de: existing?.[k], para: payload[k] };
       }
     });
-    if (Object.keys(changes).length > 0) {
-      await auditService.log({
-        acao: pacienteId ? "atualizar" : "cadastrar",
-        entidade: "paciente",
-        entidadeId: result.data.id,
-        modulo: origem,
-        user,
-        detalhes: { changes },
-      }).catch(() => {});
-    }
+  }
+
+  if (!pacienteId || Object.keys(changes).length > 0) {
+    await auditService.log({
+      acao: pacienteId ? "editar" : "cadastrar",
+      entidade: "paciente",
+      entidadeId: result.data.id,
+      modulo: "pacientes",
+      user,
+      detalhes: { 
+        origem,
+        acao: pacienteId ? "edicao" : "criacao",
+        changes: Object.keys(changes).length > 0 ? changes : undefined
+      },
+    }).catch(() => {});
   }
 
   if (queryClient) {
     await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
     if (pacienteId) await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(pacienteId) });
+    await queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
+    await queryClient.invalidateQueries({ queryKey: ['agenda'] });
+    await queryClient.invalidateQueries({ queryKey: ['fila_espera'] });
   }
 
   return result.data;
