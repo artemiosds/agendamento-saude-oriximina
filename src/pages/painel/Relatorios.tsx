@@ -391,7 +391,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, filteredAtendimentos, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [filtered, prontuariosFull, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
