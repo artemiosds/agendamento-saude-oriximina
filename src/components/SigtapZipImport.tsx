@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Download, FileArchive, CheckCircle2, XCircle, AlertTriangle,
-  Loader2, ExternalLink, Upload, Github, Cloud,
+  Loader2, ExternalLink, Upload, Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -505,7 +505,7 @@ const SigtapZipImport: React.FC = () => {
           <Tabs value={source} onValueChange={(v) => setSource(v as Source)} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="github" className="gap-2">
-                <Github className="w-4 h-4" /> Repositório GitHub
+                <ExternalLink className="w-4 h-4" /> Repositório GitHub
               </TabsTrigger>
               <TabsTrigger value="upload" className="gap-2">
                 <Upload className="w-4 h-4" /> Upload de ZIP
