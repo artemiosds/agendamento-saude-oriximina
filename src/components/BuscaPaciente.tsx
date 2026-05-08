@@ -194,13 +194,15 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
                 type="button"
                 onClick={() => {
                   setSelectedPaciente(paciente);
-                  onChange(paciente.id, paciente.nome);
+                  // Garantir que passamos o nome correto (priorizando nome_completo)
+                  const nomeParaExibir = paciente.nome_completo || paciente.nome;
+                  onChange(paciente.id, nomeParaExibir);
                   setAberto(false);
                   setQuery('');
                 }}
                 className="w-full border-b border-border px-3 py-2 text-left transition-colors last:border-0 hover:bg-accent"
               >
-                <p className="text-sm font-medium">{paciente.nome || paciente.nome_completo}</p>
+                <p className="text-sm font-medium">{paciente.nome_completo || paciente.nome}</p>
                 <p className="text-xs text-muted-foreground">
                   {paciente.cpf ? `CPF: ${paciente.cpf} · ` : ''}
                   {paciente.telefone ? `Tel: ${paciente.telefone}` : 'Telefone não informado'}
