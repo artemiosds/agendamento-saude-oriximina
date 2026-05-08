@@ -646,8 +646,9 @@ const Pacientes: React.FC = () => {
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch (err: any) {
-      console.error("[Pacientes] Erro real ao salvar paciente", err);
-      toast.error("Não foi possível salvar o paciente. Verifique os campos obrigatórios e tente novamente.");
+      console.error("[Pacientes] Erro ao salvar paciente:", err);
+      const msg = err?.message || err?.details || "Verifique os campos obrigatórios.";
+      toast.error(`Não foi possível salvar o paciente: ${msg}`);
     } finally {
       setSaving(false);
     }

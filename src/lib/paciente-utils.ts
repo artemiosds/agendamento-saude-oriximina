@@ -111,8 +111,10 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
         out[k] = {};
         continue;
       }
-      // Para colunas que aceitam NULL, mantemos null se o banco permitir (is_nullable=YES)
-      // Mas para 'pacientes', quase tudo é NOT NULL conforme o schema lido.
+      // Para pacientes, as colunas são majoritariamente NOT NULL no schema lido.
+      // Em vez de deixar undefined (que remove do payload de UPDATE), forçamos valor vazio 
+      // ou mantemos undefined se quisermos apenas um "patch". 
+      // Para o persistPaciente ser seguro, convertemos null -> safe default.
       out[k] = ""; 
       continue;
     }
@@ -132,11 +134,11 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
  * para o padrão de persistência do sistema.
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
-  const resolve = (f: string, f2?: string) => {
-    let v = form[f] ?? form[f2 || ""];
+  const resolve = (f: string, f2?: string, f3?: string) => {
+    let v = form[f] ?? form[f2 || ""] ?? form[f3 || ""];
     
     if ((v === null || v === undefined) && existingPatient) {
-      v = existingPatient[f] ?? existingPatient[f2 || ""];
+      v = existingPatient[f] ?? existingPatient[f2 || ""] ?? existingPatient[f3 || ""];
     }
 
     if (v === undefined || v === null) return "";
@@ -151,24 +153,27 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     return !!v;
   };
 
-  const existingCd = existingPatient?.custom_data || {};
+  const existingCd = (existingPatient?.custom_data || existingPatient?.customData || {});
+  const formCd = (form?.custom_data || form?.customData || {});
+
   const customData = {
     ...existingCd,
-    sexo: form.sexo ?? existingCd.sexo ?? "",
-    raca_cor: form.raca_cor ?? form.racaCor ?? existingCd.raca_cor ?? existingCd.racaCor ?? "",
-    etnia: form.etnia ?? existingCd.etnia ?? "",
-    etnia_outra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etnia_outra ?? existingCd.etniaOutra ?? "",
-    nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
-    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.paisNascimento ?? "",
-    cep: form.cep ?? existingCd.cep ?? "",
-    tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
-    tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
-    logradouro: form.logradouro ?? existingCd.logradouro ?? "",
-    numero: form.numero ?? existingCd.numero ?? "",
-    complemento: form.complemento ?? existingCd.complemento ?? "",
-    bairro: form.bairro ?? existingCd.bairro ?? "",
-    uf: form.uf ?? existingCd.uf ?? "PA",
-    telefone_secundario: form.telefone_secundario ?? form.telefoneSecundario ?? existingCd.telefone_secundario ?? existingCd.telefoneSecundario ?? "",
+    ...formCd, // Prioridade para o que veio do form se for um objeto completo
+    sexo: form.sexo ?? formCd.sexo ?? existingCd.sexo ?? "",
+    raca_cor: form.raca_cor ?? form.racaCor ?? formCd.raca_cor ?? formCd.racaCor ?? existingCd.raca_cor ?? existingCd.racaCor ?? "",
+    etnia: form.etnia ?? formCd.etnia ?? existingCd.etnia ?? "",
+    etnia_outra: form.etnia_outra ?? form.etniaOutra ?? formCd.etnia_outra ?? formCd.etniaOutra ?? existingCd.etnia_outra ?? existingCd.etniaOutra ?? "",
+    nacionalidade: form.nacionalidade ?? formCd.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
+    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? formCd.pais_nascimento ?? formCd.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.paisNascimento ?? "",
+    cep: form.cep ?? formCd.cep ?? existingCd.cep ?? "",
+    tipo_logradouro_dne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? formCd.tipo_logradouro_dne ?? formCd.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouroDne ?? "",
+    tipo_logradouro_codigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? formCd.tipo_logradouro_codigo ?? formCd.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? existingCd.tipoLogradouroCodigo ?? "",
+    logradouro: form.logradouro ?? formCd.logradouro ?? existingCd.logradouro ?? "",
+    numero: form.numero ?? formCd.numero ?? existingCd.numero ?? "",
+    complemento: form.complemento ?? formCd.complemento ?? existingCd.complemento ?? "",
+    bairro: form.bairro ?? formCd.bairro ?? existingCd.bairro ?? "",
+    uf: form.uf ?? formCd.uf ?? existingCd.uf ?? "PA",
+    telefone_secundario: form.telefone_secundario ?? form.telefoneSecundario ?? formCd.telefone_secundario ?? formCd.telefoneSecundario ?? existingCd.telefone_secundario ?? existingCd.telefoneSecundario ?? "",
     data_ultima_validacao: new Date().toISOString(),
   };
 

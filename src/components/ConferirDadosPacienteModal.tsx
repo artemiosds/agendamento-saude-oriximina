@@ -274,7 +274,8 @@ export function ConferirDadosPacienteModal({
       if (!silent) toast.success("Dados do paciente atualizados com sucesso!");
     } catch (e: any) {
       console.error("[ConferirDados] Erro ao salvar paciente:", e);
-      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "Erro desconhecido"));
+      const msg = e?.message || e?.details || "Erro desconhecido";
+      if (!silent) toast.error(`Erro ao salvar: ${msg}`);
       throw e;
     } finally {
       setSaving(false);
