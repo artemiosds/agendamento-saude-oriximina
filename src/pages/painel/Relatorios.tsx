@@ -101,117 +101,134 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentos]);
 
+  const normalizeStatus = useCallback((status: string): 'concluido' | 'pendente' | 'falta' | 'cancelado' | 'remarcado' | 'retorno' | string => {
+    if (!status) return 'pendente';
+    const s = status.toLowerCase().trim();
+    
+    const concluidos = ['concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 'prontuario_concluido'];
+    const pendentes = ['pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 'aguardando_triagem', 'confirmado_chegada'];
+    const faltas = ['faltou', 'falta', 'ausente', 'nao_compareceu', 'não compareceu'];
+    const cancelados = ['cancelado', 'cancelada', 'cancelamento'];
+    const remarcados = ['remarcado', 'reagendado', 'reagendada'];
+    const retornos = ['retorno', 'consulta_retorno', 'atendimento_retorno'];
+
+    if (concluidos.includes(s)) return 'concluido';
+    if (pendentes.includes(s)) return 'pendente';
+    if (faltas.includes(s)) return 'falta';
+    if (cancelados.includes(s)) return 'cancelado';
+    if (remarcados.includes(s)) return 'remarcado';
+    if (retornos.includes(s)) return 'retorno';
+    
+    return s;
+  }, []);
+
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [agendamentosFull, setAgendamentosFull] = useState<any[]>([]);
+  const [prontuariosFull, setProntuariosFull] = useState<any[]>([]);
+
   const loadReportData = useCallback(async () => {
+    if (isFetching) return;
+    setIsFetching(true);
+    
     try {
-      let qAt = supabase.from('atendimentos').select('id,agendamento_id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,procedimento,data,hora_inicio,hora_fim,duracao_minutos,status');
-      let qFila = supabase.from('fila_espera').select('id,paciente_id,paciente_nome,unidade_id,profissional_id,setor,prioridade,prioridade_perfil,status,posicao,hora_chegada,hora_chamada,criado_em');
-      let qTriage = supabase.from('triage_records').select('id,agendamento_id,tecnico_id,criado_em,confirmado_em,iniciado_em');
-      // Universal unit isolation (admin.sms sees all)
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qAt = qAt.eq('unidade_id', user.unidadeId);
-        qFila = qFila.eq('unidade_id', user.unidadeId);
-      }
-      if (user?.role === 'profissional' && user.id) {
-        qAt = qAt.eq('profissional_id', user.id);
-        qFila = qFila.eq('profissional_id', user.id);
-      }
-      if (user?.role === 'tecnico' && user.id) {
-        qTriage = qTriage.eq('tecnico_id', user.id);
-      }
+      const filters = { 
+        unit: filterUnit, 
+        prof: filterProf, 
+        status: filterStatus, 
+        type: filterTipo, 
+        dateFrom, 
+        dateTo 
+      };
+      console.log("[Relatórios] buscando dados com filtros:", filters);
 
-      let qProc = (supabase as any).from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, procedimentos:procedimento_id(nome), prontuarios:prontuario_id(profissional_nome,unidade_id,data_atendimento)');
-
-      let qCycles = supabase.from('treatment_cycles').select('id,patient_id,professional_id,unit_id,specialty,treatment_type,status,total_sessions,sessions_done,frequency,start_date,end_date_predicted,created_at');
-      const loadAllTreatmentSessions = async () => {
-        const pageSize = 1000;
+      const fetchAllPages = async (table: string, dateField: string) => {
+        let allData: any[] = [];
         let from = 0;
-        let allSessions: any[] = [];
-
+        const PAGE_SIZE = 1000;
+        
         while (true) {
-          let query = supabase
-            .from('treatment_sessions')
-            .select('id,cycle_id,patient_id,professional_id,status,scheduled_date,session_number,absence_type')
-            .range(from, from + pageSize - 1);
+          let query = supabase.from(table).select('*').range(from, from + PAGE_SIZE - 1);
+          
+          if (dateFrom) {
+            query = query.gte(dateField, dateFrom);
+          }
+          if (dateTo) {
+            // Include full day
+            query = query.lte(dateField, dateTo);
+          }
 
-          if (user?.role === 'profissional') {
-            query = query.eq('professional_id', user.id);
+          if (user?.unidadeId && user?.usuario !== 'admin.sms') {
+            query = query.eq('unidade_id', user.unidadeId);
+          }
+          
+          if (table === 'agendamentos') {
+            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+            if (filterStatus !== 'all') query = query.eq('status', filterStatus);
+            if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
+          } else if (table === 'prontuarios') {
+            if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
+            if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
           }
 
           const { data, error } = await query;
           if (error) throw error;
           if (!data || data.length === 0) break;
-
-          allSessions = allSessions.concat(data);
-
-          if (data.length < pageSize) break;
-          from += pageSize;
+          
+          allData = allData.concat(data);
+          if (data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
         }
-
-        return allSessions;
+        return allData;
       };
 
-      if (user?.role === 'profissional') {
-        qCycles = qCycles.eq('professional_id', user.id);
-      }
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qCycles = qCycles.eq('unit_id', user.unidadeId);
-      }
-
-      let qNursing = supabase.from('nursing_evaluations').select('id,patient_id,unit_id,evaluation_date,resultado,prioridade,avaliacao_risco,created_at');
-      let qMulti = supabase.from('multiprofessional_evaluations').select('id,patient_id,unit_id,evaluation_date,specialty,parecer,professional_nome,created_at');
-      let qPts = supabase.from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,created_at');
-      if (user?.unidadeId && user?.usuario !== 'admin.sms') {
-        qNursing = qNursing.eq('unit_id', user.unidadeId);
-        qMulti = qMulti.eq('unit_id', user.unidadeId);
-        qPts = qPts.eq('unit_id', user.unidadeId);
-      }
-
-      const [
-        { data: atData },
-        { data: filaData },
-        { data: triageData },
-        { data: procData },
-        { data: cyclesData },
-        sessionsData,
-        { data: nursingData },
-        { data: multiData },
-        { data: ptsDataResult },
-      ] = await Promise.all([
-        qAt,
-        qFila,
-        qTriage,
-        qProc,
-        qCycles,
-        loadAllTreatmentSessions(),
-        qNursing,
-        qMulti,
-        qPts,
+      const [ags, prons, filaData, triageData, cyclesData, sessData, nursingData, multiData, ptsDataResult] = await Promise.all([
+        fetchAllPages('agendamentos', 'data'),
+        fetchAllPages('prontuarios', 'data_atendimento'),
+        supabase.from('fila_espera').select('*').limit(2000), // Fila doesn't usually have 1000s of active records
+        supabase.from('triage_records').select('*'),
+        supabase.from('treatment_cycles').select('*'),
+        supabase.from('treatment_sessions').select('*'),
+        supabase.from('nursing_evaluations').select('*'),
+        supabase.from('multiprofessional_evaluations').select('*'),
+        supabase.from('pts').select('*'),
       ]);
 
-      if (atData) setAtendimentosDB(atData);
-      if (filaData) setFilaDB(filaData);
-      if (triageData) setTriagensDB(triageData as TriagemDB[]);
-      if (procData) {
-        setProcedimentosDB(procData.map((r: any) => ({
-          prontuario_id: r.prontuario_id,
-          procedimento_id: r.procedimento_id,
-          proc_nome: r.procedimentos?.nome || '',
-          prof_nome: r.prontuarios?.profissional_nome || '',
-          unidade_id: r.prontuarios?.unidade_id || '',
-          data: r.prontuarios?.data_atendimento || '',
-        })));
-      }
-      if (cyclesData) setTreatmentCycles(cyclesData);
-      if (sessionsData) setTreatmentSessions(sessionsData);
-      if (nursingData) setNursingEvals(nursingData);
-      if (multiData) setMultiEvals(multiData);
-      if (ptsDataResult) setPtsData(ptsDataResult);
+      setAgendamentosFull(ags || []);
+      setProntuariosFull(prons || []);
+      if (filaData.data) setFilaDB(filaData.data);
+      if (triageData.data) setTriagensDB(triageData.data as TriagemDB[]);
+      if (cyclesData.data) setTreatmentCycles(cyclesData.data);
+      if (sessData.data) setTreatmentSessions(sessData.data);
+      if (nursingData.data) setNursingEvals(nursingData.data);
+      if (multiData.data) setMultiEvals(multiData.data);
+      if (ptsDataResult.data) setPtsData(ptsDataResult.data);
+      
       setLastUpdated(new Date());
-    } catch (err) { console.error('Error loading report data:', err); }
-  }, [user]);
+      setIsInitialLoading(false);
+      
+      console.log("[Relatórios] agendamentos retornados:", ags?.length);
+      console.log("[Relatórios] prontuários retornados:", prons?.length);
+    } catch (err) { 
+      console.error('Error loading report data:', err); 
+    } finally {
+      setIsFetching(false);
+    }
+  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo]);
 
-  useEffect(() => { loadReportData(); }, [loadReportData]);
+  // Use a stable ref to avoid infinite loops if loadReportData changes
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!hasLoadedRef.current) {
+      loadReportData();
+      hasLoadedRef.current = true;
+    }
+  }, [loadReportData]);
+
+  const handleRefresh = () => {
+    loadReportData();
+  };
 
   // Realtime subscription for auto-refresh
   useRealtimeSubscription({
