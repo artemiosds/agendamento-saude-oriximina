@@ -4,6 +4,50 @@ import { auditService } from "@/services/auditService";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 
 /**
+ * Colunas NOT NULL (sem permitir null) na tabela `pacientes`.
+ * Para essas, null/undefined deve ser convertido para "" (texto) ou false (boolean)
+ * antes do INSERT/UPDATE para evitar erros do tipo
+ * "null value in column ... violates not-null constraint".
+ */
+const PACIENTE_TEXT_NOT_NULL = new Set([
+  "nome", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
+  "nome_mae", "municipio", "naturalidade", "naturalidade_uf", "unidade_id",
+  "data_nascimento", "descricao_clinica", "cid", "especialidade_destino",
+  "turno_preferido", "transporte", "observacao_equipamentos",
+  "tipo_condicao", "mobilidade", "tipo_dispositivo", "comunicacao", "comportamento",
+  "nome_responsavel", "cpf_responsavel", "ubs_origem", "profissional_solicitante",
+  "tipo_encaminhamento", "diagnostico_resumido", "justificativa",
+  "data_encaminhamento", "documento_url",
+]);
+
+const PACIENTE_BOOL_NOT_NULL = new Set([
+  "is_gestante", "is_pne", "is_autista", "menor_idade",
+  "outro_servico_sus", "usa_dispositivo", "usa_equipamentos",
+]);
+
+/**
+ * Saneia um payload destinado à tabela `pacientes`:
+ * - Remove chaves com valor `undefined` (preserva valor antigo no banco).
+ * - Converte `null` em "" para colunas TEXT NOT NULL.
+ * - Converte `null` em false para colunas BOOLEAN NOT NULL.
+ * Resultado: nunca enviar null para colunas NOT NULL.
+ */
+export function sanitizePacientePayload<T extends Record<string, any>>(payload: T): T {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === undefined) continue; // preserva valor existente
+    if (v === null) {
+      if (PACIENTE_TEXT_NOT_NULL.has(k)) { out[k] = ""; continue; }
+      if (PACIENTE_BOOL_NOT_NULL.has(k)) { out[k] = false; continue; }
+      // Para outras colunas, omita o null (deixa default ou valor antigo)
+      continue;
+    }
+    out[k] = v;
+  }
+  return out as T;
+}
+
+/**
  * Normaliza os dados do paciente vindos do formulário para o formato do banco.
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
@@ -79,7 +123,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     payload.endereco = enderecoTexto;
   }
 
-  return payload;
+  return sanitizePacientePayload(payload);
 }
 
 /**
@@ -109,7 +153,7 @@ export async function updatePacienteCadastro(
   // 2. Normalizar payload com merge
   const updatePayload = normalizePatientPayload(dados, existing);
 
-  // 3. Update no banco
+  // 3. Update no banco — payload já saneado por normalizePatientPayload/sanitizePacientePayload
   const { data: updated, error: updateError } = await supabase
     .from("pacientes")
     .update(updatePayload)
@@ -117,7 +161,18 @@ export async function updatePacienteCadastro(
     .select()
     .single();
 
-  if (updateError) throw updateError;
+  if (updateError) {
+    console.error("[updatePacienteCadastro] Erro Supabase:", {
+      origem,
+      pacienteId,
+      code: (updateError as any)?.code,
+      message: updateError.message,
+      details: (updateError as any)?.details,
+      hint: (updateError as any)?.hint,
+      payloadKeys: Object.keys(updatePayload),
+    });
+    throw updateError;
+  }
 
   // 4. Auditoria
   const camposAlterados: Record<string, { de: any; para: any }> = {};

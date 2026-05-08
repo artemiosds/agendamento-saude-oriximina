@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { sanitizePacientePayload } from "@/lib/paciente-utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -187,18 +188,18 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         contato_emergencia_telefone: editData.contato_emergencia_telefone.trim(),
       };
 
-      const { error } = await supabase.from("pacientes").update({
-        nome: editData.nome.trim(),
-        data_nascimento: editData.data_nascimento,
-        cpf: editData.cpf,
+      const { error } = await supabase.from("pacientes").update(sanitizePacientePayload({
+        nome: (editData.nome ?? "").trim(),
+        data_nascimento: editData.data_nascimento ?? "",
+        cpf: editData.cpf ?? "",
         cns: (editData.cns || "").replace(/\D/g, "").slice(0, 15),
-        cid: editData.cid,
-        nome_mae: editData.nome_mae,
-        endereco: editData.endereco,
-        telefone: editData.telefone,
-        email: editData.email,
+        cid: editData.cid ?? "",
+        nome_mae: editData.nome_mae ?? "",
+        endereco: editData.endereco ?? "",
+        telefone: editData.telefone ?? "",
+        email: editData.email ?? "",
         custom_data: newCustom,
-      }).eq("id", pacienteId);
+      })).eq("id", pacienteId);
 
       if (error) throw error;
 

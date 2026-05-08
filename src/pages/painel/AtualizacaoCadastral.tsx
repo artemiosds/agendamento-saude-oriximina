@@ -19,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/ui/page-header";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { sanitizePacientePayload } from "@/lib/paciente-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import CadastroPacienteForm, { emptyPacienteForm } from "@/components/CadastroPacienteForm";
@@ -149,9 +150,9 @@ const AtualizacaoCadastral: React.FC = () => {
         nome: editForm.nome,
         cpf: editForm.cpf,
         cns: (editForm.cns || "").replace(/\D/g, "").slice(0, 15),
-        nomeMae: editForm.nomeMae,
+        nome_mae: editForm.nomeMae,
         telefone: editForm.telefone,
-        dataNascimento: editForm.dataNascimento,
+        data_nascimento: editForm.dataNascimento,
         email: editForm.email,
         endereco: editForm.endereco,
         municipio: editForm.municipio,
@@ -189,7 +190,7 @@ const AtualizacaoCadastral: React.FC = () => {
         transporte: editForm.transporte,
         turno_preferido: editForm.turnoPreferido,
 
-        customData: {
+        custom_data: {
           ...(editForm.customData || {}),
           atualizado_em: new Date().toISOString(),
           atualizado_por: user?.id || "",
@@ -200,7 +201,7 @@ const AtualizacaoCadastral: React.FC = () => {
       // yet, but we'll also call refreshPacientes to be safe.
       const { error } = await supabase
         .from("pacientes")
-        .update(updateData)
+        .update(sanitizePacientePayload(updateData))
         .eq("id", selectedPatient.id);
 
       if (error) throw error;
