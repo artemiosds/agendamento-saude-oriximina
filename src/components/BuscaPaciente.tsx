@@ -107,7 +107,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
           'id, nome_completo, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
         .or(`nome_completo.ilike.%${ilikeTerm}%,nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
-        .order('nome', { ascending: true })
+        .order('nome_completo', { ascending: true })
         .limit(10);
 
       if (!cancelled) {
