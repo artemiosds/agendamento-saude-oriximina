@@ -277,6 +277,7 @@ export function ConferirDadosPacienteModal({
 
       const updatePayload: any = {
         nome: formToSave.nome,
+        nome_completo: formToSave.nome,
         nome_mae: formToSave.nome_mae,
         data_nascimento: formToSave.data_nascimento || "",
         cpf: formToSave.cpf,
