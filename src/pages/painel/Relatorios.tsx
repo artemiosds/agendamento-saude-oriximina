@@ -831,8 +831,8 @@ const Relatorios: React.FC = () => {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
-        const at = filteredAtendimentos.find(at => at.agendamento_id === a.id);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, at?.hora_inicio || '', at?.hora_fim || '', at?.duracao_minutos?.toString() || ''];
+        // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
       });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
