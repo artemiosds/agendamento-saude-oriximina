@@ -187,8 +187,35 @@ interface Props {
 
 const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
-  const setCustom = (key: string, value: any) =>
-    onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
+  const setCustom = (key: string, value: any) => {
+    // Sincroniza o campo de topo se houver um mapeamento
+    const mapping: Record<string, keyof PacienteFormData> = {
+      cep: "cep",
+      logradouro: "logradouro",
+      numero: "numero",
+      complemento: "complemento",
+      bairro: "bairro",
+      uf: "uf",
+      nacionalidade: "nacionalidade",
+      sexo: "sexo",
+      racaCor: "racaCor",
+      raca_cor: "racaCor",
+      etnia: "etnia",
+      etniaOutra: "etniaOutra",
+      paisNascimento: "paisNascimento",
+      tipoLogradouro: "tipoLogradouroDne",
+      tipoLogradouroCodigo: "tipoLogradouroCodigo",
+      telefoneSecundario: "telefoneSecundario"
+    };
+
+    const newState = { ...form };
+    if (mapping[key]) {
+      // @ts-ignore
+      newState[mapping[key]] = value;
+    }
+    newState.customData = { ...(form.customData || {}), [key]: value };
+    onChange(newState);
+  };
   const cd = form.customData || {};
 
   const [uploading, setUploading] = useState(false);
