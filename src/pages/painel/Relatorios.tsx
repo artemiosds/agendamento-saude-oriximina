@@ -578,10 +578,8 @@ const Relatorios: React.FC = () => {
   }, [filtered]);
 
   const statusData = useMemo(() => [
-    { name: 'Confirmados', value: stats.confirmados },
-    { name: 'Pendentes', value: stats.pendentes },
     { name: 'Concluídos', value: stats.concluidos },
-    { name: 'Em Atendimento', value: stats.emAtendimento },
+    { name: 'Pendentes', value: stats.pendentes },
     { name: 'Faltas', value: stats.faltas },
     { name: 'Cancelados', value: stats.cancelados },
     { name: 'Remarcados', value: stats.remarcados },
