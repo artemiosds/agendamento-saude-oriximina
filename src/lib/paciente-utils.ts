@@ -123,7 +123,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     payload.endereco = enderecoTexto;
   }
 
-  return payload;
+  return sanitizePacientePayload(payload);
 }
 
 /**
