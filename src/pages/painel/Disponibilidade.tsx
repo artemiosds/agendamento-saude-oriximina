@@ -784,154 +784,165 @@ const Disponibilidade: React.FC = () => {
 
             {/* === POR TURNO mode === */}
             {modo === 'por_turno' && (
-              <>
-                {activeTurnos.length === 0 ? (
-                  <Card className="border-l-4 border-l-warning">
-                    <CardContent className="p-4 text-sm text-warning">
-                      Nenhum turno ativo cadastrado. Configure turnos em Configurações → Fluxo de Atendimento → Turnos.
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <>
-                    {/* Turnos + vagas */}
-                    <div>
-                      <Label className="mb-2 block">Turnos Disponíveis</Label>
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
-                          <span>Turno</span>
-                          <span className="text-center px-3">Horário</span>
-                          <span className="text-center px-3">Vagas</span>
-                          <span className="text-center px-3">Ativo</span>
-                        </div>
-                        {activeTurnos.map(turno => (
-                          <div key={turno.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center px-3 py-2.5 border-b border-border last:border-b-0">
-                            <span className="text-sm font-medium flex items-center gap-2">
-                              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                              {turno.nome}
-                            </span>
-                            <span className="text-xs text-muted-foreground text-center px-3">{turno.horaInicio} - {turno.horaFim}</span>
-                            <div className="px-3">
-                              <Input
-                                type="number" min={1} value={turnoVagas[turno.id] || 20}
-                                onChange={e => setTurnoVagas(prev => ({ ...prev, [turno.id]: parseInt(e.target.value) || 1 }))}
-                                className="h-8 w-16 text-xs text-center"
-                              />
-                            </div>
-                            <div className="px-3 flex justify-center">
-                              <Switch
-                                checked={turnoVagas[turno.id] !== undefined}
-                                onCheckedChange={v => {
-                                  if (v) {
-                                    setTurnoVagas(prev => ({ ...prev, [turno.id]: 20 }));
-                                  } else {
-                                    setTurnoVagas(prev => { const n = { ...prev }; delete n[turno.id]; return n; });
-                                    setTurnoDays(prev => prev.map(td => ({ ...td, turnosAtivos: td.turnosAtivos.filter(id => id !== turno.id) })));
-                                  }
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Days + turno selection */}
-                    <div>
-                      <Label className="mb-2 block">Dias da Semana</Label>
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div className="grid grid-cols-[1fr_auto_1fr] gap-0 bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
-                          <span>Dia</span>
-                          <span className="text-center px-2">Ativo</span>
-                          <span>Turnos ativos neste dia</span>
-                        </div>
-                        {turnoDays.map((td, i) => {
-                          const isFds = i === 0 || i === 6;
-                          const enabledTurnos = activeTurnos.filter(t => turnoVagas[t.id] !== undefined);
-                          return (
-                            <div key={i} className={cn(
-                              "grid grid-cols-[1fr_auto_1fr] gap-0 items-center px-3 py-2.5 border-b border-border last:border-b-0",
-                              !td.ativo && "bg-muted/20",
-                              isFds && td.ativo && "bg-orange-500/5",
+              <div className="space-y-4">
+                <Accordion type="multiple" className="w-full border rounded-lg overflow-hidden">
+                  {configDias.map((dia, diaIndex) => {
+                    const isFds = diaIndex === 0 || diaIndex === 6;
+                    return (
+                      <AccordionItem key={diaIndex} value={`dia-${diaIndex}`} className="border-b last:border-0">
+                        <div className={cn(
+                          "flex items-center justify-between px-4 py-2",
+                          !dia.ativo && "bg-muted/30",
+                          isFds && dia.ativo && "bg-orange-500/5"
+                        )}>
+                          <div className="flex items-center gap-3">
+                            <Switch 
+                              checked={dia.ativo} 
+                              onCheckedChange={(v) => toggleDiaConfig(diaIndex, v)} 
+                            />
+                            <span className={cn(
+                              "font-semibold text-sm",
+                              !dia.ativo && "text-muted-foreground",
+                              isFds && dia.ativo && "text-orange-600"
                             )}>
-                              <span className={cn(
-                                "text-sm font-medium",
-                                td.ativo ? "text-foreground" : "text-muted-foreground",
-                                isFds && td.ativo && "text-orange-600 dark:text-orange-400",
-                              )}>
-                                {diasSemanaFull[i]}
-                              </span>
-                              <div className="flex justify-center px-2">
-                                <Switch checked={td.ativo} onCheckedChange={v => toggleTurnoDay(i, v)} />
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {td.ativo ? (
-                                  enabledTurnos.length > 0 ? enabledTurnos.map(turno => (
-                                    <button
-                                      key={turno.id}
-                                      onClick={() => toggleTurnoForDay(i, turno.id)}
-                                      className={cn(
-                                        "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
-                                        td.turnosAtivos.includes(turno.id)
-                                          ? "bg-primary/10 text-primary border-primary/30"
-                                          : "bg-muted/50 text-muted-foreground border-border"
-                                      )}
-                                    >
-                                      {td.turnosAtivos.includes(turno.id) ? '✅' : '○'} {turno.nome}
-                                    </button>
-                                  )) : (
-                                    <span className="text-[11px] text-muted-foreground">Ative turnos acima</span>
-                                  )
-                                ) : (
-                                  <span className="text-[11px] text-muted-foreground">—</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Summary */}
-                    <Card className="bg-muted/30 border border-border">
-                      <CardContent className="p-4">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumo de Disponibilidade</h4>
-                        <div className="space-y-2">
-                          {activeTurnos.filter(t => turnoVagas[t.id] !== undefined).map(turno => {
-                            const diasComTurno = turnoDays.filter(td => td.ativo && td.turnosAtivos.includes(turno.id)).length;
-                            const vagasTurno = turnoVagas[turno.id] || 0;
-                            return (
-                              <div key={turno.id} className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2">
-                                  <span>{turno.horaInicio < '12:00' ? '🌅' : turno.horaInicio < '18:00' ? '🌆' : '🌙'}</span>
-                                  <span className="font-medium">Turno {turno.nome}:</span>
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {vagasTurno} vagas/dia × {diasComTurno} dias = <strong className="text-foreground">{vagasTurno * diasComTurno} vagas/semana</strong>
-                                </span>
-                              </div>
-                            );
-                          })}
-                          <div className="border-t border-border pt-2 mt-2 flex items-center justify-between text-sm font-semibold">
-                            <span>Total:</span>
-                            <span>{(() => {
-                              const totalPerDay = activeTurnos
-                                .filter(t => turnoVagas[t.id] !== undefined)
-                                .reduce((s, t) => s + (turnoVagas[t.id] || 0), 0);
-                              return `${totalPerDay} vagas/dia × ${turnoWeeklySummary.diasAtivos} dias = ${turnoWeeklySummary.totalVagas} vagas/semana`;
-                            })()}</span>
+                              {diasSemanaFull[diaIndex]}
+                              {isFds && <span className="text-[10px] ml-1 opacity-70">(FDS)</span>}
+                            </span>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            <span>Dias ativos: {turnoDays.map((td, i) => td.ativo ? diasSemanaLabels[i] : null).filter(Boolean).join(' / ')}</span>
-                            {turnoDays.some((td, i) => !td.ativo) && (
-                              <span className="ml-2">• {turnoDays.map((td, i) => !td.ativo ? diasSemanaFull[i] : null).filter(Boolean).join(' e ')}: sem atendimento</span>
+                          <div className="flex items-center gap-2">
+                            {dia.ativo && (
+                              <>
+                                <Badge variant="outline" className="text-[10px]">
+                                  {dia.blocos.filter(b => b.ativo).length} bloco(s)
+                                </Badge>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-8 w-8 text-muted-foreground"
+                                  onClick={(e) => { e.stopPropagation(); copyDayConfig(diaIndex); }}
+                                  title="Copiar para outros dias"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
                             )}
+                            <AccordionTrigger className="py-2 hover:no-underline" disabled={!dia.ativo} />
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </>
+                        <AccordionContent className="p-0">
+                          {dia.ativo && (
+                            <div className="p-4 space-y-3 bg-muted/20">
+                              {dia.blocos.map((bloco, blocoIndex) => (
+                                <div key={blocoIndex} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 bg-background border rounded-md shadow-sm">
+                                  <div className="flex-1 w-full">
+                                    <Label className="text-[10px] uppercase text-muted-foreground mb-1 block">Nome do Turno</Label>
+                                    <Input 
+                                      value={bloco.nome} 
+                                      onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'nome', e.target.value)} 
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div className="w-full sm:w-24">
+                                    <Label className="text-[10px] uppercase text-muted-foreground mb-1 block">Início</Label>
+                                    <Input 
+                                      type="time" 
+                                      value={bloco.horaInicio} 
+                                      onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'horaInicio', e.target.value)} 
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div className="w-full sm:w-24">
+                                    <Label className="text-[10px] uppercase text-muted-foreground mb-1 block">Fim</Label>
+                                    <Input 
+                                      type="time" 
+                                      value={bloco.horaFim} 
+                                      onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'horaFim', e.target.value)} 
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div className="w-full sm:w-20">
+                                    <Label className="text-[10px] uppercase text-muted-foreground mb-1 block">Vagas</Label>
+                                    <Input 
+                                      type="number" 
+                                      value={bloco.vagas} 
+                                      onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'vagas', parseInt(e.target.value) || 0)} 
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1 self-end sm:self-center mt-2 sm:mt-5">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                      onClick={() => removeBlocoFromDia(diaIndex, blocoIndex)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                              
+                              <div className="flex justify-between pt-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="text-xs h-8 border-dashed"
+                                  onClick={() => addBlocoToDia(diaIndex)}
+                                >
+                                  <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar Bloco
+                                </Button>
+                                
+                                <div className="flex gap-2">
+                                  {turnosGlobais.filter(t => t.ativo).map(t => (
+                                    <Button 
+                                      key={t.id}
+                                      variant="secondary" 
+                                      size="sm" 
+                                      className="text-[10px] h-7 px-2"
+                                      onClick={() => {
+                                        setConfigDias(prev => prev.map((pd, i) => i === diaIndex ? {
+                                          ...pd,
+                                          blocos: [...pd.blocos, { 
+                                            nome: t.nome, 
+                                            tipo: 'padrao', 
+                                            horaInicio: t.horaInicio, 
+                                            horaFim: t.horaFim, 
+                                            vagas: 20, 
+                                            ativo: true 
+                                          }]
+                                        } : pd));
+                                      }}
+                                    >
+                                      + {t.nome}
+                                    </Button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+
+                {/* Summary */}
+                <Card className="bg-muted/30 border border-border">
+                  <CardContent className="p-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Resumo da Configuração</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground text-[10px] uppercase">Vagas Semanais</span>
+                        <span className="font-bold text-lg">{turnoWeeklySummary.totalVagas}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground text-[10px] uppercase">Dias Ativos</span>
+                        <span className="font-bold text-lg">{turnoWeeklySummary.diasAtivos} / 7</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             )}
 
             <Button onClick={handleSave} disabled={!canSave} className="w-full gradient-primary text-primary-foreground">
