@@ -92,14 +92,37 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined) continue;
+    
+    // Se o valor for null e a coluna for NOT NULL no banco, convertemos para o padrão seguro
     if (v === null) {
-      if (PACIENTE_TEXT_NOT_NULL.has(k)) { out[k] = ""; continue; }
-      if (PACIENTE_BOOL_NOT_NULL.has(k)) { out[k] = false; continue; }
-      if (k === "equipamentos") { out[k] = []; continue; }
-      if (k === "custom_data") { out[k] = {}; continue; }
+      if (PACIENTE_TEXT_NOT_NULL.has(k)) {
+        out[k] = "";
+        continue;
+      }
+      if (PACIENTE_BOOL_NOT_NULL.has(k)) {
+        out[k] = false;
+        continue;
+      }
+      if (k === "equipamentos") {
+        out[k] = [];
+        continue;
+      }
+      if (k === "custom_data") {
+        out[k] = {};
+        continue;
+      }
+      // Para colunas que aceitam NULL, mantemos null se o banco permitir (is_nullable=YES)
+      // Mas para 'pacientes', quase tudo é NOT NULL conforme o schema lido.
+      out[k] = ""; 
       continue;
     }
-    out[k] = v;
+
+    // Garante que campos de texto NOT NULL nunca sejam vazios (sempre string, nunca null)
+    if (PACIENTE_TEXT_NOT_NULL.has(k) && (v === null || v === undefined)) {
+      out[k] = "";
+    } else {
+      out[k] = v;
+    }
   }
   return out as T;
 }
