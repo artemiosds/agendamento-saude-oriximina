@@ -204,8 +204,11 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
       etniaOutra: "etniaOutra",
       paisNascimento: "paisNascimento",
       tipoLogradouro: "tipoLogradouroDne",
+      tipo_logradouro_dne: "tipoLogradouroDne",
       tipoLogradouroCodigo: "tipoLogradouroCodigo",
-      telefoneSecundario: "telefoneSecundario"
+      tipo_logradouro_codigo: "tipoLogradouroCodigo",
+      telefoneSecundario: "telefoneSecundario",
+      telefone_secundario: "telefoneSecundario"
     };
 
     const newState = { ...form };
