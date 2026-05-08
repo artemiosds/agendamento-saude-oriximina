@@ -1276,14 +1276,8 @@ const ProntuarioPage: React.FC = () => {
       setPreviousForm(null);
       return true;
     } catch (err: any) {
-      if (insertedNewProntuario && prontuarioId) {
-        try {
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
-        } catch (rollbackError) {
-          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
-        }
-      }
+      // Remoção do rollback perigoso: se o prontuário foi salvo no banco, não devemos deletá-lo
+      // caso ocorra um erro posterior (como falha no log ou no refresh da lista).
       console.error("Erro ao salvar prontuário/sessão:", {
         error: err,
         message: err?.message,
