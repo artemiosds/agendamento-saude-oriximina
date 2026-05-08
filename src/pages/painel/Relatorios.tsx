@@ -1241,7 +1241,7 @@ ${dataRows}
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k as any} value={k as any}>{v as any}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
