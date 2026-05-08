@@ -132,6 +132,24 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+
+  // --- Campos Re-idratados do Custom Data ---
+  sexo: string;
+  racaCor: string;
+  etnia: string;
+  etniaOutra: string;
+  nacionalidade: string;
+  paisNascimento: string;
+  cep: string;
+  tipoLogradouroDne: string;
+  tipoLogradouroCodigo: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  uf: string;
+  telefoneSecundario: string;
+
   customData?: Record<string, any>;
 }
 
@@ -147,6 +165,13 @@ export const emptyPacienteForm: PacienteFormData = {
   observacaoEquipamentos: "", outroServicoSus: false, transporte: "", turnoPreferido: "",
   email: "", endereco: "", nomeMae: "", descricaoClinica: "",
   isGestante: false, isPne: false, isAutista: false,
+  
+  // Re-idratados
+  sexo: "", racaCor: "", etnia: "", etniaOutra: "", nacionalidade: "brasileiro", 
+  paisNascimento: "", cep: "", tipoLogradouroDne: "", tipoLogradouroCodigo: "",
+  logradouro: "", numero: "", complemento: "", bairro: "", uf: "PA", 
+  telefoneSecundario: "",
+
   customData: {},
 };
 
@@ -162,8 +187,35 @@ interface Props {
 
 const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onSave, saving, isEdit, errors }) => {
   const set = (field: keyof PacienteFormData, value: any) => onChange({ ...form, [field]: value });
-  const setCustom = (key: string, value: any) =>
-    onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
+  const setCustom = (key: string, value: any) => {
+    // Sincroniza o campo de topo se houver um mapeamento
+    const mapping: Record<string, keyof PacienteFormData> = {
+      cep: "cep",
+      logradouro: "logradouro",
+      numero: "numero",
+      complemento: "complemento",
+      bairro: "bairro",
+      uf: "uf",
+      nacionalidade: "nacionalidade",
+      sexo: "sexo",
+      racaCor: "racaCor",
+      raca_cor: "racaCor",
+      etnia: "etnia",
+      etniaOutra: "etniaOutra",
+      paisNascimento: "paisNascimento",
+      tipoLogradouro: "tipoLogradouroDne",
+      tipoLogradouroCodigo: "tipoLogradouroCodigo",
+      telefoneSecundario: "telefoneSecundario"
+    };
+
+    const newState = { ...form };
+    if (mapping[key]) {
+      // @ts-ignore
+      newState[mapping[key]] = value;
+    }
+    newState.customData = { ...(form.customData || {}), [key]: value };
+    onChange(newState);
+  };
   const cd = form.customData || {};
 
   const [uploading, setUploading] = useState(false);
@@ -236,9 +288,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
         const municipioMatch = MUNICIPIOS.find((m) =>
           sanitizeUpper(m) === sanitizeUpper(novoMunicipio)
         );
+        
         onChange({
           ...form,
           municipio: municipioMatch || form.municipio,
+          logradouro: update.logradouro || form.logradouro,
+          bairro: update.bairro || form.bairro,
+          uf: update.uf || form.uf,
           customData: update,
         });
         toast.success("Endereço preenchido pelo CEP");
@@ -473,15 +529,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   Tipo de Logradouro (DNE) <span className="text-destructive">*</span>
                 </Label>
                 <LogradouroDneAutocomplete
-                  value={cd.tipoLogradouro || ""}
-                  codigo={cd.tipoLogradouroCodigo || ""}
+                  value={form.tipoLogradouroDne || ""}
+                  codigo={form.tipoLogradouroCodigo || ""}
                   onChange={(descricao, codigo) => {
                     onChange({
                       ...form,
+                      tipoLogradouroDne: descricao,
+                      tipoLogradouroCodigo: codigo,
                       customData: {
                         ...(form.customData || {}),
                         tipoLogradouro: descricao,
                         tipoLogradouroCodigo: codigo,
+                        tipo_logradouro_dne: descricao,
+                        tipo_logradouro_codigo: codigo,
                       },
                     });
                   }}

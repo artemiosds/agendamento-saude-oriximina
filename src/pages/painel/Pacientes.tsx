@@ -444,48 +444,67 @@ const Pacientes: React.FC = () => {
 
   const openEdit = (p: (typeof pacientes)[0]) => {
     setEditId(p.id);
+    const cd = p.custom_data || {};
     setForm({
       ...emptyPacienteForm,
-      nome: p.nome,
-      cpf: p.cpf,
+      nome: p.nome || "",
+      cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nomeMae || "",
-      telefone: p.telefone,
-      dataNascimento: p.dataNascimento,
-      email: p.email,
+      nomeMae: p.nome_mae || "",
+      telefone: p.telefone || "",
+      dataNascimento: p.data_nascimento || "",
+      email: p.email || "",
       endereco: p.endereco || "",
-      descricaoClinica: p.descricaoClinica || "",
+      descricaoClinica: p.descricao_clinica || "",
       cid: p.cid || "",
-      especialidadeDestino: (p as any).especialidade_destino || "",
-      municipio: (p as any).municipio || "",
-      naturalidade: (p as any).naturalidade || "",
-      naturalidadeUf: (p as any).naturalidade_uf || "",
-      menorIdade: (p as any).menor_idade || false,
-      nomeResponsavel: (p as any).nome_responsavel || "",
-      cpfResponsavel: (p as any).cpf_responsavel || "",
-      ubsOrigem: (p as any).ubs_origem || "",
-      profissionalSolicitante: (p as any).profissional_solicitante || "",
-      tipoEncaminhamento: (p as any).tipo_encaminhamento || "",
-      diagnosticoResumido: (p as any).diagnostico_resumido || "",
-      justificativa: (p as any).justificativa || "",
-      dataEncaminhamento: (p as any).data_encaminhamento || "",
-      documentoUrl: (p as any).documento_url || "",
-      tipoCondicao: (p as any).tipo_condicao || "",
-      mobilidade: (p as any).mobilidade || "",
-      usaDispositivo: (p as any).usa_dispositivo || false,
-      tipoDispositivo: (p as any).tipo_dispositivo || "",
-      comunicacao: (p as any).comunicacao || "",
-      comportamento: (p as any).comportamento || "",
-      usaEquipamentos: (p as any).usa_equipamentos || false,
-      equipamentos: (p as any).equipamentos || [],
-      observacaoEquipamentos: (p as any).observacao_equipamentos || "",
-      outroServicoSus: (p as any).outro_servico_sus || false,
-      transporte: (p as any).transporte || "",
-      turnoPreferido: (p as any).turno_preferido || "",
-      isGestante: (p as any).isGestante || (p as any).is_gestante || false,
-      isPne: (p as any).isPne || (p as any).is_pne || false,
-      isAutista: (p as any).isAutista || (p as any).is_autista || false,
-      customData: (p as any).custom_data || {},
+      especialidadeDestino: p.especialidade_destino || "",
+      municipio: p.municipio || "",
+      naturalidade: p.naturalidade || "",
+      naturalidadeUf: p.naturalidade_uf || "",
+      menorIdade: !!p.menor_idade,
+      nomeResponsavel: p.nome_responsavel || "",
+      cpfResponsavel: p.cpf_responsavel || "",
+      ubsOrigem: p.ubs_origem || "",
+      profissionalSolicitante: p.profissional_solicitante || "",
+      tipoEncaminhamento: p.tipo_encaminhamento || "",
+      diagnosticoResumido: p.diagnostico_resumido || "",
+      justificativa: p.justificativa || "",
+      dataEncaminhamento: p.data_encaminhamento || "",
+      documentoUrl: p.documento_url || "",
+      tipoCondicao: p.tipo_condicao || "",
+      mobilidade: p.mobilidade || "",
+      usaDispositivo: !!p.usa_dispositivo,
+      tipoDispositivo: p.tipo_dispositivo || "",
+      comunicacao: p.comunicacao || "",
+      comportamento: p.comportamento || "",
+      usaEquipamentos: !!p.usa_equipamentos,
+      equipamentos: p.equipamentos || [],
+      observacaoEquipamentos: p.observacao_equipamentos || "",
+      outroServicoSus: !!p.outro_servico_sus,
+      transporte: p.transporte || "",
+      turnoPreferido: p.turno_preferido || "",
+      isGestante: !!p.is_gestante,
+      isPne: !!p.is_pne,
+      isAutista: !!p.is_autista,
+      
+      // Re-idratação estruturada do custom_data para o formulário
+      sexo: cd.sexo || "",
+      racaCor: cd.racaCor || cd.raca_cor || "",
+      etnia: cd.etnia || "",
+      etniaOutra: cd.etniaOutra || cd.etnia_outra || "",
+      nacionalidade: cd.nacionalidade || "brasileiro",
+      paisNascimento: cd.paisNascimento || cd.pais_nascimento || "",
+      cep: cd.cep || "",
+      tipoLogradouroDne: cd.tipo_logradouro_dne || cd.tipoLogradouroDne || "",
+      tipoLogradouroCodigo: cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || "",
+      logradouro: cd.logradouro || "",
+      numero: cd.numero || "",
+      complemento: cd.complemento || "",
+      bairro: cd.bairro || "",
+      uf: cd.uf || "PA",
+      telefoneSecundario: cd.telefone_secundario || cd.telefoneSecundario || "",
+      
+      customData: cd,
     });
     setErrors({});
     setDialogOpen(true);
@@ -525,13 +544,14 @@ const Pacientes: React.FC = () => {
       ...form,
       unidade_id: user?.role === "recepcao" || (!isGlobalAdminUser && unidadeIdFuncionario) 
         ? unidadeIdFuncionario 
-        : (form as any).unidadeId,
+        : (form as any).unidadeId || (form as any).unidade_id,
     };
 
     try {
       if (editId) {
-        // Usa a função centralizada para update que já lida com merge, normalização e auditoria
-        await updatePacienteCadastro(
+        // Usa a função centralizada persistPaciente que lida com normalização robusta
+        const { persistPaciente } = await import("@/lib/paciente-utils");
+        await persistPaciente(
           editId,
           dbFields,
           "Pacientes",
@@ -594,49 +614,34 @@ const Pacientes: React.FC = () => {
           return;
         }
 
-        const insertPayload: any = {
-          ...normalizePatientPayload(dbFields),
-          id,
-          criado_em: new Date().toISOString(),
-          unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
-        };
+        // Usa a função centralizada persistPaciente que garante normalização idêntica ao Update
+        const { persistPaciente } = await import("@/lib/paciente-utils");
         
-        // Garantir que não existam nulls em colunas NOT NULL
-        const sanitizedInsert = sanitizePacientePayload(insertPayload);
+        persistPaciente(
+          null,
+          dbFields,
+          "Pacientes",
+          user,
+          queryClient
+        ).then(async (newRecord) => {
+          const id = newRecord.id;
+          // Flush pending referrals + attachments queued in CadastroPacienteForm
+          try {
+            const refHandle = (window as any).__patientReferralRef?.current;
+            if (refHandle?.hasPending?.()) {
+              await refHandle.flushPending(id);
+            }
+          } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
+          
+          queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+          refreshPacientes();
+        }).catch((err) => {
+          console.error("Erro ao cadastrar paciente:", err);
+          toast.error("Erro ao cadastrar paciente.");
+        });
 
-        // Adiciona metadados extras ao custom_data
-        sanitizedInsert.custom_data = {
-          ...(sanitizedInsert.custom_data || {}),
-          criado_por: user?.id || "",
-          criado_por_nome: user?.nome || "",
-          criado_por_usuario: user?.usuario || "",
-          unidade_origem_id: unidadeIdFuncionario,
-          criado_at: new Date().toISOString(),
-          atualizado_at: new Date().toISOString(),
-          motivo_alteracao: "Cadastro de paciente pela página Pacientes",
-        };
-        // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert(sanitizedInsert))
-          .then(async ({ error }) => {
-            if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
-            // Flush pending referrals + attachments queued in CadastroPacienteForm
-            try {
-              const refHandle = (window as any).__patientReferralRef?.current;
-              if (refHandle?.hasPending?.()) {
-                await refHandle.flushPending(id);
-              }
-            } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
-          })
-          .catch((err) => console.error("Erro ao cadastrar paciente:", err))
-          .finally(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
-            refreshPacientes();
-          });
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch {
