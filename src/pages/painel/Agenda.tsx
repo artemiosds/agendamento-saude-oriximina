@@ -966,6 +966,31 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
+    // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
+    // Antes de criar o agendamento, garantimos que os dados conferidos do paciente foram persistidos.
+    if (newAg.pacienteId) {
+      try {
+        const { data: currentP } = await supabase
+          .from("pacientes")
+          .select("*")
+          .eq("id", newAg.pacienteId)
+          .maybeSingle();
+        
+        if (currentP) {
+          await updatePacienteCadastro(
+            newAg.pacienteId,
+            currentP,
+            "Novo Agendamento (Persistência)",
+            user,
+            // @ts-ignore
+            queryClient
+          );
+        }
+      } catch (err) {
+        console.warn("[Agenda] Erro ao persistir dados do paciente antes de agendar:", err);
+      }
+    }
+
     addAgendamento(agData);
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
