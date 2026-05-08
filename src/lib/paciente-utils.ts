@@ -151,8 +151,9 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
   };
 
   // 2. Montagem do Payload de Topo (Tabela `pacientes`)
+  // IMPORTANTE: Mapear para os nomes reais das colunas do banco
   const payload: any = {
-    nome: resolve("nome", "nome_completo"),
+    nome: resolve("nome_completo", "nome"), // Garante mapeamento para nome_completo se existir
     nome_mae: resolve("nome_mae", "nomeMae"),
     data_nascimento: resolve("data_nascimento", "dataNascimento"),
     cpf: String(resolve("cpf")).replace(/\D/g, ""),
@@ -201,6 +202,11 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     // Custom Data Acoplado
     custom_data: customData,
   };
+
+  // Se a coluna real no banco for 'nome' (retrocompatibilidade ou divergência), duplicamos
+  // Mas conforme schema lido, a coluna é 'nome'.
+  // VAMOS USAR O QUE O DB DISSE: id, nome, cpf, telefone, data_nascimento, email, endereco, etc.
+  payload.nome = resolve("nome", "nome_completo");
 
   // 3. Sincronização do Campo `endereco` (Texto Livre) com o Estruturado
   const parts = [
@@ -261,11 +267,20 @@ export async function persistPaciente(
   }
 
   if (result.error) {
-    console.error(`[Paciente] Erro ao salvar cadastro`, {
+    console.error(`[Paciente] Erro real ao salvar paciente`, {
       origem,
+      modo: pacienteId && existing ? "UPDATE" : "INSERT",
       pacienteId,
       error: result.error,
-      payloadResumo: { nome: payload.nome, cpf: payload.cpf ? '***' : '' }
+      message: result.error?.message,
+      details: result.error?.details,
+      hint: result.error?.hint,
+      code: result.error?.code,
+      payloadResumo: { 
+        nome: payload.nome, 
+        cpf: payload.cpf ? '***' : '',
+        unidade_id: payload.unidade_id 
+      }
     });
     throw result.error;
   }
