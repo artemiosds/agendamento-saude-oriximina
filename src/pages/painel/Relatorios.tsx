@@ -860,7 +860,7 @@ const Relatorios: React.FC = () => {
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades, filteredAtendimentos]);
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
   // === EXPORT EXCEL (XML Spreadsheet) ===
   const exportExcel = useCallback((type: string) => {
