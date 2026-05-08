@@ -549,8 +549,9 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        // Usa a função centralizada para update que já lida com merge, normalização e auditoria
-        await updatePacienteCadastro(
+        // Usa a função centralizada persistPaciente que lida com normalização robusta
+        const { persistPaciente } = await import("@/lib/paciente-utils");
+        await persistPaciente(
           editId,
           dbFields,
           "Pacientes",
