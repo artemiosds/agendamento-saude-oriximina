@@ -222,14 +222,18 @@ export function ConferirDadosPacienteModal({
     const newForm = { ...form, [name]: masked };
     setForm(newForm);
     setDirty(true);
-    
-    // Autosave: salvar imediatamente ao alterar qualquer campo
-    // Debounce manual opcional, mas o pedido é "salva automaticamente e reflete de imediato"
-    if (paciente) {
-      handleSave(true, newForm).catch(err => {
-        console.error("[ConferirDados] Erro no autosave:", err);
-      });
-    }
+    setSaveStatus("idle");
+
+    // Autosave com debounce de 1200ms
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (paciente) {
+        handleSave(true, newForm).catch((err) => {
+          console.error("[ConferirDados] Erro no autosave:", err);
+          setSaveStatus("error");
+        });
+      }
+    }, 1200);
   };
 
   const handleSave = async (silent = false, currentForm?: any) => {
