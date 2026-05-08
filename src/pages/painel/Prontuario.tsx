@@ -1194,14 +1194,14 @@ const ProntuarioPage: React.FC = () => {
             toast.info('🎉 Ciclo de tratamento concluído!');
           }
 
-          await logAction({
+          logAction({
             acao: 'sessao_registrada',
             entidade: 'treatment_session',
             entidadeId: currentSessionForRegistration.id,
             modulo: 'prontuario',
             user,
             detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
-          }).catch(e => console.error("[Prontuario] Erro ao registrar log de sessão:", e));
+          });
           
           toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
         } catch (sessionErr: any) {
