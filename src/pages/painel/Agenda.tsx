@@ -857,7 +857,7 @@ const Agenda: React.FC = () => {
     if (!pac && newAg.pacienteId) {
       const { data, error } = await (supabase as any)
         .from("pacientes")
-        .select("id, nome, telefone, email")
+        .select("id, nome, nome_completo, telefone, email")
         .eq("id", newAg.pacienteId)
         .maybeSingle();
 
@@ -868,7 +868,7 @@ const Agenda: React.FC = () => {
 
       pac = {
         id: data.id,
-        nome: data.nome,
+        nome: data.nome_completo || data.nome,
         telefone: data.telefone || "",
         email: data.email || "",
       } as typeof pac;

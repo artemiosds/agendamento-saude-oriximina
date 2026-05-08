@@ -158,7 +158,7 @@ export function ConferirDadosPacienteModal({
       const cd = data.custom_data || {};
       setPaciente(data);
       setForm({
-        nome: data.nome || "",
+        nome: data.nome_completo || data.nome || "",
         nome_mae: data.nome_mae || "",
         data_nascimento: data.data_nascimento || "",
         cpf: data.cpf || "",
