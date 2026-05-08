@@ -542,8 +542,8 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       customData: {
                         ...(form.customData || {}),
                         tipoLogradouro: descricao,
-                        tipo_logradouro_dne: descricao,
                         tipoLogradouroCodigo: codigo,
+                        tipo_logradouro_dne: descricao,
                         tipo_logradouro_codigo: codigo,
                       },
                     });
