@@ -47,7 +47,7 @@ interface TriagemDB {
 }
 
 const Relatorios: React.FC = () => {
-  const { agendamentos, pacientes, funcionarios, unidades, salas, fila } = useData();
+  const { pacientes, funcionarios, unidades, salas, fila } = useData();
   const resolvePaciente = usePacienteNomeResolver();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('geral');
