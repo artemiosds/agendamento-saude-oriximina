@@ -8,7 +8,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  * 
  * 1. Colunas de Topo (Tabela `pacientes`):
  *    - id (text, PK)
- *    - nome_completo (text, NOT NULL) - Nome real da coluna conforme schema lido
+ *    - nome (text, NOT NULL) - Nome real da coluna conforme schema real do banco
  *    - cpf (text, NOT NULL)
  *    - cns (text, NOT NULL)
  *    - telefone (text, NOT NULL)
@@ -293,7 +293,7 @@ export async function persistPaciente(
       hint: result.error?.hint,
       code: result.error?.code,
       payloadResumo: { 
-        nome_completo: payload.nome_completo, 
+        nome: payload.nome, 
         cpf: payload.cpf ? '***' : '',
         unidade_id: payload.unidade_id 
       }
