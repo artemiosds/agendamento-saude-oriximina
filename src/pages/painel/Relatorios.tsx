@@ -2028,7 +2028,6 @@ th{background:#f1f5f9;font-weight:600;}
                   <tbody>
                     {filtered.slice(0, 200).map(a => {
                       const un = unidades.find(u => u.id === a.unidadeId);
-                      const at = atendimentosDB.find(at => at.agendamento_id === a.id);
                       return (
                         <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
                           <td className="py-2 px-2 text-foreground">{a.data}</td>
@@ -2039,9 +2038,9 @@ th{background:#f1f5f9;font-weight:600;}
                           <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
                           <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_inicio || '-'}</td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{at?.hora_fim || '-'}</td>
-                          <td className="py-2 px-2 text-center text-primary font-medium">{at?.duracao_minutos ? `${at.duracao_minutos}min` : '-'}</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
+                          <td className="py-2 px-2 text-center text-primary font-medium">-</td>
                         </tr>
                       );
                     })}
