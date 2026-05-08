@@ -313,7 +313,7 @@ export async function persistPaciente(
       hint: result.error?.hint,
       code: result.error?.code,
       payloadResumo: { 
-        nome: payload.nome, 
+        nome_completo: payload.nome_completo, 
         cpf: payload.cpf ? '***' : '',
         unidade_id: payload.unidade_id 
       }
