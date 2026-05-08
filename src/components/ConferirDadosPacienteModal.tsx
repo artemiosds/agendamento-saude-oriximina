@@ -167,6 +167,7 @@ export function ConferirDadosPacienteModal({
         email: data.email || "",
         endereco: data.endereco || "",
         municipio: data.municipio || "",
+        unidade_id: data.unidade_id || "", // Importante para persistencia
         naturalidade: data.naturalidade || "",
         naturalidade_uf: data.naturalidade_uf || "",
         
