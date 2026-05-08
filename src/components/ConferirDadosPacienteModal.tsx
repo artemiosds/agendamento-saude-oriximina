@@ -13,12 +13,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import LogradouroDneAutocomplete from "@/components/LogradouroDneAutocomplete";
 import MunicipioCombobox from "@/components/MunicipioCombobox";
-import { applyPhoneMask, normalizePhone } from "@/lib/phoneUtils";
+import { applyPhoneMask } from "@/lib/phoneUtils";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
 import { useData } from "@/contexts/DataContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { auditService } from "@/services/auditService";
+import { patientService } from "@/services/patientService";
 import { maskCNS as maskCnsUtil } from "@/lib/cnsUtils";
 
 export interface ConferirDadosPacienteModalProps {
@@ -111,6 +112,7 @@ const MASKS: Record<string, (v: string) => string> = {
   cpf: maskCpf,
   cns: maskCns,
   telefone: applyPhoneMask,
+  telefone_principal: applyPhoneMask,
   telefone_secundario: applyPhoneMask,
   cep: maskCep,
 };
@@ -145,48 +147,15 @@ export function ConferirDadosPacienteModal({
     setLoading(true);
     setLoadError(null);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const { data, error } = await (supabase as any)
-        .from("pacientes")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle()
-        .abortSignal(controller.signal);
-      clearTimeout(timeout);
-      if (error) throw error;
+      const data = await patientService.getById(id);
       if (!data) throw new Error("Paciente não encontrado");
+      
       console.log("[ConferirDados] Dados carregados com sucesso");
-      const cd = data.custom_data || {};
+      const mappedForm = patientService.mapPacienteDbToForm(data);
+      
       setPaciente(data);
-      setForm({
-        nome: data.nome_completo || data.nome || "",
-        nome_mae: data.nome_mae || "",
-        data_nascimento: data.data_nascimento || "",
-        cpf: data.cpf || "",
-        cns: data.cns || "",
-        telefone: data.telefone || "",
-        email: data.email || "",
-        endereco: data.endereco || "",
-        municipio: data.municipio || "",
-        naturalidade: data.naturalidade || "",
-        naturalidade_uf: data.naturalidade_uf || "",
-        sexo: cd.sexo || "",
-        raca_cor: cd.racaCor || cd.raca_cor || "",
-        etnia: cd.etnia || "",
-        etnia_outra: cd.etniaOutra || "",
-        nacionalidade: cd.nacionalidade || "brasileiro",
-        pais_nascimento: cd.paisNascimento || "",
-        tipo_logradouro_dne: cd.tipoLogradouroDne || cd.tipo_logradouro_dne || cd.tipoLogradouro || "",
-        tipo_logradouro_codigo: cd.tipoLogradouroCodigo || cd.tipo_logradouro_codigo || "",
-        logradouro: cd.logradouro || "",
-        numero: cd.numero || "",
-        complemento: cd.complemento || "",
-        bairro: cd.bairro || "",
-        uf: cd.uf || "PA",
-        cep: cd.cep || "",
-        telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
-      });
+      setForm(mappedForm);
+      setLastSavedJson(JSON.stringify(mappedForm));
     } catch (err: any) {
       console.error("[ConferirDados] Erro ao carregar:", err);
       setLoadError(err?.message || "Erro ao carregar dados do paciente");
@@ -208,7 +177,7 @@ export function ConferirDadosPacienteModal({
     if (!paciente) return { incompleto: false, faltando: [] as string[] };
     return isCadastroIncompleto({
       sexo: form.sexo,
-      telefone: form.telefone,
+      telefone: form.telefone_principal,
       endereco: form.logradouro || form.endereco,
       municipio: form.municipio,
       cpf: form.cpf,
@@ -230,7 +199,6 @@ export function ConferirDadosPacienteModal({
       if (paciente) {
         handleSave(true, newForm).catch((err) => {
           console.error("[ConferirDados] Erro no autosave:", err);
-          setSaveStatus("error");
         });
       }
     }, 1200);
@@ -240,106 +208,35 @@ export function ConferirDadosPacienteModal({
     if (!paciente) return;
     const formToSave = currentForm || form;
 
-    // Evitar salvar se os dados não mudaram (autosave excessivo)
     const currentJson = JSON.stringify(formToSave);
     if (silent && currentJson === lastSavedJson) return;
 
     setSaving(true);
     setSaveStatus("saving");
     setLastSavedJson(currentJson);
+    
     try {
-      // Normalizar telefones para o formato canônico (13 dígitos com 55)
-      const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
-      const telSecNormalizado = formToSave.telefone_secundario
-        ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
-        : "";
-
-      const customData = {
-        ...(paciente.custom_data || {}),
-        sexo: formToSave.sexo || paciente.custom_data?.sexo || "",
-        raca_cor: formToSave.raca_cor || paciente.custom_data?.raca_cor || "",
-        racaCor: formToSave.raca_cor || paciente.custom_data?.racaCor || "",
-        etnia: formToSave.etnia || paciente.custom_data?.etnia || "",
-        etniaOutra: formToSave.etnia_outra || paciente.custom_data?.etniaOutra || "",
-        nacionalidade: formToSave.nacionalidade || paciente.custom_data?.nacionalidade || "brasileiro",
-        paisNascimento: formToSave.pais_nascimento || paciente.custom_data?.paisNascimento || "",
-        tipoLogradouroDne: formToSave.tipo_logradouro_dne || paciente.custom_data?.tipoLogradouroDne || "",
-        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo || paciente.custom_data?.tipoLogradouroCodigo || "",
-        tipoLogradouro: formToSave.tipo_logradouro_dne || paciente.custom_data?.tipoLogradouro || "",
-        logradouro: formToSave.logradouro || paciente.custom_data?.logradouro || "",
-        numero: formToSave.numero || paciente.custom_data?.numero || "",
-        complemento: formToSave.complemento || paciente.custom_data?.complemento || "",
-        bairro: formToSave.bairro || paciente.custom_data?.bairro || "",
-        uf: formToSave.uf || paciente.custom_data?.uf || "PA",
-        cep: formToSave.cep || paciente.custom_data?.cep || "",
-        telefoneSecundario: telSecNormalizado || paciente.custom_data?.telefoneSecundario || "",
-        data_ultima_validacao_cadastro: new Date().toISOString(),
-        dados_conferidos_em: new Date().toISOString(),
-        dados_conferidos_por: user?.nome || user?.id || "",
-      };
-
-      const updatePayload: any = {
-        nome_completo: formToSave.nome,
-        nome: formToSave.nome, // Sincroniza ambos
-        nome_mae: formToSave.nome_mae || "",
-        data_nascimento: formToSave.data_nascimento || null,
-        cpf: formToSave.cpf || "",
-        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15) || "",
-        telefone: telNormalizado || "",
-        email: formToSave.email || "",
-        municipio: formToSave.municipio || "",
-        naturalidade: formToSave.naturalidade || "",
-        naturalidade_uf: formToSave.naturalidade_uf || "",
-        logradouro: formToSave.logradouro || "",
-        numero: formToSave.numero || "",
-        bairro: formToSave.bairro || "",
-        uf: formToSave.uf || "",
-        cep: formToSave.cep || "",
-        custom_data: customData,
-      };
-
-      // Remover undefined para evitar erros no Supabase
-      Object.keys(updatePayload).forEach(key => {
-        if (updatePayload[key] === undefined) delete updatePayload[key];
-      });
-
-      const { error } = await (supabase as any)
-        .from("pacientes")
-        .update(updatePayload)
-        .eq("id", paciente.id);
-
-      if (error) throw error;
-
-      // Auditoria e Refresh
-      const camposAlterados: Record<string, { de: any; para: any }> = {};
-      const compareFields = ["nome_completo", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "municipio", "logradouro", "numero", "bairro", "uf", "cep"];
-      compareFields.forEach((k) => {
-        const antes = (paciente as any)[k] ?? "";
-        const depois = (updatePayload as any)[k] ?? "";
-        if (String(antes) !== String(depois)) camposAlterados[k] = { de: antes, para: depois };
-      });
+      const data = await patientService.savePacienteCadastro(
+        paciente.id, 
+        formToSave, 
+        modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento"
+      );
 
       setDirty(false);
       setSaveStatus("saved");
-      setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+      setPaciente(data);
 
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
+      queryClient.invalidateQueries({ queryKey: ['paciente_by_id', paciente.id] });
+      queryClient.invalidateQueries({ queryKey: ['conferir_dados_paciente', paciente.id] });
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
+      queryClient.invalidateQueries({ queryKey: ['prontuario', paciente.id] });
+      queryClient.invalidateQueries({ queryKey: ['ficha_cadastral', paciente.id] });
+      
       try { await refreshPacientes(); } catch {}
-
-      if (Object.keys(camposAlterados).length > 0) {
-        auditService.log({
-          acao: "atualizar",
-          entidade: "paciente",
-          entidadeId: paciente.id,
-          modulo: "Conferir Dados do Paciente",
-          user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
-          detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
-        }).catch(() => {});
-      }
 
       if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
@@ -610,7 +507,7 @@ export function ConferirDadosPacienteModal({
                   <Phone className="w-4 h-4 text-primary" />Contato
                 </div>
                 <div className="grid sm:grid-cols-3 gap-3">
-                  {renderFieldText("Telefone principal", "telefone", "tel", "(00) 00000-0000", "tel")}
+                  {renderFieldText("Telefone principal", "telefone_principal", "tel", "(00) 00000-0000", "tel")}
                   {renderFieldText("Telefone secundário", "telefone_secundario", "tel", "(00) 00000-0000", "tel")}
                   {renderFieldText("E-mail", "email", "email", "email@exemplo.com", "email")}
                 </div>
@@ -656,13 +553,16 @@ export function ConferirDadosPacienteModal({
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
                   
-                  // Se houver autosave em curso, aguarda um pouco
+                  // Se houver autosave em curso ou erro, impede o avanço
                   if (saveStatus === "saving" || autoSaveTimerRef.current) {
                     if (autoSaveTimerRef.current) {
                       clearTimeout(autoSaveTimerRef.current);
                       autoSaveTimerRef.current = null;
                     }
                     await handleSave(true);
+                  } else if (saveStatus === "error") {
+                    toast.error("Existem alterações não salvas. Corrija antes de continuar.");
+                    return;
                   } else if (dirty) {
                     await handleSave(true);
                   }
