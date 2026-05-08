@@ -985,11 +985,23 @@ const Disponibilidade: React.FC = () => {
                     const allIds = records.map(r => r.id);
 
                     if (isTurno) {
-                      const turnoMap = new Map<string, { turno: TurnoDefinition | undefined; vagas: number; days: number[] }>();
+                      const turnoBlocks: { bloco: BlocoConfig; dayNum: number }[] = [];
                       records.forEach(r => {
                         const tId = r.salaId || '';
-                        if (!turnoMap.has(tId)) turnoMap.set(tId, { turno: turnosGlobais.find(t => t.id === tId), vagas: r.vagasPorDia, days: [] });
-                        r.diasSemana.forEach(d => { turnoMap.get(tId)!.days.push(d); });
+                        const turnoObj = turnosGlobais.find(t => t.id === tId);
+                        r.diasSemana.forEach(d => {
+                          turnoBlocks.push({
+                            dayNum: d,
+                            bloco: {
+                              nome: turnoObj?.nome || tId || 'Turno',
+                              tipo: turnoObj ? 'padrao' : 'custom',
+                              horaInicio: r.horaInicio,
+                              horaFim: r.horaFim,
+                              vagas: r.vagasPorDia,
+                              ativo: true
+                            }
+                          });
+                        });
                       });
 
                       return (
@@ -1015,12 +1027,12 @@ const Disponibilidade: React.FC = () => {
                               </div>
                             </div>
                             <div className="space-y-1">
-                              {Array.from(turnoMap.entries()).map(([tId, info]) => (
-                                <div key={tId} className="flex items-center gap-2 text-xs">
-                                  <Badge variant="outline" className="text-[10px]">{info.turno?.nome || tId}</Badge>
-                                  <span className="text-muted-foreground">{info.turno?.horaInicio}–{info.turno?.horaFim}</span>
-                                  <span className="font-medium">{info.vagas} vagas</span>
-                                  <span className="text-muted-foreground">• {info.days.sort().map(d => diasSemanaLabels[d]).join(', ')}</span>
+                              {turnoBlocks.sort((a, b) => a.dayNum - b.dayNum || a.bloco.horaInicio.localeCompare(b.bloco.horaInicio)).map((tb, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-xs">
+                                  <Badge variant="outline" className="text-[10px] min-w-[32px] justify-center">{diasSemanaLabels[tb.dayNum]}</Badge>
+                                  <span className="font-medium">{tb.bloco.nome}</span>
+                                  <span className="text-muted-foreground">{tb.bloco.horaInicio}–{tb.bloco.horaFim}</span>
+                                  <span className="font-medium">{tb.bloco.vagas} vagas</span>
                                 </div>
                               ))}
                             </div>
