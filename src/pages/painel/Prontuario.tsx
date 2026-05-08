@@ -1040,9 +1040,25 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
+      
+      // Sanitização básica: garante que campos obrigatórios não sejam undefined
+      Object.keys(record).forEach(key => {
+        if (record[key] === undefined) {
+          record[key] = null;
+        }
+      });
+
       if (effectiveEditId) {
+        console.log("[Prontuario] Atualizando prontuário:", { id: effectiveEditId, profissionalId: record.profissional_id });
         const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
-        if (error) throw error;
+        if (error) {
+          console.error("[Prontuario] Erro ao atualizar prontuário principal:", {
+            error,
+            effectiveEditId,
+            record
+          });
+          throw error;
+        }
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
