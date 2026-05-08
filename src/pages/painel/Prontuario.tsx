@@ -1344,21 +1344,26 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
-        const links = selectedProcIds.map((pid) => {
-          const proc = procedimentos.find(p => p.id === pid);
-          return {
-            prontuario_id: prontId,
-            procedimento_id: proc?.uuid || pid,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
-          };
-        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-        
-        // Use a single transaction (delete + insert)
-        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (links.length > 0) {
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+        try {
+          const links = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            return {
+              prontuario_id: prontId,
+              procedimento_id: proc?.uuid || pid,
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+          
+          // Use delete + insert strategy for autosave too
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+          if (links.length > 0) {
+            await (supabase as any).from("prontuario_procedimentos").insert(links);
+          }
+        } catch (autoProcErr) {
+          console.error("[autosave] erro ao salvar procedimentos:", autoProcErr);
+          // Don't fail the whole autosave for procedure errors
         }
       }
       setAutosaveStatus('saved');
