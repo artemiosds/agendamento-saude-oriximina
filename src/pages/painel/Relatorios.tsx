@@ -92,14 +92,14 @@ const Relatorios: React.FC = () => {
   const tecnicos = funcionarios.filter(f => f.role === 'tecnico' && f.ativo);
 
   const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentos.map(a => a.tipo)].filter(Boolean));
+    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
-  }, [atendimentosDB, agendamentos]);
+  }, [atendimentosDB, agendamentosFull]);
 
   const tiposUnicos = useMemo(() => {
-    const s = new Set(agendamentos.map(a => a.tipo).filter(Boolean));
+    const s = new Set(agendamentosFull.map(a => a.tipo).filter(Boolean));
     return Array.from(s).sort();
-  }, [agendamentos]);
+  }, [agendamentosFull]);
 
   const normalizeStatus = useCallback((status: string): 'concluido' | 'pendente' | 'falta' | 'cancelado' | 'remarcado' | 'retorno' | string => {
     if (!status) return 'pendente';
