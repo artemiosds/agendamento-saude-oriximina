@@ -183,27 +183,37 @@ const Relatorios: React.FC = () => {
         return allData;
       };
 
-      const [ags, prons, filaData, triageData, cyclesData, sessData, nursingData, multiData, ptsDataResult] = await Promise.all([
+      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes] = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
-        supabase.from('fila_espera').select('*').limit(2000), // Fila doesn't usually have 1000s of active records
-        supabase.from('triage_records').select('*'),
-        supabase.from('treatment_cycles').select('*'),
-        supabase.from('treatment_sessions').select('*'),
-        supabase.from('nursing_evaluations').select('*'),
-        supabase.from('multiprofessional_evaluations').select('*'),
-        supabase.from('pts').select('*'),
+        supabase.from('fila_espera').select('*').limit(2000),
+        supabase.from('triage_records' as any).select('*'),
+        supabase.from('treatment_cycles' as any).select('*'),
+        supabase.from('treatment_sessions' as any).select('*'),
+        supabase.from('nursing_evaluations' as any).select('*'),
+        supabase.from('multiprofessional_evaluations' as any).select('*'),
+        supabase.from('pts' as any).select('*'),
       ]);
 
-      setAgendamentosFull(ags || []);
-      setProntuariosFull(prons || []);
-      if (filaData.data) setFilaDB(filaData.data);
-      if (triageData.data) setTriagensDB(triageData.data as TriagemDB[]);
-      if (cyclesData.data) setTreatmentCycles(cyclesData.data);
-      if (sessData.data) setTreatmentSessions(sessData.data);
-      if (nursingData.data) setNursingEvals(nursingData.data);
-      if (multiData.data) setMultiEvals(multiData.data);
-      if (ptsDataResult.data) setPtsData(ptsDataResult.data);
+      const agsData = ags || [];
+      const pronsData = prons || [];
+      const filaData = filaRes.data || [];
+      const triageData = triageRes.data || [];
+      const cyclesData = cyclesRes.data || [];
+      const sessData = sessRes.data || [];
+      const nursingData = nursingRes.data || [];
+      const multiData = multiRes.data || [];
+      const ptsDataResult = ptsRes.data || [];
+
+      setAgendamentosFull(agsData);
+      setProntuariosFull(pronsData);
+      setFilaDB(filaData);
+      setTriagensDB(triageData as TriagemDB[]);
+      setTreatmentCycles(cyclesData);
+      setTreatmentSessions(sessData);
+      setNursingEvals(nursingData);
+      setMultiEvals(multiData);
+      setPtsData(ptsDataResult);
       
       setLastUpdated(new Date());
       setIsInitialLoading(false);
