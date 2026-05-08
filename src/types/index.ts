@@ -108,6 +108,7 @@ export interface Setor {
 export interface Paciente {
   id: string;
   nome: string;
+  nome_completo?: string;
   cpf: string;
   cns: string;
   nomeMae: string;
