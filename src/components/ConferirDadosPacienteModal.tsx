@@ -397,8 +397,35 @@ export function ConferirDadosPacienteModal({
         className="p-0 gap-0 max-w-3xl w-[calc(100vw-1rem)] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
       >
         <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0">
-          <DialogTitle className="flex items-center gap-2 font-display text-base sm:text-lg pr-6">
-            {modo === "chegada" ? "Confirmar Chegada — Conferência" : "Conferir Dados do Paciente"}
+          <DialogTitle className="flex flex-col gap-1 pr-6 font-display">
+            <span className="text-base sm:text-lg">
+              {modo === "chegada" ? "Confirmar Chegada — Conferência" : "Conferir Dados do Paciente"}
+            </span>
+            <div className="flex items-center gap-1.5 h-4">
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground animate-pulse">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" />
+                  Salvando automaticamente...
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-success">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Salvo automaticamente
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive">
+                  <AlertTriangle className="w-3 h-3" />
+                  Erro ao salvar
+                </span>
+              )}
+              {saveStatus === "idle" && dirty && (
+                <span className="text-[11px] font-normal text-muted-foreground italic">
+                  Alterações pendentes...
+                </span>
+              )}
+            </div>
           </DialogTitle>
         </DialogHeader>
 
