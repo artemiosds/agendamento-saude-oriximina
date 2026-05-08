@@ -1241,8 +1241,15 @@ const Agenda: React.FC = () => {
               queryClient
             );
           }
-        } catch (err) {
-          console.warn("[Agenda] Erro ao persistir dados do paciente antes da chegada:", err);
+        } catch (err: any) {
+          console.error("[Agenda] Erro real ao persistir dados do paciente antes da chegada", {
+            pacienteId: ag.pacienteId,
+            error: err,
+            message: err?.message,
+            code: err?.code
+          });
+          toast.error("Não foi possível salvar os dados do paciente. Verifique os campos e tente novamente.");
+          return; // Aborta confirmação de chegada se falhar salvamento do paciente
         }
 
         // Triage routing is OPT-IN. Default = direct to professional's queue.
