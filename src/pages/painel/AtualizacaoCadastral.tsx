@@ -95,7 +95,7 @@ const AtualizacaoCadastral: React.FC = () => {
     // Ensure data alignment with CadastroPacienteForm expected structure
     setEditForm({
       ...emptyPacienteForm,
-      nome: p.nome || "",
+      nome: p.nome_completo || p.nome || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
       nomeMae: p.nomeMae || p.nome_mae || "",
