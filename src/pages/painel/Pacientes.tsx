@@ -559,6 +559,7 @@ const Pacientes: React.FC = () => {
           queryClient
         );
         
+        await refreshPacientes();
         setSaving(false);
         setDialogOpen(false);
         toast.success("Paciente atualizado!");
