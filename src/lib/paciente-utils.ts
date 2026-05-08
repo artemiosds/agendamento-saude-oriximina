@@ -133,14 +133,25 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
   // Helper para resolver valor priorizando o form, depois o banco, com fallback seguro
+  // Se o valor for null ou undefined no form, tentamos pegar do existente.
+  // Se ainda assim for nulo/vazio, garantimos string vazia para campos NOT NULL.
   const resolve = (f: string, f2?: string) => {
-    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    let v = form[f] ?? form[f2 || ""];
+    
+    // Se no form vier null/undefined explicitamente, e tivermos paciente existente, preservamos o dado antigo
+    if ((v === null || v === undefined) && existingPatient) {
+      v = existingPatient[f] ?? existingPatient[f2 || ""];
+    }
+
     if (v === undefined || v === null) return "";
-    return typeof v === 'string' ? v.trim() : v;
+    return typeof v === 'string' ? v.trim() : String(v);
   };
 
   const resolveBool = (f: string, f2?: string) => {
-    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""];
+    let v = form[f] ?? form[f2 || ""];
+    if ((v === null || v === undefined) && existingPatient) {
+      v = existingPatient[f] ?? existingPatient[f2 || ""];
+    }
     return !!v;
   };
 
@@ -154,7 +165,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     etnia: form.etnia ?? existingCd.etnia ?? "",
     etnia_outra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etnia_outra ?? existingCd.etniaOutra ?? "",
     nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
-    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.pais_nascimento ?? "",
+    pais_nascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.pais_nascimento ?? existingCd.paisNascimento ?? "",
     
     // Endereço Estruturado
     cep: form.cep ?? existingCd.cep ?? "",
@@ -174,15 +185,15 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
   };
 
   // 2. Montagem do Payload de Topo (Tabela `pacientes`)
-  // IMPORTANTE: Mapear para os nomes reais das colunas do banco
+  // IMPORTANTE: Mapear para os nomes reais das colunas do banco (que são snake_case)
   const payload: any = {
-    nome: resolve("nome_completo", "nome"), // Garante mapeamento para nome_completo se existir
+    nome: resolve("nome", "nome_completo"), 
     nome_mae: resolve("nome_mae", "nomeMae"),
     data_nascimento: resolve("data_nascimento", "dataNascimento"),
     cpf: String(resolve("cpf")).replace(/\D/g, ""),
     cns: String(resolve("cns")).replace(/\D/g, "").slice(0, 15),
     telefone: normalizePhone(String(resolve("telefone"))) || String(resolve("telefone")),
-    email: String(resolve("email")).toLowerCase(),
+    email: String(resolve("email")).toLowerCase().trim(),
     municipio: resolve("municipio"),
     naturalidade: resolve("naturalidade"),
     naturalidade_uf: resolve("naturalidade_uf", "naturalidadeUf"),
@@ -226,25 +237,27 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     custom_data: customData,
   };
 
-  // Se a coluna real no banco for 'nome' (retrocompatibilidade ou divergência), duplicamos
-  // Mas conforme schema lido, a coluna é 'nome'.
-  // VAMOS USAR O QUE O DB DISSE: id, nome, cpf, telefone, data_nascimento, email, endereco, etc.
-  payload.nome = resolve("nome", "nome_completo");
-
   // 3. Sincronização do Campo `endereco` (Texto Livre) com o Estruturado
-  const parts = [
-    customData.tipo_logradouro_dne,
-    customData.logradouro,
-    customData.numero ? `nº ${customData.numero}` : "",
-    customData.complemento,
-    customData.bairro,
-    payload.municipio,
-    customData.uf,
-    customData.cep ? `CEP ${customData.cep}` : ""
-  ].filter(p => p && String(p).trim() !== "");
-  
-  payload.endereco = parts.join(", ");
+  // Se o formulário enviou um 'endereco' manual, damos preferência a ele se os estruturados estiverem vazios
+  const hasStructuredAddress = customData.logradouro || customData.bairro || customData.cep;
+  if (!hasStructuredAddress && form.endereco) {
+    payload.endereco = form.endereco;
+  } else {
+    const parts = [
+      customData.tipo_logradouro_dne,
+      customData.logradouro,
+      customData.numero ? `nº ${customData.numero}` : "",
+      customData.complemento,
+      customData.bairro,
+      payload.municipio,
+      customData.uf,
+      customData.cep ? `CEP ${customData.cep}` : ""
+    ].filter(p => p && String(p).trim() !== "");
+    
+    payload.endereco = parts.join(", ");
+  }
 
+  // Sanitização final para garantir NOT NULL no banco
   return sanitizePacientePayload(payload);
 }
 
