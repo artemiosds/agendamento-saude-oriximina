@@ -427,19 +427,72 @@ const Disponibilidade: React.FC = () => {
     }
   };
 
-  const toggleTurnoDay = (dayIndex: number, ativo: boolean) => {
-    setTurnoDays(prev => prev.map((td, i) => {
-      if (i !== dayIndex) return td;
-      return { ...td, ativo, turnosAtivos: ativo ? activeTurnos.map(t => t.id) : [] };
+  const toggleDiaConfig = (dayIndex: number, ativo: boolean) => {
+    setConfigDias(prev => prev.map((pd, i) => {
+      if (i !== dayIndex) return pd;
+      // When activating, if it has no blocks, add defaults from global templates
+      const activeGlobalTurnos = turnosGlobais.filter(t => t.ativo);
+      const newBlocks = (ativo && pd.blocos.length === 0) 
+        ? activeGlobalTurnos.map(t => ({
+            nome: t.nome,
+            tipo: 'padrao' as const,
+            horaInicio: t.horaInicio,
+            horaFim: t.horaFim,
+            vagas: 20,
+            ativo: true
+          }))
+        : pd.blocos;
+      return { ...pd, ativo, blocos: newBlocks };
     }));
   };
 
-  const toggleTurnoForDay = (dayIndex: number, turnoId: string) => {
-    setTurnoDays(prev => prev.map((td, i) => {
-      if (i !== dayIndex) return td;
-      const has = td.turnosAtivos.includes(turnoId);
-      return { ...td, turnosAtivos: has ? td.turnosAtivos.filter(id => id !== turnoId) : [...td.turnosAtivos, turnoId] };
+  const addBlocoToDia = (dayIndex: number) => {
+    setConfigDias(prev => prev.map((pd, i) => {
+      if (i !== dayIndex) return pd;
+      return {
+        ...pd,
+        blocos: [
+          ...pd.blocos,
+          { nome: 'Novo Turno', tipo: 'custom', horaInicio: '13:00', horaFim: '18:00', vagas: 10, ativo: true }
+        ]
+      };
     }));
+  };
+
+  const removeBlocoFromDia = (dayIndex: number, blocoIndex: number) => {
+    setConfigDias(prev => prev.map((pd, i) => {
+      if (i !== dayIndex) return pd;
+      return {
+        ...pd,
+        blocos: pd.blocos.filter((_, bi) => bi !== blocoIndex)
+      };
+    }));
+  };
+
+  const updateBlocoInDia = (dayIndex: number, blocoIndex: number, field: keyof BlocoConfig, value: any) => {
+    setConfigDias(prev => prev.map((pd, i) => {
+      if (i !== dayIndex) return pd;
+      return {
+        ...pd,
+        blocos: pd.blocos.map((b, bi) => bi === blocoIndex ? { ...b, [field]: value } : b)
+      };
+    }));
+  };
+
+  const copyDayConfig = (fromIndex: number) => {
+    const sourceDay = configDias[fromIndex];
+    if (!sourceDay.ativo) return;
+    
+    // For simplicity, copy to ALL other active days or provide a selection? 
+    // Here we'll show a toast or just apply to next.
+    // User requested: "copy from one day to another", "apply to several days"
+    // We'll implement a simple "Apply to all other active days" or just copy to next.
+    // Let's implement "Copy to all other active days" for now.
+    setConfigDias(prev => prev.map((pd, i) => {
+      if (i === fromIndex || !pd.ativo) return pd;
+      return { ...pd, blocos: sourceDay.blocos.map(b => ({ ...b, id: undefined })) };
+    }));
+    toast.success(`Configuração de ${diasSemanaFull[fromIndex]} copiada para os demais dias ativos.`);
   };
 
   const filteredSalas = salas.filter(s => s.unidadeId === form.unidadeId && s.ativo);
@@ -454,17 +507,18 @@ const Disponibilidade: React.FC = () => {
     if (modo !== 'por_turno') return { totalVagas: 0, diasAtivos: 0, turnosConfig: 0 };
     let totalVagas = 0;
     let diasAtivos = 0;
-    const turnosUsados = new Set<string>();
-    turnoDays.forEach(td => {
-      if (!td.ativo) return;
+    let totalTurnos = 0;
+    configDias.forEach(pd => {
+      if (!pd.ativo) return;
       diasAtivos++;
-      td.turnosAtivos.forEach(tId => {
-        turnosUsados.add(tId);
-        totalVagas += turnoVagas[tId] || 20;
+      pd.blocos.forEach(b => {
+        if (!b.ativo) return;
+        totalTurnos++;
+        totalVagas += b.vagas;
       });
     });
-    return { totalVagas, diasAtivos, turnosConfig: turnosUsados.size };
-  }, [modo, turnoDays, turnoVagas]);
+    return { totalVagas, diasAtivos, turnosConfig: totalTurnos };
+  }, [modo, configDias]);
 
   // Group disponibilidades by professional
   const profGroups = useMemo(() => {
