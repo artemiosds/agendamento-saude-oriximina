@@ -153,7 +153,7 @@ export async function updatePacienteCadastro(
   // 2. Normalizar payload com merge
   const updatePayload = normalizePatientPayload(dados, existing);
 
-  // 3. Update no banco
+  // 3. Update no banco — payload já saneado por normalizePatientPayload/sanitizePacientePayload
   const { data: updated, error: updateError } = await supabase
     .from("pacientes")
     .update(updatePayload)
@@ -161,7 +161,18 @@ export async function updatePacienteCadastro(
     .select()
     .single();
 
-  if (updateError) throw updateError;
+  if (updateError) {
+    console.error("[updatePacienteCadastro] Erro Supabase:", {
+      origem,
+      pacienteId,
+      code: (updateError as any)?.code,
+      message: updateError.message,
+      details: (updateError as any)?.details,
+      hint: (updateError as any)?.hint,
+      payloadKeys: Object.keys(updatePayload),
+    });
+    throw updateError;
+  }
 
   // 4. Auditoria
   const camposAlterados: Record<string, { de: any; para: any }> = {};
