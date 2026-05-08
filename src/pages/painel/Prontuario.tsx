@@ -1112,53 +1112,61 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (prontuarioId) {
-        // First, fetch current procedures to avoid unnecessary deletion if no changes
-        const { data: existingProcs } = await (supabase as any)
-          .from("prontuario_procedimentos")
-          .select("procedimento_id, quantidade, observacao, cids_selecionados")
-          .eq("prontuario_id", prontuarioId);
+        console.log("[Prontuario] Iniciando salvamento de procedimentos para prontuário:", prontuarioId);
+        
+        try {
+          // Prepare the new list of links to insert
+          const linksToInsert = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            // Prioritize proc.uuid (the real UUID from the DB), fallback to pid if it looks like a UUID
+            const finalProcId = proc?.uuid || (pid.length > 30 ? pid : null);
+            
+            if (!finalProcId) {
+              console.warn(`[Prontuario] Procedimento ID ignorado (não é UUID): ${pid}`);
+              return null;
+            }
 
-        // Prepare the new list of links to insert
-        const linksToInsert = selectedProcIds.map((pid) => {
-          const proc = procedimentos.find(p => p.id === pid);
-          // Prioritize proc.uuid (the real UUID from the DB), fallback to pid if it looks like a UUID
-          const finalProcId = proc?.uuid || (pid.length > 30 ? pid : null);
-          
-          if (!finalProcId) {
-            console.warn(`[Prontuario] Procedimento ID ignorado (não é UUID): ${pid}`);
-            return null;
-          }
+            return {
+              prontuario_id: prontuarioId,
+              procedimento_id: finalProcId,
+              // Campos obrigatórios conforme schema do banco (verificados via information_schema)
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(Boolean);
 
-          return {
-            prontuario_id: prontuarioId,
-            procedimento_id: finalProcId,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
-          };
-        }).filter(Boolean);
-
-        // Simple strategy: delete and re-insert if different
-        const hasChanges = JSON.stringify(existingProcs || []) !== JSON.stringify(linksToInsert.map(l => ({
-          procedimento_id: l!.procedimento_id,
-          quantidade: l!.quantidade,
-          observacao: l!.observacao,
-          cids_selecionados: l!.cids_selecionados
-        })));
-
-        if (hasChanges || !existingProcs || existingProcs.length !== linksToInsert.length) {
-          const { error: deleteError } = await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
+          // Estratégia: Sempre deletar os antigos e inserir os novos para este prontuário
+          // Isso resolve problemas de desincronização entre estado da tela e banco
+          const { error: deleteError } = await (supabase as any)
+            .from("prontuario_procedimentos")
+            .delete()
+            .eq("prontuario_id", prontuarioId);
+            
           if (deleteError) {
-            console.error("Erro ao deletar procedimentos antigos:", deleteError);
-            throw new Error("Não foi possível atualizar os procedimentos (erro de permissão ou vínculo).");
+            console.error("[Prontuario] Erro ao deletar procedimentos antigos:", deleteError);
+            // Não bloqueia o prontuário inteiro, mas avisa o usuário no console
           }
+
           if (linksToInsert.length > 0) {
-            const { error: insertError } = await (supabase as any).from("prontuario_procedimentos").insert(linksToInsert);
+            const { error: insertError } = await (supabase as any)
+              .from("prontuario_procedimentos")
+              .insert(linksToInsert);
+              
             if (insertError) {
-              console.error("Erro ao inserir procedimentos do prontuário:", insertError, linksToInsert);
-              throw new Error("Não foi possível salvar os procedimentos do prontuário. Verifique se todos os procedimentos são válidos.");
+              console.error("[Prontuario] Erro ao inserir procedimentos do prontuário:", {
+                error: insertError,
+                payload: linksToInsert,
+                prontuarioId
+              });
+              // Mensagem específica para erro de procedimentos sem bloquear o fluxo principal
+              toast.error("Os dados clínicos foram salvos, mas houve um erro ao salvar os procedimentos. Verifique se as permissões estão corretas.");
+            } else {
+              console.log("[Prontuario] Procedimentos salvos com sucesso:", linksToInsert.length);
             }
           }
+        } catch (procErr) {
+          console.error("[Prontuario] Erro inesperado no fluxo de procedimentos:", procErr);
         }
       }
 
@@ -1336,21 +1344,26 @@ const ProntuarioPage: React.FC = () => {
 
       // Autosave procedures to junction table
       if (prontId) {
-        const links = selectedProcIds.map((pid) => {
-          const proc = procedimentos.find(p => p.id === pid);
-          return {
-            prontuario_id: prontId,
-            procedimento_id: proc?.uuid || pid,
-            cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
-            quantidade: procDetails[pid]?.quantidade || 1,
-            observacao: procDetails[pid]?.observacao || "",
-          };
-        }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
-        
-        // Use a single transaction (delete + insert)
-        await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
-        if (links.length > 0) {
-          await (supabase as any).from("prontuario_procedimentos").insert(links);
+        try {
+          const links = selectedProcIds.map((pid) => {
+            const proc = procedimentos.find(p => p.id === pid);
+            return {
+              prontuario_id: prontId,
+              procedimento_id: proc?.uuid || pid,
+              cids_selecionados: Array.from(new Set(selectedCidsByProc[pid] || [])),
+              quantidade: procDetails[pid]?.quantidade || 1,
+              observacao: procDetails[pid]?.observacao || "",
+            };
+          }).filter(l => l.procedimento_id && l.procedimento_id.length > 30);
+          
+          // Use delete + insert strategy for autosave too
+          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontId);
+          if (links.length > 0) {
+            await (supabase as any).from("prontuario_procedimentos").insert(links);
+          }
+        } catch (autoProcErr) {
+          console.error("[autosave] erro ao salvar procedimentos:", autoProcErr);
+          // Don't fail the whole autosave for procedure errors
         }
       }
       setAutosaveStatus('saved');
