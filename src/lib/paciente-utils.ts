@@ -187,7 +187,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
   // 2. Montagem do Payload de Topo (Tabela `pacientes`)
   // IMPORTANTE: Mapear para os nomes reais das colunas do banco (que são snake_case)
   const payload: any = {
-    nome: resolve("nome", "nome_completo"), 
+    nome_completo: resolve("nome_completo", "nome"), 
     nome_mae: resolve("nome_mae", "nomeMae"),
     data_nascimento: resolve("data_nascimento", "dataNascimento"),
     cpf: String(resolve("cpf")).replace(/\D/g, ""),
