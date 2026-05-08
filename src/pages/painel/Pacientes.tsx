@@ -1373,6 +1373,10 @@ const Pacientes: React.FC = () => {
               <PCampo label={L('cns', 'Cartão SUS')} valor={formatCNS(detalhePaciente.cns)} />
               <PCampo label={L('nomeMae', 'Nome da mãe')} valor={detalhePaciente.nomeMae} />
               <PCampo label="CID" valor={cidVal} />
+              <PCampo label="Sexo" valor={(detalhePaciente as any).custom_data?.sexo} />
+              <PCampo label="Raça/Cor" valor={(detalhePaciente as any).custom_data?.raca_cor || (detalhePaciente as any).custom_data?.racaCor} />
+              <PCampo label="Nacionalidade" valor={(detalhePaciente as any).custom_data?.nacionalidade} />
+              <PCampo label="Naturalidade" valor={detalhePaciente.naturalidade} />
             </PSecao>
 
             <PSecao titulo="Endereço">
