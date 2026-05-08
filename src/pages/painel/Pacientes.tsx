@@ -614,49 +614,34 @@ const Pacientes: React.FC = () => {
           return;
         }
 
-        const insertPayload: any = {
-          ...normalizePatientPayload(dbFields),
-          id,
-          criado_em: new Date().toISOString(),
-          unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
-        };
+        // Usa a função centralizada persistPaciente que garante normalização idêntica ao Update
+        const { persistPaciente } = await import("@/lib/paciente-utils");
         
-        // Garantir que não existam nulls em colunas NOT NULL
-        const sanitizedInsert = sanitizePacientePayload(insertPayload);
+        persistPaciente(
+          null,
+          dbFields,
+          "Pacientes",
+          user,
+          queryClient
+        ).then(async (newRecord) => {
+          const id = newRecord.id;
+          // Flush pending referrals + attachments queued in CadastroPacienteForm
+          try {
+            const refHandle = (window as any).__patientReferralRef?.current;
+            if (refHandle?.hasPending?.()) {
+              await refHandle.flushPending(id);
+            }
+          } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
+          
+          queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+          refreshPacientes();
+        }).catch((err) => {
+          console.error("Erro ao cadastrar paciente:", err);
+          toast.error("Erro ao cadastrar paciente.");
+        });
 
-        // Adiciona metadados extras ao custom_data
-        sanitizedInsert.custom_data = {
-          ...(sanitizedInsert.custom_data || {}),
-          criado_por: user?.id || "",
-          criado_por_nome: user?.nome || "",
-          criado_por_usuario: user?.usuario || "",
-          unidade_origem_id: unidadeIdFuncionario,
-          criado_at: new Date().toISOString(),
-          atualizado_at: new Date().toISOString(),
-          motivo_alteracao: "Cadastro de paciente pela página Pacientes",
-        };
-        // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert(sanitizedInsert))
-          .then(async ({ error }) => {
-            if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
-            // Flush pending referrals + attachments queued in CadastroPacienteForm
-            try {
-              const refHandle = (window as any).__patientReferralRef?.current;
-              if (refHandle?.hasPending?.()) {
-                await refHandle.flushPending(id);
-              }
-            } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
-          })
-          .catch((err) => console.error("Erro ao cadastrar paciente:", err))
-          .finally(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
-            refreshPacientes();
-          });
         toast.success("Paciente cadastrado com sucesso!");
       }
     } catch {
