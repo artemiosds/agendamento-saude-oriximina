@@ -1980,7 +1980,7 @@ const Agenda: React.FC = () => {
                     <BuscaPaciente
                       pacientes={pacientes}
                       value={newAg.pacienteId}
-                      onChange={(id) => handlePacienteSelecionadoNovoAg(id)}
+                      onChange={(id, nome) => handlePacienteSelecionadoNovoAg(id)}
                     />
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <div className="flex-1 h-px bg-border" />
