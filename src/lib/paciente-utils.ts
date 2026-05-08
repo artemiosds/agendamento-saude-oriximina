@@ -70,7 +70,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  */
 
 const PACIENTE_TEXT_NOT_NULL = new Set([
-  "nome", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
+  "nome_completo", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
   "nome_mae", "municipio", "naturalidade", "naturalidade_uf", "unidade_id",
   "data_nascimento", "descricao_clinica", "cid", "especialidade_destino",
   "turno_preferido", "transporte", "observacao_equipamentos",
