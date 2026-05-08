@@ -288,9 +288,13 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
         const municipioMatch = MUNICIPIOS.find((m) =>
           sanitizeUpper(m) === sanitizeUpper(novoMunicipio)
         );
+        
         onChange({
           ...form,
           municipio: municipioMatch || form.municipio,
+          logradouro: update.logradouro || form.logradouro,
+          bairro: update.bairro || form.bairro,
+          uf: update.uf || form.uf,
           customData: update,
         });
         toast.success("Endereço preenchido pelo CEP");
