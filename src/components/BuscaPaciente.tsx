@@ -13,8 +13,7 @@ interface BuscaPacienteProps {
 
 const mapPaciente = (row: any): Paciente => ({
   id: row.id,
-  nome: row.nome_completo || row.nome,
-  nome_completo: row.nome_completo,
+  nome: row.nome,
   cpf: row.cpf || '',
   cns: row.cns || '',
   nomeMae: row.nome_mae || '',
@@ -66,7 +65,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       const { data, error } = await supabase
         .from('pacientes')
         .select(
-          'id, nome, nome_completo, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
         .eq('id', value)
         .maybeSingle();
@@ -105,9 +104,9 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
       const { data, error } = await supabase
         .from('pacientes')
         .select(
-          'id, nome, nome_completo, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
+          'id, nome, cpf, cns, nome_mae, telefone, data_nascimento, email, endereco, observacoes, descricao_clinica, cid, criado_em',
         )
-        .or(`nome.ilike.%${ilikeTerm}%,nome_completo.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
+        .or(`nome.ilike.%${ilikeTerm}%,cpf.ilike.%${ilikeTerm}%,telefone.ilike.%${ilikeTerm}%`)
         .order('nome', { ascending: true })
         .limit(10);
 
@@ -139,7 +138,7 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
     return (
       <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{selectedPaciente.nome || selectedPaciente.nome_completo}</p>
+          <p className="truncate text-sm font-medium">{selectedPaciente.nome}</p>
           <p className="truncate text-xs text-muted-foreground">
             {selectedPaciente.cpf ? `CPF: ${selectedPaciente.cpf} · ` : ''}
             Tel: {selectedPaciente.telefone || 'Não informado'}
@@ -194,15 +193,14 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
                 type="button"
                 onClick={() => {
                   setSelectedPaciente(paciente);
-                  // Garantir que passamos o nome correto (priorizando nome_completo)
-                  const nomeParaExibir = paciente.nome_completo || paciente.nome;
+                  const nomeParaExibir = paciente.nome;
                   onChange(paciente.id, nomeParaExibir);
                   setAberto(false);
                   setQuery('');
                 }}
                 className="w-full border-b border-border px-3 py-2 text-left transition-colors last:border-0 hover:bg-accent"
               >
-                <p className="text-sm font-medium">{paciente.nome_completo || paciente.nome}</p>
+                <p className="text-sm font-medium">{paciente.nome}</p>
                 <p className="text-xs text-muted-foreground">
                   {paciente.cpf ? `CPF: ${paciente.cpf} · ` : ''}
                   {paciente.telefone ? `Tel: ${paciente.telefone}` : 'Telefone não informado'}

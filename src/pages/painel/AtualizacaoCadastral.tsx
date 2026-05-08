@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/hooks/queries/queryKeys";
+import { patientService } from "@/services/patientService";
 import CadastroPacienteForm, { emptyPacienteForm } from "@/components/CadastroPacienteForm";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -119,39 +120,37 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from("pacientes")
-        .update({
-          nome: editForm.nome,
-          cpf: editForm.cpf,
-          cns: editForm.cns.replace(/\D/g, "").slice(0, 15),
-          nome_mae: editForm.nomeMae,
-          telefone: editForm.telefone,
-          data_nascimento: editForm.dataNascimento,
-          email: editForm.email,
-          endereco: editForm.endereco,
-          municipio: editForm.municipio,
-          naturalidade: editForm.naturalidade,
-          naturalidade_uf: editForm.naturalidadeUf,
-          menor_idade: editForm.menorIdade,
-          nome_responsavel: editForm.nomeResponsavel,
-          cpf_responsavel: editForm.cpfResponsavel,
-          is_gestante: editForm.isGestante,
-          is_pne: editForm.isPne,
-          is_autista: editForm.isAutista,
-          custom_data: {
-            ...(editForm.customData || {}),
-            atualizado_em: new Date().toISOString(),
-            atualizado_por: user?.id || "",
-          }
-        })
-        .eq("id", selectedPatient.id);
-
-      if (error) throw error;
+      // Usar o serviço central para garantir mapeamento correto e consistência
+      await patientService.savePacienteCadastro(selectedPatient.id, {
+        nome: editForm.nome,
+        cpf: editForm.cpf,
+        cns: editForm.cns,
+        nome_mae: editForm.nomeMae,
+        telefone_principal: editForm.telefone,
+        data_nascimento: editForm.dataNascimento,
+        email: editForm.email,
+        endereco: editForm.endereco,
+        municipio: editForm.municipio,
+        naturalidade: editForm.naturalidade,
+        naturalidade_uf: editForm.naturalidadeUf,
+        menor_idade: editForm.menorIdade,
+        nome_responsavel: editForm.nomeResponsavel,
+        cpf_responsavel: editForm.cpfResponsavel,
+        is_gestante: editForm.isGestante,
+        is_pne: editForm.isPne,
+        is_autista: editForm.isAutista,
+        customData: {
+          ...(editForm.customData || {}),
+          atualizado_em: new Date().toISOString(),
+          atualizado_por: user?.id || "",
+          atualizado_por_nome: user?.nome || "",
+        }
+      }, "Central de Atualização Cadastral");
 
       toast.success("Dados do paciente atualizados!");
       setIsEditModalOpen(false);
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) });
       refreshPacientes();
       
       logAction({
@@ -161,9 +160,9 @@ const AtualizacaoCadastral: React.FC = () => {
         detalhes: { acao: "edicao_rapida_central_pendencias", nome: editForm.nome },
         user
       });
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao salvar alterações.");
+    } catch (err: any) {
+      console.error("[AtualizacaoCadastral] Erro ao salvar:", err);
+      toast.error("Erro ao salvar alterações: " + (err?.message || ""));
     } finally {
       setIsSaving(false);
     }
@@ -180,7 +179,7 @@ const AtualizacaoCadastral: React.FC = () => {
     }
 
     const headers = [
-      "id_paciente", "nome_completo", "cpf", "cns", "data_nascimento", "nome_mae", 
+      "id_paciente", "nome", "cpf", "cns", "data_nascimento", "nome_mae", 
       "telefone", "email", "municipio", "unidade_id", "pendencias", "status_cadastral", "completude"
     ];
 

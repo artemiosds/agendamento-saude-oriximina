@@ -193,7 +193,9 @@ export function ConferirDadosPacienteModal({
     setDirty(true);
     setSaveStatus("idle");
 
-    // Autosave com debounce de 1200ms
+    // Autosave pausado temporariamente para estabilidade. 
+    // O salvamento ocorrerá ao clicar em Salvar ou ao Confirmar.
+    /*
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
       if (paciente) {
@@ -202,6 +204,7 @@ export function ConferirDadosPacienteModal({
         });
       }
     }, 1200);
+    */
   };
 
   const handleSave = async (silent = false, currentForm?: any) => {
@@ -240,6 +243,15 @@ export function ConferirDadosPacienteModal({
 
       if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
+      console.error("[Agenda/Pacientes] Erro real no fluxo", {
+        etapa: "salvamento_paciente",
+        origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento",
+        pacienteId: paciente.id,
+        errorMessage: e?.message,
+        errorDetails: e?.details,
+        errorHint: e?.hint,
+        errorCode: e?.code
+      });
       setSaveStatus("error");
       if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
       throw e;
@@ -424,6 +436,8 @@ export function ConferirDadosPacienteModal({
                         setForm(newFormData);
                         setDirty(true);
                         setSaveStatus("idle");
+                        // Autosave pausado
+                        /*
                         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                         autoSaveTimerRef.current = setTimeout(() => {
                           handleSave(true, newFormData).catch(err => {
@@ -431,6 +445,7 @@ export function ConferirDadosPacienteModal({
                             setSaveStatus("error");
                           });
                         }, 1200);
+                        */
                       }}
                       placeholder="Selecione o município de naturalidade"
                     />
@@ -473,6 +488,8 @@ export function ConferirDadosPacienteModal({
                         setForm(newFormData);
                         setDirty(true);
                         setSaveStatus("idle");
+                        // Autosave pausado
+                        /*
                         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
                         autoSaveTimerRef.current = setTimeout(() => {
                           handleSave(true, newFormData).catch(err => {
@@ -480,6 +497,7 @@ export function ConferirDadosPacienteModal({
                             setSaveStatus("error");
                           });
                         }, 1200);
+                        */
                       }}
                     />
                   </div>
