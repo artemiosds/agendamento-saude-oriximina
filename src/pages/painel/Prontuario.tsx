@@ -1112,12 +1112,24 @@ const ProntuarioPage: React.FC = () => {
           },
         });
       } else {
+        console.log("[Prontuario] Inserindo novo prontuário:", {
+          paciente: record.paciente_nome,
+          profissionalId: record.profissional_id,
+          unidadeId: record.unidade_id
+        });
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
           .select("id")
           .single();
-        if (error) throw error;
+          
+        if (error) {
+          console.error("[Prontuario] Erro ao inserir prontuário principal:", {
+            error,
+            record
+          });
+          throw error;
+        }
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
