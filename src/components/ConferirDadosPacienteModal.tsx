@@ -127,6 +127,7 @@ export function ConferirDadosPacienteModal({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [confirming, setConfirming] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -134,6 +135,7 @@ export function ConferirDadosPacienteModal({
   const [form, setForm] = useState<any>({});
   const [lastSavedJson, setLastSavedJson] = useState<string>("");
   const formRef = useRef<any>({});
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
@@ -220,28 +222,33 @@ export function ConferirDadosPacienteModal({
     const newForm = { ...form, [name]: masked };
     setForm(newForm);
     setDirty(true);
-    
-    // Autosave: salvar imediatamente ao alterar qualquer campo
-    // Debounce manual opcional, mas o pedido é "salva automaticamente e reflete de imediato"
-    if (paciente) {
-      handleSave(true, newForm).catch(err => {
-        console.error("[ConferirDados] Erro no autosave:", err);
-      });
-    }
+    setSaveStatus("idle");
+
+    // Autosave com debounce de 1200ms
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (paciente) {
+        handleSave(true, newForm).catch((err) => {
+          console.error("[ConferirDados] Erro no autosave:", err);
+          setSaveStatus("error");
+        });
+      }
+    }, 1200);
   };
 
   const handleSave = async (silent = false, currentForm?: any) => {
     if (!paciente) return;
     const formToSave = currentForm || form;
-    
+
     // Evitar salvar se os dados não mudaram (autosave excessivo)
     const currentJson = JSON.stringify(formToSave);
     if (silent && currentJson === lastSavedJson) return;
-    
+
     setSaving(true);
+    setSaveStatus("saving");
     setLastSavedJson(currentJson);
     try {
-      // Normalizar telefones para o formato canônico (13 dígitos com 55), igual à página Pacientes.
+      // Normalizar telefones para o formato canônico (13 dígitos com 55)
       const telNormalizado = formToSave.telefone ? (normalizePhone(formToSave.telefone) || formToSave.telefone) : "";
       const telSecNormalizado = formToSave.telefone_secundario
         ? (normalizePhone(formToSave.telefone_secundario) || formToSave.telefone_secundario)
@@ -249,83 +256,81 @@ export function ConferirDadosPacienteModal({
 
       const customData = {
         ...(paciente.custom_data || {}),
-        sexo: formToSave.sexo,
-        // Persistir Raça/Cor em ambas as chaves (compat com BPA)
-        racaCor: formToSave.raca_cor,
-        raca_cor: formToSave.raca_cor,
-        etnia: formToSave.etnia,
-        etniaOutra: formToSave.etnia_outra,
-        nacionalidade: formToSave.nacionalidade,
-        paisNascimento: formToSave.pais_nascimento,
-        // Tipo de logradouro DNE: salvar código + descrição (chaves compat com Cadastro)
-        tipoLogradouroDne: formToSave.tipo_logradouro_dne,
-        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo,
-        tipoLogradouro: formToSave.tipo_logradouro_dne,
-        // Endereço estruturado (mesmas chaves usadas no CadastroPacienteForm)
-        logradouro: formToSave.logradouro,
-        numero: formToSave.numero,
-        complemento: formToSave.complemento,
-        bairro: formToSave.bairro,
-        uf: formToSave.uf,
-        cep: formToSave.cep,
-        telefoneSecundario: telSecNormalizado,
-        // Auditoria de conferência
+        sexo: formToSave.sexo || paciente.custom_data?.sexo || "",
+        raca_cor: formToSave.raca_cor || paciente.custom_data?.raca_cor || "",
+        racaCor: formToSave.raca_cor || paciente.custom_data?.racaCor || "",
+        etnia: formToSave.etnia || paciente.custom_data?.etnia || "",
+        etniaOutra: formToSave.etnia_outra || paciente.custom_data?.etniaOutra || "",
+        nacionalidade: formToSave.nacionalidade || paciente.custom_data?.nacionalidade || "brasileiro",
+        paisNascimento: formToSave.pais_nascimento || paciente.custom_data?.paisNascimento || "",
+        tipoLogradouroDne: formToSave.tipo_logradouro_dne || paciente.custom_data?.tipoLogradouroDne || "",
+        tipoLogradouroCodigo: formToSave.tipo_logradouro_codigo || paciente.custom_data?.tipoLogradouroCodigo || "",
+        tipoLogradouro: formToSave.tipo_logradouro_dne || paciente.custom_data?.tipoLogradouro || "",
+        logradouro: formToSave.logradouro || paciente.custom_data?.logradouro || "",
+        numero: formToSave.numero || paciente.custom_data?.numero || "",
+        complemento: formToSave.complemento || paciente.custom_data?.complemento || "",
+        bairro: formToSave.bairro || paciente.custom_data?.bairro || "",
+        uf: formToSave.uf || paciente.custom_data?.uf || "PA",
+        cep: formToSave.cep || paciente.custom_data?.cep || "",
+        telefoneSecundario: telSecNormalizado || paciente.custom_data?.telefoneSecundario || "",
         data_ultima_validacao_cadastro: new Date().toISOString(),
         dados_conferidos_em: new Date().toISOString(),
         dados_conferidos_por: user?.nome || user?.id || "",
       };
 
       const updatePayload: any = {
-        nome: formToSave.nome,
         nome_completo: formToSave.nome,
-        nome_mae: formToSave.nome_mae,
-        data_nascimento: formToSave.data_nascimento || "",
-        cpf: formToSave.cpf,
-        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15),
-        telefone: telNormalizado,
-        email: formToSave.email,
-        // Não sobrescrever endereço legado: preserva o valor atual do paciente.
-        endereco: paciente.endereco || "",
-        municipio: formToSave.municipio,
+        nome: formToSave.nome, // Sincroniza ambos
+        nome_mae: formToSave.nome_mae || "",
+        data_nascimento: formToSave.data_nascimento || null,
+        cpf: formToSave.cpf || "",
+        cns: (formToSave.cns || "").replace(/\D/g, "").slice(0, 15) || "",
+        telefone: telNormalizado || "",
+        email: formToSave.email || "",
+        municipio: formToSave.municipio || "",
         naturalidade: formToSave.naturalidade || "",
         naturalidade_uf: formToSave.naturalidade_uf || "",
+        logradouro: formToSave.logradouro || "",
+        numero: formToSave.numero || "",
+        bairro: formToSave.bairro || "",
+        uf: formToSave.uf || "",
+        cep: formToSave.cep || "",
         custom_data: customData,
       };
+
+      // Remover undefined para evitar erros no Supabase
+      Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === undefined) delete updatePayload[key];
+      });
 
       const { error } = await (supabase as any)
         .from("pacientes")
         .update(updatePayload)
         .eq("id", paciente.id);
+
       if (error) throw error;
 
-      // Captura diff para auditoria (campos alterados)
+      // Auditoria e Refresh
       const camposAlterados: Record<string, { de: any; para: any }> = {};
-      const compareFields: Array<keyof typeof updatePayload> = [
-        "nome", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "endereco", "municipio",
-      ];
+      const compareFields = ["nome_completo", "nome_mae", "data_nascimento", "cpf", "cns", "telefone", "email", "municipio", "logradouro", "numero", "bairro", "uf", "cep"];
       compareFields.forEach((k) => {
         const antes = (paciente as any)[k] ?? "";
         const depois = (updatePayload as any)[k] ?? "";
-        if (String(antes) !== String(depois)) camposAlterados[k as string] = { de: antes, para: depois };
+        if (String(antes) !== String(depois)) camposAlterados[k] = { de: antes, para: depois };
       });
-      setDirty(false);
 
-      // CRÍTICO: invalidar caches + recarregar contexto global para refletir
-      // imediatamente em Paciente, Agenda, Prontuário, Tratamento, PTS, Triagem, BPA.
+      setDirty(false);
+      setSaveStatus("saved");
+      setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
+
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(paciente.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agendamentos.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.atendimentos.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.prontuarios.byPaciente(paciente.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.triagem.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.fila.all });
       try { await refreshPacientes(); } catch {}
 
-      // Auditoria (best-effort, não bloqueia fluxo)
       if (Object.keys(camposAlterados).length > 0) {
-        // Atualiza o estado do paciente para refletir o que foi salvo
-        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
-        
         auditService.log({
           acao: "atualizar",
           entidade: "paciente",
@@ -334,14 +339,11 @@ export function ConferirDadosPacienteModal({
           user: user ? { id: user.id, nome: user.nome, role: user.role, unidadeId: user.unidadeId } : null,
           detalhes: { origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento", campos_alterados: camposAlterados },
         }).catch(() => {});
-      } else {
-        // Se não houver alterações (ex: apenas abertura ou salvamento de campos iguais), 
-        // ainda precisamos garantir que o estado local do paciente não está defasado
-        setPaciente((prev: any) => ({ ...prev, ...updatePayload }));
       }
 
-      if (!silent) toast.success("Dados atualizados em todo o sistema!");
+      if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
+      setSaveStatus("error");
       if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
       throw e;
     } finally {
@@ -395,8 +397,35 @@ export function ConferirDadosPacienteModal({
         className="p-0 gap-0 max-w-3xl w-[calc(100vw-1rem)] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden"
       >
         <DialogHeader className="px-4 sm:px-6 pt-5 pb-3 border-b shrink-0">
-          <DialogTitle className="flex items-center gap-2 font-display text-base sm:text-lg pr-6">
-            {modo === "chegada" ? "Confirmar Chegada — Conferência" : "Conferir Dados do Paciente"}
+          <DialogTitle className="flex flex-col gap-1 pr-6 font-display">
+            <span className="text-base sm:text-lg">
+              {modo === "chegada" ? "Confirmar Chegada — Conferência" : "Conferir Dados do Paciente"}
+            </span>
+            <div className="flex items-center gap-1.5 h-4">
+              {saveStatus === "saving" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground animate-pulse">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" />
+                  Salvando automaticamente...
+                </span>
+              )}
+              {saveStatus === "saved" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-success">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Salvo automaticamente
+                </span>
+              )}
+              {saveStatus === "error" && (
+                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive">
+                  <AlertTriangle className="w-3 h-3" />
+                  Erro ao salvar
+                </span>
+              )}
+              {saveStatus === "idle" && dirty && (
+                <span className="text-[11px] font-normal text-muted-foreground italic">
+                  Alterações pendentes...
+                </span>
+              )}
+            </div>
           </DialogTitle>
         </DialogHeader>
 
@@ -494,8 +523,17 @@ export function ConferirDadosPacienteModal({
                       value={form.naturalidade}
                       uf={form.naturalidade_uf}
                       onChange={(cidade, uf) => {
-                        setForm((p: any) => ({ ...p, naturalidade: cidade, naturalidade_uf: uf }));
+                        const newFormData = { ...form, naturalidade: cidade, naturalidade_uf: uf };
+                        setForm(newFormData);
                         setDirty(true);
+                        setSaveStatus("idle");
+                        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                        autoSaveTimerRef.current = setTimeout(() => {
+                          handleSave(true, newFormData).catch(err => {
+                            console.error("[ConferirDados] Erro no autosave:", err);
+                            setSaveStatus("error");
+                          });
+                        }, 1200);
                       }}
                       placeholder="Selecione o município de naturalidade"
                     />
@@ -530,12 +568,21 @@ export function ConferirDadosPacienteModal({
                       value={form.tipo_logradouro_dne}
                       codigo={form.tipo_logradouro_codigo}
                       onChange={(descricao, codigo) => {
-                        setForm((p: any) => ({
-                          ...p,
+                        const newFormData = {
+                          ...form,
                           tipo_logradouro_dne: descricao,
                           tipo_logradouro_codigo: codigo,
-                        }));
+                        };
+                        setForm(newFormData);
                         setDirty(true);
+                        setSaveStatus("idle");
+                        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                        autoSaveTimerRef.current = setTimeout(() => {
+                          handleSave(true, newFormData).catch(err => {
+                            console.error("[ConferirDados] Erro no autosave:", err);
+                            setSaveStatus("error");
+                          });
+                        }, 1200);
                       }}
                     />
                   </div>
@@ -569,12 +616,18 @@ export function ConferirDadosPacienteModal({
                 </div>
               </div>
 
-              {/* Botão salvar (quando houver alterações) */}
+              {/* Botão salvar (fallback discreto) */}
               {dirty && (
                 <div className="flex justify-end pt-1">
-                  <Button size="sm" onClick={() => { handleSave().catch(() => {}); }} disabled={saving}>
-                    <Save className="w-3.5 h-3.5 mr-1.5" />
-                    {saving ? "Salvando…" : "Salvar alterações"}
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="text-[11px] h-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => { handleSave().catch(() => {}); }} 
+                    disabled={saving}
+                  >
+                    <Save className="w-3 h-3 mr-1.5" />
+                    {saving ? "Salvando…" : "Salvar agora"}
                   </Button>
                 </div>
               )}
@@ -602,7 +655,18 @@ export function ConferirDadosPacienteModal({
                 try {
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
-                  if (dirty) await handleSave(true);
+                  
+                  // Se houver autosave em curso, aguarda um pouco
+                  if (saveStatus === "saving" || autoSaveTimerRef.current) {
+                    if (autoSaveTimerRef.current) {
+                      clearTimeout(autoSaveTimerRef.current);
+                      autoSaveTimerRef.current = null;
+                    }
+                    await handleSave(true);
+                  } else if (dirty) {
+                    await handleSave(true);
+                  }
+
                   await Promise.resolve(onConfirm());
                   console.log("[ConferirDados] Operação concluída com sucesso");
                   toast.success(modo === "chegada" ? "Chegada confirmada!" : "Dados conferidos com sucesso!");
