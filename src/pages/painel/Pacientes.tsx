@@ -673,7 +673,7 @@ const Pacientes: React.FC = () => {
         acao: "excluir",
         entidade: "paciente",
         entidadeId: p.id,
-        detalhes: { nome: p.nome, cpf: p.cpf },
+        detalhes: { nome: p.nome || p.nome_completo || "", cpf: p.cpf },
         user,
       });
       await refreshPacientes();
