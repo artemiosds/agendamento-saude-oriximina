@@ -186,7 +186,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
     unidade_id: resolve("unidade_id", "unidadeId"),
     is_gestante: resolveBool("is_gestante", "isGestante"),
     is_pne: resolveBool("is_pne", "isPne"),
-    is_artista: resolveBool("is_autista", "isAutista"),
+    is_autista: resolveBool("is_autista", "isAutista"),
     menor_idade: resolveBool("menor_idade", "menorIdade"),
     nome_responsavel: resolve("nome_responsavel", "nomeResponsavel"),
     cpf_responsavel: String(resolve("cpf_responsavel", "cpfResponsavel")).replace(/\D/g, ""),
