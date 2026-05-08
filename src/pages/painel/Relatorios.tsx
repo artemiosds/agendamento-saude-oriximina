@@ -38,11 +38,11 @@ const normalizeStatus = (status: string): string => {
   if (!status) return 'pendente';
   const s = status.toLowerCase().trim();
   
-  // Concluídos / Realizados
+  // Concluídos / Realizados (Foco na Produção Real)
   if ([
     'concluido', 'concluído', 'finalizado', 'atendido', 'realizado', 
     'atendimento_realizado', 'atendimento_finalizado', 'prontuario_finalizado', 
-    'prontuario_concluido', 'finalizada', 'concluida'
+    'prontuario_concluido', 'finalizada', 'concluida', 'atendimento_encerrado', 'encerrado'
   ].includes(s)) {
     return 'concluido';
   }
@@ -50,19 +50,19 @@ const normalizeStatus = (status: string): string => {
   if (['falta', 'faltou', 'ausente', 'nao compareceu', 'nao_compareceu', 'não compareceu'].includes(s)) {
     return 'falta';
   }
-  // Cancelados
-  if (['cancelado', 'cancelada', 'cancelamento'].includes(s)) {
+  // Cancelamentos
+  if (['cancelado', 'cancelada', 'cancelamento', 'rejeitado', 'rejeitada', 'excluido'].includes(s)) {
     return 'cancelado';
   }
-  // Remarcados
-  if (['remarcado', 'reagendado', 'reagendada'].includes(s)) {
+  // Remarcações
+  if (['remarcado', 'remarcada', 'reagendado', 'reagendada'].includes(s)) {
     return 'remarcado';
   }
-  // Pendentes / Em andamento
+  // Pendentes / Em andamento (Tudo o que ainda não virou produção nem perda definitiva)
   if ([
     'pendente', 'aguardando', 'confirmado', 'confirmada', 'agendado', 
     'apto', 'apto_atendimento', 'apto_para_atendimento', 'em_atendimento', 
-    'aguardando_triagem', 'confirmado_chegada', 'atraso'
+    'aguardando_triagem', 'confirmado_chegada', 'atraso', 'chegou'
   ].includes(s)) {
     return 'pendente';
   }
