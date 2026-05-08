@@ -1196,6 +1196,9 @@ ${dataRows}
           <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
             <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
           </span>
+          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={handleRefresh}>
+            <RefreshCw className="w-4 h-4 mr-1" />{isFetching ? 'Buscando...' : 'Atualizar'}
+          </Button>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
