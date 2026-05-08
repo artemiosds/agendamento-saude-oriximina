@@ -207,7 +207,7 @@ const Relatorios: React.FC = () => {
       setAgendamentosFull(agsData);
       setProntuariosFull(pronsData);
       setFilaDB(filaData);
-      setTriagensDB(triageData as TriagemDB[]);
+      setTriagensDB(triageData as any as TriagemDB[]);
       setTreatmentCycles(cyclesData);
       setTreatmentSessions(sessData);
       setNursingEvals(nursingData);
