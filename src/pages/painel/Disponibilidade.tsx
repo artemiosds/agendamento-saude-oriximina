@@ -22,6 +22,22 @@ import type { TurnoDefinition } from '@/components/config/ConfigFluxoAtendimento
 const diasSemanaLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const diasSemanaFull = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+interface BlocoConfig {
+  id?: string;
+  nome: string;
+  tipo: 'padrao' | 'custom';
+  horaInicio: string;
+  horaFim: string;
+  vagas: number;
+  ativo: boolean;
+}
+
+interface DiaConfig {
+  diaSemana: number;
+  ativo: boolean;
+  blocos: BlocoConfig[];
+}
+
 interface DaySchedule {
   ativo: boolean;
   horaInicio: string;
