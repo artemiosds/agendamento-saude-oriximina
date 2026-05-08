@@ -127,6 +127,7 @@ export function ConferirDadosPacienteModal({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [confirming, setConfirming] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -134,6 +135,7 @@ export function ConferirDadosPacienteModal({
   const [form, setForm] = useState<any>({});
   const [lastSavedJson, setLastSavedJson] = useState<string>("");
   const formRef = useRef<any>({});
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
   const { refreshPacientes } = useData();
   const { user } = useAuth();
