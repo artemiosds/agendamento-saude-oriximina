@@ -544,7 +544,7 @@ const Pacientes: React.FC = () => {
       ...form,
       unidade_id: user?.role === "recepcao" || (!isGlobalAdminUser && unidadeIdFuncionario) 
         ? unidadeIdFuncionario 
-        : (form as any).unidadeId,
+        : (form as any).unidadeId || (form as any).unidade_id,
     };
 
     try {
