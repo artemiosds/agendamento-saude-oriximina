@@ -132,6 +132,24 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+
+  // --- Campos Re-idratados do Custom Data ---
+  sexo: string;
+  racaCor: string;
+  etnia: string;
+  etniaOutra: string;
+  nacionalidade: string;
+  paisNascimento: string;
+  cep: string;
+  tipoLogradouroDne: string;
+  tipoLogradouroCodigo: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  uf: string;
+  telefoneSecundario: string;
+
   customData?: Record<string, any>;
 }
 
