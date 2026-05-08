@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { sanitizePacientePayload } from "@/lib/paciente-utils";
+import { sanitizePacientePayload, updatePacienteCadastro } from "@/lib/paciente-utils";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -184,24 +184,29 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
       const prevCustom = (paciente.custom_data || {}) as Record<string, any>;
       const newCustom = {
         ...prevCustom,
-        contato_emergencia_nome: editData.contato_emergencia_nome.trim(),
-        contato_emergencia_telefone: editData.contato_emergencia_telefone.trim(),
+        contato_emergencia_nome: (editData.contato_emergencia_nome || "").trim(),
+        contato_emergencia_telefone: (editData.contato_emergencia_telefone || "").trim(),
       };
 
-      const { error } = await supabase.from("pacientes").update(sanitizePacientePayload({
-        nome: (editData.nome ?? "").trim(),
-        data_nascimento: editData.data_nascimento ?? "",
-        cpf: editData.cpf ?? "",
-        cns: (editData.cns || "").replace(/\D/g, "").slice(0, 15),
-        cid: editData.cid ?? "",
-        nome_mae: editData.nome_mae ?? "",
-        endereco: editData.endereco ?? "",
-        telefone: editData.telefone ?? "",
-        email: editData.email ?? "",
-        custom_data: newCustom,
-      })).eq("id", pacienteId);
-
-      if (error) throw error;
+      // Usa o utilitário centralizado para garantir integridade, normalização e auditoria
+      const updated = await updatePacienteCadastro(
+        pacienteId,
+        {
+          nome: editData.nome.trim(),
+          data_nascimento: editData.data_nascimento,
+          cpf: editData.cpf,
+          cns: editData.cns,
+          cid: editData.cid,
+          nome_mae: editData.nome_mae,
+          endereco: editData.endereco,
+          telefone: editData.telefone,
+          email: editData.email,
+          custom_data: newCustom,
+        },
+        "Ficha do Paciente (Cabeçalho)",
+        { id: profissionalId, nome: profissionalNome, role: 'profissional' }, // Mock user info since we don't have the full auth user here
+        undefined // queryClient can be injected if needed, but the helper handles basic refresh
+      );
 
       if (agendamentoId && editData.profissionalId !== profissionalId) {
         const profFunc = funcionarios.find(f => f.id === editData.profissionalId);
@@ -211,8 +216,7 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         }).eq("id", agendamentoId);
       }
 
-      const { data } = await supabase.from("pacientes").select("*").eq("id", pacienteId).single();
-      if (data) setPaciente(data);
+      setPaciente(updated);
 
       toast.success("Dados do paciente atualizados");
       setEditing(false);
