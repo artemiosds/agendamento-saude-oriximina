@@ -8,7 +8,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  * 
  * 1. Colunas de Topo (Tabela `pacientes`):
  *    - id (text, PK)
- *    - nome (text, NOT NULL)
+ *    - nome_completo (text, NOT NULL) - Nome real da coluna conforme schema lido
  *    - cpf (text, NOT NULL)
  *    - cns (text, NOT NULL)
  *    - telefone (text, NOT NULL)
