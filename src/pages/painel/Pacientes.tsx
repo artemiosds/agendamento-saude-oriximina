@@ -1375,10 +1375,20 @@ const Pacientes: React.FC = () => {
               <PCampo label="CID" valor={cidVal} />
             </PSecao>
 
+            <PSecao titulo="Endereço">
+              <PCampo label="CEP" valor={(detalhePaciente as any).custom_data?.cep} />
+              <PCampo label="Logradouro" valor={[(detalhePaciente as any).custom_data?.tipo_logradouro_dne || (detalhePaciente as any).custom_data?.tipoLogradouroDne, (detalhePaciente as any).custom_data?.logradouro].filter(Boolean).join(' ')} />
+              <PCampo label="Número" valor={(detalhePaciente as any).custom_data?.numero} />
+              <PCampo label="Complemento" valor={(detalhePaciente as any).custom_data?.complemento} />
+              <PCampo label="Bairro" valor={(detalhePaciente as any).custom_data?.bairro} />
+              <PCampo label="Município" valor={detalhePaciente.municipio} />
+              <PCampo label="UF" valor={(detalhePaciente as any).custom_data?.uf} />
+            </PSecao>
+
             <PSecao titulo="Contato">
-              <PCampo label={L('telefone', 'Telefone')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label={L('telefone', 'Telefone principal')} valor={formatTelefoneBR(detalhePaciente.telefone)} />
+              <PCampo label="Telefone secundário" valor={formatTelefoneBR((detalhePaciente as any).custom_data?.telefone_secundario || (detalhePaciente as any).custom_data?.telefoneSecundario)} />
               <PCampo label={L('email', 'E-mail')} valor={detalhePaciente.email} />
-              <PCampo label={L('endereco', 'Endereço')} valor={detalhePaciente.endereco} />
             </PSecao>
 
             <PSecao titulo="Histórico">
