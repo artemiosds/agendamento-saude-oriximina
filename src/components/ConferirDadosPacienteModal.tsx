@@ -155,7 +155,7 @@ export function ConferirDadosPacienteModal({
       console.log("[ConferirDados] Dados carregados com sucesso");
       setPaciente(data);
       
-      const cd = data.custom_data || {};
+      const cd = (data.custom_data as any) || {};
       setForm({
         nome: data.nome || "",
         nome_mae: data.nome_mae || "",
@@ -188,7 +188,7 @@ export function ConferirDadosPacienteModal({
         telefone_secundario: cd.telefone_secundario || cd.telefoneSecundario || "",
         is_gestante: !!(data.is_gestante || cd.is_gestante),
         is_pne: !!(data.is_pne || cd.is_pne),
-        is_artista: !!(data.is_autista || cd.is_autista),
+        is_autista: !!(data.is_autista || cd.is_autista),
       });
     } catch (err: any) {
       console.error("[ConferirDados] Erro ao carregar:", err);
