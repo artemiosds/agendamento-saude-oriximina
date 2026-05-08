@@ -70,7 +70,7 @@ import { queryKeys } from "@/hooks/queries/queryKeys";
  */
 
 const PACIENTE_TEXT_NOT_NULL = new Set([
-  "nome_completo", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
+  "nome", "cpf", "cns", "telefone", "email", "endereco", "observacoes",
   "nome_mae", "municipio", "naturalidade", "naturalidade_uf", "unidade_id",
   "data_nascimento", "descricao_clinica", "cid", "especialidade_destino",
   "turno_preferido", "transporte", "observacao_equipamentos",
@@ -178,7 +178,7 @@ export function normalizePatientPayload(form: any, existingPatient?: any) {
   };
 
   const payload: any = {
-    nome_completo: resolve("nome_completo", "nome"), 
+    nome: resolve("nome", "nome_completo"), 
     nome_mae: resolve("nome_mae", "nomeMae"),
     data_nascimento: resolve("data_nascimento", "dataNascimento"),
     cpf: String(resolve("cpf")).replace(/\D/g, ""),
