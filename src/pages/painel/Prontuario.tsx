@@ -1173,35 +1173,41 @@ const ProntuarioPage: React.FC = () => {
       const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
 
       if (shouldRegisterSession) {
-        const procedureDone =
-          procTexto ||
-          form.procedimentos_texto?.trim() ||
-          form.outro_procedimento?.trim() ||
-          form.queixa_principal?.trim() ||
-          'Sessão registrada';
+        try {
+          const procedureDone =
+            procTexto ||
+            form.procedimentos_texto?.trim() ||
+            form.outro_procedimento?.trim() ||
+            form.queixa_principal?.trim() ||
+            'Sessão registrada';
 
-        const result = await treatmentService.registerCompletedSession({
-          cycle: sessaoCycle,
-          session: currentSessionForRegistration,
-          soap: soapPayload,
-          procedureDone,
-          userId: user?.id,
-          appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
-        });
+          const result = await treatmentService.registerCompletedSession({
+            cycle: sessaoCycle,
+            session: currentSessionForRegistration,
+            soap: soapPayload,
+            procedureDone,
+            userId: user?.id,
+            appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+          });
 
-        if (result.cycleStatus === 'concluido') {
-          toast.info('🎉 Ciclo de tratamento concluído!');
+          if (result.cycleStatus === 'concluido') {
+            toast.info('🎉 Ciclo de tratamento concluído!');
+          }
+
+          await logAction({
+            acao: 'sessao_registrada',
+            entidade: 'treatment_session',
+            entidadeId: currentSessionForRegistration.id,
+            modulo: 'prontuario',
+            user,
+            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+          }).catch(e => console.error("[Prontuario] Erro ao registrar log de sessão:", e));
+          
+          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+        } catch (sessionErr: any) {
+          console.error("[Prontuario] Erro ao registrar sessão:", sessionErr);
+          toast.error("O prontuário foi salvo, mas houve um erro ao registrar a sessão no ciclo de tratamento.");
         }
-
-        await logAction({
-          acao: 'sessao_registrada',
-          entidade: 'treatment_session',
-          entidadeId: currentSessionForRegistration.id,
-          modulo: 'prontuario',
-          user,
-          detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
-        });
-        toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
       } else {
         toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
@@ -1214,16 +1220,17 @@ const ProntuarioPage: React.FC = () => {
           modulo: "prontuario",
           user,
           detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
-        });
+        }).catch(e => console.error("[Prontuario] Erro ao registrar log de criação:", e));
       }
 
-      await Promise.all([
+      // Refresh data without blocking or failing the main save
+      void Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
           ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
-      ]);
+      ]).catch(refreshErr => console.error("[Prontuario] Erro ao atualizar listas após salvar:", refreshErr));
 
       setSessionRegistrationRequested(false);
       // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
