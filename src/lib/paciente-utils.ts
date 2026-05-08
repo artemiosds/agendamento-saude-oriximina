@@ -17,7 +17,7 @@ const PACIENTE_TEXT_NOT_NULL = new Set([
   "tipo_condicao", "mobilidade", "tipo_dispositivo", "comunicacao", "comportamento",
   "nome_responsavel", "cpf_responsavel", "ubs_origem", "profissional_solicitante",
   "tipo_encaminhamento", "diagnostico_resumido", "justificativa",
-  "data_encaminhamento", "documento_url",
+  "data_encaminhamento", "documento_url", "raca_cor", "naturalidade_uf", "municipio"
 ]);
 
 const PACIENTE_BOOL_NOT_NULL = new Set([
@@ -51,62 +51,77 @@ export function sanitizePacientePayload<T extends Record<string, any>>(payload: 
  * Normaliza os dados do paciente vindos do formulário para o formato do banco.
  */
 export function normalizePatientPayload(form: any, existingPatient?: any) {
-  const telNormalizado = form.telefone ? (normalizePhone(form.telefone) || form.telefone) : "";
-  const telSecNormalizado = form.telefone_secundario || form.telefoneSecundario
-    ? (normalizePhone(form.telefone_secundario || form.telefoneSecundario) || (form.telefone_secundario || form.telefoneSecundario))
-    : "";
+  // Garante strings básicas
+  const getVal = (f: string, f2?: string) => {
+    const v = form[f] ?? form[f2 || ""] ?? existingPatient?.[f] ?? existingPatient?.[f2 || ""] ?? "";
+    return typeof v === 'string' ? v.trim() : v;
+  };
+
+  const telNormalizado = normalizePhone(getVal("telefone")) || getVal("telefone");
+  const telSecNormalizado = normalizePhone(getVal("telefone_secundario", "telefoneSecundario")) || getVal("telefone_secundario", "telefoneSecundario");
 
   // Campos que residem no custom_data
   const existingCd = existingPatient?.custom_data || {};
+  
+  // Mapeia todas as variações possíveis de nomes de campos (camelCase e snake_case)
   const customData = {
     ...existingCd,
-    sexo: form.sexo || existingCd.sexo || "",
-    racaCor: form.raca_cor || form.racaCor || existingCd.racaCor || existingCd.raca_cor || "",
-    raca_cor: form.raca_cor || form.racaCor || existingCd.raca_cor || existingCd.racaCor || "",
-    etnia: form.etnia || existingCd.etnia || "",
-    etniaOutra: form.etnia_outra || form.etniaOutra || existingCd.etniaOutra || existingCd.etnia_outra || "",
-    nacionalidade: form.nacionalidade || existingCd.nacionalidade || "brasileiro",
-    paisNascimento: form.pais_nascimento || form.paisNascimento || existingCd.paisNascimento || existingCd.pais_nascimento || "",
+    sexo: form.sexo ?? existingCd.sexo ?? "",
+    raca_cor: form.raca_cor ?? form.racaCor ?? existingCd.raca_cor ?? existingCd.racaCor ?? "",
+    racaCor: form.raca_cor ?? form.racaCor ?? existingCd.racaCor ?? existingCd.raca_cor ?? "",
+    etnia: form.etnia ?? existingCd.etnia ?? "",
+    etniaOutra: form.etnia_outra ?? form.etniaOutra ?? existingCd.etniaOutra ?? existingCd.etnia_outra ?? "",
+    nacionalidade: form.nacionalidade ?? existingCd.nacionalidade ?? "brasileiro",
+    paisNascimento: form.pais_nascimento ?? form.paisNascimento ?? existingCd.paisNascimento ?? existingCd.pais_nascimento ?? "",
     
     // Endereço estruturado
-    tipoLogradouroDne: form.tipo_logradouro_dne || form.tipoLogradouroDne || existingCd.tipoLogradouroDne || existingCd.tipo_logradouro_dne || "",
-    tipoLogradouroCodigo: form.tipo_logradouro_codigo || form.tipoLogradouroCodigo || existingCd.tipoLogradouroCodigo || existingCd.tipo_logradouro_codigo || "",
-    tipoLogradouro: form.tipo_logradouro_dne || form.tipoLogradouroDne || existingCd.tipoLogradouro || "",
-    logradouro: form.logradouro || existingCd.logradouro || "",
-    numero: form.numero || existingCd.numero || "",
-    complemento: form.complemento || existingCd.complemento || "",
-    bairro: form.bairro || existingCd.bairro || "",
-    uf: form.uf || existingCd.uf || "PA",
-    cep: form.cep || existingCd.cep || "",
+    tipoLogradouroDne: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipoLogradouroDne ?? existingCd.tipo_logradouro_dne ?? existingCd.tipoLogradouro ?? "",
+    tipoLogradouroCodigo: form.tipo_logradouro_codigo ?? form.tipoLogradouroCodigo ?? existingCd.tipoLogradouroCodigo ?? existingCd.tipo_logradouro_codigo ?? "",
+    tipoLogradouro: form.tipo_logradouro_dne ?? form.tipoLogradouroDne ?? existingCd.tipoLogradouro ?? "",
+    logradouro: form.logradouro ?? existingCd.logradouro ?? "",
+    numero: form.numero ?? existingCd.numero ?? "",
+    complemento: form.complemento ?? existingCd.complemento ?? "",
+    bairro: form.bairro ?? existingCd.bairro ?? "",
+    uf: form.uf ?? existingCd.uf ?? "PA",
+    cep: form.cep ?? existingCd.cep ?? "",
     
     telefoneSecundario: telSecNormalizado,
     
     // Flags especiais
-    is_gestante: form.isGestante !== undefined ? form.isGestante : (form.is_gestante !== undefined ? form.is_gestante : existingCd.is_gestante),
-    is_pne: form.isPne !== undefined ? form.isPne : (form.is_pne !== undefined ? form.is_pne : existingCd.is_pne),
-    is_autista: form.isAutista !== undefined ? form.isAutista : (form.is_autista !== undefined ? form.is_autista : existingCd.is_autista),
+    is_gestante: form.isGestante !== undefined ? !!form.isGestante : (form.is_gestante !== undefined ? !!form.is_gestante : !!existingCd.is_gestante),
+    is_pne: form.isPne !== undefined ? !!form.isPne : (form.is_pne !== undefined ? !!form.is_pne : !!existingCd.is_pne),
+    is_autista: form.isAutista !== undefined ? !!form.isAutista : (form.is_autista !== undefined ? !!form.is_autista : !!existingCd.is_autista),
 
     data_ultima_validacao_cadastro: new Date().toISOString(),
   };
 
   // Payload principal da tabela 'pacientes'
   const payload: any = {
-    nome: (form.nome || form.nome_completo || existingPatient?.nome || "").trim(),
-    nome_mae: (form.nome_mae || form.nomeMae || existingPatient?.nome_mae || "").trim(),
-    data_nascimento: form.data_nascimento || form.dataNascimento || existingPatient?.data_nascimento || "",
-    cpf: (form.cpf || existingPatient?.cpf || "").replace(/\D/g, ""),
-    cns: (form.cns || "").replace(/\D/g, "").slice(0, 15) || (existingPatient?.cns || "").replace(/\D/g, ""),
+    nome: getVal("nome", "nome_completo"),
+    nome_mae: getVal("nome_mae", "nomeMae"),
+    data_nascimento: getVal("data_nascimento", "dataNascimento"),
+    cpf: String(getVal("cpf")).replace(/\D/g, ""),
+    cns: String(getVal("cns")).replace(/\D/g, "").slice(0, 15),
     telefone: telNormalizado || "",
-    email: (form.email || existingPatient?.email || "").trim(),
-    municipio: form.municipio || existingPatient?.municipio || "",
-    naturalidade: form.naturalidade || existingPatient?.naturalidade || "",
-    naturalidade_uf: form.naturalidade_uf || form.naturalidadeUf || existingPatient?.naturalidade_uf || "",
-    unidade_id: form.unidade_id || form.unidadeId || existingPatient?.unidade_id || "",
+    email: getVal("email"),
+    municipio: getVal("municipio"),
+    naturalidade: getVal("naturalidade"),
+    naturalidade_uf: getVal("naturalidade_uf", "naturalidadeUf"),
+    unidade_id: getVal("unidade_id", "unidadeId"),
     
-    // Flags diretas na tabela (se existirem)
+    // Flags diretas na tabela
     is_gestante: !!customData.is_gestante,
     is_pne: !!customData.is_pne,
     is_autista: !!customData.is_autista,
+    
+    // Outros campos comuns que podem vir do form
+    descricao_clinica: getVal("descricao_clinica", "descricaoClinica"),
+    cid: getVal("cid"),
+    especialidade_destino: getVal("especialidade_destino", "especialidadeDestino"),
+    menor_idade: form.menor_idade ?? form.menorIdade ?? existingPatient?.menor_idade ?? !!existingPatient?.menor_idade,
+    nome_responsavel: getVal("nome_responsavel", "nomeResponsavel"),
+    cpf_responsavel: String(getVal("cpf_responsavel", "cpfResponsavel")).replace(/\D/g, ""),
+    ubs_origem: getVal("ubs_origem", "ubsOrigem"),
     
     custom_data: customData,
   };

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { updatePacienteCadastro } from "@/lib/paciente-utils";
+import { updatePacienteCadastro, normalizePatientPayload, sanitizePacientePayload } from "@/lib/paciente-utils";
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { getManchesterBadgeStyle } from '@/lib/manchesterProtocol';
 import { usePacienteNomeResolver } from "@/hooks/usePacienteNomeResolver";
@@ -966,6 +966,31 @@ const Agenda: React.FC = () => {
       criadoEm: new Date().toISOString(),
       criadoPor: "current",
     };
+    // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
+    // Antes de criar o agendamento, garantimos que os dados conferidos do paciente foram persistidos.
+    if (newAg.pacienteId) {
+      try {
+        const { data: currentP } = await supabase
+          .from("pacientes")
+          .select("*")
+          .eq("id", newAg.pacienteId)
+          .maybeSingle();
+        
+        if (currentP) {
+          await updatePacienteCadastro(
+            newAg.pacienteId,
+            currentP,
+            "Novo Agendamento (Persistência)",
+            user,
+            // @ts-ignore
+            queryClient
+          );
+        }
+      } catch (err) {
+        console.warn("[Agenda] Erro ao persistir dados do paciente antes de agendar:", err);
+      }
+    }
+
     addAgendamento(agData);
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
@@ -1189,6 +1214,29 @@ const Agenda: React.FC = () => {
         const horaChegada = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
         // Update local arrival map immediately for correct sorting
         setArrivalMap((prev) => ({ ...prev, [agId]: horaChegada }));
+
+        // ── GARANTIA DE SALVAMENTO DE DADOS DO PACIENTE ──
+        // Antes de confirmar a chegada, garantimos que os dados conferidos foram persistidos.
+        try {
+          const { data: currentP } = await supabase
+            .from("pacientes")
+            .select("*")
+            .eq("id", ag.pacienteId)
+            .maybeSingle();
+          
+          if (currentP) {
+            await updatePacienteCadastro(
+              ag.pacienteId,
+              currentP,
+              "Confirmar Chegada (Finalização)",
+              user,
+              // @ts-ignore
+              queryClient
+            );
+          }
+        } catch (err) {
+          console.warn("[Agenda] Erro ao persistir dados do paciente antes da chegada:", err);
+        }
 
         // Triage routing is OPT-IN. Default = direct to professional's queue.
         // Only routes to triage when explicitly enabled (per professional or globally).

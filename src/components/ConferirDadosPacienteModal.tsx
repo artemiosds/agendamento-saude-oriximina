@@ -170,7 +170,7 @@ export function ConferirDadosPacienteModal({
         naturalidade: data.naturalidade || "",
         naturalidade_uf: data.naturalidade_uf || "",
         sexo: cd.sexo || "",
-        raca_cor: cd.racaCor || cd.raca_cor || "",
+        raca_cor: cd.raca_cor || cd.racaCor || "",
         etnia: cd.etnia || "",
         etnia_outra: cd.etniaOutra || "",
         nacionalidade: cd.nacionalidade || "brasileiro",
@@ -184,6 +184,9 @@ export function ConferirDadosPacienteModal({
         uf: cd.uf || "PA",
         cep: cd.cep || "",
         telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
+        is_gestante: !!(data.is_gestante || cd.is_gestante),
+        is_pne: !!(data.is_pne || cd.is_pne),
+        is_autista: !!(data.is_autista || cd.is_autista),
       });
     } catch (err: any) {
       console.error("[ConferirDados] Erro ao carregar:", err);
@@ -232,16 +235,21 @@ export function ConferirDadosPacienteModal({
 
   const handleSave = async (silent = false, currentForm?: any) => {
     if (!paciente) return;
+    
+    // Se for autosave silencioso, cancela qualquer autosave pendente
+    if (silent && autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    
     const formToSave = currentForm || form;
     
-    // Evitar salvar se os dados não mudaram
+    // Evitar salvar se os dados não mudaram (comparação profunda simples via JSON)
     const currentJson = JSON.stringify(formToSave);
     if (silent && currentJson === lastSavedJson) return;
     
     setSaving(true);
-    setLastSavedJson(currentJson);
     try {
-      console.log("[ConferirDados] Iniciando salvamento centralizado...");
+      console.log(`[ConferirDados] Iniciando salvamento (${silent ? 'autosave' : 'manual'})...`);
       
       const updated = await updatePacienteCadastro(
         paciente.id,
@@ -251,14 +259,11 @@ export function ConferirDadosPacienteModal({
         queryClient
       );
 
+      setLastSavedJson(currentJson);
       setDirty(false);
 
-      // Atualiza contexto global se disponível
-      try {
-        await refreshPacientes();
-      } catch (err) {
-        console.warn("[ConferirDados] Falha ao atualizar refreshPacientes:", err);
-      }
+      // Atualiza contexto global
+      await refreshPacientes();
 
       // Atualiza estado local do paciente
       setPaciente(updated);

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { updatePacienteCadastro, normalizePatientPayload } from "@/lib/paciente-utils";
+import { updatePacienteCadastro, normalizePatientPayload, sanitizePacientePayload } from "@/lib/paciente-utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState, ErrorState } from "@/components/EmptyState";
 import { useData } from "@/contexts/DataContext";
@@ -530,7 +530,7 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        // Usa a função centralizada para update
+        // Usa a função centralizada para update que já lida com merge, normalização e auditoria
         await updatePacienteCadastro(
           editId,
           dbFields,
@@ -600,10 +600,13 @@ const Pacientes: React.FC = () => {
           criado_em: new Date().toISOString(),
           unidade_id: user?.role === "recepcao" ? unidadeIdFuncionario : dbFields.unidade_id || unidadeIdFuncionario,
         };
+        
+        // Garantir que não existam nulls em colunas NOT NULL
+        const sanitizedInsert = sanitizePacientePayload(insertPayload);
 
-        // Adiciona metadados extras ao custom_data que a normalização pode não ter
-        insertPayload.custom_data = {
-          ...(insertPayload.custom_data || {}),
+        // Adiciona metadados extras ao custom_data
+        sanitizedInsert.custom_data = {
+          ...(sanitizedInsert.custom_data || {}),
           criado_por: user?.id || "",
           criado_por_nome: user?.nome || "",
           criado_por_usuario: user?.usuario || "",
@@ -615,7 +618,7 @@ const Pacientes: React.FC = () => {
         // Close dialog immediately (optimistic)
         setDialogOpen(false);
         setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert(insertPayload))
+        Promise.resolve(supabase.from("pacientes").insert(sanitizedInsert))
           .then(async ({ error }) => {
             if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
             // Flush pending referrals + attachments queued in CadastroPacienteForm
