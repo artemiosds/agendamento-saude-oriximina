@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Download, FileArchive, CheckCircle2, XCircle, AlertTriangle,
-  Loader2, ExternalLink, Upload, Github, Cloud,
+  Loader2, ExternalLink, Upload, Cloud,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
