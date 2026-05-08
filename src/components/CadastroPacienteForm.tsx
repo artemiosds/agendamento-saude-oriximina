@@ -529,15 +529,19 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   Tipo de Logradouro (DNE) <span className="text-destructive">*</span>
                 </Label>
                 <LogradouroDneAutocomplete
-                  value={cd.tipoLogradouro || ""}
-                  codigo={cd.tipoLogradouroCodigo || ""}
+                  value={form.tipoLogradouroDne || ""}
+                  codigo={form.tipoLogradouroCodigo || ""}
                   onChange={(descricao, codigo) => {
                     onChange({
                       ...form,
+                      tipoLogradouroDne: descricao,
+                      tipoLogradouroCodigo: codigo,
                       customData: {
                         ...(form.customData || {}),
                         tipoLogradouro: descricao,
                         tipoLogradouroCodigo: codigo,
+                        tipo_logradouro_dne: descricao,
+                        tipo_logradouro_codigo: codigo,
                       },
                     });
                   }}
