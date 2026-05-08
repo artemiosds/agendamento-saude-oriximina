@@ -101,6 +101,13 @@ const Disponibilidade: React.FC = () => {
   });
 
   const [modo, setModo] = useState<ModoDisponibilidade>('por_hora');
+  const [configDias, setConfigDias] = useState<DiaConfig[]>(
+    Array.from({ length: 7 }, (_, i) => ({
+      diaSemana: i,
+      ativo: i >= 1 && i <= 5,
+      blocos: []
+    }))
+  );
   const [turnoDays, setTurnoDays] = useState<TurnoDayConfig[]>(defaultTurnoDays.map(d => ({ ...d, turnosAtivos: [] })));
   const [turnoVagas, setTurnoVagas] = useState<TurnoVagas>({});
 
