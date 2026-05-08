@@ -190,7 +190,7 @@ const AtualizacaoCadastral: React.FC = () => {
         transporte: editForm.transporte,
         turno_preferido: editForm.turnoPreferido,
 
-        customData: {
+        custom_data: {
           ...(editForm.customData || {}),
           atualizado_em: new Date().toISOString(),
           atualizado_por: user?.id || "",
