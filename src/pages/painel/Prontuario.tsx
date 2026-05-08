@@ -1040,9 +1040,25 @@ const ProntuarioPage: React.FC = () => {
       }
 
       const pac = pacientes.find((px) => px.id === (form.paciente_id || record.paciente_id));
+      
+      // Sanitização básica: garante que campos obrigatórios não sejam undefined
+      Object.keys(record).forEach(key => {
+        if (record[key] === undefined) {
+          record[key] = null;
+        }
+      });
+
       if (effectiveEditId) {
+        console.log("[Prontuario] Atualizando prontuário:", { id: effectiveEditId, profissionalId: record.profissional_id });
         const { error } = await (supabase as any).from("prontuarios").update(record).eq("id", effectiveEditId);
-        if (error) throw error;
+        if (error) {
+          console.error("[Prontuario] Erro ao atualizar prontuário principal:", {
+            error,
+            effectiveEditId,
+            record
+          });
+          throw error;
+        }
         const camposAlterados: Record<string, { anterior: string; novo: string }> = {};
         if (previousForm) {
           const fieldLabels: Record<string, string> = {
@@ -1096,12 +1112,24 @@ const ProntuarioPage: React.FC = () => {
           },
         });
       } else {
+        console.log("[Prontuario] Inserindo novo prontuário:", {
+          paciente: record.paciente_nome,
+          profissionalId: record.profissional_id,
+          unidadeId: record.unidade_id
+        });
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
           .insert(record)
           .select("id")
           .single();
-        if (error) throw error;
+          
+        if (error) {
+          console.error("[Prontuario] Erro ao inserir prontuário principal:", {
+            error,
+            record
+          });
+          throw error;
+        }
         prontuarioId = inserted?.id;
         insertedNewProntuario = true;
         // Sincroniza imediatamente o ref para que próximos saves não dupliquem
@@ -1173,41 +1201,47 @@ const ProntuarioPage: React.FC = () => {
       const shouldRegisterSession = Boolean(isSessionRegistrationFlow && currentSessionForRegistration && sessaoCycle);
 
       if (shouldRegisterSession) {
-        const procedureDone =
-          procTexto ||
-          form.procedimentos_texto?.trim() ||
-          form.outro_procedimento?.trim() ||
-          form.queixa_principal?.trim() ||
-          'Sessão registrada';
+        try {
+          const procedureDone =
+            procTexto ||
+            form.procedimentos_texto?.trim() ||
+            form.outro_procedimento?.trim() ||
+            form.queixa_principal?.trim() ||
+            'Sessão registrada';
 
-        const result = await treatmentService.registerCompletedSession({
-          cycle: sessaoCycle,
-          session: currentSessionForRegistration,
-          soap: soapPayload,
-          procedureDone,
-          userId: user?.id,
-          appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
-        });
+          const result = await treatmentService.registerCompletedSession({
+            cycle: sessaoCycle,
+            session: currentSessionForRegistration,
+            soap: soapPayload,
+            procedureDone,
+            userId: user?.id,
+            appointmentId: form.agendamento_id || currentSessionForRegistration.appointment_id || null,
+          });
 
-        if (result.cycleStatus === 'concluido') {
-          toast.info('🎉 Ciclo de tratamento concluído!');
+          if (result.cycleStatus === 'concluido') {
+            toast.info('🎉 Ciclo de tratamento concluído!');
+          }
+
+          logAction({
+            acao: 'sessao_registrada',
+            entidade: 'treatment_session',
+            entidadeId: currentSessionForRegistration.id,
+            modulo: 'prontuario',
+            user,
+            detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
+          });
+          
+          toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
+        } catch (sessionErr: any) {
+          console.error("[Prontuario] Erro ao registrar sessão:", sessionErr);
+          toast.error("O prontuário foi salvo, mas houve um erro ao registrar a sessão no ciclo de tratamento.");
         }
-
-        await logAction({
-          acao: 'sessao_registrada',
-          entidade: 'treatment_session',
-          entidadeId: currentSessionForRegistration.id,
-          modulo: 'prontuario',
-          user,
-          detalhes: { paciente: form.paciente_nome, sessao_numero: currentSessionForRegistration.session_number, ciclo_id: sessaoCycle.id },
-        });
-        toast.success(`✅ Sessão ${currentSessionForRegistration.session_number} registrada com sucesso!`);
       } else {
         toast.success(effectiveEditId ? "Prontuário atualizado!" : "Prontuário criado!");
       }
 
       if (!effectiveEditId) {
-        await logAction({
+        logAction({
           acao: "prontuario_criado",
           entidade: "prontuario",
           entidadeId: prontuarioId || "",
@@ -1217,13 +1251,14 @@ const ProntuarioPage: React.FC = () => {
         });
       }
 
-      await Promise.all([
+      // Refresh data without blocking or failing the main save
+      void Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
           ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
-      ]);
+      ]).catch(refreshErr => console.error("[Prontuario] Erro ao atualizar listas após salvar:", refreshErr));
 
       setSessionRegistrationRequested(false);
       // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
@@ -1241,14 +1276,8 @@ const ProntuarioPage: React.FC = () => {
       setPreviousForm(null);
       return true;
     } catch (err: any) {
-      if (insertedNewProntuario && prontuarioId) {
-        try {
-          await (supabase as any).from("prontuario_procedimentos").delete().eq("prontuario_id", prontuarioId);
-          await (supabase as any).from("prontuarios").delete().eq("id", prontuarioId);
-        } catch (rollbackError) {
-          console.error("Erro ao reverter prontuário após falha na sessão:", rollbackError);
-        }
-      }
+      // Remoção do rollback perigoso: se o prontuário foi salvo no banco, não devemos deletá-lo
+      // caso ocorra um erro posterior (como falha no log ou no refresh da lista).
       console.error("Erro ao salvar prontuário/sessão:", {
         error: err,
         message: err?.message,
