@@ -201,7 +201,7 @@ const AtualizacaoCadastral: React.FC = () => {
       // yet, but we'll also call refreshPacientes to be safe.
       const { error } = await supabase
         .from("pacientes")
-        .update(updateData)
+        .update(sanitizePacientePayload(updateData))
         .eq("id", selectedPatient.id);
 
       if (error) throw error;
