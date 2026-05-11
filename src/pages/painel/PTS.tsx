@@ -296,26 +296,51 @@ const PTS: React.FC = () => {
   };
 
   // Add CID to list
-  const handleAddCid = (cid: SigtapCid) => {
+  const handleAddCid = async (cid: SigtapCid) => {
     if (cidsSelecionados.some(c => c.cid_codigo === cid.cid_codigo)) {
       toast.info('CID já adicionado.');
       return;
     }
-    setCidsSelecionados(prev => [...prev, { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao }]);
+    const newCid = { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao };
+    setCidsSelecionados(prev => [...prev, newCid]);
     setCidSearch('');
-    toast.success(`CID ${cid.cid_codigo} adicionado.`);
+    
+    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+    if (currentProc?.especialidade === 'fonoaudiologia') {
+       if (editingPts) {
+         await (supabase as any).from('pts_cid').upsert({
+           pts_id: editingPts.id,
+           cid_codigo: cid.cid_codigo,
+           cid_descricao: cid.cid_descricao
+         }, { onConflict: 'pts_id, cid_codigo' });
+       }
+       toast.success(`CID ${cid.cid_codigo} vinculado.`);
+    } else {
+      toast.success(`CID ${cid.cid_codigo} adicionado.`);
+    }
   };
 
-  const handleForceAddCid = () => {
+  const handleForceAddCid = async () => {
     const code = cidSearch.trim().toUpperCase();
     if (!code) return;
     if (cidsSelecionados.some(c => c.cid_codigo === code)) {
       toast.info('CID já adicionado.');
       return;
     }
-    setCidsSelecionados(prev => [...prev, { cid_codigo: code, cid_descricao: 'CID informado manualmente' }]);
+    const newCid = { cid_codigo: code, cid_descricao: 'CID informado manualmente' };
+    setCidsSelecionados(prev => [...prev, newCid]);
     setCidSearch('');
     setCidWarning(false);
+
+    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+    if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
+       await (supabase as any).from('pts_cid').upsert({
+         pts_id: editingPts.id,
+         cid_codigo: code,
+         cid_descricao: 'CID informado manualmente'
+       }, { onConflict: 'pts_id, cid_codigo' });
+    }
+    
     toast.info('CID aceito manualmente.');
   };
 
