@@ -17,6 +17,9 @@ import {
 import { toast } from "sonner";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
+import PatientAttachmentManager from "@/components/PatientAttachmentManager";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildInstitutionalCSS } from "@/lib/printLayout";
 import { formatCNS } from "@/lib/cnsUtils";
 
