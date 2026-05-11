@@ -1469,6 +1469,44 @@ export type Database = {
           },
         ]
       }
+      patient_procedures: {
+        Row: {
+          cid: string | null
+          created_at: string
+          id: string
+          patient_id: string
+          procedimento_nome: string | null
+          sigtap_codigo: string | null
+          updated_at: string
+        }
+        Insert: {
+          cid?: string | null
+          created_at?: string
+          id?: string
+          patient_id: string
+          procedimento_nome?: string | null
+          sigtap_codigo?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cid?: string | null
+          created_at?: string
+          id?: string
+          patient_id?: string
+          procedimento_nome?: string | null
+          sigtap_codigo?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_procedures_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_referrals: {
         Row: {
           cid: string | null
