@@ -644,22 +644,32 @@ const PTS: React.FC = () => {
             {/* SIGTAP Section */}
             {showSigtap && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
-                <Label className="text-sm font-semibold flex items-center gap-1.5">
-                  📋 Procedimentos SIGTAP
-                  {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    📋 Procedimentos SIGTAP
+                    {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
+                  </Label>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
+                    // Logic to open a dedicated search dialog if we wanted, 
+                    // but we'll stick to making the Select more "search-friendly"
+                    // or just adding the Lupa icon to the existing search.
+                  }}>
+                    <Search className="w-3.5 h-3.5 mr-1" /> Pesquisar
+                  </Button>
+                </div>
 
                 {sigtapProcs.length > 0 && (
                   <div className="flex gap-2 items-end">
-                    <div className="flex-1">
+                    <div className="flex-1 relative">
                       <Select value={selectedProcCodigo} onValueChange={v => { setSelectedProcCodigo(v); setCidSearch(''); }}>
-                        <SelectTrigger>
+                        <SelectTrigger className="pl-9">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           {Object.entries(procsBySpecialty).map(([esp, procs]) => (
                             <React.Fragment key={esp}>
-                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 z-10">
                                 {getSpecLabelForSigtap(esp)} ({procs.length})
                               </div>
                               {procs.map(p => (
