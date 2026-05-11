@@ -36,9 +36,16 @@ export const bpaService = {
   }): Promise<LinhaBpaNormalizada[]> {
     const ano = competencia.slice(0, 4);
     const mes = competencia.slice(4, 6);
-    const dataInicio = `${ano}-${mes}-01`;
-    const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
-    const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
+    
+    // Função para calcular range correto em formato ISO
+    const start = new Date(Number(ano), Number(mes) - 1, 1);
+    const end = new Date(Number(ano), Number(mes), 0, 23, 59, 59, 999);
+    
+    const dataInicio = start.toISOString().split('T')[0];
+    const dataFim = end.toISOString().split('T')[0];
+    
+    console.log("[BPA] competencia resolvida", { competencia, dataInicio, dataFim });
+
 
     // 1) Fetch Prontuários
     let qPront = (supabase as any)
