@@ -406,7 +406,7 @@ const Pacientes: React.FC = () => {
     const pending = list.filter(p => p.status !== 'completo' && p.status !== 'revisado');
     return {
       total: pending.length,
-      semUnidade: pending.filter(p => p.status === 'sem_unidade').length
+      pendenteBpa: list.filter(p => p.status === 'pendente_bpa').length
     };
   }, [visiblePacientes]);
 
