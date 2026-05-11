@@ -140,12 +140,19 @@ const AtualizacaoCadastral: React.FC = () => {
           atualizado_por_nome: user?.nome || "",
         }
       }, "Central de Atualização Cadastral");
-
-      toast.success("Dados do paciente atualizados!");
-      setIsEditModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) });
+      
+      // Feedback imediato no estado local
       refreshPacientes();
+      
+      // Invalidação agressiva do cache do TanStack Query
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.page({}) }), // Passando objeto vazio para evitar erro de tipos se necessário
+      ]);
+
+      toast.success("Dados do paciente atualizados com sucesso!");
+      setIsEditModalOpen(false);
       
       logAction({
         acao: "editar",
