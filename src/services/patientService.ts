@@ -135,6 +135,8 @@ export const patientService = {
       nome_responsavel: getValue('nomeResponsavel', getValue('nome_responsavel', cd.nome_responsavel)),
       cpf_responsavel: getValue('cpfResponsavel', getValue('cpf_responsavel', cd.cpf_responsavel)),
       observacoes: getValue('observacoes', cd.observacoes),
+      sigtap_codigo: getValue('sigtap_codigo', cd.sigtap_codigo),
+      procedimento_nome: getValue('procedimento_nome', cd.procedimento_nome),
       data_ultima_validacao_cadastro: new Date().toISOString(),
       dados_conferidos_em: new Date().toISOString(),
     };
@@ -153,6 +155,7 @@ export const patientService = {
       unidade_id: getValue('unidade_id', oldPaciente.unidade_id),
       endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
       observacoes: getValue('observacoes', oldPaciente.observacoes),
+      cid: getValue('cid', oldPaciente.cid),
       custom_data: updatedCustomData,
     };
 
