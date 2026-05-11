@@ -20,6 +20,7 @@ export interface LinhaBpaNormalizada {
   qtd: number;
   status_bpa: 'ok' | 'pendente';
   motivo_pendencia?: string;
+  pendenciaTriagemSigtap?: boolean;
 }
 
 export const bpaService = {
