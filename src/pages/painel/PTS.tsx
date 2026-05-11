@@ -226,45 +226,137 @@ const PTS: React.FC = () => {
     setCidSearch('');
   };
 
+  const saveImmediateFono = async (item: SelectedSigtap, cids?: SelectedCid[]) => {
+    try {
+      // 1. Link to professional (current user)
+      if (user?.id) {
+        await (supabase as any).from('procedimento_profissionais').upsert({
+          procedimento_codigo: item.procedimento_codigo,
+          profissional_id: user.id
+        }, { onConflict: 'procedimento_codigo, profissional_id' });
+      }
+
+      // 2. If editing an existing PTS, save to pts_sigtap
+      if (editingPts) {
+        await (supabase as any).from('pts_sigtap').upsert({
+          pts_id: editingPts.id,
+          procedimento_codigo: item.procedimento_codigo,
+          procedimento_nome: item.procedimento_nome,
+          especialidade: item.especialidade
+        }, { onConflict: 'pts_id, procedimento_codigo' });
+      }
+
+      // 3. Create/Link to Prontuario if patient selected
+      if (form.patient_id) {
+        const cidInfo = cids && cids.length > 0 ? `\nCIDs: ${cids.map(c => c.cid_codigo).join(', ')}` : '';
+        await (supabase as any).from('prontuarios').insert({
+          paciente_id: form.patient_id,
+          paciente_nome: form.patient_name,
+          profissional_id: user?.id || '',
+          profissional_nome: user?.nome || '',
+          unidade_id: user?.unidadeId || '',
+          data_atendimento: new Date().toISOString().split('T')[0],
+          hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          tipo_registro: 'pts_procedimento',
+          queixa_principal: 'Procedimento Fonoaudiologia (PTS)',
+          observacoes: `Procedimento: ${item.procedimento_codigo} - ${item.procedimento_nome}${cidInfo}`
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao salvar imediato fono:', err);
+    }
+  };
+
   // Add selected SIGTAP procedure to list
-  const handleAddSigtap = () => {
+  const handleAddSigtap = async () => {
     if (!selectedProcCodigo) return;
     const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (!proc) return;
+    
     if (sigtapSelecionados.some(s => s.procedimento_codigo === proc.codigo)) {
       toast.info('Procedimento já adicionado.');
       return;
     }
-    setSigtapSelecionados(prev => [...prev, {
+
+    const newItem = {
       procedimento_codigo: proc.codigo,
       procedimento_nome: proc.nome,
       especialidade: proc.especialidade,
-    }]);
+    };
+
+    setSigtapSelecionados(prev => [...prev, newItem]);
     setSelectedProcCodigo('');
-    toast.success('Procedimento SIGTAP adicionado.');
+
+    if (proc.especialidade === 'fonoaudiologia') {
+      // Auto-fetch CIDs for this procedure
+      const { data: relatedCids } = await supabase
+        .from('sigtap_procedimento_cids')
+        .select('cid_codigo, cid_descricao')
+        .eq('procedimento_codigo', proc.codigo);
+      
+      const cidsToAdd: SelectedCid[] = [];
+      if (relatedCids && relatedCids.length > 0) {
+        setCidsSelecionados(prev => {
+          const currentCodes = new Set(prev.map(c => c.cid_codigo));
+          const toAdd = relatedCids.filter(c => !currentCodes.has(c.cid_codigo));
+          cidsToAdd.push(...toAdd);
+          return [...prev, ...toAdd];
+        });
+      }
+
+      await saveImmediateFono(newItem, cidsToAdd);
+      toast.success('Procedimento e CIDs de Fonoaudiologia vinculados.');
+    } else {
+      toast.success('Procedimento SIGTAP adicionado.');
+    }
   };
 
   // Add CID to list
-  const handleAddCid = (cid: SigtapCid) => {
+  const handleAddCid = async (cid: SigtapCid) => {
     if (cidsSelecionados.some(c => c.cid_codigo === cid.cid_codigo)) {
       toast.info('CID já adicionado.');
       return;
     }
-    setCidsSelecionados(prev => [...prev, { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao }]);
+    const newCid = { cid_codigo: cid.cid_codigo, cid_descricao: cid.cid_descricao };
+    setCidsSelecionados(prev => [...prev, newCid]);
     setCidSearch('');
-    toast.success(`CID ${cid.cid_codigo} adicionado.`);
+    
+    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+    if (currentProc?.especialidade === 'fonoaudiologia') {
+       if (editingPts) {
+         await (supabase as any).from('pts_cid').upsert({
+           pts_id: editingPts.id,
+           cid_codigo: cid.cid_codigo,
+           cid_descricao: cid.cid_descricao
+         }, { onConflict: 'pts_id, cid_codigo' });
+       }
+       toast.success(`CID ${cid.cid_codigo} vinculado.`);
+    } else {
+      toast.success(`CID ${cid.cid_codigo} adicionado.`);
+    }
   };
 
-  const handleForceAddCid = () => {
+  const handleForceAddCid = async () => {
     const code = cidSearch.trim().toUpperCase();
     if (!code) return;
     if (cidsSelecionados.some(c => c.cid_codigo === code)) {
       toast.info('CID já adicionado.');
       return;
     }
-    setCidsSelecionados(prev => [...prev, { cid_codigo: code, cid_descricao: 'CID informado manualmente' }]);
+    const newCid = { cid_codigo: code, cid_descricao: 'CID informado manualmente' };
+    setCidsSelecionados(prev => [...prev, newCid]);
     setCidSearch('');
     setCidWarning(false);
+
+    const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+    if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
+       await (supabase as any).from('pts_cid').upsert({
+         pts_id: editingPts.id,
+         cid_codigo: code,
+         cid_descricao: 'CID informado manualmente'
+       }, { onConflict: 'pts_id, cid_codigo' });
+    }
+    
     toast.info('CID aceito manualmente.');
   };
 
@@ -552,22 +644,32 @@ const PTS: React.FC = () => {
             {/* SIGTAP Section */}
             {showSigtap && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
-                <Label className="text-sm font-semibold flex items-center gap-1.5">
-                  📋 Procedimentos SIGTAP
-                  {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold flex items-center gap-1.5">
+                    📋 Procedimentos SIGTAP
+                    {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
+                  </Label>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
+                    // Logic to open a dedicated search dialog if we wanted, 
+                    // but we'll stick to making the Select more "search-friendly"
+                    // or just adding the Lupa icon to the existing search.
+                  }}>
+                    <Search className="w-3.5 h-3.5 mr-1" /> Pesquisar
+                  </Button>
+                </div>
 
                 {sigtapProcs.length > 0 && (
                   <div className="flex gap-2 items-end">
-                    <div className="flex-1">
+                    <div className="flex-1 relative">
                       <Select value={selectedProcCodigo} onValueChange={v => { setSelectedProcCodigo(v); setCidSearch(''); }}>
-                        <SelectTrigger>
+                        <SelectTrigger className="pl-9">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           {Object.entries(procsBySpecialty).map(([esp, procs]) => (
                             <React.Fragment key={esp}>
-                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 z-10">
                                 {getSpecLabelForSigtap(esp)} ({procs.length})
                               </div>
                               {procs.map(p => (
