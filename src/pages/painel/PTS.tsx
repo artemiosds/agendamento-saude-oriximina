@@ -288,8 +288,24 @@ const PTS: React.FC = () => {
     setSelectedProcCodigo('');
 
     if (proc.especialidade === 'fonoaudiologia') {
-      await saveImmediateFono(newItem);
-      toast.success('Procedimento Fonoaudiologia salvo e vinculado.');
+      // Auto-fetch CIDs for this procedure
+      const { data: relatedCids } = await supabase
+        .from('sigtap_procedimento_cids')
+        .select('cid_codigo, cid_descricao')
+        .eq('procedimento_codigo', proc.codigo);
+      
+      const cidsToAdd: SelectedCid[] = [];
+      if (relatedCids && relatedCids.length > 0) {
+        setCidsSelecionados(prev => {
+          const currentCodes = new Set(prev.map(c => c.cid_codigo));
+          const toAdd = relatedCids.filter(c => !currentCodes.has(c.cid_codigo));
+          cidsToAdd.push(...toAdd);
+          return [...prev, ...toAdd];
+        });
+      }
+
+      await saveImmediateFono(newItem, cidsToAdd);
+      toast.success('Procedimento e CIDs de Fonoaudiologia vinculados.');
     } else {
       toast.success('Procedimento SIGTAP adicionado.');
     }
