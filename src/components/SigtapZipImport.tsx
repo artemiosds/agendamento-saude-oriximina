@@ -354,7 +354,10 @@ const SigtapZipImport: React.FC = () => {
         })),
         { onConflict: 'codigo' }
       );
-      if (error) console.warn('[SIGTAP] proc upsert:', error.message);
+      if (error) {
+        console.error('[SIGTAP] proc upsert error:', error);
+        throw new Error(`Erro ao salvar lote de procedimentos: ${error.message}`);
+      }
       done += batch.length;
       setProgressPct(Math.round((done / totalOps) * 100));
     }
@@ -369,7 +372,10 @@ const SigtapZipImport: React.FC = () => {
           batch,
           { onConflict: 'procedimento_codigo,cid_codigo' }
         );
-        if (error) console.warn('[SIGTAP] cid upsert:', error.message);
+        if (error) {
+          console.error('[SIGTAP] cid upsert error:', error);
+          throw new Error(`Erro ao salvar lote de vínculos CID: ${error.message}`);
+        }
         done += batch.length;
         setProgressPct(Math.round((done / totalOps) * 100));
       }
