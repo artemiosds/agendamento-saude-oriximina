@@ -377,9 +377,13 @@ const Pacientes: React.FC = () => {
   });
 
   useEffect(() => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-    refreshPacientes();
-  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario]);
+    // Revalidação periódica ou quando parâmetros de busca mudam
+    const invalidate = async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
+      refreshPacientes();
+    };
+    invalidate();
+  }, [queryClient, refreshPacientes, unidadeIdFuncionario, user?.role, user?.usuario, debouncedSearch]);
 
   // Profissionais veem pacientes vinculados aos seus agendamentos.
   // Recepção/Gestão/Master de unidade usam exclusivamente unidade_id real do funcionário.
