@@ -315,6 +315,12 @@ export const bpaService = {
       }
     });
 
+    console.log("[BPA] resolucao da producao - final", {
+      competencia,
+      totalValidos: result.filter(r => r.status_bpa === 'ok').length,
+      totalPendentes: result.filter(r => r.status_bpa === 'pendente').length
+    });
+
     return result;
   }
 };
