@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
-type Origem = 'prontuario' | 'triagem';
+type Origem = 'prontuario' | 'triagem' | 'pts';
 
 interface ProntuarioRow {
   id: string;
@@ -34,12 +34,14 @@ interface ProntuarioRow {
   profissional_nome: string;
   data_atendimento: string;
   unidade_id: string;
+  tipo_registro?: string;
 }
 
 interface LinhaBPA {
   key: string;
   origem: Origem;
-  prontuario_id: string;
+  prontuario_id?: string;
+  pts_id?: string;
   paciente_id: string;
   paciente_nome: string;
   profissional_id: string;
@@ -51,6 +53,8 @@ interface LinhaBPA {
   cid: string;
   carater: string;
   qtd: number;
+  fonte_procedimento: 'prontuario' | 'pts' | 'triagem';
+  fonte_cid: 'prontuario' | 'pts' | 'vazio';
   pendenciaTriagemSigtap?: boolean;
 }
 
@@ -129,10 +133,10 @@ const BpaProducao: React.FC = () => {
       // 1) Prontuários do período
       let q = (supabase as any)
         .from('prontuarios')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro')
         .gte('data_atendimento', dataInicio)
         .lte('data_atendimento', dataFim)
-        .limit(5000) // Aumentado para garantir completude
+        .limit(5000)
         .order('data_atendimento', { ascending: false });
       if (unidadeFiltro && unidadeFiltro !== 'all') q = q.eq('unidade_id', unidadeFiltro);
       const { data: prontuarios, error } = await q;
@@ -142,20 +146,60 @@ const BpaProducao: React.FC = () => {
       // 2) Vínculos prontuário-procedimento
       const prontIds = prots.map((p) => p.id);
       const vincs = prontIds.length
-        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds).limit(5000)).data || [])
+        ? ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds).limit(5000)).data || [])
         : [];
       const procIds = [...new Set(vincs.map((v: any) => v.procedimento_id))];
       const procsData = procIds.length
-        ? ((await (supabase as any).from('procedimentos').select('id, nome, codigo_sigtap').in('id', procIds)).data || [])
+        ? ((await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', procIds)).data || [])
         : [];
-      const procsMap = new Map<string, any>(procsData.map((p: any) => [p.id, p]));
+      const procsMap = new Map<string, any>(procsData.map((p: any) => [p.uuid, p]));
       const prontMap = new Map<string, ProntuarioRow>(prots.map((p) => [p.id, p]));
 
+      // 2.1) Buscar PTS para complementar CID ou procedimentos
+      const pacIdsNoPeriodo = [...new Set(prots.map(p => p.paciente_id))];
+      const { data: ptsData } = pacIdsNoPeriodo.length 
+        ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIdsNoPeriodo).eq('status', 'ativo')
+        : { data: [] };
+      
+      const ptsIds = (ptsData || []).map((p: any) => p.id);
+      const { data: ptsCids } = ptsIds.length 
+        ? await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', ptsIds)
+        : { data: [] };
+      
+      const { data: ptsProcs } = ptsIds.length
+        ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', ptsIds)
+        : { data: [] };
+
+      const ptsMap = new Map<string, any>(); // patient_id -> { pts_id, cids: [], procs: [] }
+      (ptsData || []).forEach((p: any) => {
+        ptsMap.set(p.patient_id, {
+          pts_id: p.id,
+          cids: (ptsCids || []).filter((c: any) => c.pts_id === p.id).map((c: any) => c.cid_codigo),
+          procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
+        });
+      });
+
       const result: LinhaBPA[] = [];
+      const usedProntuarios = new Set<string>();
+
       vincs.forEach((v: any) => {
         const pront = prontMap.get(v.prontuario_id);
         if (!pront) return;
+        usedProntuarios.add(pront.id);
         const proc = procsMap.get(v.procedimento_id);
+        
+        // Prioridade CID: Prontuário -> PTS
+        let cidFinal = (v.cids_selecionados && v.cids_selecionados[0]) || '';
+        let fonteCid: 'prontuario' | 'pts' | 'vazio' = cidFinal ? 'prontuario' : 'vazio';
+        
+        if (!cidFinal) {
+          const ptsInfo = ptsMap.get(pront.paciente_id);
+          if (ptsInfo && ptsInfo.cids.length > 0) {
+            cidFinal = ptsInfo.cids[0];
+            fonteCid = 'pts';
+          }
+        }
+
         result.push({
           key: `pron_${pront.id}_${v.procedimento_id}`,
           origem: 'prontuario',
@@ -168,13 +212,44 @@ const BpaProducao: React.FC = () => {
           data: pront.data_atendimento,
           procedimento_nome: proc?.nome || '—',
           codigo_sigtap: proc?.codigo_sigtap || '',
-          cid: '',
+          cid: cidFinal,
           carater: '01',
-          qtd: 1,
+          qtd: v.quantidade || 1,
+          fonte_procedimento: 'prontuario',
+          fonte_cid: fonteCid
         });
       });
+
+      // Prontuários sem procedimentos vinculados: Tentar buscar no PTS se houver sessão
       prots.forEach((pront) => {
-        if (!vincs.some((v: any) => v.prontuario_id === pront.id)) {
+        if (usedProntuarios.has(pront.id)) return;
+        
+        const ptsInfo = ptsMap.get(pront.paciente_id);
+        if (pront.tipo_registro === 'sessao' && ptsInfo && ptsInfo.procs.length > 0) {
+          // Se é uma sessão e não tem procedimento no prontuário, mas tem no PTS, puxamos do PTS
+          ptsInfo.procs.forEach((ptsp: any, idx: number) => {
+            let cidFinal = ptsInfo.cids[0] || '';
+            result.push({
+              key: `pts_aux_${pront.id}_${idx}`,
+              origem: 'pts',
+              prontuario_id: pront.id,
+              pts_id: ptsInfo.pts_id,
+              paciente_id: pront.paciente_id,
+              paciente_nome: pront.paciente_nome,
+              profissional_id: pront.profissional_id,
+              profissional_nome: pront.profissional_nome,
+              unidade_id: pront.unidade_id,
+              data: pront.data_atendimento,
+              procedimento_nome: ptsp.procedimento_nome || '—',
+              codigo_sigtap: ptsp.procedimento_codigo || '',
+              cid: cidFinal,
+              carater: '01',
+              qtd: 1,
+              fonte_procedimento: 'pts',
+              fonte_cid: cidFinal ? 'pts' : 'vazio'
+            });
+          });
+        } else {
           result.push({
             key: `pron_${pront.id}_none`,
             origem: 'prontuario',
@@ -190,6 +265,8 @@ const BpaProducao: React.FC = () => {
             cid: '',
             carater: '01',
             qtd: 1,
+            fonte_procedimento: 'prontuario',
+            fonte_cid: 'vazio'
           });
         }
       });
@@ -230,6 +307,8 @@ const BpaProducao: React.FC = () => {
           cid: '',
           carater: '01',
           qtd: 1,
+          fonte_procedimento: 'triagem',
+          fonte_cid: 'vazio',
           pendenciaTriagemSigtap: !triagemSigtapPadrao,
         });
       });
