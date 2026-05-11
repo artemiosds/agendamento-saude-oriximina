@@ -535,12 +535,20 @@ const PTS: React.FC = () => {
 
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
+    const searchTerm = normalize(procSearch);
+    
     for (const p of sigtapProcs) {
+      if (searchTerm) {
+        const procName = normalize(p.nome);
+        const procCode = p.codigo;
+        if (!procName.includes(searchTerm) && !procCode.includes(searchTerm)) continue;
+      }
+      
       if (!map[p.especialidade]) map[p.especialidade] = [];
       map[p.especialidade].push(p);
     }
     return map;
-  }, [sigtapProcs]);
+  }, [sigtapProcs, procSearch, normalize]);
 
   const getSpecLabelForSigtap = useCallback((key: string): string => {
     const entry = Object.entries(SPECIALTY_TO_SIGTAP).find(([, v]) => v === key);
