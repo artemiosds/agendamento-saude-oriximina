@@ -389,15 +389,16 @@ const BpaProducao: React.FC = () => {
       const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
 
       return [
-        seq, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
+        seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
         idade, pac.sexo || '', pac.municipio || '', l.data, procNomeFinal, sigtapFinal,
         l.qtd, l.cid || '', l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
+        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', bpaRows,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        competenciaFmt, folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.prontuario_id || '', ok ? 'OK' : 'PENDENTE',
+        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
       ];
+
     });
     const wsBpa = XLSX.utils.aoa_to_sheet([bpaHeader, ...bpaRows]);
     wsBpa['!cols'] = bpaHeader.map((h) => ({ wch: Math.max(10, Math.min(28, h.length + 4)) }));
