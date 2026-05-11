@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Pencil, Save, X, Lock, Search, User, CreditCard, Heart, Activity,
@@ -106,6 +107,19 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
     contato_emergencia_nome: "",
     contato_emergencia_telefone: "",
     profissionalId: "",
+    // New fields
+    telefone_secundario: "",
+    municipio: "",
+    bairro: "",
+    cep: "",
+    raca_cor: "",
+    nacionalidade: "",
+    etnia: "",
+    etniaOutra: "",
+    paisNascimento: "",
+    is_gestante: false,
+    is_pne: false,
+    is_autista: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -139,6 +153,19 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
       contato_emergencia_nome: cd.contato_emergencia_nome || "",
       contato_emergencia_telefone: cd.contato_emergencia_telefone || "",
       profissionalId: profissionalId,
+      // Mapping new fields
+      telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
+      municipio: paciente.municipio || cd.municipio || "",
+      bairro: cd.bairro || "",
+      cep: cd.cep || "",
+      raca_cor: cd.racaCor || cd.raca_cor || "",
+      nacionalidade: cd.nacionalidade || "",
+      etnia: cd.etnia || "",
+      etniaOutra: cd.etniaOutra || "",
+      paisNascimento: cd.paisNascimento || "",
+      is_gestante: !!paciente.is_gestante,
+      is_pne: !!paciente.is_pne,
+      is_autista: !!paciente.is_autista,
     });
     setCidSearch(paciente.cid || "");
     setErrors({});
@@ -185,6 +212,16 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         ...prevCustom,
         contato_emergencia_nome: editData.contato_emergencia_nome.trim(),
         contato_emergencia_telefone: editData.contato_emergencia_telefone.trim(),
+        telefoneSecundario: editData.telefone_secundario.trim(),
+        municipio: editData.municipio.trim(),
+        bairro: editData.bairro.trim(),
+        cep: editData.cep.trim(),
+        racaCor: editData.raca_cor,
+        raca_cor: editData.raca_cor,
+        nacionalidade: editData.nacionalidade,
+        etnia: editData.etnia,
+        etniaOutra: editData.etniaOutra.trim(),
+        paisNascimento: editData.paisNascimento.trim(),
       };
 
       const { error } = await supabase.from("pacientes").update({
@@ -197,6 +234,10 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         endereco: editData.endereco,
         telefone: editData.telefone,
         email: editData.email,
+        municipio: editData.municipio.trim(),
+        is_gestante: editData.is_gestante,
+        is_pne: editData.is_pne,
+        is_autista: editData.is_autista,
         custom_data: newCustom,
       }).eq("id", pacienteId);
 
@@ -307,61 +348,124 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
               <InfoField icon={<Stethoscope className="w-3.5 h-3.5" />} label="Profissional responsável" value={profissionalNome || "—"} />
             </div>
 
-            {/* Expanded info */}
+            {/* Expanded info (Sections) */}
             {expanded && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/40">
-                <InfoField icon={<Users className="w-3.5 h-3.5" />} label="Nome da mãe" value={paciente.nome_mae || "—"} />
-                <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone" value={paciente.telefone || "—"} mono />
-                <InfoField icon={<Mail className="w-3.5 h-3.5" />} label="E-mail" value={paciente.email || "—"} />
-                <InfoField icon={<MapPin className="w-3.5 h-3.5" />} label="Endereço" value={paciente.endereco || "—"} />
-                <InfoField
-                  icon={<User className="w-3.5 h-3.5" />}
-                  label="Raça/Cor (IBGE)"
-                  value={
-                    customData.racaCor || customData.raca_cor
-                      ? String(customData.racaCor || customData.raca_cor).replace(/_/g, " ")
-                      : "—"
-                  }
-                />
-                <InfoField
-                  icon={<User className="w-3.5 h-3.5" />}
-                  label="Nacionalidade"
-                  value={customData.nacionalidade ? String(customData.nacionalidade) : "—"}
-                />
-                {(customData.racaCor === "indigena" || customData.raca_cor === "indigena") && (
-                  <InfoField
-                    icon={<User className="w-3.5 h-3.5" />}
-                    label="Etnia"
-                    value={customData.etnia === "X999" ? (customData.etniaOutra || "—") : (customData.etnia || "—")}
-                  />
-                )}
-                {customData.nacionalidade === "estrangeiro" && (
-                  <InfoField
-                    icon={<MapPin className="w-3.5 h-3.5" />}
-                    label="País de nascimento"
-                    value={customData.paisNascimento || "—"}
-                  />
-                )}
-                <InfoField
-                  icon={<AlertCircle className="w-3.5 h-3.5" />}
-                  label="Contato de emergência"
-                  value={
-                    customData.contato_emergencia_nome
-                      ? `${customData.contato_emergencia_nome}${customData.contato_emergencia_telefone ? ` · ${customData.contato_emergencia_telefone}` : ""}`
-                      : "—"
-                  }
-                />
+              <div className="space-y-4 pt-4 border-t border-border/40">
+                {/* Section: Endereço */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3" /> Endereço
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Endereço"
+                      value={paciente.endereco || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Município"
+                      value={paciente.municipio || customData.municipio || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Bairro"
+                      value={customData.bairro || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="CEP"
+                      value={customData.cep || "—"}
+                    />
+                  </div>
+                </div>
+
+                {/* Section: Contato */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone className="w-3 h-3" /> Contato
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone Principal" value={paciente.telefone || "—"} mono />
+                    <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone Secundário" value={customData.telefoneSecundario || customData.telefone_secundario || "—"} mono />
+                    <InfoField icon={<Mail className="w-3.5 h-3.5" />} label="E-mail" value={paciente.email || "—"} />
+                    <InfoField
+                      icon={<AlertCircle className="w-3.5 h-3.5" />}
+                      label="Contato de emergência"
+                      value={
+                        customData.contato_emergencia_nome
+                          ? `${customData.contato_emergencia_nome}${customData.contato_emergencia_telefone ? ` · ${customData.contato_emergencia_telefone}` : ""}`
+                          : "—"
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Section: Complementares */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3 h-3" /> Complementares
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField icon={<Users className="w-3.5 h-3.5" />} label="Nome da mãe" value={paciente.nome_mae || "—"} />
+                    <InfoField
+                      icon={<User className="w-3.5 h-3.5" />}
+                      label="Raça/Cor (IBGE)"
+                      value={
+                        customData.racaCor || customData.raca_cor
+                          ? String(customData.racaCor || customData.raca_cor).replace(/_/g, " ")
+                          : "—"
+                      }
+                    />
+                    <InfoField
+                      icon={<User className="w-3.5 h-3.5" />}
+                      label="Nacionalidade"
+                      value={customData.nacionalidade ? String(customData.nacionalidade) : "—"}
+                    />
+                    {(customData.racaCor === "indigena" || customData.raca_cor === "indigena") && (
+                      <InfoField
+                        icon={<User className="w-3.5 h-3.5" />}
+                        label="Etnia"
+                        value={customData.etnia === "X999" ? (customData.etniaOutra || "—") : (customData.etnia || "—")}
+                      />
+                    )}
+                    {customData.nacionalidade === "estrangeiro" && (
+                      <InfoField
+                        icon={<MapPin className="w-3.5 h-3.5" />}
+                        label="País de nascimento"
+                        value={customData.paisNascimento || "—"}
+                      />
+                    )}
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="Gestante"
+                      value={paciente.is_gestante ? "Sim" : "Não"}
+                    />
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="PNE"
+                      value={paciente.is_pne ? "Sim" : "Não"}
+                    />
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="Autista"
+                      value={paciente.is_autista ? "Sim" : "Não"}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
         ) : (
           /* ── EDIT MODE ── */
-          <div className="space-y-4">
+          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-1">
             {/* Identificação */}
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Identificação</p>
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <User className="w-3 h-3" /> Identificação
+              </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div className="col-span-2 sm:col-span-1">
+                <div className="col-span-2">
                   <Label className="text-xs font-medium text-muted-foreground">Nome completo <span className="text-destructive">*</span></Label>
                   <Input
                     value={editData.nome}
@@ -377,10 +481,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">Data de nascimento</Label>
                   <Input type="date" value={editData.data_nascimento} onChange={e => setEditData(d => ({ ...d, data_nascimento: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Idade <Lock className="w-3 h-3" /></Label>
-                  <Input value={calcularIdade(editData.data_nascimento)} disabled className="opacity-50 mt-1" />
                 </div>
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">CPF</Label>
@@ -402,12 +502,162 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                   />
                   {errors.cns && <p className="text-xs text-destructive mt-0.5">{errors.cns}</p>}
                 </div>
+              </div>
+            </div>
+
+            {/* Contato */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <Phone className="w-3 h-3" /> Contato
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Telefone Principal</Label>
+                  <Input
+                    value={editData.telefone}
+                    onChange={e => { setEditData(d => ({ ...d, telefone: e.target.value })); setErrors(er => ({ ...er, telefone: "" })); }}
+                    placeholder="(00) 00000-0000"
+                    className={`mt-1 ${errors.telefone ? "border-destructive" : ""}`}
+                  />
+                  {errors.telefone && <p className="text-xs text-destructive mt-0.5">{errors.telefone}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Telefone Secundário</Label>
+                  <Input
+                    value={editData.telefone_secundario}
+                    onChange={e => setEditData(d => ({ ...d, telefone_secundario: e.target.value }))}
+                    placeholder="(00) 00000-0000"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">E-mail</Label>
+                  <Input
+                    type="email"
+                    value={editData.email}
+                    onChange={e => { setEditData(d => ({ ...d, email: e.target.value })); setErrors(er => ({ ...er, email: "" })); }}
+                    placeholder="paciente@email.com"
+                    className={`mt-1 ${errors.email ? "border-destructive" : ""}`}
+                  />
+                </div>
+                <div className="col-span-2 grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground">Contato Emergência (Nome)</Label>
+                    <Input
+                      value={editData.contato_emergencia_nome}
+                      onChange={e => setEditData(d => ({ ...d, contato_emergencia_nome: e.target.value }))}
+                      placeholder="Nome"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground">Contato Emergência (Tel)</Label>
+                    <Input
+                      value={editData.contato_emergencia_telefone}
+                      onChange={e => setEditData(d => ({ ...d, contato_emergencia_telefone: e.target.value }))}
+                      placeholder="Telefone"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Endereço */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <MapPin className="w-3 h-3" /> Endereço
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Endereço Completo</Label>
+                  <Input
+                    value={editData.endereco}
+                    onChange={e => setEditData(d => ({ ...d, endereco: e.target.value }))}
+                    placeholder="Rua, número, complemento"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Bairro</Label>
+                  <Input
+                    value={editData.bairro}
+                    onChange={e => setEditData(d => ({ ...d, bairro: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">CEP</Label>
+                  <Input
+                    value={editData.cep}
+                    onChange={e => setEditData(d => ({ ...d, cep: e.target.value }))}
+                    placeholder="00000-000"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Município</Label>
+                  <Input
+                    value={editData.municipio}
+                    onChange={e => setEditData(d => ({ ...d, municipio: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Complementares */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <Users className="w-3 h-3" /> Complementares
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
                   <Label className="text-xs font-medium text-muted-foreground">Nome da mãe</Label>
                   <Input value={editData.nome_mae} onChange={e => setEditData(d => ({ ...d, nome_mae: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs font-medium text-muted-foreground">CID-10</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">Raça/Cor (IBGE)</Label>
+                  <Select value={editData.raca_cor} onValueChange={v => setEditData(d => ({ ...d, raca_cor: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="branca">Branca</SelectItem>
+                      <SelectItem value="preta">Preta</SelectItem>
+                      <SelectItem value="parda">Parda</SelectItem>
+                      <SelectItem value="amarela">Amarela</SelectItem>
+                      <SelectItem value="indigena">Indígena</SelectItem>
+                      <SelectItem value="nao_declarado">Não declarado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Nacionalidade</Label>
+                  <Select value={editData.nacionalidade} onValueChange={v => setEditData(d => ({ ...d, nacionalidade: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="brasileiro">Brasileiro(a)</SelectItem>
+                      <SelectItem value="naturalizado">Naturalizado(a)</SelectItem>
+                      <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {editData.raca_cor === "indigena" && (
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium text-muted-foreground">Etnia</Label>
+                    <Input value={editData.etnia} onChange={e => setEditData(d => ({ ...d, etnia: e.target.value }))} className="mt-1" placeholder="Código ou nome" />
+                  </div>
+                )}
+
+                {editData.nacionalidade === "estrangeiro" && (
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium text-muted-foreground">País de Nascimento</Label>
+                    <Input value={editData.paisNascimento} onChange={e => setEditData(d => ({ ...d, paisNascimento: e.target.value }))} className="mt-1" />
+                  </div>
+                )}
+
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">CID-10 Principal</Label>
                   <Popover open={cidOpen} onOpenChange={setCidOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="w-full justify-start text-left font-normal h-10 text-sm mt-1">
@@ -437,7 +687,33 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div>
+
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_gestante"
+                    checked={editData.is_gestante}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_gestante: !!v }))}
+                  />
+                  <Label htmlFor="is_gestante" className="text-xs cursor-pointer">Gestante</Label>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_pne"
+                    checked={editData.is_pne}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_pne: !!v }))}
+                  />
+                  <Label htmlFor="is_pne" className="text-xs cursor-pointer">PNE</Label>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_autista"
+                    checked={editData.is_autista}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_autista: !!v }))}
+                  />
+                  <Label htmlFor="is_autista" className="text-xs cursor-pointer">Autista</Label>
+                </div>
+
+                <div className="col-span-2 pt-4 border-t border-border/40">
                   <Label className="text-xs font-medium text-muted-foreground">Profissional responsável</Label>
                   <Select value={editData.profissionalId} onValueChange={v => setEditData(d => ({ ...d, profissionalId: v }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -447,71 +723,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Contato e Endereço */}
-            <div className="pt-3 border-t border-border/40">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Contato e Endereço</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Telefone</Label>
-                  <Input
-                    value={editData.telefone}
-                    onChange={e => { setEditData(d => ({ ...d, telefone: e.target.value })); setErrors(er => ({ ...er, telefone: "" })); }}
-                    placeholder="(00) 00000-0000"
-                    className={`mt-1 ${errors.telefone ? "border-destructive" : ""}`}
-                  />
-                  {errors.telefone && <p className="text-xs text-destructive mt-0.5">{errors.telefone}</p>}
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">E-mail</Label>
-                  <Input
-                    type="email"
-                    value={editData.email}
-                    onChange={e => { setEditData(d => ({ ...d, email: e.target.value })); setErrors(er => ({ ...er, email: "" })); }}
-                    placeholder="paciente@email.com"
-                    className={`mt-1 ${errors.email ? "border-destructive" : ""}`}
-                  />
-                  {errors.email && <p className="text-xs text-destructive mt-0.5">{errors.email}</p>}
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs font-medium text-muted-foreground">Endereço completo</Label>
-                  <Input
-                    value={editData.endereco}
-                    onChange={e => setEditData(d => ({ ...d, endereco: e.target.value }))}
-                    placeholder="Rua, número, bairro, cidade — UF"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Contato de Emergência */}
-            <div className="pt-3 border-t border-border/40">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Contato de Emergência
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Nome</Label>
-                  <Input
-                    value={editData.contato_emergencia_nome}
-                    onChange={e => setEditData(d => ({ ...d, contato_emergencia_nome: e.target.value }))}
-                    placeholder="Nome do contato"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Telefone</Label>
-                  <Input
-                    value={editData.contato_emergencia_telefone}
-                    onChange={e => { setEditData(d => ({ ...d, contato_emergencia_telefone: e.target.value })); setErrors(er => ({ ...er, contato_emergencia_telefone: "" })); }}
-                    placeholder="(00) 00000-0000"
-                    className={`mt-1 ${errors.contato_emergencia_telefone ? "border-destructive" : ""}`}
-                  />
-                  {errors.contato_emergencia_telefone && <p className="text-xs text-destructive mt-0.5">{errors.contato_emergencia_telefone}</p>}
                 </div>
               </div>
             </div>

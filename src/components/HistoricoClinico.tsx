@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History, MoreVertical, Printer, Download, Link2, FileDown } from "lucide-react";
+import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History, MoreVertical, Printer, Download, Link2, FileDown, MapPin, Phone, Users, User, Mail, AlertCircle, CreditCard, Stethoscope } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import { buildInstitutionalCSS } from "@/lib/printLayout";
+import { formatCNS } from "@/lib/cnsUtils";
 
 interface ProntuarioItem {
   id: string;
@@ -77,6 +78,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   const [docModalOpen, setDocModalOpen] = useState(false);
   const cancelledRef = useRef(false);
 
+  const [pacienteData, setPacienteData] = useState<any>(null);
+
   const loadData = useCallback(async () => {
     if (!pacienteId) {
       setProntuarios([]);
@@ -90,7 +93,11 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
     setError(null);
 
     try {
-      const [{ data: pData, error: pError }, { data: eData, error: eError }] = await Promise.all([
+      const [
+        { data: pData, error: pError }, 
+        { data: eData, error: eError },
+        { data: pacData, error: pacError }
+      ] = await Promise.all([
         supabase
           .from("prontuarios")
           .select(
@@ -103,15 +110,22 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           .select("*")
           .eq("paciente_id", pacienteId)
           .order("data_inicio", { ascending: false }),
+        supabase
+          .from("pacientes")
+          .select("*")
+          .eq("id", pacienteId)
+          .single()
       ]);
 
       if (cancelledRef.current) return;
 
       if (pError) throw pError;
       if (eError) throw eError;
+      if (pacError) throw pacError;
 
       setProntuarios(pData || []);
       setEpisodios(eData || []);
+      setPacienteData(pacData);
     } catch (err) {
       console.error("[Historico] Erro inesperado:", err);
       if (!cancelledRef.current) {
@@ -235,7 +249,93 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Dados Cadastrais do Paciente (Prontuário) */}
+      {pacienteData && (
+        <Card className="border-border/60 shadow-sm overflow-hidden bg-card">
+          <div className="bg-muted/40 px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dados Cadastrais</h3>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Prontuário Nº {pacienteData.id?.slice(-6) || "—"}
+            </Badge>
+          </div>
+          <CardContent className="p-4 space-y-5">
+            {/* Seção 1: Identificação */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <User className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Identificação</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <DataField label="Nome" value={pacienteData.nome} />
+                <DataField label="Data Nasc." value={pacienteData.data_nascimento ? new Date(pacienteData.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"} />
+                <DataField label="CPF" value={pacienteData.cpf} mono />
+                <DataField label="CNS" value={formatCNS(pacienteData.cns)} mono />
+              </div>
+            </div>
+
+            {/* Seção 2: Endereço */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <MapPin className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Endereço</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="sm:col-span-2">
+                  <DataField label="Logradouro" value={pacienteData.endereco} />
+                </div>
+                <DataField label="Bairro" value={pacienteData.custom_data?.bairro} />
+                <DataField label="Município" value={pacienteData.municipio || pacienteData.custom_data?.municipio} />
+                <DataField label="CEP" value={pacienteData.custom_data?.cep} mono />
+              </div>
+            </div>
+
+            {/* Seção 3: Contato */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <Phone className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Contato</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <DataField label="Tel. Principal" value={pacienteData.telefone} mono />
+                <DataField label="Tel. Secundário" value={pacienteData.custom_data?.telefoneSecundario || pacienteData.custom_data?.telefone_secundario} mono />
+                <div className="sm:col-span-2">
+                  <DataField label="E-mail" value={pacienteData.email} />
+                </div>
+                <div className="sm:col-span-2">
+                  <DataField label="Contato Emergência" value={pacienteData.custom_data?.contato_emergencia_nome} />
+                </div>
+                <DataField label="Tel. Emergência" value={pacienteData.custom_data?.contato_emergencia_telefone} mono />
+              </div>
+            </div>
+
+            {/* Seção 4: Complementares */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <Activity className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Complementares</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="sm:col-span-2">
+                  <DataField label="Nome da Mãe" value={pacienteData.nome_mae} />
+                </div>
+                <DataField label="Raça/Cor" value={pacienteData.custom_data?.racaCor || pacienteData.custom_data?.raca_cor} />
+                <DataField label="Nacionalidade" value={pacienteData.custom_data?.nacionalidade} />
+                <DataField label="Gestante" value={pacienteData.is_gestante ? "Sim" : "Não"} />
+                <DataField label="PNE" value={pacienteData.is_pne ? "Sim" : "Não"} />
+                <DataField label="Autista" value={pacienteData.is_autista ? "Sim" : "Não"} />
+                <DataField label="CID-10 Principal" value={pacienteData.cid} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Separator />
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -531,9 +631,23 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   );
 };
 
+const DataField = ({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) => {
+  const display = value && String(value).trim() ? value : "—";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] text-muted-foreground uppercase font-semibold">{label}</span>
+      <span className={`text-xs text-foreground leading-tight ${mono ? "font-mono" : "font-medium"}`}>
+        {display}
+      </span>
+    </div>
+  );
+};
+
 const Section: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div>
     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
     <p className="text-foreground whitespace-pre-wrap leading-relaxed">{value}</p>
   </div>
 );
+
+export default HistoricoClinico;
