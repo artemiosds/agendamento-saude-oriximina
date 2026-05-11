@@ -73,6 +73,7 @@ function formatDateBR(isoDate: string): string {
 export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, currentProfissionalId, unidades }) => {
   const [prontuarios, setProntuarios] = useState<ProntuarioItem[]>([]);
   const [episodios, setEpisodios] = useState<EpisodioItem[]>([]);
+  const [encaminhamentosEnviados, setEncaminhamentosEnviados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
