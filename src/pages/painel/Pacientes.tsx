@@ -649,20 +649,33 @@ const Pacientes: React.FC = () => {
 
     try {
       if (editId) {
-        // Close dialog immediately (optimistic)
-        setDialogOpen(false);
-        setSaving(false);
-        Promise.resolve(supabase.from("pacientes").update(dbFields).eq("id", editId))
-          .then(({ error }) => { if (error) console.error("Erro ao atualizar paciente:", error); })
-          .catch((err) => console.error("Erro ao atualizar paciente:", err))
-          .finally(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
-            refreshPacientes();
+        // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
+        const { data, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
+        
+        if (error) {
+          console.error("Erro ao atualizar paciente:", error);
+          toast.error("Erro ao salvar dados. Verifique sua conexão.");
+        } else {
+          // Invalidação agressiva e imediata
+          await refreshPacientes();
+          await queryClient.invalidateQueries(); // Invalida todas as consultas para garantir consistência entre telas
+          
+          // Refetch explícito dos dados do paciente atualizado
+          await queryClient.refetchQueries({ queryKey: queryKeys.pacientes.detail(editId) });
+          
+          toast.success("Dados do paciente sincronizados com sucesso!");
+          
+          logAction({
+            acao: "editar",
+            entidade: "paciente",
+            entidadeId: editId,
+            detalhes: { nome: form.nome, modulo: "Pacientes", acao: "edicao_paciente_pagina_pacientes" },
+            user,
           });
-        toast.success("Paciente atualizado!");
+          
+          setDialogOpen(false);
+          setEditId(null);
+        }
       } else {
         // === DUPLICATE DETECTION ===
         const duplicateChecks: string[] = [];
