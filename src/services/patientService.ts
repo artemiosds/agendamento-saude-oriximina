@@ -104,7 +104,7 @@ export const patientService = {
       racaCor: formData.raca_cor ?? cd.racaCor ?? "",
       etnia: formData.etnia ?? cd.etnia ?? "",
       etnia_outra: formData.etnia_outra ?? cd.etnia_outra ?? "",
-      etniaOutra: formData.etnia_out_ra ?? cd.etniaOutra ?? "",
+      etniaOutra: formData.etnia_outra ?? cd.etniaOutra ?? "",
       nacionalidade: formData.nacionalidade ?? cd.nacionalidade ?? "brasileiro",
       pais_nascimento: formData.pais_nascimento ?? cd.pais_nascimento ?? "",
       paisNascimento: formData.pais_nascimento ?? cd.paisNascimento ?? "",
