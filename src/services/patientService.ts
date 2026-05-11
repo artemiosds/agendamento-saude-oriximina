@@ -69,6 +69,10 @@ export const patientService = {
       telefone_secundario: cd.telefone_secundario || cd.telefoneSecundario || "",
       observacoes: cd.observacoes || paciente.observacoes || "",
       unidade_id: paciente.unidade_id || "",
+      // Novos campos persistentes para BPA
+      sigtap_codigo: cd.sigtap_codigo || cd.sigtap_principal || "",
+      procedimento_nome: cd.procedimento_nome || cd.procedimento_principal || "",
+      cid: paciente.cid || cd.cid || "",
     };
   },
 
