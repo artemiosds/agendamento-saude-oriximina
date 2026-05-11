@@ -1,5 +1,5 @@
 
-export type PatientStatus = "completo" | "incompleto" | "pendente_bpa" | "sem_unidade" | "revisado";
+export type PatientStatus = "completo" | "parcial" | "pendente_cadastro" | "pendente_bpa" | "revisado";
 
 export interface PendingFieldsResult {
   fields: string[];
@@ -9,55 +9,61 @@ export interface PendingFieldsResult {
 
 /**
  * Calculates pending fields and cadastral status for a patient.
- * Centralized logic as requested.
+ * Focuses on cadastral data, ignoring "Unidade" as a blocking factor.
  */
 export function calculatePatientPendingFields(p: any): PendingFieldsResult {
-  if (!p) return { fields: [], status: "incompleto", percentage: 0 };
+  if (!p) return { fields: [], status: "pendente_cadastro", percentage: 0 };
   
   const missing: string[] = [];
   const cd = p.custom_data || {};
   
-  // Basic Identification
+  // Basic Identification (Crucial for Cadastro)
   if (!p.nome?.trim()) missing.push("Nome");
   if (!p.cpf?.trim()) missing.push("CPF");
-  if (!p.data_nascimento) missing.push("Data de Nascimento");
-  if (!p.nome_mae?.trim()) missing.push("Nome da Mãe");
+  if (!p.data_nascimento && !p.dataNascimento) missing.push("Data de Nascimento");
+  if (!p.nome_mae?.trim() && !p.nomeMae?.trim()) missing.push("Nome da Mãe");
   if (!cd.sexo) missing.push("Sexo");
   
-  // SUS / BPA Requirements
+  // SUS / BPA Requirements (Crucial for SUS)
   if (!p.cns?.trim()) missing.push("CNS");
   if (!cd.raca_cor) missing.push("Raça/Cor");
-  if (!cd.nacionalidade) missing.push("Nacionalidade");
-  if (!p.naturalidade?.trim()) missing.push("Naturalidade");
   
-  // Contact
+  // Contact (Important for Cadastro)
   if (!p.telefone?.trim()) missing.push("Telefone");
   
-  // Address (Checking custom_data structured fields)
+  // Address (Crucial for Cadastro/BPA)
   if (!cd.cep?.trim()) missing.push("CEP");
   if (!cd.logradouro?.trim()) missing.push("Logradouro");
   if (!cd.bairro?.trim()) missing.push("Bairro");
   if (!p.municipio?.trim()) missing.push("Município");
   
-  // System
-  const hasUnidade = !!p.unidade_id;
-  if (!hasUnidade) missing.push("Unidade Vinculada");
+  // Complementary (Important)
+  if (!cd.nacionalidade) missing.push("Nacionalidade");
+  if (!p.naturalidade?.trim()) missing.push("Naturalidade");
+
+  // Removed Unidade as a dependency for this screen's logic
   
-  const importantFieldsCount = 15;
+  const importantFieldsCount = 13; // Adjusted count
   const percentage = Math.max(0, Math.round(((importantFieldsCount - missing.length) / importantFieldsCount) * 100));
   
   let status: PatientStatus = "completo";
-  if (!hasUnidade) {
-    status = "sem_unidade";
-  } else if (missing.length > 0) {
+  
+  if (missing.length > 0) {
     // Check if critical BPA fields are missing
     const bpaCritical = ["CNS", "Raça/Cor", "Nome da Mãe", "Data de Nascimento", "Sexo"];
     const hasBpaPending = missing.some(f => bpaCritical.includes(f));
-    status = hasBpaPending ? "pendente_bpa" : "incompleto";
+    
+    if (hasBpaPending) {
+      status = "pendente_bpa";
+    } else if (percentage < 50) {
+      status = "pendente_cadastro";
+    } else {
+      status = "parcial";
+    }
   }
   
   // Explicitly marked as revised in custom_data
-  if (cd.revisado_em && status !== "sem_unidade") {
+  if (cd.revisado_em) {
     status = "revisado";
   }
 
