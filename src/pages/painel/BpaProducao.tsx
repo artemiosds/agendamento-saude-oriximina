@@ -38,26 +38,7 @@ interface ProntuarioRow {
   tipo_registro?: string;
 }
 
-interface LinhaBPA {
-  key: string;
-  origem: Origem;
-  prontuario_id?: string;
-  pts_id?: string;
-  paciente_id: string;
-  paciente_nome: string;
-  profissional_id: string;
-  profissional_nome: string;
-  unidade_id: string;
-  data: string;
-  procedimento_nome: string;
-  codigo_sigtap: string;
-  cid: string;
-  carater: string;
-  qtd: number;
-  fonte_procedimento: 'prontuario' | 'pts' | 'triagem';
-  fonte_cid: 'prontuario' | 'pts' | 'vazio';
-  pendenciaTriagemSigtap?: boolean;
-}
+export type LinhaBPA = LinhaBpaNormalizada;
 
 interface PacienteInfo {
   cns: string; cpf: string; nome: string; data_nascimento: string;
