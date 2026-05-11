@@ -114,8 +114,11 @@ Deno.serve(async (req) => {
     const ano = competencia.slice(0, 4);
     const mes = competencia.slice(4, 6);
     const dataInicio = `${ano}-${mes}-01`;
-    const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
-    const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
+    const end = new Date(Number(ano), Number(mes), 0, 23, 59, 59, 999);
+    const dataFim = end.toISOString().split('T')[0];
+    
+    console.log("[generate-bpa] competencia resolvida", { competencia, dataInicio, dataFim });
+
 
     // 1. Carrega configurações e dados do período com limites maiores
     let prontQuery = supabase
