@@ -251,7 +251,7 @@ const ProntuarioPage: React.FC = () => {
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
   const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
-  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
+  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string; isGlobal?: boolean }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
   const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
   const [procSearch, setProcSearch] = useState("");
