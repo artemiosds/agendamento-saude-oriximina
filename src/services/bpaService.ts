@@ -41,7 +41,7 @@ export const bpaService = {
     const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
 
     // 1) Fetch Prontuários
-    let qPront = supabase
+    let qPront = (supabase as any)
       .from('prontuarios')
       .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, custom_data')
       .gte('data_atendimento', dataInicio)
@@ -54,62 +54,65 @@ export const bpaService = {
     const { data: prontuarios, error: errorPront } = await qPront;
     if (errorPront) throw errorPront;
 
-    const prots = (prontuarios || []);
+    const prots = (prontuarios || []) as any[];
     const pacIds = [...new Set(prots.map(p => p.paciente_id))];
     const prontIds = prots.map(p => p.id);
 
     // 2) Fetch Patients (Persistent data)
     const { data: pacientes } = pacIds.length 
-      ? await supabase.from('pacientes').select('id, nome, cns, cpf, data_nascimento, cid, custom_data').in('id', pacIds)
+      ? await (supabase as any).from('pacientes').select('id, nome, cns, cpf, data_nascimento, cid, custom_data').in('id', pacIds)
       : { data: [] };
-    const pacMap = new Map<string, any>(pacientes?.map(p => [p.id, p]));
+    const pacMap = new Map<string, any>();
+    (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
 
     // 3) Fetch Prontuario Procedimentos
     const { data: vincs } = prontIds.length
-      ? await supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds)
+      ? await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds)
       : { data: [] };
 
-    const procIds = [...new Set((vincs || []).map(v => v.procedimento_id))];
+    const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
     const { data: procsData } = procIds.length
-      ? await supabase.from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', procIds)
+      ? await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', procIds)
       : { data: [] };
-    const procsMap = new Map<string, any>(procsData?.map(p => [p.uuid, p]));
+    const procsMap = new Map<string, any>();
+    (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
 
     // 4) Fetch PTS
     const { data: ptsData } = pacIds.length
-      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
+      ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
       : { data: [] };
     
-    const activePtsIds = (ptsData || []).map(p => p.id);
+    const activePtsIds = (ptsData || []).map((p: any) => p.id);
     const { data: ptsCids } = activePtsIds.length
-      ? await supabase.from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds)
+      ? await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds)
       : { data: [] };
     const { data: ptsProcs } = activePtsIds.length
-      ? await supabase.from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
+      ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
       : { data: [] };
 
     const ptsMap = new Map<string, any>();
-    (ptsData || []).forEach(p => {
+    (ptsData || []).forEach((p: any) => {
       ptsMap.set(p.patient_id, {
         pts_id: p.id,
-        cids: (ptsCids || []).filter(c => c.pts_id === p.id).map(c => c.cid_codigo),
-        procs: (ptsProcs || []).filter(pr => pr.pts_id === p.id)
+        cids: (ptsCids || []).filter((c: any) => c.pts_id === p.id).map((c: any) => c.cid_codigo),
+        procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
       });
     });
 
     // 5) Fetch Triagens
-    let qTri = supabase
+    let qTri = (supabase as any)
       .from('triage_records')
       .select('id, agendamento_id, tecnico_id, criado_em')
       .gte('criado_em', `${dataInicio}T00:00:00`)
       .lte('criado_em', `${dataFim}T23:59:59`);
     
     const { data: triagens } = await qTri;
-    const agIds = [...new Set((triagens || []).map(t => t.agendamento_id).filter(Boolean))];
+    const agIds = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
     const { data: agsData } = agIds.length
-      ? await supabase.from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', agIds)
+      ? await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', agIds)
       : { data: [] };
-    const agsMap = new Map<string, any>(agsData?.map(a => [a.id, a]));
+    const agsMap = new Map<string, any>();
+    (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
 
     const result: LinhaBpaNormalizada[] = [];
     const usedCombinations = new Set<string>(); // paciente_id + data + sigtap + cid
@@ -123,8 +126,10 @@ export const bpaService = {
     };
 
     // Process Prontuários with Procedures
-    const prontMap = new Map<string, any>(prots.map(p => [p.id, p]));
-    (vincs || []).forEach(v => {
+    const prontMap = new Map<string, any>();
+    prots.forEach(p => prontMap.set(p.id, p));
+
+    (vincs || []).forEach((v: any) => {
       const pront = prontMap.get(v.prontuario_id);
       if (!pront) return;
       const pac = pacMap.get(pront.paciente_id);
@@ -184,7 +189,7 @@ export const bpaService = {
         cid: cid,
         carater: '01',
         qtd: v.quantidade || 1,
-        status_bpa: 'ok', // will be validated later
+        status_bpa: 'ok',
       });
     });
 
@@ -243,7 +248,7 @@ export const bpaService = {
     });
 
     // Process Triagens
-    (triagens || []).forEach(t => {
+    (triagens || []).forEach((t: any) => {
       const ag = agsMap.get(t.agendamento_id);
       if (!ag) return;
       if (unidadeId && unidadeId !== 'all' && ag.unidade_id !== unidadeId) return;
@@ -282,8 +287,7 @@ export const bpaService = {
       if (!pac?.nome) pendencias.push("Paciente sem nome.");
       if (!pac?.data_nascimento) pendencias.push("Paciente sem data de nascimento.");
       
-      // CID mandatory check (example logic, can be refined based on SIGTAP rules)
-      // Usually procedures starting with 0301 require CID
+      // CID mandatory check
       if (row.codigo_sigtap && (row.codigo_sigtap.startsWith('0301') || row.codigo_sigtap.startsWith('0303')) && !row.cid) {
          pendencias.push("CID obrigatório não encontrado no Prontuário, no Paciente ou no PTS.");
       }
@@ -292,13 +296,6 @@ export const bpaService = {
         row.status_bpa = 'pendente';
         row.motivo_pendencia = pendencias.join(' | ');
       }
-    });
-
-    console.log("[BPA] resolucao procedimento/cid", {
-      competencia,
-      totalResult: result.length,
-      totalValidos: result.filter(r => r.status_bpa === 'ok').length,
-      totalPendentes: result.filter(r => r.status_bpa === 'pendente').length
     });
 
     return result;
