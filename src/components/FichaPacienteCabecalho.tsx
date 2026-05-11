@@ -106,6 +106,19 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
     contato_emergencia_nome: "",
     contato_emergencia_telefone: "",
     profissionalId: "",
+    // New fields
+    telefone_secundario: "",
+    municipio: "",
+    bairro: "",
+    cep: "",
+    raca_cor: "",
+    nacionalidade: "",
+    etnia: "",
+    etniaOutra: "",
+    paisNascimento: "",
+    is_gestante: false,
+    is_pne: false,
+    is_autista: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
