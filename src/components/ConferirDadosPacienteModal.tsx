@@ -130,6 +130,7 @@ export function ConferirDadosPacienteModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveErrorMsg, setSaveErrorMsg] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmou, setConfirmou] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -216,7 +217,7 @@ export function ConferirDadosPacienteModal({
 
     setSaving(true);
     setSaveStatus("saving");
-    setLastSavedJson(currentJson);
+    setSaveErrorMsg(null);
     
     try {
       const data = await patientService.savePacienteCadastro(
@@ -225,6 +226,7 @@ export function ConferirDadosPacienteModal({
         modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento"
       );
 
+      setLastSavedJson(currentJson);
       setDirty(false);
       setSaveStatus("saved");
       setPaciente(data);
@@ -243,6 +245,7 @@ export function ConferirDadosPacienteModal({
 
       if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
+      const msg = e?.message || e?.details || e?.hint || "Erro desconhecido ao salvar";
       console.error("[Agenda/Pacientes] Erro real no fluxo", {
         etapa: "salvamento_paciente",
         origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento",
@@ -253,7 +256,8 @@ export function ConferirDadosPacienteModal({
         errorCode: e?.code
       });
       setSaveStatus("error");
-      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      setSaveErrorMsg(msg);
+      if (!silent) toast.error("Erro ao salvar: " + msg);
       throw e;
     } finally {
       setSaving(false);
@@ -324,9 +328,9 @@ export function ConferirDadosPacienteModal({
                 </span>
               )}
               {saveStatus === "error" && (
-                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive">
+                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive" title={saveErrorMsg || ""}>
                   <AlertTriangle className="w-3 h-3" />
-                  Erro ao salvar
+                  {saveErrorMsg ? `Erro ao salvar: ${saveErrorMsg.slice(0, 80)}` : "Erro ao salvar"}
                 </span>
               )}
               {saveStatus === "idle" && dirty && (
@@ -571,18 +575,19 @@ export function ConferirDadosPacienteModal({
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
                   
-                  // Se houver autosave em curso ou erro, impede o avanço
-                  if (saveStatus === "saving" || autoSaveTimerRef.current) {
-                    if (autoSaveTimerRef.current) {
-                      clearTimeout(autoSaveTimerRef.current);
-                      autoSaveTimerRef.current = null;
+                  if (autoSaveTimerRef.current) {
+                    clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                  }
+
+                  // Sempre tenta (re)salvar se houver alterações pendentes ou erro anterior
+                  if (dirty || saveStatus === "error") {
+                    try {
+                      await handleSave(true);
+                    } catch (saveErr: any) {
+                      // handleSave já notificou o erro real; bloqueia o avanço
+                      return;
                     }
-                    await handleSave(true);
-                  } else if (saveStatus === "error") {
-                    toast.error("Existem alterações não salvas. Corrija antes de continuar.");
-                    return;
-                  } else if (dirty) {
-                    await handleSave(true);
                   }
 
                   await Promise.resolve(onConfirm());
