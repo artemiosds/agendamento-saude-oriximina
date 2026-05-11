@@ -1259,7 +1259,7 @@ const ProntuarioPage: React.FC = () => {
         if (prontuarioId) {
           setEditId(prontuarioId);
           // Refresh procedures for the newly saved record
-          loadProntuarioProcedimentos(prontuarioId, form.paciente_id);
+          loadProntuarioProcedimentos(prontuarioId, form.paciente_id, form.data_atendimento);
         }
         // Keep SOAP fields intact so user can still view/edit the prontuário
       }
