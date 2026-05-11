@@ -226,22 +226,73 @@ const PTS: React.FC = () => {
     setCidSearch('');
   };
 
+  const saveImmediateFono = async (item: SelectedSigtap, cids?: SelectedCid[]) => {
+    try {
+      // 1. Link to professional (current user)
+      if (user?.id) {
+        await (supabase as any).from('procedimento_profissionais').upsert({
+          procedimento_codigo: item.procedimento_codigo,
+          profissional_id: user.id
+        }, { onConflict: 'procedimento_codigo, profissional_id' });
+      }
+
+      // 2. If editing an existing PTS, save to pts_sigtap
+      if (editingPts) {
+        await (supabase as any).from('pts_sigtap').upsert({
+          pts_id: editingPts.id,
+          procedimento_codigo: item.procedimento_codigo,
+          procedimento_nome: item.procedimento_nome,
+          especialidade: item.especialidade
+        }, { onConflict: 'pts_id, procedimento_codigo' });
+      }
+
+      // 3. Create/Link to Prontuario if patient selected
+      if (form.patient_id) {
+        const cidInfo = cids && cids.length > 0 ? `\nCIDs: ${cids.map(c => c.cid_codigo).join(', ')}` : '';
+        await (supabase as any).from('prontuarios').insert({
+          paciente_id: form.patient_id,
+          paciente_nome: form.patient_name,
+          profissional_id: user?.id || '',
+          profissional_nome: user?.nome || '',
+          unidade_id: user?.unidadeId || '',
+          data_atendimento: new Date().toISOString().split('T')[0],
+          hora_atendimento: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          tipo_registro: 'pts_procedimento',
+          queixa_principal: 'Procedimento Fonoaudiologia (PTS)',
+          observacoes: `Procedimento: ${item.procedimento_codigo} - ${item.procedimento_nome}${cidInfo}`
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao salvar imediato fono:', err);
+    }
+  };
+
   // Add selected SIGTAP procedure to list
-  const handleAddSigtap = () => {
+  const handleAddSigtap = async () => {
     if (!selectedProcCodigo) return;
     const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (!proc) return;
+    
     if (sigtapSelecionados.some(s => s.procedimento_codigo === proc.codigo)) {
       toast.info('Procedimento já adicionado.');
       return;
     }
-    setSigtapSelecionados(prev => [...prev, {
+
+    const newItem = {
       procedimento_codigo: proc.codigo,
       procedimento_nome: proc.nome,
       especialidade: proc.especialidade,
-    }]);
+    };
+
+    setSigtapSelecionados(prev => [...prev, newItem]);
     setSelectedProcCodigo('');
-    toast.success('Procedimento SIGTAP adicionado.');
+
+    if (proc.especialidade === 'fonoaudiologia') {
+      await saveImmediateFono(newItem);
+      toast.success('Procedimento Fonoaudiologia salvo e vinculado.');
+    } else {
+      toast.success('Procedimento SIGTAP adicionado.');
+    }
   };
 
   // Add CID to list
