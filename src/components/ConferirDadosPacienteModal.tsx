@@ -575,18 +575,19 @@ export function ConferirDadosPacienteModal({
                   setConfirming(true);
                   console.log("[ConferirDados] Confirmando operação…");
                   
-                  // Se houver autosave em curso ou erro, impede o avanço
-                  if (saveStatus === "saving" || autoSaveTimerRef.current) {
-                    if (autoSaveTimerRef.current) {
-                      clearTimeout(autoSaveTimerRef.current);
-                      autoSaveTimerRef.current = null;
+                  if (autoSaveTimerRef.current) {
+                    clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                  }
+
+                  // Sempre tenta (re)salvar se houver alterações pendentes ou erro anterior
+                  if (dirty || saveStatus === "error") {
+                    try {
+                      await handleSave(true);
+                    } catch (saveErr: any) {
+                      // handleSave já notificou o erro real; bloqueia o avanço
+                      return;
                     }
-                    await handleSave(true);
-                  } else if (saveStatus === "error") {
-                    toast.error("Existem alterações não salvas. Corrija antes de continuar.");
-                    return;
-                  } else if (dirty) {
-                    await handleSave(true);
                   }
 
                   await Promise.resolve(onConfirm());
