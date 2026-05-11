@@ -368,16 +368,23 @@ Deno.serve(async (req) => {
       const pacCd = pac ? (pac.custom_data || {}) : {};
       const pts = pac ? ptsMapByPatient.get(pac.id) : null;
 
-      let sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
-      let sourceSigtap = proc ? 'prontuario' : '';
+      let sigtap = onlyDigits(proc?.codigo_sigtap || '');
+      let cid = String(proc?.cid || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+      let qtd = Number(proc?.quantidade || 1);
 
       if (!sigtap && pac) {
         if (pacCd.sigtap_codigo) {
           sigtap = onlyDigits(pacCd.sigtap_codigo);
-          sourceSigtap = 'paciente';
         } else if (pts && pts.procs.length > 0) {
           sigtap = onlyDigits(pts.procs[0].procedimento_codigo);
-          sourceSigtap = 'pts';
+        }
+      }
+      
+      if (!cid && pac) {
+        if (pac.cid) {
+          cid = String(pac.cid).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        } else if (pts && pts.cids.length > 0) {
+          cid = pts.cids[0];
         }
       }
 
