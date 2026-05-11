@@ -20,6 +20,7 @@ export interface LinhaBpaNormalizada {
   qtd: number;
   status_bpa: 'ok' | 'pendente';
   motivo_pendencia?: string;
+  pendenciaTriagemSigtap?: boolean;
 }
 
 export const bpaService = {
@@ -36,9 +37,16 @@ export const bpaService = {
   }): Promise<LinhaBpaNormalizada[]> {
     const ano = competencia.slice(0, 4);
     const mes = competencia.slice(4, 6);
-    const dataInicio = `${ano}-${mes}-01`;
-    const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
-    const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
+    
+    // Função para calcular range correto em formato ISO
+    const start = new Date(Number(ano), Number(mes) - 1, 1);
+    const end = new Date(Number(ano), Number(mes), 0, 23, 59, 59, 999);
+    
+    const dataInicio = start.toISOString().split('T')[0];
+    const dataFim = end.toISOString().split('T')[0];
+    
+    console.log("[BPA] competencia resolvida", { competencia, dataInicio, dataFim });
+
 
     // 1) Fetch Prontuários
     let qPront = (supabase as any)
@@ -77,7 +85,7 @@ export const bpaService = {
     const procsMap = new Map<string, any>();
     (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
 
-    // 4) Fetch PTS
+    // 4) Fetch PTS (Active)
     const { data: ptsData } = pacIds.length
       ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
       : { data: [] };
@@ -114,8 +122,17 @@ export const bpaService = {
     const agsMap = new Map<string, any>();
     (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
 
+    console.log("[BPA] resolucao da producao - pre-processamento", {
+      competencia,
+      totalProntuarios: prots.length,
+      totalTriagens: (triagens || []).length,
+      totalPacientes: pacMap.size,
+      totalPts: ptsMap.size
+    });
+
     const result: LinhaBpaNormalizada[] = [];
     const usedCombinations = new Set<string>(); // paciente_id + data + sigtap + cid
+
 
     // Function to add a line with deduplication
     const addLine = (line: LinhaBpaNormalizada) => {
@@ -296,6 +313,12 @@ export const bpaService = {
         row.status_bpa = 'pendente';
         row.motivo_pendencia = pendencias.join(' | ');
       }
+    });
+
+    console.log("[BPA] resolucao da producao - final", {
+      competencia,
+      totalValidos: result.filter(r => r.status_bpa === 'ok').length,
+      totalPendentes: result.filter(r => r.status_bpa === 'pendente').length
     });
 
     return result;

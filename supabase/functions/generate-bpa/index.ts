@@ -114,8 +114,11 @@ Deno.serve(async (req) => {
     const ano = competencia.slice(0, 4);
     const mes = competencia.slice(4, 6);
     const dataInicio = `${ano}-${mes}-01`;
-    const ultDia = new Date(Number(ano), Number(mes), 0).getDate();
-    const dataFim = `${ano}-${mes}-${String(ultDia).padStart(2, '0')}`;
+    const end = new Date(Number(ano), Number(mes), 0, 23, 59, 59, 999);
+    const dataFim = end.toISOString().split('T')[0];
+    
+    console.log("[generate-bpa] competencia resolvida", { competencia, dataInicio, dataFim });
+
 
     // 1. Carrega configurações e dados do período com limites maiores
     let prontQuery = supabase
@@ -165,12 +168,33 @@ Deno.serve(async (req) => {
       : { data: [] as any[] };
     const procMap = new Map((procsData || []).map((p: any) => [p.id, p]));
 
+    const { data: ptsData } = pacIds.size
+      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', Array.from(pacIds)).eq('status', 'ativo')
+      : { data: [] };
+    const activePtsIds = (ptsData || []).map((p: any) => p.id);
+    const [{ data: ptsCids }, { data: ptsProcs }] = activePtsIds.length
+      ? await Promise.all([
+          supabase.from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds),
+          supabase.from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
+        ])
+      : [{ data: [] }, { data: [] }];
+
+    const ptsMapByPatient = new Map<string, any>();
+    (ptsData || []).forEach((p: any) => {
+      ptsMapByPatient.set(p.patient_id, {
+        pts_id: p.id,
+        cids: (ptsCids || []).filter((c: any) => c.pts_id === p.id).map((c: any) => c.cid_codigo),
+        procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
+      });
+    });
+
     const vincsByProntuario = new Map<string, any[]>();
     (vincs || []).forEach((v: any) => {
       const arr = vincsByProntuario.get(v.prontuario_id) || [];
       arr.push(v);
       vincsByProntuario.set(v.prontuario_id, arr);
     });
+
 
     // 4. Mapas auxiliares
     const pacIds = new Set<string>();
@@ -273,9 +297,25 @@ Deno.serve(async (req) => {
       const cnes = cnesOverride || cnesUni;
       if (!cnes) motivos.push('CNES ausente');
 
-      const sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
+      const pacCd = pac ? (pac.custom_data || {}) : {};
+      const pts = pac ? ptsMapByPatient.get(pac.id) : null;
+
+      let sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
+      let sourceSigtap = proc ? 'prontuario' : '';
+
+      if (!sigtap && pac) {
+        if (pacCd.sigtap_codigo) {
+          sigtap = onlyDigits(pacCd.sigtap_codigo);
+          sourceSigtap = 'paciente';
+        } else if (pts && pts.procs.length > 0) {
+          sigtap = onlyDigits(pts.procs[0].procedimento_codigo);
+          sourceSigtap = 'pts';
+        }
+      }
+
       const exigeSigtap = !isMedico(cboDigits);
-      if (exigeSigtap && (!proc || sigtap.length !== 10)) motivos.push('SIGTAP obrigatório');
+      if (exigeSigtap && sigtap.length !== 10) motivos.push('SIGTAP obrigatório não encontrado no Prontuário, no Paciente ou no PTS');
+
 
       if (motivos.length > 0) {
         pendentes.push({ 
@@ -296,7 +336,16 @@ Deno.serve(async (req) => {
       if (munCode.toUpperCase().includes('ORIXIMINA')) munCode = '150530';
       const municipio = padNum(munCode, 6);
       const cep = padNum(pacCustom.cep || '', 8);
-      const cid = String(pacCustom.cid || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+      let cid = (pac && pac.cid) || '';
+      if (!cid && pts && pts.cids.length > 0) {
+        cid = pts.cids[0];
+      }
+      cid = String(cid).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+
+      if (sigtap.length === 10 && (sigtap.startsWith('0301') || sigtap.startsWith('0303')) && !cid) {
+        motivos.push('CID obrigatório não encontrado no Prontuário, no Paciente ou no PTS');
+      }
+
       const carater = padNum(pacCustom.carater_atendimento || '01', 2);
       const autorizacao = padText(String(pacCustom.numero_autorizacao || ''), 13);
       const sigtapFinal = sigtap.length === 10 ? sigtap : (origem === 'triagem' ? triagemSigtapPadrao : '0301010072');
