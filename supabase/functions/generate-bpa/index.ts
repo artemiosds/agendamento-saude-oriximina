@@ -168,12 +168,33 @@ Deno.serve(async (req) => {
       : { data: [] as any[] };
     const procMap = new Map((procsData || []).map((p: any) => [p.id, p]));
 
+    const { data: ptsData } = pacIds.size
+      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', Array.from(pacIds)).eq('status', 'ativo')
+      : { data: [] };
+    const activePtsIds = (ptsData || []).map((p: any) => p.id);
+    const [{ data: ptsCids }, { data: ptsProcs }] = activePtsIds.length
+      ? await Promise.all([
+          supabase.from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds),
+          supabase.from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
+        ])
+      : [{ data: [] }, { data: [] }];
+
+    const ptsMapByPatient = new Map<string, any>();
+    (ptsData || []).forEach((p: any) => {
+      ptsMapByPatient.set(p.patient_id, {
+        pts_id: p.id,
+        cids: (ptsCids || []).filter((c: any) => c.pts_id === p.id).map((c: any) => c.cid_codigo),
+        procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
+      });
+    });
+
     const vincsByProntuario = new Map<string, any[]>();
     (vincs || []).forEach((v: any) => {
       const arr = vincsByProntuario.get(v.prontuario_id) || [];
       arr.push(v);
       vincsByProntuario.set(v.prontuario_id, arr);
     });
+
 
     // 4. Mapas auxiliares
     const pacIds = new Set<string>();
