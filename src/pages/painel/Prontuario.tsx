@@ -2000,7 +2000,7 @@ const ProntuarioPage: React.FC = () => {
             </>
           )}
           {canEdit && (
-            <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+            <Button onClick={() => openNew(queryPacienteId || undefined, queryPacienteNome || undefined)} className="gradient-primary text-primary-foreground">
               <Plus className="w-4 h-4 mr-2" />
               Novo Prontuário
             </Button>
