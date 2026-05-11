@@ -169,7 +169,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
   const [uploading, setUploading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("identificacao");
-  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  // Removido estado de autosave para evitar fechamento indesejado da modal
   const { user } = useAuth();
   const { resolved: customConfig, getNativeLabel, isNativeHidden } = useCustomFields("paciente", user?.unidadeId);
   const L = (name: string, fallback: string) => getNativeLabel(name, fallback);
@@ -201,21 +201,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit]);
 
-  // ---- AUTOSAVE: indicador visual (debounce 1.5s) ----
-  const firstRunRef = useRef(true);
-  useEffect(() => {
-    if (firstRunRef.current) { firstRunRef.current = false; return; }
-    if (!isEdit) return; // Só autosave em edição
-    
-    setAutoSaveStatus("saving");
-    const t = setTimeout(() => {
-      onSave(); // Tenta salvar de fato se estiver em modo edição
-      setAutoSaveStatus("saved");
-      const t2 = setTimeout(() => setAutoSaveStatus("idle"), 1500);
-      return () => clearTimeout(t2);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [form, isEdit, onSave]);
+  // Removido useEffect de autosave que disparava onSave() indevidamente ao abrir a modal
 
   // ---- ViaCEP ----
   const handleCepBlur = async () => {
@@ -286,16 +272,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
   return (
     <div className="flex flex-col h-full">
-      {/* Status autosave */}
-      {isEdit && autoSaveStatus !== "idle" && (
-        <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground px-1 pb-2">
-          {autoSaveStatus === "saving" ? (
-            <><Loader className="w-3 h-3 animate-spin" /> Salvando...</>
-          ) : (
-            <><CheckCircle2 className="w-3 h-3 text-success" /> Salvo automaticamente</>
-          )}
-        </div>
-      )}
+      {/* Status autosave removido */}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         {/* Tabs scrolláveis no mobile */}
@@ -334,7 +311,6 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Input
                     value={form.nome}
                     onChange={(e) => set("nome", sanitizeUpper(e.target.value))}
-                    onBlur={() => isEdit && onSave()}
                     placeholder="NOME DO PACIENTE"
                   />
                   {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
