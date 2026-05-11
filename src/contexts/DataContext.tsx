@@ -1187,9 +1187,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from("pacientes" as any)
         .update(dbData)
         .eq("id", id);
+      
       if (!error) {
+        // Atualiza estado local imediatamente
         setPacientes((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
+        
+        // Invalida caches relacionados
         invalidateCache(queryKeys.pacientes.all);
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(id) });
         invalidateCache(queryKeys.agendamentos.all);
         invalidateCache(queryKeys.fila.all);
       } else {
@@ -1197,7 +1202,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw error;
       }
     },
-    [authUser?.role, invalidateCache, resolveScopedUnidadeId],
+    [authUser?.role, invalidateCache, queryClient, resolveScopedUnidadeId],
   );
 
   const addToFila = useCallback(
