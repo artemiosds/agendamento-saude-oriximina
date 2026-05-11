@@ -744,32 +744,42 @@ const Pacientes: React.FC = () => {
             motivo_alteracao: "Cadastro de paciente pela página Pacientes",
           },
         };
-        // Close dialog immediately (optimistic)
-        setDialogOpen(false);
-        setSaving(false);
-        Promise.resolve(supabase.from("pacientes").insert(insertPayload))
-          .then(async ({ error }) => {
-            if (error) { console.error("Erro ao cadastrar paciente:", error); return; }
-            // Flush pending referrals + attachments queued in CadastroPacienteForm
-            try {
-              const refHandle = (window as any).__patientReferralRef?.current;
-              if (refHandle?.hasPending?.()) {
-                await refHandle.flushPending(id);
-              }
-            } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
-          })
-          .catch((err) => console.error("Erro ao cadastrar paciente:", err))
-          .finally(() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'page'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'linked-unidade'] });
-            queryClient.invalidateQueries({ queryKey: ['pacientes', 'diagnostics'] });
-            refreshPacientes();
+        // Aguardar o insert para garantir integridade e sincronização imediata
+        const { error } = await supabase.from("pacientes").insert(insertPayload);
+        
+        if (error) {
+          console.error("Erro ao cadastrar paciente:", error);
+          toast.error("Erro ao realizar cadastro.");
+        } else {
+          // Flush pending referrals + attachments queued in CadastroPacienteForm
+          try {
+            const refHandle = (window as any).__patientReferralRef?.current;
+            if (refHandle?.hasPending?.()) {
+              await refHandle.flushPending(id);
+            }
+          } catch (e) { console.error("Erro flush encaminhamentos pendentes:", e); }
+
+          // Invalidação agressiva e abrangente
+          await refreshPacientes();
+          await queryClient.invalidateQueries(); 
+          
+          toast.success("Novo paciente cadastrado e sincronizado!");
+          
+          logAction({
+            acao: "criar",
+            entidade: "paciente",
+            entidadeId: id,
+            detalhes: { nome: form.nome, modulo: "Pacientes" },
+            user,
           });
-        toast.success("Paciente cadastrado com sucesso!");
+          
+          setDialogOpen(false);
+          setEditId(null);
+        }
       }
-    } catch {
-      toast.error("Erro ao salvar paciente.");
+    } catch (err: any) {
+      console.error("[Pacientes] Erro crítico ao salvar:", err);
+      toast.error("Erro de persistência: " + (err.message || "Tente novamente"));
     } finally {
       setSaving(false);
     }
