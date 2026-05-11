@@ -203,7 +203,36 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit]);
 
-  // Removido useEffect de autosave que disparava onSave() indevidamente ao abrir a modal
+  // Carregar procedimentos vinculados se for edição
+  useEffect(() => {
+    if (isEdit && pacienteId) {
+      (async () => {
+        const { data, error } = await supabase
+          .from("patient_procedures")
+          .select("*")
+          .eq("patient_id", pacienteId);
+        if (!error && data) {
+          set("patientProcedures", data);
+        }
+      })();
+    }
+  }, [isEdit, pacienteId]);
+
+  const addProcedure = () => {
+    const newList = [...(form.patientProcedures || []), { sigtap_codigo: "", procedimento_nome: "", cid: "" }];
+    set("patientProcedures", newList);
+  };
+
+  const updateProcedure = (index: number, field: string, value: string) => {
+    const newList = [...(form.patientProcedures || [])];
+    newList[index] = { ...newList[index], [field]: value };
+    set("patientProcedures", newList);
+  };
+
+  const removeProcedure = (index: number) => {
+    const newList = (form.patientProcedures || []).filter((_, i) => i !== index);
+    set("patientProcedures", newList);
+  };
 
   // ---- ViaCEP ----
   const handleCepBlur = async () => {
