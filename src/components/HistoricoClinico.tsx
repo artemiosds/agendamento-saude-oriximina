@@ -277,77 +277,84 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           <div className="bg-muted/40 px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dados Cadastrais</h3>
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dados Cadastrais Completos</h3>
             </div>
             <Badge variant="outline" className="text-[10px] font-mono">
-              Prontuário Nº {pacienteData.id?.slice(-6) || "—"}
+              Prontuário Nº {pacienteId?.slice(-6) || "—"}
             </Badge>
           </div>
-          <CardContent className="p-4 space-y-5">
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
-                <User className="w-3 h-3 text-primary" />
-                <span className="text-[10px] font-bold text-primary uppercase">Identificação</span>
+          <CardContent className="p-4 space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1.5">
+                <User className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Identificação</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <DataField label="Nome" value={pacienteData.nome} />
-                <DataField label="Data Nasc." value={formatDateBR(pacienteData.data_nascimento)} />
+                <DataField label="Nome Completo" value={pacienteData.nome} />
+                <DataField label="Data de Nascimento" value={formatDateBR(pacienteData.data_nascimento)} />
                 <DataField label="CPF" value={pacienteData.cpf} mono />
-                <DataField label="CNS" value={formatCNS(pacienteData.cns)} mono />
+                <DataField label="Cartão SUS (CNS)" value={formatCNS(pacienteData.cns)} mono />
+                <DataField label="Nome da Mãe" value={pacienteData.nome_mae} />
+                <DataField label="Nome do Responsável" value={pacienteData.nome_responsavel || pacienteData.custom_data?.nome_responsavel} />
+                <DataField label="CPF do Responsável" value={pacienteData.cpf_responsavel || pacienteData.custom_data?.cpf_responsavel} mono />
+                <DataField label="Sexo / Gênero" value={pacienteData.custom_data?.sexo || pacienteData.custom_data?.genero || "—"} />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
-                <MapPin className="w-3 h-3 text-primary" />
-                <span className="text-[10px] font-bold text-primary uppercase">Endereço</span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1.5">
+                <MapPin className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Endereço</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="sm:col-span-2">
-                  <DataField label="Logradouro" value={pacienteData.endereco || pacienteData.custom_data?.logradouro} />
+                  <DataField label="Logradouro / Endereço" value={pacienteData.endereco || pacienteData.custom_data?.logradouro} />
                 </div>
                 <DataField label="Número" value={pacienteData.custom_data?.numero} />
+                <DataField label="Complemento" value={pacienteData.custom_data?.complemento} />
                 <DataField label="Bairro" value={pacienteData.custom_data?.bairro} />
                 <DataField label="Município" value={pacienteData.municipio || pacienteData.custom_data?.municipio} />
-                <DataField label="UF" value={pacienteData.custom_data?.uf} />
+                <DataField label="UF" value={pacienteData.custom_data?.uf || pacienteData.naturalidade_uf} />
                 <DataField label="CEP" value={pacienteData.custom_data?.cep} mono />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
-                <Phone className="w-3 h-3 text-primary" />
-                <span className="text-[10px] font-bold text-primary uppercase">Contato</span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1.5">
+                <Phone className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Contato</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <DataField label="Tel. Principal" value={pacienteData.telefone} mono />
-                <DataField label="Tel. Secundário" value={pacienteData.custom_data?.telefoneSecundario || pacienteData.custom_data?.telefone_secundario} mono />
+                <DataField label="Telefone Principal" value={pacienteData.telefone} mono />
+                <DataField label="Telefone Secundário" value={pacienteData.custom_data?.telefoneSecundario || pacienteData.custom_data?.telefone_secundario} mono />
                 <div className="sm:col-span-2">
                   <DataField label="E-mail" value={pacienteData.email} />
                 </div>
                 <div className="sm:col-span-2">
-                  <DataField label="Contato Emergência" value={pacienteData.custom_data?.contato_emergencia_nome} />
+                  <DataField label="Contato de Emergência" value={pacienteData.custom_data?.contato_emergencia_nome} />
                 </div>
                 <DataField label="Tel. Emergência" value={pacienteData.custom_data?.contato_emergencia_telefone} mono />
+                <DataField label="Observação Contato" value={pacienteData.custom_data?.observacao_contato} />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
-                <Activity className="w-3 h-3 text-primary" />
-                <span className="text-[10px] font-bold text-primary uppercase">Complementares</span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1.5">
+                <Activity className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Complementares e Clínicos</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="sm:col-span-2">
-                  <DataField label="Nome da Mãe" value={pacienteData.nome_mae} />
-                </div>
-                <DataField label="Sexo" value={pacienteData.custom_data?.sexo} />
-                <DataField label="Raça/Cor" value={pacienteData.custom_data?.racaCor || pacienteData.custom_data?.raca_cor} />
+                <DataField label="Raça/Cor (IBGE)" value={pacienteData.custom_data?.racaCor || pacienteData.custom_data?.raca_cor} />
                 <DataField label="Etnia" value={pacienteData.custom_data?.etnia || pacienteData.custom_data?.etniaOutra} />
                 <DataField label="Nacionalidade" value={pacienteData.custom_data?.nacionalidade} />
+                <DataField label="Naturalidade" value={pacienteData.naturalidade} />
+                <DataField label="Religião" value={pacienteData.custom_data?.religiao} />
+                <DataField label="Escolaridade" value={pacienteData.custom_data?.escolaridade} />
+                <DataField label="Profissão / Ocupação" value={pacienteData.custom_data?.profissao} />
+                <DataField label="Estado Civil" value={pacienteData.custom_data?.estado_civil} />
                 <DataField label="Gestante" value={pacienteData.is_gestante ? "Sim" : "Não"} />
-                <DataField label="PNE" value={pacienteData.is_pne ? "Sim" : "Não"} />
-                <DataField label="Autista" value={pacienteData.is_autista ? "Sim" : "Não"} />
+                <DataField label="PNE (Necessidades Especiais)" value={pacienteData.is_pne ? "Sim" : "Não"} />
+                <DataField label="TEA (Autista)" value={pacienteData.is_autista ? "Sim" : "Não"} />
                 <DataField label="CID-10 Principal" value={pacienteData.cid} />
               </div>
             </div>
@@ -581,56 +588,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
         </TabsContent>
 
         <TabsContent value="encaminhamentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
-           <div className="flex items-center gap-2 mb-2">
-             <Send className="w-4 h-4 text-primary" />
-             <h3 className="text-sm font-semibold">Histórico de Encaminhamentos</h3>
-           </div>
-           {encaminhamentosEnviados.length === 0 ? (
-             <div className="text-center py-10 border border-dashed rounded-lg bg-muted/10">
-               <Send className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-               <p className="text-sm text-muted-foreground">Nenhum encaminhamento encontrado.</p>
-             </div>
-           ) : (
-             <div className="border rounded-lg overflow-hidden bg-card">
-               <Table className="w-full text-xs">
-                 <TableHeader className="bg-muted/50">
-                   <TableRow>
-                     <TableHead className="p-2 font-medium">Data</TableHead>
-                     <TableHead className="p-2 font-medium">Profissional</TableHead>
-                     <TableHead className="p-2 font-medium">Especialidade</TableHead>
-                     <TableHead className="p-2 font-medium">Status</TableHead>
-                     <TableHead className="p-2 font-medium text-right">Ações</TableHead>
-                   </TableRow>
-                 </TableHeader>
-                 <TableBody>
-                   {encaminhamentosEnviados.map((enc: any) => (
-                     <TableRow key={enc.id} className="hover:bg-muted/30">
-                       <TableCell className="p-2 font-medium">{new Date(enc.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                       <TableCell className="p-2">{enc.profissional_nome}</TableCell>
-                       <TableCell className="p-2 capitalize">{enc.campos_formulario?.especialidade_destino || enc.campos_formulario?.especialidade || '-'}</TableCell>
-                       <TableCell className="p-2">
-                         <Badge variant="outline" className="text-[9px] h-4 py-0 font-mono">
-                           {enc.status}
-                         </Badge>
-                       </TableCell>
-                       <TableCell className="p-2 text-right">
-                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
-                            const body = enc.conteudo_html;
-                            const win = window.open("", "_blank");
-                            if (win) {
-                              win.document.write(body);
-                              win.document.close();
-                            }
-                         }}>
-                           <Eye className="w-3.5 h-3.5" />
-                         </Button>
-                       </TableCell>
-                     </TableRow>
-                   ))}
-                 </TableBody>
-               </Table>
-             </div>
-           )}
+           <PatientReferralHistory patientId={pacienteId} patientData={pacienteData} />
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
