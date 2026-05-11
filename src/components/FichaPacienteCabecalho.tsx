@@ -307,50 +307,111 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
               <InfoField icon={<Stethoscope className="w-3.5 h-3.5" />} label="Profissional responsável" value={profissionalNome || "—"} />
             </div>
 
-            {/* Expanded info */}
+            {/* Expanded info (Sections) */}
             {expanded && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border/40">
-                <InfoField icon={<Users className="w-3.5 h-3.5" />} label="Nome da mãe" value={paciente.nome_mae || "—"} />
-                <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone" value={paciente.telefone || "—"} mono />
-                <InfoField icon={<Mail className="w-3.5 h-3.5" />} label="E-mail" value={paciente.email || "—"} />
-                <InfoField icon={<MapPin className="w-3.5 h-3.5" />} label="Endereço" value={paciente.endereco || "—"} />
-                <InfoField
-                  icon={<User className="w-3.5 h-3.5" />}
-                  label="Raça/Cor (IBGE)"
-                  value={
-                    customData.racaCor || customData.raca_cor
-                      ? String(customData.racaCor || customData.raca_cor).replace(/_/g, " ")
-                      : "—"
-                  }
-                />
-                <InfoField
-                  icon={<User className="w-3.5 h-3.5" />}
-                  label="Nacionalidade"
-                  value={customData.nacionalidade ? String(customData.nacionalidade) : "—"}
-                />
-                {(customData.racaCor === "indigena" || customData.raca_cor === "indigena") && (
-                  <InfoField
-                    icon={<User className="w-3.5 h-3.5" />}
-                    label="Etnia"
-                    value={customData.etnia === "X999" ? (customData.etniaOutra || "—") : (customData.etnia || "—")}
-                  />
-                )}
-                {customData.nacionalidade === "estrangeiro" && (
-                  <InfoField
-                    icon={<MapPin className="w-3.5 h-3.5" />}
-                    label="País de nascimento"
-                    value={customData.paisNascimento || "—"}
-                  />
-                )}
-                <InfoField
-                  icon={<AlertCircle className="w-3.5 h-3.5" />}
-                  label="Contato de emergência"
-                  value={
-                    customData.contato_emergencia_nome
-                      ? `${customData.contato_emergencia_nome}${customData.contato_emergencia_telefone ? ` · ${customData.contato_emergencia_telefone}` : ""}`
-                      : "—"
-                  }
-                />
+              <div className="space-y-4 pt-4 border-t border-border/40">
+                {/* Section: Endereço */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3" /> Endereço
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Endereço"
+                      value={paciente.endereco || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Município"
+                      value={paciente.municipio || customData.municipio || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="Bairro"
+                      value={customData.bairro || "—"}
+                    />
+                    <InfoField
+                      icon={<MapPin className="w-3.5 h-3.5" />}
+                      label="CEP"
+                      value={customData.cep || "—"}
+                    />
+                  </div>
+                </div>
+
+                {/* Section: Contato */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone className="w-3 h-3" /> Contato
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone Principal" value={paciente.telefone || "—"} mono />
+                    <InfoField icon={<Phone className="w-3.5 h-3.5" />} label="Telefone Secundário" value={customData.telefoneSecundario || customData.telefone_secundario || "—"} mono />
+                    <InfoField icon={<Mail className="w-3.5 h-3.5" />} label="E-mail" value={paciente.email || "—"} />
+                    <InfoField
+                      icon={<AlertCircle className="w-3.5 h-3.5" />}
+                      label="Contato de emergência"
+                      value={
+                        customData.contato_emergencia_nome
+                          ? `${customData.contato_emergencia_nome}${customData.contato_emergencia_telefone ? ` · ${customData.contato_emergencia_telefone}` : ""}`
+                          : "—"
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* Section: Complementares */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3 h-3" /> Complementares
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoField icon={<Users className="w-3.5 h-3.5" />} label="Nome da mãe" value={paciente.nome_mae || "—"} />
+                    <InfoField
+                      icon={<User className="w-3.5 h-3.5" />}
+                      label="Raça/Cor (IBGE)"
+                      value={
+                        customData.racaCor || customData.raca_cor
+                          ? String(customData.racaCor || customData.raca_cor).replace(/_/g, " ")
+                          : "—"
+                      }
+                    />
+                    <InfoField
+                      icon={<User className="w-3.5 h-3.5" />}
+                      label="Nacionalidade"
+                      value={customData.nacionalidade ? String(customData.nacionalidade) : "—"}
+                    />
+                    {(customData.racaCor === "indigena" || customData.raca_cor === "indigena") && (
+                      <InfoField
+                        icon={<User className="w-3.5 h-3.5" />}
+                        label="Etnia"
+                        value={customData.etnia === "X999" ? (customData.etniaOutra || "—") : (customData.etnia || "—")}
+                      />
+                    )}
+                    {customData.nacionalidade === "estrangeiro" && (
+                      <InfoField
+                        icon={<MapPin className="w-3.5 h-3.5" />}
+                        label="País de nascimento"
+                        value={customData.paisNascimento || "—"}
+                      />
+                    )}
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="Gestante"
+                      value={paciente.is_gestante ? "Sim" : "Não"}
+                    />
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="PNE"
+                      value={paciente.is_pne ? "Sim" : "Não"}
+                    />
+                    <InfoField
+                      icon={<Activity className="w-3.5 h-3.5" />}
+                      label="Autista"
+                      value={paciente.is_autista ? "Sim" : "Não"}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
