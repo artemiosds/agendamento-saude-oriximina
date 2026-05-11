@@ -646,26 +646,31 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string) => {
+  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string, date?: string) => {
     // 1. Load procedures specific to THIS prontuario (current visit)
-    const { data: prontuarioProcs } = await (supabase as any)
-      .from("prontuario_procedimentos")
-      .select("procedimento_id, cids_selecionados, quantidade, observacao")
-      .eq("prontuario_id", prontuarioId);
-    
-    // 2. Load persistent procedures for this patient (global history)
-    let persistentProcs: any[] = [];
-    if (patientId) {
+    let prontuarioProcs: any[] = [];
+    if (prontuarioId) {
       const { data } = await (supabase as any)
-        .from("paciente_procedimentos_persistentes")
+        .from("prontuario_procedimentos")
         .select("procedimento_id, cids_selecionados, quantidade, observacao")
-        .eq("paciente_id", patientId);
-      persistentProcs = data || [];
+        .eq("prontuario_id", prontuarioId);
+      prontuarioProcs = data || [];
+    }
+    
+    // 2. Load global procedures for this patient on this specific date
+    let globalProcs: any[] = [];
+    if (patientId && date) {
+      const { data } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("paciente_id", patientId)
+        .eq("data_atendimento", date);
+      globalProcs = data || [];
     }
 
     // Merge both, with current prontuario procedures taking precedence
-    const combinedData = [...(prontuarioProcs || [])];
-    (persistentProcs || []).forEach(p => {
+    const combinedData = [...prontuarioProcs];
+    globalProcs.forEach(p => {
       if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
         combinedData.push(p);
       }
