@@ -3178,6 +3178,7 @@ const Tratamentos: React.FC = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="aguardando_agendamento">Aguardando Agendamento</SelectItem>
             {Object.entries(statusLabels).map(([k, v]) => (
               <SelectItem key={k} value={k}>
                 {v}
