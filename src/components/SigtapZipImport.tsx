@@ -275,9 +275,15 @@ const SigtapZipImport: React.FC = () => {
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
 
-      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub];
-      if (!especialidade) continue;
-      if (!selected.has(especialidade)) continue;
+      // CORREÇÃO: Não filtrar por especialidade aqui. Importar TUDO.
+      // Se não houver mapeamento, usar 'outros'
+      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
+      
+      // Se o usuário selecionou especialidades específicas E não é "outros" ou "todos", 
+      // poderíamos filtrar, mas o pedido é QUEBRAR LIMITAÇÕES.
+      // Vamos importar tudo o que estiver no arquivo que o usuário permitiu via checkboxes,
+      // mas se o usuário marcou "outros", ele pega o resto da base.
+      if (!selected.has(especialidade) && !selected.has('outros')) continue;
 
       procedures.push({ codigo, nome, especialidade, subgrupo });
     }
@@ -333,8 +339,8 @@ const SigtapZipImport: React.FC = () => {
     const totalOps = procedures.length + cidLinks.length;
     let done = 0;
 
-    // Procedures: batch 200
-    const PROC_BATCH = 200;
+    // Procedures: batch 1000 (increased to avoid overhead)
+    const PROC_BATCH = 1000;
     for (let i = 0; i < procedures.length; i += PROC_BATCH) {
       const batch = procedures.slice(i, i + PROC_BATCH);
       const { error } = await supabase.from('sigtap_procedimentos').upsert(
@@ -353,9 +359,9 @@ const SigtapZipImport: React.FC = () => {
     }
     addLog('ok', `${procedures.length.toLocaleString('pt-BR')} procedimentos salvos`);
 
-    // CID links: batch 500
+    // CID links: batch 2000 (increased to avoid overhead)
     if (cidLinks.length > 0) {
-      const CID_BATCH = 500;
+      const CID_BATCH = 2000;
       for (let i = 0; i < cidLinks.length; i += CID_BATCH) {
         const batch = cidLinks.slice(i, i + CID_BATCH);
         const { error } = await supabase.from('sigtap_procedimento_cids').upsert(

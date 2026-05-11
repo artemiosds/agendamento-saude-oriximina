@@ -207,8 +207,8 @@ export const procedureService = {
     const { data } = await (supabase as any)
       .from('sigtap_procedimento_cids')
       .select('cid_codigo, cid_descricao')
-      .eq('procedimento_codigo', codigo)
-      .limit(50);
+      .eq('procedimento_codigo', codigo);
+    // REMOVIDO .limit(50) para garantir que todos os CIDs vinculados apareçam
     return (data || []).map((r: any) => ({ codigo: r.cid_codigo, descricao: r.cid_descricao }));
   },
 
@@ -219,7 +219,7 @@ export const procedureService = {
       .from('cid10_codigos')
       .select('codigo, descricao')
       .or(`codigo.ilike.%${q}%,descricao.ilike.%${q}%`)
-      .limit(20);
+      .limit(100); // Aumentado de 20 para 100 para dar mais opções na busca
     return (data || []).map((r: any) => ({ codigo: r.codigo, descricao: r.descricao }));
   },
 
