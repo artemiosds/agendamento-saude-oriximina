@@ -213,6 +213,27 @@ export const patientService = {
       });
       throw error;
     }
+
+    // Salvar procedimentos vinculados, se fornecidos no formData
+    if (formData.patientProcedures) {
+      const procs = (formData.patientProcedures as any[]).filter(p => p.sigtap_codigo || p.procedimento_nome || p.cid);
+      
+      // Deletar os antigos e inserir os novos (estratégia simples de sincronização)
+      await supabase.from('patient_procedures').delete().eq('patient_id', pacienteId);
+      
+      if (procs.length > 0) {
+        const insertPayload = procs.map(p => ({
+          patient_id: pacienteId,
+          sigtap_codigo: p.sigtap_codigo || "",
+          procedimento_nome: p.procedimento_nome || "",
+          cid: p.cid || ""
+        }));
+        const { error: insError } = await supabase.from('patient_procedures').insert(insertPayload);
+        if (insError) console.error("[Paciente] Erro ao salvar procedimentos vinculados", insError);
+      }
+    }
+
     return data;
   }
 };
+
