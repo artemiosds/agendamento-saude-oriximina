@@ -195,7 +195,8 @@ export const bpaService = {
 
     // Function to add a line with deduplication
     const addLine = (line: LinhaBpaNormalizada) => {
-      const comboKey = `${line.paciente_id}_${line.data}_${line.codigo_sigtap}_${line.cid}`;
+      // CORREÇÃO: Incluir profissional_id no comboKey para não apagar produção válida de profissionais diferentes no mesmo dia/paciente
+      const comboKey = `${line.paciente_id}_${line.data}_${line.codigo_sigtap}_${line.cid}_${line.profissional_id}`;
       if (usedCombinations.has(comboKey)) return;
       usedCombinations.add(comboKey);
       result.push(line);
