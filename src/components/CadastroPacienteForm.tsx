@@ -132,6 +132,7 @@ export interface PacienteFormData {
   isGestante: boolean;
   isPne: boolean;
   isAutista: boolean;
+  patientProcedures?: any[];
   customData?: Record<string, any>;
 }
 
