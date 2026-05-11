@@ -766,6 +766,7 @@ const ProntuarioPage: React.FC = () => {
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
         setProcDetails({});
+        loadProntuarioProcedimentos("", pacienteId); // Load global patient procedures
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
