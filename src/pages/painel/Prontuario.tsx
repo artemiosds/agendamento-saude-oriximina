@@ -771,7 +771,7 @@ const ProntuarioPage: React.FC = () => {
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
         setProcDetails({});
-        loadProntuarioProcedimentos("", pacienteId); // Load global patient procedures
+        loadProntuarioProcedimentos("", pacienteId, data || new Date().toISOString().split("T")[0]); // Load global patient procedures for this date
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
