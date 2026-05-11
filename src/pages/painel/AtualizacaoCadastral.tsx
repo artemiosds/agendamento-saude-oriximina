@@ -144,33 +144,24 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
-      // Mesclar dados do formulário com o custom_data para garantir persistência total
-      const finalPayload = {
-        ...editForm,
-        // Garantir que campos que estão no nível superior do form também vão para o customData se necessário
-        customData: {
-          ...(editForm.customData || {}),
-          ...editForm, // Inclui campos como nomeMae, dataNascimento etc no customData para redundância segura
-          atualizado_em: new Date().toISOString(),
-          atualizado_por: user?.id || "",
-          atualizado_por_nome: user?.nome || "",
-        }
-      };
+      // O service agora é inteligente o suficiente para lidar com o editForm diretamente
+      // mesmo que alguns campos estejam dentro de customData
+      const result = await patientService.savePacienteCadastro(
+        selectedPatient.id, 
+        editForm, 
+        "Central de Atualização Cadastral"
+      );
+      
+      if (!result) {
+        throw new Error("Não foi possível confirmar o salvamento no servidor.");
+      }
 
-      await patientService.savePacienteCadastro(selectedPatient.id, finalPayload, "Central de Atualização Cadastral");
-      
-      // Feedback imediato no estado local
-      // Feedback imediato e invalidação global
+      // Invalidação global e específica para garantir que TODAS as telas (incluindo Página do Paciente) se atualizem
       await refreshPacientes();
+      await queryClient.invalidateQueries();
       
-      // Invalidação agressiva e abrangente do cache
-      await queryClient.invalidateQueries(); // Invalida TUDO para garantir consistência total entre todas as telas
-      
-      // Forçar refetch específico se o queryClient.invalidateQueries() demorar
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: queryKeys.pacientes.all }),
-        queryClient.refetchQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) })
-      ]);
+      // Forçar atualização do cache específico do paciente para garantir que a Página do Paciente veja os novos dados
+      queryClient.setQueryData(queryKeys.pacientes.detail(selectedPatient.id), result);
 
       toast.success("Dados do paciente atualizados com sucesso!");
       setIsEditModalOpen(false);
