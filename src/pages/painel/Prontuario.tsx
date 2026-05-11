@@ -251,7 +251,7 @@ const ProntuarioPage: React.FC = () => {
   const [episodios, setEpisodios] = useState<{ id: string; titulo: string; status: string }[]>([]);
   const [cidsByProc, setCidsByProc] = useState<Record<string, { codigo: string; descricao: string }[]>>({});
   const [selectedCidsByProc, setSelectedCidsByProc] = useState<Record<string, string[]>>({});
-  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string }[]>([]);
+  const [pacienteProcHistory, setPacienteProcHistory] = useState<{ id: string; nome: string; ultima: string; isGlobal?: boolean }[]>([]);
   const [novoProcOpen, setNovoProcOpen] = useState(false);
   const [expandedProcId, setExpandedProcId] = useState<string | null>(null);
   const [procSearch, setProcSearch] = useState("");
@@ -646,26 +646,31 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string) => {
+  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string, date?: string) => {
     // 1. Load procedures specific to THIS prontuario (current visit)
-    const { data: prontuarioProcs } = await (supabase as any)
-      .from("prontuario_procedimentos")
-      .select("procedimento_id, cids_selecionados, quantidade, observacao")
-      .eq("prontuario_id", prontuarioId);
-    
-    // 2. Load persistent procedures for this patient (global history)
-    let persistentProcs: any[] = [];
-    if (patientId) {
+    let prontuarioProcs: any[] = [];
+    if (prontuarioId) {
       const { data } = await (supabase as any)
-        .from("paciente_procedimentos_persistentes")
+        .from("prontuario_procedimentos")
         .select("procedimento_id, cids_selecionados, quantidade, observacao")
-        .eq("paciente_id", patientId);
-      persistentProcs = data || [];
+        .eq("prontuario_id", prontuarioId);
+      prontuarioProcs = data || [];
+    }
+    
+    // 2. Load global procedures for this patient on this specific date
+    let globalProcs: any[] = [];
+    if (patientId && date) {
+      const { data } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("paciente_id", patientId)
+        .eq("data_atendimento", date);
+      globalProcs = data || [];
     }
 
     // Merge both, with current prontuario procedures taking precedence
-    const combinedData = [...(prontuarioProcs || [])];
-    (persistentProcs || []).forEach(p => {
+    const combinedData = [...prontuarioProcs];
+    globalProcs.forEach(p => {
       if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
         combinedData.push(p);
       }
@@ -766,7 +771,7 @@ const ProntuarioPage: React.FC = () => {
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
         setProcDetails({});
-        loadProntuarioProcedimentos("", pacienteId); // Load global patient procedures
+        loadProntuarioProcedimentos("", pacienteId, data || new Date().toISOString().split("T")[0]); // Load global patient procedures for this date
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
@@ -833,22 +838,36 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => {
     if (!form.paciente_id) { setPacienteProcHistory([]); return; }
     (async () => {
-      const { data } = await (supabase as any)
+      // 1. Suggest from Prontuario Procedures (Historical)
+      const { data: prontuarioData } = await (supabase as any)
         .from("prontuario_procedimentos")
         .select("procedimento_id, prontuarios!inner(paciente_id, data_atendimento)")
         .eq("prontuarios.paciente_id", form.paciente_id)
         .order("criado_em", { ascending: false })
-        .limit(50);
-      const seen = new Map<string, { id: string; nome: string; ultima: string }>();
-      (data || []).forEach((r: any) => {
-        // Find by UUID
+        .limit(25);
+        
+      // 2. Suggest from Global Production Table (Global History)
+      const { data: globalData } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, data_atendimento")
+        .eq("paciente_id", form.paciente_id)
+        .order("data_atendimento", { ascending: false })
+        .limit(25);
+
+      const seen = new Map<string, { id: string; nome: string; ultima: string; isGlobal?: boolean }>();
+      
+      const processItem = (r: any, isGlobal = false) => {
         const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
-          const dt = r.prontuarios?.data_atendimento || '';
-          const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
-          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima });
+          const dt = (r.prontuarios?.data_atendimento || r.data_atendimento || '');
+          const ultima = dt ? new Date(dt + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima, isGlobal });
         }
-      });
+      };
+
+      (globalData || []).forEach(r => processItem(r, true));
+      (prontuarioData || []).forEach(r => processItem(r));
+      
       setPacienteProcHistory(Array.from(seen.values()));
     })();
   }, [form.paciente_id, procedimentos]);
@@ -868,7 +887,7 @@ const ProntuarioPage: React.FC = () => {
     setSoapEnabled(true);
     
     if (pacienteId) {
-      loadProntuarioProcedimentos("", pacienteId);
+      loadProntuarioProcedimentos("", pacienteId, new Date().toISOString().split("T")[0]);
     }
     
     setForm({ 
@@ -891,7 +910,7 @@ const ProntuarioPage: React.FC = () => {
     setSelectedCidsByProc({});
     setProcDetails({});
 
-    loadProntuarioProcedimentos(p.id, p.paciente_id);
+    loadProntuarioProcedimentos(p.id, p.paciente_id, p.data_atendimento);
     loadEpisodios(p.paciente_id);
     const formData = {
       paciente_id: p.paciente_id,
@@ -1254,7 +1273,7 @@ const ProntuarioPage: React.FC = () => {
         if (prontuarioId) {
           setEditId(prontuarioId);
           // Refresh procedures for the newly saved record
-          loadProntuarioProcedimentos(prontuarioId, form.paciente_id);
+          loadProntuarioProcedimentos(prontuarioId, form.paciente_id, form.data_atendimento);
         }
         // Keep SOAP fields intact so user can still view/edit the prontuário
       }
@@ -2793,6 +2812,9 @@ const ProntuarioPage: React.FC = () => {
                             </div>
                             {selCids.length > 0 && (
                               <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
+                            )}
+                            {pacienteProcHistory.find(h => h.id === proc.id)?.isGlobal && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-primary text-primary">Vínculo Global</Badge>
                             )}
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
                               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
