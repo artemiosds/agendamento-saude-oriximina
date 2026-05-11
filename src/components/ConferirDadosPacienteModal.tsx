@@ -217,7 +217,7 @@ export function ConferirDadosPacienteModal({
 
     setSaving(true);
     setSaveStatus("saving");
-    setLastSavedJson(currentJson);
+    setSaveErrorMsg(null);
     
     try {
       const data = await patientService.savePacienteCadastro(
@@ -226,6 +226,7 @@ export function ConferirDadosPacienteModal({
         modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento"
       );
 
+      setLastSavedJson(currentJson);
       setDirty(false);
       setSaveStatus("saved");
       setPaciente(data);
@@ -244,6 +245,7 @@ export function ConferirDadosPacienteModal({
 
       if (!silent) toast.success("Dados salvos com sucesso!");
     } catch (e: any) {
+      const msg = e?.message || e?.details || e?.hint || "Erro desconhecido ao salvar";
       console.error("[Agenda/Pacientes] Erro real no fluxo", {
         etapa: "salvamento_paciente",
         origem: modo === "chegada" ? "Confirmar Chegada" : "Novo Agendamento",
@@ -254,7 +256,8 @@ export function ConferirDadosPacienteModal({
         errorCode: e?.code
       });
       setSaveStatus("error");
-      if (!silent) toast.error("Erro ao salvar: " + (e?.message || "desconhecido"));
+      setSaveErrorMsg(msg);
+      if (!silent) toast.error("Erro ao salvar: " + msg);
       throw e;
     } finally {
       setSaving(false);
