@@ -88,6 +88,7 @@ const PTS: React.FC = () => {
   const [selectedProcCodigo, setSelectedProcCodigo] = useState('');
   const [validCids, setValidCids] = useState<SigtapCid[]>([]);
   const [cidSearch, setCidSearch] = useState('');
+  const [procSearch, setProcSearch] = useState(''); // Search for the procedures list
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
