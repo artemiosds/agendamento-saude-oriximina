@@ -152,6 +152,19 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
       contato_emergencia_nome: cd.contato_emergencia_nome || "",
       contato_emergencia_telefone: cd.contato_emergencia_telefone || "",
       profissionalId: profissionalId,
+      // Mapping new fields
+      telefone_secundario: cd.telefoneSecundario || cd.telefone_secundario || "",
+      municipio: paciente.municipio || cd.municipio || "",
+      bairro: cd.bairro || "",
+      cep: cd.cep || "",
+      raca_cor: cd.racaCor || cd.raca_cor || "",
+      nacionalidade: cd.nacionalidade || "",
+      etnia: cd.etnia || "",
+      etniaOutra: cd.etniaOutra || "",
+      paisNascimento: cd.paisNascimento || "",
+      is_gestante: !!paciente.is_gestante,
+      is_pne: !!paciente.is_pne,
+      is_autista: !!paciente.is_autista,
     });
     setCidSearch(paciente.cid || "");
     setErrors({});
