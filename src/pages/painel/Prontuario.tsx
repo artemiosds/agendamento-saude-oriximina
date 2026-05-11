@@ -880,7 +880,7 @@ const ProntuarioPage: React.FC = () => {
     setSelectedCidsByProc({});
     setProcDetails({});
 
-    loadProntuarioProcedimentos(p.id);
+    loadProntuarioProcedimentos(p.id, p.paciente_id);
     loadEpisodios(p.paciente_id);
     const formData = {
       paciente_id: p.paciente_id,
