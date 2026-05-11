@@ -249,7 +249,93 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Dados Cadastrais do Paciente (Prontuário) */}
+      {pacienteData && (
+        <Card className="border-border/60 shadow-sm overflow-hidden bg-card">
+          <div className="bg-muted/40 px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Dados Cadastrais</h3>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Prontuário Nº {pacienteData.id?.slice(-6) || "—"}
+            </Badge>
+          </div>
+          <CardContent className="p-4 space-y-5">
+            {/* Seção 1: Identificação */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <User className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Identificação</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <DataField label="Nome" value={pacienteData.nome} />
+                <DataField label="Data Nasc." value={pacienteData.data_nascimento ? new Date(pacienteData.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"} />
+                <DataField label="CPF" value={pacienteData.cpf} mono />
+                <DataField label="CNS" value={formatCNS(pacienteData.cns)} mono />
+              </div>
+            </div>
+
+            {/* Seção 2: Endereço */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <MapPin className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Endereço</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="sm:col-span-2">
+                  <DataField label="Logradouro" value={pacienteData.endereco} />
+                </div>
+                <DataField label="Bairro" value={pacienteData.custom_data?.bairro} />
+                <DataField label="Município" value={pacienteData.municipio || pacienteData.custom_data?.municipio} />
+                <DataField label="CEP" value={pacienteData.custom_data?.cep} mono />
+              </div>
+            </div>
+
+            {/* Seção 3: Contato */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <Phone className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Contato</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <DataField label="Tel. Principal" value={pacienteData.telefone} mono />
+                <DataField label="Tel. Secundário" value={pacienteData.custom_data?.telefoneSecundario || pacienteData.custom_data?.telefone_secundario} mono />
+                <div className="sm:col-span-2">
+                  <DataField label="E-mail" value={pacienteData.email} />
+                </div>
+                <div className="sm:col-span-2">
+                  <DataField label="Contato Emergência" value={pacienteData.custom_data?.contato_emergencia_nome} />
+                </div>
+                <DataField label="Tel. Emergência" value={pacienteData.custom_data?.contato_emergencia_telefone} mono />
+              </div>
+            </div>
+
+            {/* Seção 4: Complementares */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
+                <Activity className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-bold text-primary uppercase">Complementares</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="sm:col-span-2">
+                  <DataField label="Nome da Mãe" value={pacienteData.nome_mae} />
+                </div>
+                <DataField label="Raça/Cor" value={pacienteData.custom_data?.racaCor || pacienteData.custom_data?.raca_cor} />
+                <DataField label="Nacionalidade" value={pacienteData.custom_data?.nacionalidade} />
+                <DataField label="Gestante" value={pacienteData.is_gestante ? "Sim" : "Não"} />
+                <DataField label="PNE" value={pacienteData.is_pne ? "Sim" : "Não"} />
+                <DataField label="Autista" value={pacienteData.is_autista ? "Sim" : "Não"} />
+                <DataField label="CID-10 Principal" value={pacienteData.cid} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Separator />
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
