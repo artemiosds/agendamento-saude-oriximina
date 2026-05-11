@@ -88,6 +88,7 @@ const PTS: React.FC = () => {
   const [selectedProcCodigo, setSelectedProcCodigo] = useState('');
   const [validCids, setValidCids] = useState<SigtapCid[]>([]);
   const [cidSearch, setCidSearch] = useState('');
+  const [procSearch, setProcSearch] = useState(''); // Search for the procedures list
   const [cidWarning, setCidWarning] = useState(false);
   const [loadingCids, setLoadingCids] = useState(false);
   const [loadingProcs, setLoadingProcs] = useState(false);
@@ -534,12 +535,20 @@ const PTS: React.FC = () => {
 
   const procsBySpecialty = useMemo(() => {
     const map: Record<string, SigtapProcedimento[]> = {};
+    const searchTerm = normalize(procSearch);
+    
     for (const p of sigtapProcs) {
+      if (searchTerm) {
+        const procName = normalize(p.nome);
+        const procCode = p.codigo;
+        if (!procName.includes(searchTerm) && !procCode.includes(searchTerm)) continue;
+      }
+      
       if (!map[p.especialidade]) map[p.especialidade] = [];
       map[p.especialidade].push(p);
     }
     return map;
-  }, [sigtapProcs]);
+  }, [sigtapProcs, procSearch, normalize]);
 
   const getSpecLabelForSigtap = useCallback((key: string): string => {
     const entry = Object.entries(SPECIALTY_TO_SIGTAP).find(([, v]) => v === key);
@@ -649,45 +658,55 @@ const PTS: React.FC = () => {
                     📋 Procedimentos SIGTAP
                     {loadingProcs && <Loader2 className="w-3 h-3 animate-spin" />}
                   </Label>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => {
-                    // Logic to open a dedicated search dialog if we wanted, 
-                    // but we'll stick to making the Select more "search-friendly"
-                    // or just adding the Lupa icon to the existing search.
-                  }}>
-                    <Search className="w-3.5 h-3.5 mr-1" /> Pesquisar
-                  </Button>
                 </div>
 
-                {sigtapProcs.length > 0 && (
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1 relative">
-                      <Select value={selectedProcCodigo} onValueChange={v => { setSelectedProcCodigo(v); setCidSearch(''); }}>
-                        <SelectTrigger className="pl-9">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <SelectValue placeholder="Selecione o procedimento SIGTAP..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {Object.entries(procsBySpecialty).map(([esp, procs]) => (
-                            <React.Fragment key={esp}>
-                              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 z-10">
-                                {getSpecLabelForSigtap(esp)} ({procs.length})
-                              </div>
-                              {procs.map(p => (
-                                <SelectItem key={p.codigo} value={p.codigo}>
-                                  <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
-                                  <span className="text-xs">{p.nome}</span>
-                                </SelectItem>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button size="sm" onClick={handleAddSigtap} disabled={!selectedProcCodigo}>
-                      <Plus className="w-4 h-4 mr-1" /> Adicionar
-                    </Button>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Pesquisar por nome ou código do procedimento..."
+                      value={procSearch}
+                      onChange={(e) => setProcSearch(e.target.value)}
+                      className="pl-9 h-9 text-sm"
+                    />
                   </div>
-                )}
+
+                  {sigtapProcs.length > 0 && (
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <Select value={selectedProcCodigo} onValueChange={v => { setSelectedProcCodigo(v); setCidSearch(''); }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder={procSearch ? "Selecione nos resultados..." : "Selecione o procedimento..."} />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {Object.entries(procsBySpecialty).length === 0 ? (
+                              <div className="p-4 text-center text-xs text-muted-foreground">
+                                Nenhum procedimento encontrado para "{procSearch}"
+                              </div>
+                            ) : (
+                              Object.entries(procsBySpecialty).map(([esp, procs]) => (
+                                <React.Fragment key={esp}>
+                                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0 z-10">
+                                    {getSpecLabelForSigtap(esp)} ({procs.length})
+                                  </div>
+                                  {procs.map(p => (
+                                    <SelectItem key={p.codigo} value={p.codigo}>
+                                      <span className="text-xs font-mono text-muted-foreground mr-1">{p.codigo}</span>
+                                      <span className="text-xs">{p.nome}</span>
+                                    </SelectItem>
+                                  ))}
+                                </React.Fragment>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button size="sm" onClick={handleAddSigtap} disabled={!selectedProcCodigo}>
+                        <Plus className="w-4 h-4 mr-1" /> Adicionar
+                      </Button>
+                    </div>
+                  )}
+                </div>
 
                 {sigtapProcs.length === 0 && !loadingProcs && (
                   <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado. Execute a sincronização DATASUS nas Configurações.</p>
