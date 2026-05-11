@@ -28,6 +28,7 @@ import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
+import PatientReferralHistory from "@/components/Pacientes/PatientReferralHistory";
 import { buildInstitutionalCSS } from "@/lib/printLayout";
 import { formatCNS } from "@/lib/cnsUtils";
 
