@@ -88,35 +88,66 @@ export const bpaService = {
     const pacMap = new Map<string, any>();
     (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
 
-    // 3) Fetch Prontuario Procedimentos
-    const { data: vincs } = prontIds.length
-      ? await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds)
-      : { data: [] };
+    // 3) Fetch Prontuario Procedimentos - Paginado
+    let vincs: any[] = [];
+    if (prontIds.length > 0) {
+      for (let i = 0; i < prontIds.length; i += 500) {
+        const batch = prontIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', batch);
+        if (data) vincs.push(...data);
+      }
+    }
 
     const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
-    const { data: procsData } = procIds.length
-      ? await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', procIds)
-      : { data: [] };
+    let procsData: any[] = [];
+    if (procIds.length > 0) {
+      for (let i = 0; i < procIds.length; i += 500) {
+        const batch = procIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', batch);
+        if (data) procsData.push(...data);
+      }
+    }
     const procsMap = new Map<string, any>();
     (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
 
-    // 4) Fetch PTS (Active)
-    const { data: ptsData } = pacIds.length
-      ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
-      : { data: [] };
+    // 4) Fetch PTS (Active) - Paginado
+    let ptsData: any[] = [];
+    if (pacIds.length > 0) {
+      for (let i = 0; i < pacIds.length; i += 500) {
+        const batch = pacIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', batch).eq('status', 'ativo');
+        if (data) ptsData.push(...data);
+      }
+    }
     
     const activePtsIds = (ptsData || []).map((p: any) => p.id);
-    const { data: ptsCids } = activePtsIds.length
-      ? await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds)
-      : { data: [] };
-    const { data: ptsProcs } = activePtsIds.length
-      ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
-      : { data: [] };
+    let ptsCids: any[] = [];
+    if (activePtsIds.length > 0) {
+      for (let i = 0; i < activePtsIds.length; i += 500) {
+        const batch = activePtsIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch);
+        if (data) ptsCids.push(...data);
+      }
+    }
 
-    // 4.5) Fetch Patient Linked Procedures (Persistent)
-    const { data: patientLinkedProcs } = pacIds.length
-      ? await (supabase as any).from('patient_procedures').select('*').in('patient_id', pacIds)
-      : { data: [] };
+    let ptsProcs: any[] = [];
+    if (activePtsIds.length > 0) {
+      for (let i = 0; i < activePtsIds.length; i += 500) {
+        const batch = activePtsIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', batch);
+        if (data) ptsProcs.push(...data);
+      }
+    }
+
+    // 4.5) Fetch Patient Linked Procedures (Persistent) - Paginado
+    let patientLinkedProcs: any[] = [];
+    if (pacIds.length > 0) {
+      for (let i = 0; i < pacIds.length; i += 500) {
+        const batch = pacIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('patient_procedures').select('*').in('patient_id', batch);
+        if (data) patientLinkedProcs.push(...data);
+      }
+    }
 
     const ptsMap = new Map<string, any>();
     (ptsData || []).forEach((p: any) => {
