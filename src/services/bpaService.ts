@@ -85,7 +85,7 @@ export const bpaService = {
     const procsMap = new Map<string, any>();
     (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
 
-    // 4) Fetch PTS
+    // 4) Fetch PTS (Active)
     const { data: ptsData } = pacIds.length
       ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
       : { data: [] };
@@ -122,8 +122,17 @@ export const bpaService = {
     const agsMap = new Map<string, any>();
     (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
 
+    console.log("[BPA] resolucao da producao - pre-processamento", {
+      competencia,
+      totalProntuarios: prots.length,
+      totalTriagens: (triagens || []).length,
+      totalPacientes: pacMap.size,
+      totalPts: ptsMap.size
+    });
+
     const result: LinhaBpaNormalizada[] = [];
     const usedCombinations = new Set<string>(); // paciente_id + data + sigtap + cid
+
 
     // Function to add a line with deduplication
     const addLine = (line: LinhaBpaNormalizada) => {
