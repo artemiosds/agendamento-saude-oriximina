@@ -455,7 +455,7 @@ Deno.serve(async (req) => {
         municipio +                             // 76-81
         padText(cid, 4) +                       // 82-85
         padNum(idade, 3) +                      // 86-88
-        padNum(1, 6) +                          // 89-94
+        padNum(qtd, 6) +                        // 89-94
         carater +                               // 95-96
         autorizacao +                           // 97-109
         'BPA' +                                 // 110-112
