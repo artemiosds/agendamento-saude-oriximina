@@ -353,11 +353,11 @@ const BpaProducao: React.FC = () => {
       if (!pac?.sexo) pend.push('Sexo');
       if (!pac?.municipio) pend.push('Município de residência');
       if (!v.cbo) pend.push('CBO do profissional');
-      if (!v.sigtap) pend.push('Procedimento SIGTAP');
+      if (!v.sigtap) pend.push(l.motivo_pendencia || 'Procedimento SIGTAP/CID');
       const cnes = getCnesFromUnidade(l.unidade_id);
       const ine = getIneFromUnidade(l.unidade_id);
       if (!cnes) pend.push('CNES da unidade');
-      if (l.pendenciaTriagemSigtap) pend.push('SIGTAP da triagem não configurado');
+      
       return { seq: idx + 1, l, pac, prof, cnes, ine, v, ok, pend };
     });
 
@@ -367,7 +367,7 @@ const BpaProducao: React.FC = () => {
       'Dt.Atendimento','Procedimento','SIGTAP','QTD','CID','Car.Atend.','Num.Autorização',
       'Raça/Cor','Etnia','Nacionalidade','CEP','Cód.Logradouro','Endereço','Número','Complemento','Bairro',
       'Telefone','E-mail','CNES','CNS Profissional','Nome Profissional','CBO','Código INE',
-      'Competência','Folha','Unidade','Origem','Prontuário ID','Status Validação',
+      'Competência','Folha','Unidade','Origem','Fonte Proc.','Fonte CID','Prontuário ID','Status Validação',
     ];
     const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
       // Cálculo de idade
@@ -395,7 +395,7 @@ const BpaProducao: React.FC = () => {
         pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        competenciaFmt, folha, uniNome, l.origem, l.prontuario_id, ok ? 'OK' : 'PENDENTE',
+        competenciaFmt, folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.prontuario_id || '', ok ? 'OK' : 'PENDENTE',
       ];
     });
     const wsBpa = XLSX.utils.aoa_to_sheet([bpaHeader, ...bpaRows]);
