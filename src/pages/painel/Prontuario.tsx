@@ -853,7 +853,7 @@ const ProntuarioPage: React.FC = () => {
     })();
   }, [form.paciente_id, procedimentos]);
 
-  const openNew = () => {
+  const openNew = (pacienteId?: string, pacienteNome?: string) => {
     setEditId(null);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
@@ -866,7 +866,18 @@ const ProntuarioPage: React.FC = () => {
     setEspecialidadeFields({});
     setSoapErrors(false);
     setSoapEnabled(true);
-    setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0], tipo_registro: "avaliacao_inicial" });
+    
+    if (pacienteId) {
+      loadProntuarioProcedimentos("", pacienteId);
+    }
+    
+    setForm({ 
+      ...emptyForm, 
+      paciente_id: pacienteId || "",
+      paciente_nome: pacienteNome || "",
+      data_atendimento: new Date().toISOString().split("T")[0], 
+      tipo_registro: "avaliacao_inicial" 
+    });
     setDialogOpen(true);
   };
 
