@@ -293,7 +293,7 @@ const AtualizacaoCadastral: React.FC = () => {
                         <div className="flex flex-col">
                           <span className="font-semibold text-foreground text-sm leading-tight">{p.nome}</span>
                           <span className="text-[11px] text-muted-foreground mt-1">
-                            { (p.dataNascimento || p.data_nascimento) ? new Date(p.dataNascimento || p.data_nascimento).toLocaleDateString() : "Sem data nasc."}
+                            { p.dataNascimento ? new Date(p.dataNascimento).toLocaleDateString() : "Sem data nasc."}
                           </span>
                         </div>
                       </TableCell>
