@@ -635,9 +635,11 @@ const BpaProducao: React.FC = () => {
                     <TableHead>Município</TableHead>
                     <TableHead>Data Atend.</TableHead>
                     <TableHead>Procedimento</TableHead>
+                    <TableHead>Fonte Proc.</TableHead>
                     <TableHead>SIGTAP</TableHead>
                     <TableHead>QTD</TableHead>
                     <TableHead>CID</TableHead>
+                    <TableHead>Fonte CID</TableHead>
                     <TableHead>Caráter</TableHead>
                     <TableHead>Raça/Cor</TableHead>
                     <TableHead>Etnia</TableHead>
