@@ -349,80 +349,97 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
       <Separator />
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
-        </h3>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
-            <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
-            <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
-          </Button>
-        </div>
-      </div>
+      <Tabs defaultValue="atendimentos" className="w-full">
+        <TabsList className="grid grid-cols-4 w-full">
+          <TabsTrigger value="atendimentos" className="gap-2">
+            <History className="w-4 h-4" /> Atendimentos
+          </TabsTrigger>
+          <TabsTrigger value="encaminhamentos" className="gap-2">
+            <Send className="w-4 h-4" /> Encaminhamentos
+          </TabsTrigger>
+          <TabsTrigger value="documentos" className="gap-2">
+            <FileText className="w-4 h-4" /> Doc. Gerados
+          </TabsTrigger>
+          <TabsTrigger value="anexos" className="gap-2">
+            <Paperclip className="w-4 h-4" /> Doc. Anexados
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tratamentos ativos */}
-      {activeEpisodios.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" /> Tratamentos Ativos
-          </h3>
-          {activeEpisodios.map((ep) => {
-            const sessoes = prontuarios.filter((p) => p.episodio_id === ep.id).length;
-            return (
-              <Card key={ep.id} className="border-primary/20 bg-primary/5">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm text-foreground">{ep.titulo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {ep.profissional_nome} • Início:{" "}
-                        {new Date(ep.data_inicio + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {sessoes} sessão(ões)
-                    </Badge>
-                  </div>
-                  {ep.descricao && <p className="text-xs text-muted-foreground mt-1">{ep.descricao}</p>}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Timeline */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-muted-foreground" /> Linha do Tempo ({timeline.length} registro(s))
-        </h3>
-        {timeline.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6 gap-2">
-            <FileText className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground text-center">Nenhum atendimento registrado.</p>
+        <TabsContent value="atendimentos" className="space-y-6 pt-4">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
+            </h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+                <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
+                <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+              </Button>
+            </div>
           </div>
-        ) : (
-          <ScrollArea className="max-h-[400px]">
-            <div className="relative pl-6 space-y-3">
-              <div className="absolute left-2 top-2 bottom-2 w-px bg-border" aria-hidden="true" />
-              {timeline.map((item) => {
-                const isOwn = item.profissional_id === currentProfissionalId;
-                const expanded = expandedId === item.id;
+
+          {/* Tratamentos ativos */}
+          {activeEpisodios.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" /> Tratamentos Ativos
+              </h3>
+              {activeEpisodios.map((ep) => {
+                const sessoes = prontuarios.filter((p) => p.episodio_id === ep.id).length;
                 return (
-                  <div key={item.id} className="relative">
-                    <div className="absolute -left-4 top-2 w-3 h-3 rounded-full bg-primary border-2 border-background" />
-                    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <time className="text-xs font-bold text-primary" dateTime={item.data_atendimento}>
-                                {formatDateBR(item.data_atendimento)}
-                              </time>
+                  <Card key={ep.id} className="border-primary/20 bg-primary/5">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-sm text-foreground">{ep.titulo}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ep.profissional_nome} • Início:{" "}
+                            {new Date(ep.data_inicio + "T12:00:00").toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {sessoes} sessão(ões)
+                        </Badge>
+                      </div>
+                      {ep.descricao && <p className="text-xs text-muted-foreground mt-1">{ep.descricao}</p>}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Timeline */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" /> Linha do Tempo ({timeline.length} registro(s))
+            </h3>
+            {timeline.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-6 gap-2">
+                <FileText className="w-8 h-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground text-center">Nenhum atendimento registrado.</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[500px] pr-4">
+                <div className="relative pl-6 space-y-3">
+                  <div className="absolute left-2 top-2 bottom-2 w-px bg-border" aria-hidden="true" />
+                  {timeline.map((item) => {
+                    const isOwn = item.profissional_id === currentProfissionalId;
+                    const expanded = expandedId === item.id;
+                    return (
+                      <div key={item.id} className="relative">
+                        <div className="absolute -left-4 top-2 w-3 h-3 rounded-full bg-primary border-2 border-background" />
+                        <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <time className="text-xs font-bold text-primary" dateTime={item.data_atendimento}>
+                                    {formatDateBR(item.data_atendimento)}
+                                  </time>
                               {item.hora_atendimento && (
                                 <span className="text-xs text-muted-foreground">{item.hora_atendimento}</span>
                               )}
