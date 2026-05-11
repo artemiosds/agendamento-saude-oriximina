@@ -211,6 +211,16 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         ...prevCustom,
         contato_emergencia_nome: editData.contato_emergencia_nome.trim(),
         contato_emergencia_telefone: editData.contato_emergencia_telefone.trim(),
+        telefoneSecundario: editData.telefone_secundario.trim(),
+        municipio: editData.municipio.trim(),
+        bairro: editData.bairro.trim(),
+        cep: editData.cep.trim(),
+        racaCor: editData.raca_cor,
+        raca_cor: editData.raca_cor,
+        nacionalidade: editData.nacionalidade,
+        etnia: editData.etnia,
+        etniaOutra: editData.etniaOutra.trim(),
+        paisNascimento: editData.paisNascimento.trim(),
       };
 
       const { error } = await supabase.from("pacientes").update({
@@ -223,6 +233,10 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
         endereco: editData.endereco,
         telefone: editData.telefone,
         email: editData.email,
+        municipio: editData.municipio.trim(),
+        is_gestante: editData.is_gestante,
+        is_pne: editData.is_pne,
+        is_autista: editData.is_autista,
         custom_data: newCustom,
       }).eq("id", pacienteId);
 
