@@ -250,8 +250,14 @@ export const bpaService = {
       let procNome = '';
       let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
 
+      const linkedProcs = patientProcsMap.get(pront.paciente_id);
       const pacCd = pac?.custom_data || {};
-      if (pacCd.sigtap_codigo) {
+
+      if (linkedProcs && linkedProcs.length > 0) {
+        sigtap = linkedProcs[0].sigtap_codigo;
+        procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
+        fonteProc = 'paciente';
+      } else if (pacCd.sigtap_codigo) {
         sigtap = pacCd.sigtap_codigo;
         procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
         fonteProc = 'paciente';
@@ -262,12 +268,20 @@ export const bpaService = {
       }
 
       // RESOLVE CID
-      let cid = pac?.cid || '';
-      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'paciente' : 'vazio';
-      if (!cid && pts && pts.cids.length > 0) {
+      let cid = '';
+      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = 'vazio';
+
+      if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
+        cid = linkedProcs[0].cid;
+        fonteCid = 'paciente';
+      } else if (pac?.cid) {
+        cid = pac.cid;
+        fonteCid = 'paciente';
+      } else if (pts && pts.cids.length > 0) {
         cid = pts.cids[0];
         fonteCid = 'pts';
       }
+
 
       addLine({
         key: `pron_empty_${pront.id}`,
