@@ -1148,6 +1148,54 @@ export type Database = {
         }
         Relationships: []
       }
+      paciente_procedimentos_persistentes: {
+        Row: {
+          atualizado_em: string | null
+          cids_selecionados: string[] | null
+          criado_em: string | null
+          id: string
+          observacao: string | null
+          paciente_id: string
+          procedimento_id: string
+          quantidade: number | null
+        }
+        Insert: {
+          atualizado_em?: string | null
+          cids_selecionados?: string[] | null
+          criado_em?: string | null
+          id?: string
+          observacao?: string | null
+          paciente_id: string
+          procedimento_id: string
+          quantidade?: number | null
+        }
+        Update: {
+          atualizado_em?: string | null
+          cids_selecionados?: string[] | null
+          criado_em?: string | null
+          id?: string
+          observacao?: string | null
+          paciente_id?: string
+          procedimento_id?: string
+          quantidade?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paciente_procedimentos_persistentes_paciente_id_fkey"
+            columns: ["paciente_id"]
+            isOneToOne: false
+            referencedRelation: "pacientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paciente_procedimentos_persistentes_procedimento_id_fkey"
+            columns: ["procedimento_id"]
+            isOneToOne: false
+            referencedRelation: "sigtap_procedimentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pacientes: {
         Row: {
           auth_user_id: string | null

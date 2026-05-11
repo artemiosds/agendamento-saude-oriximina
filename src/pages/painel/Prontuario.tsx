@@ -646,19 +646,37 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const loadProntuarioProcedimentos = async (prontuarioId: string) => {
-    const { data } = await (supabase as any)
+  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string) => {
+    // 1. Load procedures specific to THIS prontuario (current visit)
+    const { data: prontuarioProcs } = await (supabase as any)
       .from("prontuario_procedimentos")
       .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
     
-    if (data && data.length > 0) {
+    // 2. Load persistent procedures for this patient (global history)
+    let persistentProcs: any[] = [];
+    if (patientId) {
+      const { data } = await (supabase as any)
+        .from("paciente_procedimentos_persistentes")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("paciente_id", patientId);
+      persistentProcs = data || [];
+    }
+
+    // Merge both, with current prontuario procedures taking precedence
+    const combinedData = [...(prontuarioProcs || [])];
+    (persistentProcs || []).forEach(p => {
+      if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
+        combinedData.push(p);
+      }
+    });
+    
+    if (combinedData.length > 0) {
       const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       
-      data.forEach((d: any) => {
-        // Find the procedure by its UUID (database id)
+      combinedData.forEach((d: any) => {
         const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
         const displayId = proc ? proc.id : d.procedimento_id;
         
@@ -748,6 +766,7 @@ const ProntuarioPage: React.FC = () => {
         setSelectedProcIds([]);
         setSelectedCidsByProc({});
         setProcDetails({});
+        loadProntuarioProcedimentos("", pacienteId); // Load global patient procedures
         setForm({
           ...emptyForm,
           paciente_id: pacienteId,
@@ -834,7 +853,7 @@ const ProntuarioPage: React.FC = () => {
     })();
   }, [form.paciente_id, procedimentos]);
 
-  const openNew = () => {
+  const openNew = (pacienteId?: string, pacienteNome?: string) => {
     setEditId(null);
     setActiveAtendimento(null);
     setSessionRegistrationRequested(false);
@@ -847,7 +866,18 @@ const ProntuarioPage: React.FC = () => {
     setEspecialidadeFields({});
     setSoapErrors(false);
     setSoapEnabled(true);
-    setForm({ ...emptyForm, data_atendimento: new Date().toISOString().split("T")[0], tipo_registro: "avaliacao_inicial" });
+    
+    if (pacienteId) {
+      loadProntuarioProcedimentos("", pacienteId);
+    }
+    
+    setForm({ 
+      ...emptyForm, 
+      paciente_id: pacienteId || "",
+      paciente_nome: pacienteNome || "",
+      data_atendimento: new Date().toISOString().split("T")[0], 
+      tipo_registro: "avaliacao_inicial" 
+    });
     setDialogOpen(true);
   };
 
@@ -861,7 +891,7 @@ const ProntuarioPage: React.FC = () => {
     setSelectedCidsByProc({});
     setProcDetails({});
 
-    loadProntuarioProcedimentos(p.id);
+    loadProntuarioProcedimentos(p.id, p.paciente_id);
     loadEpisodios(p.paciente_id);
     const formData = {
       paciente_id: p.paciente_id,
@@ -1224,7 +1254,7 @@ const ProntuarioPage: React.FC = () => {
         if (prontuarioId) {
           setEditId(prontuarioId);
           // Refresh procedures for the newly saved record
-          loadProntuarioProcedimentos(prontuarioId);
+          loadProntuarioProcedimentos(prontuarioId, form.paciente_id);
         }
         // Keep SOAP fields intact so user can still view/edit the prontuário
       }
@@ -1970,7 +2000,7 @@ const ProntuarioPage: React.FC = () => {
             </>
           )}
           {canEdit && (
-            <Button onClick={openNew} className="gradient-primary text-primary-foreground">
+            <Button onClick={() => openNew(queryPacienteId || undefined, queryPacienteNome || undefined)} className="gradient-primary text-primary-foreground">
               <Plus className="w-4 h-4 mr-2" />
               Novo Prontuário
             </Button>
