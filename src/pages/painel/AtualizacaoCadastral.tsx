@@ -87,27 +87,56 @@ const AtualizacaoCadastral: React.FC = () => {
 
   const handleEditQuick = (p: any) => {
     setSelectedPatient(p);
-    setEditForm({
+    const cd = p.custom_data || {};
+    
+    // Mapeamento completo e explícito para garantir que nada se perca entre o objeto do banco e o form
+    const formData = {
       ...emptyPacienteForm,
-      nome: p.nome,
+      // Identificação
+      nome: p.nome || "",
       cpf: p.cpf || "",
       cns: p.cns || "",
-      nomeMae: p.nomeMae || p.nome_mae || "",
-      telefone: p.telefone || p.telefone_principal || "",
-      dataNascimento: p.dataNascimento || p.data_nascimento || "",
-      email: p.email || "",
-      endereco: p.endereco || "",
-      municipio: p.municipio || "",
+      nomeMae: p.nome_mae || p.nomeMae || "",
+      dataNascimento: p.data_nascimento || p.dataNascimento || "",
       naturalidade: p.naturalidade || "",
-      naturalidadeUf: p.naturalidade_uf || "",
-      menorIdade: !!p.menor_idade,
-      nomeResponsavel: p.nome_responsavel || "",
-      cpfResponsavel: p.cpf_responsavel || "",
-      isGestante: !!p.is_gestante,
-      isPne: !!p.is_pne,
-      isAutista: !!p.is_autista,
-      customData: p.custom_data || {},
-    });
+      naturalidadeUf: p.naturalidade_uf || p.naturalidadeUf || "",
+      menorIdade: !!(p.menor_idade ?? cd.menor_idade),
+      nomeResponsavel: p.nome_responsavel || cd.nome_responsavel || "",
+      cpfResponsavel: p.cpf_responsavel || cd.cpf_responsavel || "",
+      
+      // Contato
+      telefone: p.telefone || p.telefone_principal || "",
+      email: p.email || "",
+      
+      // Endereço (Priorizando campos estruturados do custom_data)
+      municipio: p.municipio || "",
+      endereco: p.endereco || "",
+      
+      // Flags de prioridade
+      isGestante: !!(p.is_gestante ?? cd.is_gestante),
+      isPne: !!(p.is_pne ?? cd.is_pne),
+      isAutista: !!(p.is_autista ?? cd.is_autista),
+      
+      // Preservar todo o custom_data original
+      customData: {
+        ...cd,
+        // Garantir campos de endereço no customData para o formulário
+        cep: cd.cep || "",
+        logradouro: cd.logradouro || "",
+        numero: cd.numero || "",
+        complemento: cd.complemento || "",
+        bairro: cd.bairro || "",
+        uf: cd.uf || "PA",
+        tipoLogradouro: cd.tipoLogradouro || cd.tipo_logradouro_dne || "",
+        tipoLogradouroCodigo: cd.tipoLogradouroCodigo || "",
+        telefoneSecundario: cd.telefoneSecundario || cd.telefone_secundario || "",
+        sexo: cd.sexo || "",
+        racaCor: cd.racaCor || cd.raca_cor || "",
+        nacionalidade: cd.nacionalidade || "brasileiro",
+      },
+    };
+    
+    setEditForm(formData);
     setIsEditModalOpen(true);
   };
 
@@ -115,40 +144,32 @@ const AtualizacaoCadastral: React.FC = () => {
     if (!selectedPatient) return;
     setIsSaving(true);
     try {
-      await patientService.savePacienteCadastro(selectedPatient.id, {
-        nome: editForm.nome,
-        cpf: editForm.cpf,
-        cns: editForm.cns,
-        nome_mae: editForm.nomeMae,
-        telefone_principal: editForm.telefone,
-        data_nascimento: editForm.dataNascimento,
-        email: editForm.email,
-        endereco: editForm.endereco,
-        municipio: editForm.municipio,
-        naturalidade: editForm.naturalidade,
-        naturalidade_uf: editForm.naturalidadeUf,
-        menor_idade: editForm.menorIdade,
-        nome_responsavel: editForm.nomeResponsavel,
-        cpf_responsavel: editForm.cpfResponsavel,
-        is_gestante: editForm.isGestante,
-        is_pne: editForm.isPne,
-        is_autista: editForm.isAutista,
+      // Mesclar dados do formulário com o custom_data para garantir persistência total
+      const finalPayload = {
+        ...editForm,
+        // Garantir que campos que estão no nível superior do form também vão para o customData se necessário
         customData: {
           ...(editForm.customData || {}),
+          ...editForm, // Inclui campos como nomeMae, dataNascimento etc no customData para redundância segura
           atualizado_em: new Date().toISOString(),
           atualizado_por: user?.id || "",
           atualizado_por_nome: user?.nome || "",
         }
-      }, "Central de Atualização Cadastral");
+      };
+
+      await patientService.savePacienteCadastro(selectedPatient.id, finalPayload, "Central de Atualização Cadastral");
       
       // Feedback imediato no estado local
-      refreshPacientes();
+      // Feedback imediato e invalidação global
+      await refreshPacientes();
       
-      // Invalidação agressiva do cache do TanStack Query
+      // Invalidação agressiva e abrangente do cache
+      await queryClient.invalidateQueries(); // Invalida TUDO para garantir consistência total entre todas as telas
+      
+      // Forçar refetch específico se o queryClient.invalidateQueries() demorar
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.page({}) }), // Passando objeto vazio para evitar erro de tipos se necessário
+        queryClient.refetchQueries({ queryKey: queryKeys.pacientes.all }),
+        queryClient.refetchQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) })
       ]);
 
       toast.success("Dados do paciente atualizados com sucesso!");

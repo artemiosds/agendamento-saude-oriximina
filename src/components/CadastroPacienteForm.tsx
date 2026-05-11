@@ -332,6 +332,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Input
                     value={form.nome}
                     onChange={(e) => set("nome", sanitizeUpper(e.target.value))}
+                    onBlur={() => isEdit && onSave()}
                     placeholder="NOME DO PACIENTE"
                   />
                   {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
