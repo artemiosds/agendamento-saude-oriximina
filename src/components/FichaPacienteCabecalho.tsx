@@ -706,11 +706,11 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                 </div>
                 <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
                   <Checkbox
-                    id="is_artista"
-                    checked={editData.is_artista}
-                    onCheckedChange={v => setEditData(d => ({ ...d, is_artista: !!v }))}
+                    id="is_autista"
+                    checked={editData.is_autista}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_autista: !!v }))}
                   />
-                  <Label htmlFor="is_artista" className="text-xs cursor-pointer">Autista</Label>
+                  <Label htmlFor="is_autista" className="text-xs cursor-pointer">Autista</Label>
                 </div>
 
                 <div className="col-span-2 pt-4 border-t border-border/40">
