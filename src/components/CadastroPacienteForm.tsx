@@ -932,6 +932,73 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </AccordionItem>
             </Accordion>
 
+            {/* Procedimentos Vinculados ao Paciente */}
+            <div className="space-y-4 border-t pt-4 mt-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Stethoscope className="w-4 h-4" />
+                  Procedimentos vinculados ao paciente
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={addProcedure} className="h-7 text-xs">
+                  Adicionar
+                </Button>
+              </div>
+              
+              <div className="space-y-3">
+                {(form.patientProcedures || []).length === 0 && (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">
+                    Nenhum procedimento vinculado persistente.
+                  </p>
+                )}
+                
+                {(form.patientProcedures || []).map((proc, idx) => (
+                  <div key={idx} className="p-3 border rounded-md bg-muted/20 relative group">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon" 
+                      className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => removeProcedure(idx)}
+                    >
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div>
+                        <Label className="text-[10px] uppercase">Cód. SIGTAP</Label>
+                        <Input 
+                          value={proc.sigtap_codigo || ""}
+                          onChange={(e) => updateProcedure(idx, "sigtap_codigo", e.target.value.replace(/\D/g, ""))}
+                          className="h-8 text-xs font-mono"
+                          placeholder="0000000000"
+                          maxLength={10}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] uppercase">Nome Procedimento</Label>
+                        <Input 
+                          value={proc.procedimento_nome || ""}
+                          onChange={(e) => updateProcedure(idx, "procedimento_nome", sanitizeUpper(e.target.value))}
+                          className="h-8 text-xs"
+                          placeholder="DESCRIÇÃO"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] uppercase">CID</Label>
+                        <Input 
+                          value={proc.cid || ""}
+                          onChange={(e) => updateProcedure(idx, "cid", sanitizeUpper(e.target.value))}
+                          className="h-8 text-xs font-mono"
+                          placeholder="X00.0"
+                          maxLength={5}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Custom Fields */}
             {customConfig.fields.length > 0 && (
               <div className="p-4 border rounded-lg bg-card">
