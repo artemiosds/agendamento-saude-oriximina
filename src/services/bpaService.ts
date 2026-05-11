@@ -98,6 +98,11 @@ export const bpaService = {
       ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
       : { data: [] };
 
+    // 4.5) Fetch Patient Linked Procedures (Persistent)
+    const { data: patientLinkedProcs } = pacIds.length
+      ? await (supabase as any).from('patient_procedures').select('*').in('patient_id', pacIds)
+      : { data: [] };
+
     const ptsMap = new Map<string, any>();
     (ptsData || []).forEach((p: any) => {
       ptsMap.set(p.patient_id, {
@@ -106,6 +111,14 @@ export const bpaService = {
         procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
       });
     });
+
+    const patientProcsMap = new Map<string, any[]>();
+    (patientLinkedProcs || []).forEach((p: any) => {
+      const arr = patientProcsMap.get(p.patient_id) || [];
+      arr.push(p);
+      patientProcsMap.set(p.patient_id, arr);
+    });
+
 
     // 5) Fetch Triagens
     let qTri = (supabase as any)
@@ -152,6 +165,7 @@ export const bpaService = {
       const pac = pacMap.get(pront.paciente_id);
       const proc = procsMap.get(v.procedimento_id);
       const pts = ptsMap.get(pront.paciente_id);
+      const linkedProcs = patientProcsMap.get(pront.paciente_id);
 
       // RESOLVE PROCEDIMENTO
       let sigtap = proc?.codigo_sigtap || '';
@@ -159,17 +173,24 @@ export const bpaService = {
       let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
 
       if (!sigtap) {
-        // Try patient persistent
-        const pacCd = pac?.custom_data || {};
-        if (pacCd.sigtap_codigo) {
-          sigtap = pacCd.sigtap_codigo;
-          procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
+        // Try patient persistent (linkedProcs table first)
+        if (linkedProcs && linkedProcs.length > 0) {
+          sigtap = linkedProcs[0].sigtap_codigo;
+          procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
           fonteProc = 'paciente';
-        } else if (pts && pts.procs.length > 0) {
-          // Try PTS
-          sigtap = pts.procs[0].procedimento_codigo;
-          procNome = pts.procs[0].procedimento_nome;
-          fonteProc = 'pts';
+        } else {
+          // Try patient persistent (custom_data)
+          const pacCd = pac?.custom_data || {};
+          if (pacCd.sigtap_codigo) {
+            sigtap = pacCd.sigtap_codigo;
+            procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
+            fonteProc = 'paciente';
+          } else if (pts && pts.procs.length > 0) {
+            // Try PTS
+            sigtap = pts.procs[0].procedimento_codigo;
+            procNome = pts.procs[0].procedimento_nome;
+            fonteProc = 'pts';
+          }
         }
       }
 
@@ -178,8 +199,12 @@ export const bpaService = {
       let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'prontuario' : 'vazio';
 
       if (!cid) {
-        // Try patient persistent
-        if (pac?.cid) {
+        // Try patient persistent (linkedProcs table)
+        if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
+          cid = linkedProcs[0].cid;
+          fonteCid = 'paciente';
+        } else if (pac?.cid) {
+          // Try patient persistent (main cid field)
           cid = pac.cid;
           fonteCid = 'paciente';
         } else if (pts && pts.cids.length > 0) {
@@ -188,6 +213,7 @@ export const bpaService = {
           fonteCid = 'pts';
         }
       }
+
 
       addLine({
         key: `pron_${pront.id}_${v.procedimento_id}`,
@@ -224,8 +250,14 @@ export const bpaService = {
       let procNome = '';
       let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
 
+      const linkedProcs = patientProcsMap.get(pront.paciente_id);
       const pacCd = pac?.custom_data || {};
-      if (pacCd.sigtap_codigo) {
+
+      if (linkedProcs && linkedProcs.length > 0) {
+        sigtap = linkedProcs[0].sigtap_codigo;
+        procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
+        fonteProc = 'paciente';
+      } else if (pacCd.sigtap_codigo) {
         sigtap = pacCd.sigtap_codigo;
         procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
         fonteProc = 'paciente';
@@ -236,12 +268,20 @@ export const bpaService = {
       }
 
       // RESOLVE CID
-      let cid = pac?.cid || '';
-      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'paciente' : 'vazio';
-      if (!cid && pts && pts.cids.length > 0) {
+      let cid = '';
+      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = 'vazio';
+
+      if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
+        cid = linkedProcs[0].cid;
+        fonteCid = 'paciente';
+      } else if (pac?.cid) {
+        cid = pac.cid;
+        fonteCid = 'paciente';
+      } else if (pts && pts.cids.length > 0) {
         cid = pts.cids[0];
         fonteCid = 'pts';
       }
+
 
       addLine({
         key: `pron_empty_${pront.id}`,
