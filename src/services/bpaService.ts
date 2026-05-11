@@ -98,6 +98,11 @@ export const bpaService = {
       ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
       : { data: [] };
 
+    // 4.5) Fetch Patient Linked Procedures (Persistent)
+    const { data: patientLinkedProcs } = pacIds.length
+      ? await (supabase as any).from('patient_procedures').select('*').in('patient_id', pacIds)
+      : { data: [] };
+
     const ptsMap = new Map<string, any>();
     (ptsData || []).forEach((p: any) => {
       ptsMap.set(p.patient_id, {
@@ -106,6 +111,14 @@ export const bpaService = {
         procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
       });
     });
+
+    const patientProcsMap = new Map<string, any[]>();
+    (patientLinkedProcs || []).forEach((p: any) => {
+      const arr = patientProcsMap.get(p.patient_id) || [];
+      arr.push(p);
+      patientProcsMap.set(p.patient_id, arr);
+    });
+
 
     // 5) Fetch Triagens
     let qTri = (supabase as any)
