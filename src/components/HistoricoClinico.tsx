@@ -304,10 +304,12 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="sm:col-span-2">
-                  <DataField label="Logradouro" value={pacienteData.endereco} />
+                  <DataField label="Logradouro" value={pacienteData.endereco || pacienteData.custom_data?.logradouro} />
                 </div>
+                <DataField label="Número" value={pacienteData.custom_data?.numero} />
                 <DataField label="Bairro" value={pacienteData.custom_data?.bairro} />
                 <DataField label="Município" value={pacienteData.municipio || pacienteData.custom_data?.municipio} />
+                <DataField label="UF" value={pacienteData.custom_data?.uf} />
                 <DataField label="CEP" value={pacienteData.custom_data?.cep} mono />
               </div>
             </div>
@@ -339,7 +341,9 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                 <div className="sm:col-span-2">
                   <DataField label="Nome da Mãe" value={pacienteData.nome_mae} />
                 </div>
+                <DataField label="Sexo" value={pacienteData.custom_data?.sexo} />
                 <DataField label="Raça/Cor" value={pacienteData.custom_data?.racaCor || pacienteData.custom_data?.raca_cor} />
+                <DataField label="Etnia" value={pacienteData.custom_data?.etnia || pacienteData.custom_data?.etniaOutra} />
                 <DataField label="Nacionalidade" value={pacienteData.custom_data?.nacionalidade} />
                 <DataField label="Gestante" value={pacienteData.is_gestante ? "Sim" : "Não"} />
                 <DataField label="PNE" value={pacienteData.is_pne ? "Sim" : "Não"} />
