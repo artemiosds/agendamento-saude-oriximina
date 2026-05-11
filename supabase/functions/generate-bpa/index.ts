@@ -158,9 +158,19 @@ Deno.serve(async (req) => {
 
     // 3. Procedimentos vinculados
     const prontIds = prots.map((p: any) => p.id);
-    const { data: vincs } = prontIds.length 
-      ? await supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds).limit(5000)
-      : { data: [] };
+    const pacIdsList = Array.from(pacIds);
+    
+    const [vincsRes, patientProcsRes] = await Promise.all([
+      prontIds.length 
+        ? supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds).limit(5000)
+        : Promise.resolve({ data: [] }),
+      pacIdsList.length
+        ? supabase.from('patient_procedures').select('*').in('patient_id', pacIdsList).limit(5000)
+        : Promise.resolve({ data: [] })
+    ]);
+
+    const vincs = vincsRes.data || [];
+    const patientProcs = patientProcsRes.data || [];
 
     const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
     const { data: procsData } = procIds.length
@@ -169,7 +179,7 @@ Deno.serve(async (req) => {
     const procMap = new Map((procsData || []).map((p: any) => [p.id, p]));
 
     const { data: ptsData } = pacIds.size
-      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', Array.from(pacIds)).eq('status', 'ativo')
+      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', pacIdsList).eq('status', 'ativo')
       : { data: [] };
     const activePtsIds = (ptsData || []).map((p: any) => p.id);
     const [{ data: ptsCids }, { data: ptsProcs }] = activePtsIds.length
@@ -193,6 +203,13 @@ Deno.serve(async (req) => {
       const arr = vincsByProntuario.get(v.prontuario_id) || [];
       arr.push(v);
       vincsByProntuario.set(v.prontuario_id, arr);
+    });
+
+    const patientProcsByPatient = new Map<string, any[]>();
+    (patientProcs || []).forEach((p: any) => {
+      const arr = patientProcsByPatient.get(p.patient_id) || [];
+      arr.push(p);
+      patientProcsByPatient.set(p.patient_id, arr);
     });
 
 
@@ -241,20 +258,71 @@ Deno.serve(async (req) => {
 
     for (const pront of prots as any[]) {
       const procsDoProntuario = vincsByProntuario.get(pront.id) || [];
-      if (procsDoProntuario.length === 0) {
+      const persProcs = patientProcsByPatient.get(pront.paciente_id) || [];
+      const pts = ptsMapByPatient.get(pront.paciente_id);
+
+      // Procedimentos do prontuário
+      for (const v of procsDoProntuario) {
+        const proc = procMap.get(v.procedimento_id);
+        const cids = (v.cids_selecionados && v.cids_selecionados.length > 0) ? v.cids_selecionados : [''];
+        for (const cid of cids) {
+          items.push({ 
+            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+            data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+            proc: { 
+              codigo_sigtap: proc?.codigo_sigtap || '', 
+              nome: proc?.nome || '—',
+              cid: cid,
+              quantidade: v.quantidade || 1
+            }, 
+            origem: 'prontuario' 
+          });
+        }
+      }
+
+      // Procedimentos persistentes (cadastro)
+      for (const lp of persProcs) {
+        items.push({ 
+          id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+          data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+          proc: { 
+            codigo_sigtap: lp.sigtap_codigo || '', 
+            nome: lp.procedimento_nome || 'Vinculado',
+            cid: lp.cid || '',
+            quantidade: 1
+          }, 
+          origem: 'prontuario' 
+        });
+      }
+
+      // Procedimentos do PTS
+      if (pts && pts.procs) {
+        for (const pp of pts.procs) {
+          items.push({ 
+            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+            data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+            proc: { 
+              codigo_sigtap: pp.procedimento_codigo || '', 
+              nome: pp.procedimento_nome || 'PTS',
+              cid: pts.cids?.[0] || '',
+              quantidade: 1
+            }, 
+            origem: 'prontuario' 
+          });
+        }
+      }
+
+      // Fallback if empty
+      const alreadyHas = items.some(it => it.id === pront.id && it.proc?.codigo_sigtap);
+      if (!alreadyHas) {
         items.push({ 
           id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
           profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
           data: pront.data_atendimento, unidade_id: pront.unidade_id, proc: null, origem: 'prontuario' 
         });
-      } else {
-        for (const v of procsDoProntuario) {
-          items.push({ 
-            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
-            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
-            data: pront.data_atendimento, unidade_id: pront.unidade_id, proc: procMap.get(v.procedimento_id), origem: 'prontuario' 
-          });
-        }
       }
     }
 
@@ -300,16 +368,23 @@ Deno.serve(async (req) => {
       const pacCd = pac ? (pac.custom_data || {}) : {};
       const pts = pac ? ptsMapByPatient.get(pac.id) : null;
 
-      let sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
-      let sourceSigtap = proc ? 'prontuario' : '';
+      let sigtap = onlyDigits(proc?.codigo_sigtap || '');
+      let cid = String(proc?.cid || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+      let qtd = Number(proc?.quantidade || 1);
 
       if (!sigtap && pac) {
         if (pacCd.sigtap_codigo) {
           sigtap = onlyDigits(pacCd.sigtap_codigo);
-          sourceSigtap = 'paciente';
         } else if (pts && pts.procs.length > 0) {
           sigtap = onlyDigits(pts.procs[0].procedimento_codigo);
-          sourceSigtap = 'pts';
+        }
+      }
+      
+      if (!cid && pac) {
+        if (pac.cid) {
+          cid = String(pac.cid).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        } else if (pts && pts.cids.length > 0) {
+          cid = pts.cids[0];
         }
       }
 
@@ -336,10 +411,7 @@ Deno.serve(async (req) => {
       if (munCode.toUpperCase().includes('ORIXIMINA')) munCode = '150530';
       const municipio = padNum(munCode, 6);
       const cep = padNum(pacCustom.cep || '', 8);
-      let cid = (pac && pac.cid) || '';
-      if (!cid && pts && pts.cids.length > 0) {
-        cid = pts.cids[0];
-      }
+      // cid already resolved above from proc or patient/pts fallback
       cid = String(cid).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
 
       if (sigtap.length === 10 && (sigtap.startsWith('0301') || sigtap.startsWith('0303')) && !cid) {
@@ -383,7 +455,7 @@ Deno.serve(async (req) => {
         municipio +                             // 76-81
         padText(cid, 4) +                       // 82-85
         padNum(idade, 3) +                      // 86-88
-        padNum(1, 6) +                          // 89-94
+        padNum(qtd, 6) +                        // 89-94
         carater +                               // 95-96
         autorizacao +                           // 97-109
         'BPA' +                                 // 110-112

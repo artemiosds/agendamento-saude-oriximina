@@ -209,63 +209,22 @@ export const bpaService = {
     (vincs || []).forEach((v: any) => {
       const pront = prontMap.get(v.prontuario_id);
       if (!pront) return;
-      const pac = pacMap.get(pront.paciente_id);
       const proc = procsMap.get(v.procedimento_id);
-      const pts = ptsMap.get(pront.paciente_id);
-      const linkedProcs = patientProcsMap.get(pront.paciente_id);
-
+      
       // RESOLVE PROCEDIMENTO
-      let sigtap = proc?.codigo_sigtap || '';
-      let procNome = proc?.nome || '';
-      let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
+      const sigtap = proc?.codigo_sigtap || '';
+      const procNome = proc?.nome || '';
 
-      if (!sigtap) {
-        if (linkedProcs && linkedProcs.length > 0) {
-          sigtap = linkedProcs[0].sigtap_codigo;
-          procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
-          fonteProc = 'paciente';
-        } else {
-          const pacCd = pac?.custom_data || {};
-          if (pacCd.sigtap_codigo) {
-            sigtap = pacCd.sigtap_codigo;
-            procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
-            fonteProc = 'paciente';
-          } else if (pts && pts.procs.length > 0) {
-            sigtap = pts.procs[0].procedimento_codigo;
-            procNome = pts.procs[0].procedimento_nome;
-            fonteProc = 'pts';
-          }
-        }
-      }
-
-      // RESOLVE CID(s)
-      // CORREÇÃO: Se houver múltiplos CIDs selecionados, gerar múltiplas linhas BPA
       const cidsToProcess = (v.cids_selecionados && v.cids_selecionados.length > 0) 
         ? v.cids_selecionados 
-        : ['']; // Se não houver CID selecionado, processa uma vez com vazio para tentar as outras fontes
+        : [''];
 
       cidsToProcess.forEach((cidItem: string) => {
-        let cid = cidItem;
-        let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'prontuario' : 'vazio';
-
-        if (!cid) {
-          if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
-            cid = linkedProcs[0].cid;
-            fonteCid = 'paciente';
-          } else if (pac?.cid) {
-            cid = pac.cid;
-            fonteCid = 'paciente';
-          } else if (pts && pts.cids.length > 0) {
-            cid = pts.cids[0];
-            fonteCid = 'pts';
-          }
-        }
-
         addLine({
-          key: `pron_${pront.id}_${v.procedimento_id}_${cid}`,
+          key: `pron_${pront.id}_${v.procedimento_id}_${cidItem}`,
           origem: 'prontuario',
-          fonte_procedimento: fonteProc,
-          fonte_cid: fonteCid,
+          fonte_procedimento: 'prontuario',
+          fonte_cid: cidItem ? 'prontuario' : 'vazio',
           prontuario_id: pront.id,
           paciente_id: pront.paciente_id,
           paciente_nome: pront.paciente_nome,
@@ -275,7 +234,7 @@ export const bpaService = {
           data: pront.data_atendimento,
           procedimento_nome: procNome,
           codigo_sigtap: sigtap,
-          cid: cid,
+          cid: cidItem,
           carater: '01',
           qtd: v.quantidade || 1,
           status_bpa: 'ok',
@@ -283,58 +242,71 @@ export const bpaService = {
       });
     });
 
-    // Process Prontuários without procedures
+    // CORREÇÃO CRÍTICA: Processar Procedimentos Persistentes (patient_procedures) para TODOS os prontuários
     prots.forEach(pront => {
       const pac = pacMap.get(pront.paciente_id);
       const pts = ptsMap.get(pront.paciente_id);
-      
-      // If no procedure was added for this prontuario yet
-      const alreadyHas = result.some(r => r.prontuario_id === pront.id);
+      const linkedProcs = patientProcsMap.get(pront.paciente_id) || [];
+
+      // 1) Adiciona todos os procedimentos persistentes do cadastro do paciente
+      linkedProcs.forEach((lp: any) => {
+        addLine({
+          key: `pac_pers_${pront.id}_${lp.id}`,
+          origem: 'prontuario',
+          fonte_procedimento: 'paciente',
+          fonte_cid: lp.cid ? 'paciente' : 'vazio',
+          prontuario_id: pront.id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id,
+          profissional_nome: pront.profissional_nome,
+          unidade_id: pront.unidade_id,
+          data: pront.data_atendimento,
+          procedimento_nome: lp.procedimento_nome || 'Procedimento Vinculado',
+          codigo_sigtap: lp.sigtap_codigo || '',
+          cid: lp.cid || '',
+          carater: '01',
+          qtd: 1,
+          status_bpa: 'ok',
+        });
+      });
+
+      // 2) Adiciona todos os procedimentos do PTS ativo
+      if (pts && pts.procs && pts.procs.length > 0) {
+        pts.procs.forEach((pp: any) => {
+          addLine({
+            key: `pts_pers_${pront.id}_${pp.pts_id}_${pp.procedimento_codigo}`,
+            origem: 'prontuario',
+            fonte_procedimento: 'pts',
+            fonte_cid: pts.cids.length > 0 ? 'pts' : 'vazio',
+            prontuario_id: pront.id,
+            paciente_id: pront.paciente_id,
+            paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id,
+            profissional_nome: pront.profissional_nome,
+            unidade_id: pront.unidade_id,
+            data: pront.data_atendimento,
+            procedimento_nome: pp.procedimento_nome || 'Procedimento PTS',
+            codigo_sigtap: pp.procedimento_codigo || '',
+            cid: pts.cids[0] || '',
+            carater: '01',
+            qtd: 1,
+            status_bpa: 'ok',
+          });
+        });
+      }
+    });
+
+    // Handle prontuários that still have no procedure (fallback)
+    prots.forEach(pront => {
+      const alreadyHas = result.some(r => r.prontuario_id === pront.id && r.codigo_sigtap);
       if (alreadyHas) return;
 
-      // RESOLVE PROCEDIMENTO (Priority: Patient -> PTS)
-      let sigtap = '';
-      let procNome = '';
-      let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
-
-      const linkedProcs = patientProcsMap.get(pront.paciente_id);
-      const pacCd = pac?.custom_data || {};
-
-      if (linkedProcs && linkedProcs.length > 0) {
-        sigtap = linkedProcs[0].sigtap_codigo;
-        procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
-        fonteProc = 'paciente';
-      } else if (pacCd.sigtap_codigo) {
-        sigtap = pacCd.sigtap_codigo;
-        procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
-        fonteProc = 'paciente';
-      } else if (pts && pts.procs.length > 0) {
-        sigtap = pts.procs[0].procedimento_codigo;
-        procNome = pts.procs[0].procedimento_nome;
-        fonteProc = 'pts';
-      }
-
-      // RESOLVE CID
-      let cid = '';
-      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = 'vazio';
-
-      if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
-        cid = linkedProcs[0].cid;
-        fonteCid = 'paciente';
-      } else if (pac?.cid) {
-        cid = pac.cid;
-        fonteCid = 'paciente';
-      } else if (pts && pts.cids.length > 0) {
-        cid = pts.cids[0];
-        fonteCid = 'pts';
-      }
-
-
       addLine({
-        key: `pron_empty_${pront.id}`,
+        key: `pron_fallback_${pront.id}`,
         origem: 'prontuario',
-        fonte_procedimento: sigtap ? fonteProc : 'prontuario',
-        fonte_cid: cid ? fonteCid : 'vazio',
+        fonte_procedimento: 'prontuario',
+        fonte_cid: 'vazio',
         prontuario_id: pront.id,
         paciente_id: pront.paciente_id,
         paciente_nome: pront.paciente_nome,
@@ -342,9 +314,9 @@ export const bpaService = {
         profissional_nome: pront.profissional_nome,
         unidade_id: pront.unidade_id,
         data: pront.data_atendimento,
-        procedimento_nome: procNome || '— sem procedimento —',
-        codigo_sigtap: sigtap,
-        cid: cid,
+        procedimento_nome: '— sem procedimento —',
+        codigo_sigtap: '',
+        cid: '',
         carater: '01',
         qtd: 1,
         status_bpa: 'ok',
