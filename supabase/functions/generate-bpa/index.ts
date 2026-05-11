@@ -158,9 +158,19 @@ Deno.serve(async (req) => {
 
     // 3. Procedimentos vinculados
     const prontIds = prots.map((p: any) => p.id);
-    const { data: vincs } = prontIds.length 
-      ? await supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id').in('prontuario_id', prontIds).limit(5000)
-      : { data: [] };
+    const pacIdsList = Array.from(pacIds);
+    
+    const [vincsRes, patientProcsRes] = await Promise.all([
+      prontIds.length 
+        ? supabase.from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds).limit(5000)
+        : Promise.resolve({ data: [] }),
+      pacIdsList.length
+        ? supabase.from('patient_procedures').select('*').in('patient_id', pacIdsList).limit(5000)
+        : Promise.resolve({ data: [] })
+    ]);
+
+    const vincs = vincsRes.data || [];
+    const patientProcs = patientProcsRes.data || [];
 
     const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
     const { data: procsData } = procIds.length
@@ -169,7 +179,7 @@ Deno.serve(async (req) => {
     const procMap = new Map((procsData || []).map((p: any) => [p.id, p]));
 
     const { data: ptsData } = pacIds.size
-      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', Array.from(pacIds)).eq('status', 'ativo')
+      ? await supabase.from('pts').select('id, patient_id, status').in('patient_id', pacIdsList).eq('status', 'ativo')
       : { data: [] };
     const activePtsIds = (ptsData || []).map((p: any) => p.id);
     const [{ data: ptsCids }, { data: ptsProcs }] = activePtsIds.length
@@ -193,6 +203,13 @@ Deno.serve(async (req) => {
       const arr = vincsByProntuario.get(v.prontuario_id) || [];
       arr.push(v);
       vincsByProntuario.set(v.prontuario_id, arr);
+    });
+
+    const patientProcsByPatient = new Map<string, any[]>();
+    (patientProcs || []).forEach((p: any) => {
+      const arr = patientProcsByPatient.get(p.patient_id) || [];
+      arr.push(p);
+      patientProcsByPatient.set(p.patient_id, arr);
     });
 
 
