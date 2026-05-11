@@ -93,7 +93,11 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
     setError(null);
 
     try {
-      const [{ data: pData, error: pError }, { data: eData, error: eError }] = await Promise.all([
+      const [
+        { data: pData, error: pError }, 
+        { data: eData, error: eError },
+        { data: pacData, error: pacError }
+      ] = await Promise.all([
         supabase
           .from("prontuarios")
           .select(
@@ -106,15 +110,22 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           .select("*")
           .eq("paciente_id", pacienteId)
           .order("data_inicio", { ascending: false }),
+        supabase
+          .from("pacientes")
+          .select("*")
+          .eq("id", pacienteId)
+          .single()
       ]);
 
       if (cancelledRef.current) return;
 
       if (pError) throw pError;
       if (eError) throw eError;
+      if (pacError) throw pacError;
 
       setProntuarios(pData || []);
       setEpisodios(eData || []);
+      setPacienteData(pacData);
     } catch (err) {
       console.error("[Historico] Erro inesperado:", err);
       if (!cancelledRef.current) {
