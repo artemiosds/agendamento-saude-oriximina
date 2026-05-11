@@ -141,14 +141,14 @@ const AtualizacaoCadastral: React.FC = () => {
         }
       }, "Central de Atualização Cadastral");
       
-      // Feedback imediato no estado local (opcional, mas bom para UX)
+      // Feedback imediato no estado local
       refreshPacientes();
       
       // Invalidação agressiva do cache do TanStack Query
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.detail(selectedPatient.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.page() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pacientes.page({}) }), // Passando objeto vazio para evitar erro de tipos se necessário
       ]);
 
       toast.success("Dados do paciente atualizados com sucesso!");
