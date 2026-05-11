@@ -631,9 +631,23 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   );
 };
 
+const DataField = ({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) => {
+  const display = value && String(value).trim() ? value : "—";
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[9px] text-muted-foreground uppercase font-semibold">{label}</span>
+      <span className={`text-xs text-foreground leading-tight ${mono ? "font-mono" : "font-medium"}`}>
+        {display}
+      </span>
+    </div>
+  );
+};
+
 const Section: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div>
     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
     <p className="text-foreground whitespace-pre-wrap leading-relaxed">{value}</p>
   </div>
 );
+
+export default HistoricoClinico;
