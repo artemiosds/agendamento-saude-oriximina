@@ -873,7 +873,7 @@ const ProntuarioPage: React.FC = () => {
     setSoapEnabled(true);
     
     if (pacienteId) {
-      loadProntuarioProcedimentos("", pacienteId);
+      loadProntuarioProcedimentos("", pacienteId, new Date().toISOString().split("T")[0]);
     }
     
     setForm({ 
