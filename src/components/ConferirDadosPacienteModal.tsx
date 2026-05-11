@@ -328,9 +328,9 @@ export function ConferirDadosPacienteModal({
                 </span>
               )}
               {saveStatus === "error" && (
-                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive">
+                <span className="flex items-center gap-1 text-[11px] font-normal text-destructive" title={saveErrorMsg || ""}>
                   <AlertTriangle className="w-3 h-3" />
-                  Erro ao salvar
+                  {saveErrorMsg ? `Erro ao salvar: ${saveErrorMsg.slice(0, 80)}` : "Erro ao salvar"}
                 </span>
               )}
               {saveStatus === "idle" && dirty && (
