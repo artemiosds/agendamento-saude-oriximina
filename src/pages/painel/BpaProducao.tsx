@@ -393,7 +393,7 @@ const BpaProducao: React.FC = () => {
         idade, pac.sexo || '', pac.municipio || '', l.data, procNomeFinal, sigtapFinal,
         l.qtd, l.cid || '', l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', bpaRows,
+        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
         folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
