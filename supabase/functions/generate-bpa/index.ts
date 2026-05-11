@@ -258,20 +258,71 @@ Deno.serve(async (req) => {
 
     for (const pront of prots as any[]) {
       const procsDoProntuario = vincsByProntuario.get(pront.id) || [];
-      if (procsDoProntuario.length === 0) {
+      const persProcs = patientProcsByPatient.get(pront.paciente_id) || [];
+      const pts = ptsMapByPatient.get(pront.paciente_id);
+
+      // Procedimentos do prontuário
+      for (const v of procsDoProntuario) {
+        const proc = procMap.get(v.procedimento_id);
+        const cids = (v.cids_selecionados && v.cids_selecionados.length > 0) ? v.cids_selecionados : [''];
+        for (const cid of cids) {
+          items.push({ 
+            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+            data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+            proc: { 
+              codigo_sigtap: proc?.codigo_sigtap || '', 
+              nome: proc?.nome || '—',
+              cid: cid,
+              quantidade: v.quantidade || 1
+            }, 
+            origem: 'prontuario' 
+          });
+        }
+      }
+
+      // Procedimentos persistentes (cadastro)
+      for (const lp of persProcs) {
+        items.push({ 
+          id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+          data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+          proc: { 
+            codigo_sigtap: lp.sigtap_codigo || '', 
+            nome: lp.procedimento_nome || 'Vinculado',
+            cid: lp.cid || '',
+            quantidade: 1
+          }, 
+          origem: 'prontuario' 
+        });
+      }
+
+      // Procedimentos do PTS
+      if (pts && pts.procs) {
+        for (const pp of pts.procs) {
+          items.push({ 
+            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
+            data: pront.data_atendimento, unidade_id: pront.unidade_id, 
+            proc: { 
+              codigo_sigtap: pp.procedimento_codigo || '', 
+              nome: pp.procedimento_nome || 'PTS',
+              cid: pts.cids?.[0] || '',
+              quantidade: 1
+            }, 
+            origem: 'prontuario' 
+          });
+        }
+      }
+
+      // Fallback if empty
+      const alreadyHas = items.some(it => it.id === pront.id && it.proc?.codigo_sigtap);
+      if (!alreadyHas) {
         items.push({ 
           id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
           profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
           data: pront.data_atendimento, unidade_id: pront.unidade_id, proc: null, origem: 'prontuario' 
         });
-      } else {
-        for (const v of procsDoProntuario) {
-          items.push({ 
-            id: pront.id, paciente_id: pront.paciente_id, paciente_nome: pront.paciente_nome,
-            profissional_id: pront.profissional_id, profissional_nome: pront.profissional_nome, 
-            data: pront.data_atendimento, unidade_id: pront.unidade_id, proc: procMap.get(v.procedimento_id), origem: 'prontuario' 
-          });
-        }
       }
     }
 
