@@ -1854,22 +1854,7 @@ export type Database = {
           procedimento_id?: string
           quantidade?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "procedimentos_realizados_paciente_id_fkey"
-            columns: ["paciente_id"]
-            isOneToOne: false
-            referencedRelation: "pacientes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "procedimentos_realizados_procedimento_id_fkey"
-            columns: ["procedimento_id"]
-            isOneToOne: false
-            referencedRelation: "sigtap_procedimentos"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       professional_preferences: {
         Row: {
