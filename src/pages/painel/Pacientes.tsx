@@ -770,6 +770,23 @@ const Pacientes: React.FC = () => {
           console.error("Erro ao cadastrar paciente:", error);
           toast.error("Erro ao realizar cadastro.");
         } else {
+          // Salvar procedimentos vinculados (persistentes) para o novo paciente
+          if (form.patientProcedures && form.patientProcedures.length > 0) {
+            const validProcs = (form.patientProcedures || [])
+              .filter(p => p.sigtap_codigo || p.procedimento_nome)
+              .map(p => ({
+                patient_id: id,
+                sigtap_codigo: p.sigtap_codigo,
+                procedimento_nome: p.procedimento_nome,
+                cid: p.cid
+              }));
+              
+            if (validProcs.length > 0) {
+              const { error: procError } = await supabase.from("patient_procedures").insert(validProcs);
+              if (procError) console.error("Erro ao salvar procedimentos do novo paciente:", procError);
+            }
+          }
+
           // Flush pending referrals + attachments queued in CadastroPacienteForm
           try {
             const refHandle = (window as any).__patientReferralRef?.current;
