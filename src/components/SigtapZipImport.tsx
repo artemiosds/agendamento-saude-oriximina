@@ -57,6 +57,7 @@ const SPECIALTY_OPTIONS = [
   { key: 'podologia', label: 'Podologia', subgrupos: '03.16' },
   { key: 'optometria', label: 'Optometria', subgrupos: '03.17' },
   { key: 'saude_coletiva', label: 'Saúde Coletiva', subgrupos: '03.18' },
+  { key: 'outros', label: 'Outros (Base completa)', subgrupos: 'Restante da base SIGTAP' },
 ];
 
 const GITHUB_REPO = 'RenatoKR/SIGTAP';
