@@ -838,22 +838,36 @@ const ProntuarioPage: React.FC = () => {
   useEffect(() => {
     if (!form.paciente_id) { setPacienteProcHistory([]); return; }
     (async () => {
-      const { data } = await (supabase as any)
+      // 1. Suggest from Prontuario Procedures (Historical)
+      const { data: prontuarioData } = await (supabase as any)
         .from("prontuario_procedimentos")
         .select("procedimento_id, prontuarios!inner(paciente_id, data_atendimento)")
         .eq("prontuarios.paciente_id", form.paciente_id)
         .order("criado_em", { ascending: false })
-        .limit(50);
-      const seen = new Map<string, { id: string; nome: string; ultima: string }>();
-      (data || []).forEach((r: any) => {
-        // Find by UUID
+        .limit(25);
+        
+      // 2. Suggest from Global Production Table (Global History)
+      const { data: globalData } = await (supabase as any)
+        .from("procedimentos_realizados")
+        .select("procedimento_id, data_atendimento")
+        .eq("paciente_id", form.paciente_id)
+        .order("data_atendimento", { ascending: false })
+        .limit(25);
+
+      const seen = new Map<string, { id: string; nome: string; ultima: string; isGlobal?: boolean }>();
+      
+      const processItem = (r: any, isGlobal = false) => {
         const proc = procedimentos.find((p) => p.uuid === r.procedimento_id);
         if (proc && !seen.has(proc.id)) {
-          const dt = r.prontuarios?.data_atendimento || '';
-          const ultima = dt ? new Date(dt).toLocaleDateString('pt-BR') : '';
-          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima });
+          const dt = (r.prontuarios?.data_atendimento || r.data_atendimento || '');
+          const ultima = dt ? new Date(dt + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+          seen.set(proc.id, { id: proc.id, nome: proc.nome, ultima, isGlobal });
         }
-      });
+      };
+
+      (globalData || []).forEach(r => processItem(r, true));
+      (prontuarioData || []).forEach(r => processItem(r));
+      
       setPacienteProcHistory(Array.from(seen.values()));
     })();
   }, [form.paciente_id, procedimentos]);
