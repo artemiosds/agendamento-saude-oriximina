@@ -57,6 +57,7 @@ const SPECIALTY_OPTIONS = [
   { key: 'podologia', label: 'Podologia', subgrupos: '03.16' },
   { key: 'optometria', label: 'Optometria', subgrupos: '03.17' },
   { key: 'saude_coletiva', label: 'Saúde Coletiva', subgrupos: '03.18' },
+  { key: 'outros', label: 'Outros (Base completa)', subgrupos: 'Restante da base SIGTAP' },
 ];
 
 const GITHUB_REPO = 'RenatoKR/SIGTAP';
@@ -275,9 +276,15 @@ const SigtapZipImport: React.FC = () => {
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
 
-      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub];
-      if (!especialidade) continue;
-      if (!selected.has(especialidade)) continue;
+      // CORREÇÃO: Não filtrar por especialidade aqui. Importar TUDO.
+      // Se não houver mapeamento, usar 'outros'
+      const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
+      
+      // Se o usuário selecionou especialidades específicas E não é "outros" ou "todos", 
+      // poderíamos filtrar, mas o pedido é QUEBRAR LIMITAÇÕES.
+      // Vamos importar tudo o que estiver no arquivo que o usuário permitiu via checkboxes,
+      // mas se o usuário marcou "outros", ele pega o resto da base.
+      if (!selected.has(especialidade) && !selected.has('outros')) continue;
 
       procedures.push({ codigo, nome, especialidade, subgrupo });
     }
@@ -333,8 +340,8 @@ const SigtapZipImport: React.FC = () => {
     const totalOps = procedures.length + cidLinks.length;
     let done = 0;
 
-    // Procedures: batch 200
-    const PROC_BATCH = 200;
+    // Procedures: batch 1000 (increased to avoid overhead)
+    const PROC_BATCH = 1000;
     for (let i = 0; i < procedures.length; i += PROC_BATCH) {
       const batch = procedures.slice(i, i + PROC_BATCH);
       const { error } = await supabase.from('sigtap_procedimentos').upsert(
@@ -347,22 +354,28 @@ const SigtapZipImport: React.FC = () => {
         })),
         { onConflict: 'codigo' }
       );
-      if (error) console.warn('[SIGTAP] proc upsert:', error.message);
+      if (error) {
+        console.error('[SIGTAP] proc upsert error:', error);
+        throw new Error(`Erro ao salvar lote de procedimentos: ${error.message}`);
+      }
       done += batch.length;
       setProgressPct(Math.round((done / totalOps) * 100));
     }
     addLog('ok', `${procedures.length.toLocaleString('pt-BR')} procedimentos salvos`);
 
-    // CID links: batch 500
+    // CID links: batch 2000 (increased to avoid overhead)
     if (cidLinks.length > 0) {
-      const CID_BATCH = 500;
+      const CID_BATCH = 2000;
       for (let i = 0; i < cidLinks.length; i += CID_BATCH) {
         const batch = cidLinks.slice(i, i + CID_BATCH);
         const { error } = await supabase.from('sigtap_procedimento_cids').upsert(
           batch,
           { onConflict: 'procedimento_codigo,cid_codigo' }
         );
-        if (error) console.warn('[SIGTAP] cid upsert:', error.message);
+        if (error) {
+          console.error('[SIGTAP] cid upsert error:', error);
+          throw new Error(`Erro ao salvar lote de vínculos CID: ${error.message}`);
+        }
         done += batch.length;
         setProgressPct(Math.round((done / totalOps) * 100));
       }

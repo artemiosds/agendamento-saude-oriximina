@@ -80,13 +80,31 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
 async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string, string[]> }> {
-  const [{ data: sigtap }, { data: legacy }, { data: vinc }] = await Promise.all([
-    (supabase as any)
+  const PAGE_SIZE = 1000;
+  let allSigtap: any[] = [];
+  let from = 0;
+
+  // Busca TODOS os procedimentos SIGTAP (paginado para quebrar o limite de 1000 do Supabase)
+  while (true) {
+    const { data, error } = await (supabase as any)
       .from('sigtap_procedimentos')
       .select('*')
       .eq('ativo', true)
       .order('especialidade')
-      .order('nome'),
+      .order('nome')
+      .range(from, from + PAGE_SIZE - 1);
+    
+    if (error) {
+      console.error('[procedureService] Erro ao buscar sigtap_procedimentos:', error);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allSigtap.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  const [{ data: legacy }, { data: vinc }] = await Promise.all([
     (supabase as any)
       .from('procedimentos')
       .select('*')
@@ -101,7 +119,7 @@ async function fetchAll(): Promise<{ procs: ProcedimentoDB[]; links: Map<string,
     links.set(v.procedimento_codigo, arr);
   });
 
-  const procs: ProcedimentoDB[] = (sigtap || []).map((p: any) => {
+  const procs: ProcedimentoDB[] = (allSigtap || []).map((p: any) => {
     const profsLinkados = links.get(p.codigo) || [];
     const profissaoNome = SIGTAP_ESPECIALIDADE_TO_PROFISSAO[p.especialidade]?.[0] || p.especialidade || '';
     return {
@@ -207,8 +225,8 @@ export const procedureService = {
     const { data } = await (supabase as any)
       .from('sigtap_procedimento_cids')
       .select('cid_codigo, cid_descricao')
-      .eq('procedimento_codigo', codigo)
-      .limit(50);
+      .eq('procedimento_codigo', codigo);
+    // REMOVIDO .limit(50) para garantir que todos os CIDs vinculados apareçam
     return (data || []).map((r: any) => ({ codigo: r.cid_codigo, descricao: r.cid_descricao }));
   },
 
@@ -219,7 +237,7 @@ export const procedureService = {
       .from('cid10_codigos')
       .select('codigo, descricao')
       .or(`codigo.ilike.%${q}%,descricao.ilike.%${q}%`)
-      .limit(20);
+      .limit(100); // Aumentado de 20 para 100 para dar mais opções na busca
     return (data || []).map((r: any) => ({ codigo: r.codigo, descricao: r.descricao }));
   },
 

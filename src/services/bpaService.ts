@@ -48,60 +48,106 @@ export const bpaService = {
     console.log("[BPA] competencia resolvida", { competencia, dataInicio, dataFim });
 
 
-    // 1) Fetch Prontuários
-    let qPront = (supabase as any)
-      .from('prontuarios')
-      .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, custom_data')
-      .gte('data_atendimento', dataInicio)
-      .lte('data_atendimento', dataFim)
-      .limit(5000);
+    // 1) Fetch Prontuários (Paginado para quebrar o limite de 1000/5000)
+    const PAGE_SIZE_PRONT = 1000;
+    let fromPront = 0;
+    let allProntuarios: any[] = [];
+
+    while (true) {
+      let qPront = (supabase as any)
+        .from('prontuarios')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, custom_data')
+        .gte('data_atendimento', dataInicio)
+        .lte('data_atendimento', dataFim)
+        .range(fromPront, fromPront + PAGE_SIZE_PRONT - 1);
+      
+      if (unidadeId && unidadeId !== 'all') qPront = qPront.eq('unidade_id', unidadeId);
+      if (profissionalId && profissionalId !== 'all') qPront = qPront.eq('profissional_id', profissionalId);
+
+      const { data, error } = await qPront;
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allProntuarios.push(...data);
+      if (data.length < PAGE_SIZE_PRONT) break;
+      fromPront += PAGE_SIZE_PRONT;
+    }
     
-    if (unidadeId && unidadeId !== 'all') qPront = qPront.eq('unidade_id', unidadeId);
-    if (profissionalId && profissionalId !== 'all') qPront = qPront.eq('profissional_id', profissionalId);
-
-    const { data: prontuarios, error: errorPront } = await qPront;
-    if (errorPront) throw errorPront;
-
-    const prots = (prontuarios || []) as any[];
+    const prots = allProntuarios;
     const pacIds = [...new Set(prots.map(p => p.paciente_id))];
     const prontIds = prots.map(p => p.id);
 
-    // 2) Fetch Patients (Persistent data)
-    const { data: pacientes } = pacIds.length 
-      ? await (supabase as any).from('pacientes').select('id, nome, cns, cpf, data_nascimento, cid, custom_data').in('id', pacIds)
-      : { data: [] };
+    // 2) Fetch Patients (Persistent data) - Paginado se necessário
+    let pacientes: any[] = [];
+    if (pacIds.length > 0) {
+      for (let i = 0; i < pacIds.length; i += 500) {
+        const batch = pacIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pacientes').select('id, nome, cns, cpf, data_nascimento, cid, custom_data').in('id', batch);
+        if (data) pacientes.push(...data);
+      }
+    }
     const pacMap = new Map<string, any>();
     (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
 
-    // 3) Fetch Prontuario Procedimentos
-    const { data: vincs } = prontIds.length
-      ? await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', prontIds)
-      : { data: [] };
+    // 3) Fetch Prontuario Procedimentos - Paginado
+    let vincs: any[] = [];
+    if (prontIds.length > 0) {
+      for (let i = 0; i < prontIds.length; i += 500) {
+        const batch = prontIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', batch);
+        if (data) vincs.push(...data);
+      }
+    }
 
     const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
-    const { data: procsData } = procIds.length
-      ? await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', procIds)
-      : { data: [] };
+    let procsData: any[] = [];
+    if (procIds.length > 0) {
+      for (let i = 0; i < procIds.length; i += 500) {
+        const batch = procIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', batch);
+        if (data) procsData.push(...data);
+      }
+    }
     const procsMap = new Map<string, any>();
     (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
 
-    // 4) Fetch PTS (Active)
-    const { data: ptsData } = pacIds.length
-      ? await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', pacIds).eq('status', 'ativo')
-      : { data: [] };
+    // 4) Fetch PTS (Active) - Paginado
+    let ptsData: any[] = [];
+    if (pacIds.length > 0) {
+      for (let i = 0; i < pacIds.length; i += 500) {
+        const batch = pacIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', batch).eq('status', 'ativo');
+        if (data) ptsData.push(...data);
+      }
+    }
     
     const activePtsIds = (ptsData || []).map((p: any) => p.id);
-    const { data: ptsCids } = activePtsIds.length
-      ? await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', activePtsIds)
-      : { data: [] };
-    const { data: ptsProcs } = activePtsIds.length
-      ? await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', activePtsIds)
-      : { data: [] };
+    let ptsCids: any[] = [];
+    if (activePtsIds.length > 0) {
+      for (let i = 0; i < activePtsIds.length; i += 500) {
+        const batch = activePtsIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch);
+        if (data) ptsCids.push(...data);
+      }
+    }
 
-    // 4.5) Fetch Patient Linked Procedures (Persistent)
-    const { data: patientLinkedProcs } = pacIds.length
-      ? await (supabase as any).from('patient_procedures').select('*').in('patient_id', pacIds)
-      : { data: [] };
+    let ptsProcs: any[] = [];
+    if (activePtsIds.length > 0) {
+      for (let i = 0; i < activePtsIds.length; i += 500) {
+        const batch = activePtsIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', batch);
+        if (data) ptsProcs.push(...data);
+      }
+    }
+
+    // 4.5) Fetch Patient Linked Procedures (Persistent) - Paginado
+    let patientLinkedProcs: any[] = [];
+    if (pacIds.length > 0) {
+      for (let i = 0; i < pacIds.length; i += 500) {
+        const batch = pacIds.slice(i, i + 500);
+        const { data } = await (supabase as any).from('patient_procedures').select('*').in('patient_id', batch);
+        if (data) patientLinkedProcs.push(...data);
+      }
+    }
 
     const ptsMap = new Map<string, any>();
     (ptsData || []).forEach((p: any) => {
@@ -149,7 +195,8 @@ export const bpaService = {
 
     // Function to add a line with deduplication
     const addLine = (line: LinhaBpaNormalizada) => {
-      const comboKey = `${line.paciente_id}_${line.data}_${line.codigo_sigtap}_${line.cid}`;
+      // CORREÇÃO: Incluir profissional_id no comboKey para não apagar produção válida de profissionais diferentes no mesmo dia/paciente
+      const comboKey = `${line.paciente_id}_${line.data}_${line.codigo_sigtap}_${line.cid}_${line.profissional_id}`;
       if (usedCombinations.has(comboKey)) return;
       usedCombinations.add(comboKey);
       result.push(line);
@@ -173,20 +220,17 @@ export const bpaService = {
       let fonteProc: 'prontuario' | 'paciente' | 'pts' | 'triagem' = 'prontuario';
 
       if (!sigtap) {
-        // Try patient persistent (linkedProcs table first)
         if (linkedProcs && linkedProcs.length > 0) {
           sigtap = linkedProcs[0].sigtap_codigo;
           procNome = linkedProcs[0].procedimento_nome || 'Procedimento Vinculado';
           fonteProc = 'paciente';
         } else {
-          // Try patient persistent (custom_data)
           const pacCd = pac?.custom_data || {};
           if (pacCd.sigtap_codigo) {
             sigtap = pacCd.sigtap_codigo;
             procNome = pacCd.procedimento_nome || 'Procedimento do Paciente';
             fonteProc = 'paciente';
           } else if (pts && pts.procs.length > 0) {
-            // Try PTS
             sigtap = pts.procs[0].procedimento_codigo;
             procNome = pts.procs[0].procedimento_nome;
             fonteProc = 'pts';
@@ -194,45 +238,48 @@ export const bpaService = {
         }
       }
 
-      // RESOLVE CID
-      let cid = (v.cids_selecionados && v.cids_selecionados[0]) || '';
-      let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'prontuario' : 'vazio';
+      // RESOLVE CID(s)
+      // CORREÇÃO: Se houver múltiplos CIDs selecionados, gerar múltiplas linhas BPA
+      const cidsToProcess = (v.cids_selecionados && v.cids_selecionados.length > 0) 
+        ? v.cids_selecionados 
+        : ['']; // Se não houver CID selecionado, processa uma vez com vazio para tentar as outras fontes
 
-      if (!cid) {
-        // Try patient persistent (linkedProcs table)
-        if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
-          cid = linkedProcs[0].cid;
-          fonteCid = 'paciente';
-        } else if (pac?.cid) {
-          // Try patient persistent (main cid field)
-          cid = pac.cid;
-          fonteCid = 'paciente';
-        } else if (pts && pts.cids.length > 0) {
-          // Try PTS
-          cid = pts.cids[0];
-          fonteCid = 'pts';
+      cidsToProcess.forEach((cidItem: string) => {
+        let cid = cidItem;
+        let fonteCid: 'prontuario' | 'paciente' | 'pts' | 'vazio' = cid ? 'prontuario' : 'vazio';
+
+        if (!cid) {
+          if (linkedProcs && linkedProcs.length > 0 && linkedProcs[0].cid) {
+            cid = linkedProcs[0].cid;
+            fonteCid = 'paciente';
+          } else if (pac?.cid) {
+            cid = pac.cid;
+            fonteCid = 'paciente';
+          } else if (pts && pts.cids.length > 0) {
+            cid = pts.cids[0];
+            fonteCid = 'pts';
+          }
         }
-      }
 
-
-      addLine({
-        key: `pron_${pront.id}_${v.procedimento_id}`,
-        origem: 'prontuario',
-        fonte_procedimento: fonteProc,
-        fonte_cid: fonteCid,
-        prontuario_id: pront.id,
-        paciente_id: pront.paciente_id,
-        paciente_nome: pront.paciente_nome,
-        profissional_id: pront.profissional_id,
-        profissional_nome: pront.profissional_nome,
-        unidade_id: pront.unidade_id,
-        data: pront.data_atendimento,
-        procedimento_nome: procNome,
-        codigo_sigtap: sigtap,
-        cid: cid,
-        carater: '01',
-        qtd: v.quantidade || 1,
-        status_bpa: 'ok',
+        addLine({
+          key: `pron_${pront.id}_${v.procedimento_id}_${cid}`,
+          origem: 'prontuario',
+          fonte_procedimento: fonteProc,
+          fonte_cid: fonteCid,
+          prontuario_id: pront.id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id,
+          profissional_nome: pront.profissional_nome,
+          unidade_id: pront.unidade_id,
+          data: pront.data_atendimento,
+          procedimento_nome: procNome,
+          codigo_sigtap: sigtap,
+          cid: cid,
+          carater: '01',
+          qtd: v.quantidade || 1,
+          status_bpa: 'ok',
+        });
       });
     });
 
