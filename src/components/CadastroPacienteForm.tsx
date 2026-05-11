@@ -206,14 +206,16 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
   useEffect(() => {
     if (firstRunRef.current) { firstRunRef.current = false; return; }
     if (!isEdit) return; // Só autosave em edição
+    
     setAutoSaveStatus("saving");
     const t = setTimeout(() => {
+      onSave(); // Tenta salvar de fato se estiver em modo edição
       setAutoSaveStatus("saved");
       const t2 = setTimeout(() => setAutoSaveStatus("idle"), 1500);
       return () => clearTimeout(t2);
     }, 1500);
     return () => clearTimeout(t);
-  }, [form, isEdit]);
+  }, [form, isEdit, onSave]);
 
   // ---- ViaCEP ----
   const handleCepBlur = async () => {
@@ -332,6 +334,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Input
                     value={form.nome}
                     onChange={(e) => set("nome", sanitizeUpper(e.target.value))}
+                    onBlur={() => isEdit && onSave()}
                     placeholder="NOME DO PACIENTE"
                   />
                   {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
@@ -476,13 +479,15 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   value={cd.tipoLogradouro || ""}
                   codigo={cd.tipoLogradouroCodigo || ""}
                   onChange={(descricao, codigo) => {
+                    const update = {
+                      ...(form.customData || {}),
+                      tipoLogradouro: descricao,
+                      tipoLogradouroCodigo: codigo,
+                      tipoLogradouroDne: descricao, // Redundância para garantir persistência
+                    };
                     onChange({
                       ...form,
-                      customData: {
-                        ...(form.customData || {}),
-                        tipoLogradouro: descricao,
-                        tipoLogradouroCodigo: codigo,
-                      },
+                      customData: update,
                     });
                   }}
                   required
@@ -633,10 +638,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                   <Select
                     value={cd.racaCor || cd.raca_cor || ""}
                     onValueChange={(v) => {
-                      // Persistir em ambas as chaves para compat com BPA
+                      // Persistir em todas as chaves possíveis para compatibilidade total
                       onChange({
                         ...form,
-                        customData: { ...(form.customData || {}), racaCor: v, raca_cor: v },
+                        customData: { 
+                          ...(form.customData || {}), 
+                          racaCor: v, 
+                          raca_cor: v 
+                        },
                       });
                     }}
                   >
