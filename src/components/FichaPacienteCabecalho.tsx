@@ -457,12 +457,14 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
           </div>
         ) : (
           /* ── EDIT MODE ── */
-          <div className="space-y-4">
+          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-1">
             {/* Identificação */}
-            <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Identificação</p>
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <User className="w-3 h-3" /> Identificação
+              </p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div className="col-span-2 sm:col-span-1">
+                <div className="col-span-2">
                   <Label className="text-xs font-medium text-muted-foreground">Nome completo <span className="text-destructive">*</span></Label>
                   <Input
                     value={editData.nome}
@@ -478,10 +480,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">Data de nascimento</Label>
                   <Input type="date" value={editData.data_nascimento} onChange={e => setEditData(d => ({ ...d, data_nascimento: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">Idade <Lock className="w-3 h-3" /></Label>
-                  <Input value={calcularIdade(editData.data_nascimento)} disabled className="opacity-50 mt-1" />
                 </div>
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">CPF</Label>
@@ -503,12 +501,162 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                   />
                   {errors.cns && <p className="text-xs text-destructive mt-0.5">{errors.cns}</p>}
                 </div>
+              </div>
+            </div>
+
+            {/* Contato */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <Phone className="w-3 h-3" /> Contato
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Telefone Principal</Label>
+                  <Input
+                    value={editData.telefone}
+                    onChange={e => { setEditData(d => ({ ...d, telefone: e.target.value })); setErrors(er => ({ ...er, telefone: "" })); }}
+                    placeholder="(00) 00000-0000"
+                    className={`mt-1 ${errors.telefone ? "border-destructive" : ""}`}
+                  />
+                  {errors.telefone && <p className="text-xs text-destructive mt-0.5">{errors.telefone}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Telefone Secundário</Label>
+                  <Input
+                    value={editData.telefone_secundario}
+                    onChange={e => setEditData(d => ({ ...d, telefone_secundario: e.target.value }))}
+                    placeholder="(00) 00000-0000"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">E-mail</Label>
+                  <Input
+                    type="email"
+                    value={editData.email}
+                    onChange={e => { setEditData(d => ({ ...d, email: e.target.value })); setErrors(er => ({ ...er, email: "" })); }}
+                    placeholder="paciente@email.com"
+                    className={`mt-1 ${errors.email ? "border-destructive" : ""}`}
+                  />
+                </div>
+                <div className="col-span-2 grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground">Contato Emergência (Nome)</Label>
+                    <Input
+                      value={editData.contato_emergencia_nome}
+                      onChange={e => setEditData(d => ({ ...d, contato_emergencia_nome: e.target.value }))}
+                      placeholder="Nome"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-medium text-muted-foreground">Contato Emergência (Tel)</Label>
+                    <Input
+                      value={editData.contato_emergencia_telefone}
+                      onChange={e => setEditData(d => ({ ...d, contato_emergencia_telefone: e.target.value }))}
+                      placeholder="Telefone"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Endereço */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <MapPin className="w-3 h-3" /> Endereço
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Endereço Completo</Label>
+                  <Input
+                    value={editData.endereco}
+                    onChange={e => setEditData(d => ({ ...d, endereco: e.target.value }))}
+                    placeholder="Rua, número, complemento"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Bairro</Label>
+                  <Input
+                    value={editData.bairro}
+                    onChange={e => setEditData(d => ({ ...d, bairro: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">CEP</Label>
+                  <Input
+                    value={editData.cep}
+                    onChange={e => setEditData(d => ({ ...d, cep: e.target.value }))}
+                    placeholder="00000-000"
+                    className="mt-1"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">Município</Label>
+                  <Input
+                    value={editData.municipio}
+                    onChange={e => setEditData(d => ({ ...d, municipio: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Complementares */}
+            <div className="space-y-3 pt-3 border-t border-border/40">
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2 border-b border-primary/20 pb-1 flex items-center gap-1.5">
+                <Users className="w-3 h-3" /> Complementares
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 <div className="col-span-2">
                   <Label className="text-xs font-medium text-muted-foreground">Nome da mãe</Label>
                   <Input value={editData.nome_mae} onChange={e => setEditData(d => ({ ...d, nome_mae: e.target.value }))} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-xs font-medium text-muted-foreground">CID-10</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">Raça/Cor (IBGE)</Label>
+                  <Select value={editData.raca_cor} onValueChange={v => setEditData(d => ({ ...d, raca_cor: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="branca">Branca</SelectItem>
+                      <SelectItem value="preta">Preta</SelectItem>
+                      <SelectItem value="parda">Parda</SelectItem>
+                      <SelectItem value="amarela">Amarela</SelectItem>
+                      <SelectItem value="indigena">Indígena</SelectItem>
+                      <SelectItem value="nao_declarado">Não declarado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Nacionalidade</Label>
+                  <Select value={editData.nacionalidade} onValueChange={v => setEditData(d => ({ ...d, nacionalidade: v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="brasileiro">Brasileiro(a)</SelectItem>
+                      <SelectItem value="naturalizado">Naturalizado(a)</SelectItem>
+                      <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {editData.raca_cor === "indigena" && (
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium text-muted-foreground">Etnia</Label>
+                    <Input value={editData.etnia} onChange={e => setEditData(d => ({ ...d, etnia: e.target.value }))} className="mt-1" placeholder="Código ou nome" />
+                  </div>
+                )}
+
+                {editData.nacionalidade === "estrangeiro" && (
+                  <div className="col-span-2">
+                    <Label className="text-xs font-medium text-muted-foreground">País de Nascimento</Label>
+                    <Input value={editData.paisNascimento} onChange={e => setEditData(d => ({ ...d, paisNascimento: e.target.value }))} className="mt-1" />
+                  </div>
+                )}
+
+                <div className="col-span-2">
+                  <Label className="text-xs font-medium text-muted-foreground">CID-10 Principal</Label>
                   <Popover open={cidOpen} onOpenChange={setCidOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="w-full justify-start text-left font-normal h-10 text-sm mt-1">
@@ -538,7 +686,33 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div>
+
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_gestante"
+                    checked={editData.is_gestante}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_gestante: !!v }))}
+                  />
+                  <Label htmlFor="is_gestante" className="text-xs cursor-pointer">Gestante</Label>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_pne"
+                    checked={editData.is_pne}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_pne: !!v }))}
+                  />
+                  <Label htmlFor="is_pne" className="text-xs cursor-pointer">PNE</Label>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex items-center gap-2 pt-2">
+                  <Checkbox
+                    id="is_artista"
+                    checked={editData.is_artista}
+                    onCheckedChange={v => setEditData(d => ({ ...d, is_artista: !!v }))}
+                  />
+                  <Label htmlFor="is_artista" className="text-xs cursor-pointer">Autista</Label>
+                </div>
+
+                <div className="col-span-2 pt-4 border-t border-border/40">
                   <Label className="text-xs font-medium text-muted-foreground">Profissional responsável</Label>
                   <Select value={editData.profissionalId} onValueChange={v => setEditData(d => ({ ...d, profissionalId: v }))}>
                     <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
@@ -548,71 +722,6 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Contato e Endereço */}
-            <div className="pt-3 border-t border-border/40">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Contato e Endereço</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Telefone</Label>
-                  <Input
-                    value={editData.telefone}
-                    onChange={e => { setEditData(d => ({ ...d, telefone: e.target.value })); setErrors(er => ({ ...er, telefone: "" })); }}
-                    placeholder="(00) 00000-0000"
-                    className={`mt-1 ${errors.telefone ? "border-destructive" : ""}`}
-                  />
-                  {errors.telefone && <p className="text-xs text-destructive mt-0.5">{errors.telefone}</p>}
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">E-mail</Label>
-                  <Input
-                    type="email"
-                    value={editData.email}
-                    onChange={e => { setEditData(d => ({ ...d, email: e.target.value })); setErrors(er => ({ ...er, email: "" })); }}
-                    placeholder="paciente@email.com"
-                    className={`mt-1 ${errors.email ? "border-destructive" : ""}`}
-                  />
-                  {errors.email && <p className="text-xs text-destructive mt-0.5">{errors.email}</p>}
-                </div>
-                <div className="col-span-2">
-                  <Label className="text-xs font-medium text-muted-foreground">Endereço completo</Label>
-                  <Input
-                    value={editData.endereco}
-                    onChange={e => setEditData(d => ({ ...d, endereco: e.target.value }))}
-                    placeholder="Rua, número, bairro, cidade — UF"
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Contato de Emergência */}
-            <div className="pt-3 border-t border-border/40">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Contato de Emergência
-              </p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Nome</Label>
-                  <Input
-                    value={editData.contato_emergencia_nome}
-                    onChange={e => setEditData(d => ({ ...d, contato_emergencia_nome: e.target.value }))}
-                    placeholder="Nome do contato"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground">Telefone</Label>
-                  <Input
-                    value={editData.contato_emergencia_telefone}
-                    onChange={e => { setEditData(d => ({ ...d, contato_emergencia_telefone: e.target.value })); setErrors(er => ({ ...er, contato_emergencia_telefone: "" })); }}
-                    placeholder="(00) 00000-0000"
-                    className={`mt-1 ${errors.contato_emergencia_telefone ? "border-destructive" : ""}`}
-                  />
-                  {errors.contato_emergencia_telefone && <p className="text-xs text-destructive mt-0.5">{errors.contato_emergencia_telefone}</p>}
                 </div>
               </div>
             </div>
