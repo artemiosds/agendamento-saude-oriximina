@@ -646,19 +646,37 @@ const ProntuarioPage: React.FC = () => {
     }
   };
 
-  const loadProntuarioProcedimentos = async (prontuarioId: string) => {
-    const { data } = await (supabase as any)
+  const loadProntuarioProcedimentos = async (prontuarioId: string, patientId?: string) => {
+    // 1. Load procedures specific to THIS prontuario (current visit)
+    const { data: prontuarioProcs } = await (supabase as any)
       .from("prontuario_procedimentos")
       .select("procedimento_id, cids_selecionados, quantidade, observacao")
       .eq("prontuario_id", prontuarioId);
     
-    if (data && data.length > 0) {
+    // 2. Load persistent procedures for this patient (global history)
+    let persistentProcs: any[] = [];
+    if (patientId) {
+      const { data } = await (supabase as any)
+        .from("paciente_procedimentos_persistentes")
+        .select("procedimento_id, cids_selecionados, quantidade, observacao")
+        .eq("paciente_id", patientId);
+      persistentProcs = data || [];
+    }
+
+    // Merge both, with current prontuario procedures taking precedence
+    const combinedData = [...(prontuarioProcs || [])];
+    (persistentProcs || []).forEach(p => {
+      if (!combinedData.some(cp => cp.procedimento_id === p.procedimento_id)) {
+        combinedData.push(p);
+      }
+    });
+    
+    if (combinedData.length > 0) {
       const ids: string[] = [];
       const cidsMap: Record<string, string[]> = {};
       const detailsMap: Record<string, { quantidade: number; observacao: string }> = {};
       
-      data.forEach((d: any) => {
-        // Find the procedure by its UUID (database id)
+      combinedData.forEach((d: any) => {
         const proc = procedimentos.find(p => p.uuid === d.procedimento_id);
         const displayId = proc ? proc.id : d.procedimento_id;
         
