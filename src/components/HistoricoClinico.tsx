@@ -115,7 +115,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
         supabase
           .from("prontuarios")
           .select(
-            "id,data_atendimento,hora_atendimento,profissional_nome,profissional_id,queixa_principal,evolucao,conduta,indicacao_retorno,procedimentos_texto,outro_procedimento,unidade_id,episodio_id",
+            "id,data_atendimento,hora_atendimento,profissional_nome,profissional_id,queixa_principal,evolucao,conduta,indicacao_retorno,procedimentos_texto,outro_procedimento,unidade_id,episodio_id,anamnese,sinais_sintomas,exame_fisico,hipotese,prescricao,solicitacao_exames,observacoes",
           )
           .eq("paciente_id", pacienteId)
           .order("data_atendimento", { ascending: false }),
@@ -509,7 +509,31 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                 {item.queixa_principal && (
                                   <div>
                                     <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Queixa Principal</span>
-                                    <p className="text-foreground leading-relaxed">{item.queixa_principal}</p>
+                                    <p className="text-foreground leading-relaxed">{(item as any).queixa_principal}</p>
+                                  </div>
+                                )}
+                                {(item as any).anamnese && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Anamnese</span>
+                                    <p className="text-foreground leading-relaxed whitespace-pre-wrap">{(item as any).anamnese}</p>
+                                  </div>
+                                )}
+                                {(item as any).sinais_sintomas && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Sinais e Sintomas</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).sinais_sintomas}</p>
+                                  </div>
+                                )}
+                                {(item as any).exame_fisico && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Exame Físico</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).exame_fisico}</p>
+                                  </div>
+                                )}
+                                {(item as any).hipotese && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Hipótese Diagnóstica</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).hipotese}</p>
                                   </div>
                                 )}
                                 {item.evolucao && (
@@ -522,6 +546,24 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                   <div>
                                     <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Conduta</span>
                                     <p className="text-foreground leading-relaxed">{item.conduta}</p>
+                                  </div>
+                                )}
+                                {(item as any).prescricao && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Prescrição</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).prescricao}</p>
+                                  </div>
+                                )}
+                                {(item as any).solicitacao_exames && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Solicitação de Exames</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).solicitacao_exames}</p>
+                                  </div>
+                                )}
+                                {(item as any).observacoes && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Observações</span>
+                                    <p className="text-foreground leading-relaxed">{(item as any).observacoes}</p>
                                   </div>
                                 )}
                                 {!isOwn && <p className="text-[10px] text-orange-600 italic mt-2">Prontuário de outro profissional (somente leitura)</p>}
@@ -617,10 +659,17 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               <Separator className="my-4" />
               <div className="space-y-4 text-sm">
                 {viewerItem.queixa_principal && <Section label="Queixa principal" value={viewerItem.queixa_principal} />}
+                {(viewerItem as any).anamnese && <Section label="Anamnese" value={(viewerItem as any).anamnese} />}
+                {(viewerItem as any).sinais_sintomas && <Section label="Sinais e Sintomas" value={(viewerItem as any).sinais_sintomas} />}
+                {(viewerItem as any).exame_fisico && <Section label="Exame Físico" value={(viewerItem as any).exame_fisico} />}
+                {(viewerItem as any).hipotese && <Section label="Hipótese Diagnóstica" value={(viewerItem as any).hipotese} />}
                 {viewerItem.evolucao && <Section label="Evolução / SOAP" value={viewerItem.evolucao} />}
                 {viewerItem.conduta && <Section label="Conduta" value={viewerItem.conduta} />}
+                {(viewerItem as any).prescricao && <Section label="Prescrição" value={(viewerItem as any).prescricao} />}
+                {(viewerItem as any).solicitacao_exames && <Section label="Solicitação de Exames" value={(viewerItem as any).solicitacao_exames} />}
                 {viewerItem.procedimentos_texto && <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />}
                 {viewerItem.indicacao_retorno && <Section label="Retorno" value={viewerItem.indicacao_retorno} />}
+                {(viewerItem as any).observacoes && <Section label="Observações" value={(viewerItem as any).observacoes} />}
               </div>
               <Separator className="my-4" />
               <div className="flex flex-wrap justify-end gap-2">
