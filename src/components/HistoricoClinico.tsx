@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History, MoreVertical, Printer, Download, Link2, FileDown, MapPin, Phone, Users, User, Mail, AlertCircle, CreditCard, Stethoscope } from "lucide-react";
+import { Loader2, FileText, ChevronDown, ChevronUp, Activity, AlertTriangle, RefreshCw, Eye, FileSignature, History, MoreVertical, Printer, Download, Link2, FileDown, MapPin, Phone, Users, User, Mail, AlertCircle, CreditCard, Stethoscope, Send, Inbox, Paperclip } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -14,9 +14,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import HistoricoCompletoModal from "@/components/HistoricoCompletoModal";
 import GerarDocumentoModal from "@/components/GerarDocumentoModal";
+import DocumentosHistorico from "@/components/DocumentosHistorico";
+import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import { buildInstitutionalCSS } from "@/lib/printLayout";
 import { formatCNS } from "@/lib/cnsUtils";
 
@@ -64,12 +75,14 @@ function safeData<T>(result: { data: T | null; error: any }, context: string): T
 }
 
 function formatDateBR(isoDate: string): string {
+  if (!isoDate) return "—";
   return new Date(`${isoDate}T12:00:00`).toLocaleDateString("pt-BR");
 }
 
 export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, currentProfissionalId, unidades }) => {
   const [prontuarios, setProntuarios] = useState<ProntuarioItem[]>([]);
   const [episodios, setEpisodios] = useState<EpisodioItem[]>([]);
+  const [encaminhamentosEnviados, setEncaminhamentosEnviados] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -96,7 +109,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
       const [
         { data: pData, error: pError }, 
         { data: eData, error: eError },
-        { data: pacData, error: pacError }
+        { data: pacData, error: pacError },
+        { data: encData, error: encError }
       ] = await Promise.all([
         supabase
           .from("prontuarios")
@@ -114,7 +128,13 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
           .from("pacientes")
           .select("*")
           .eq("id", pacienteId)
-          .single()
+          .single(),
+        supabase
+          .from("documentos_gerados")
+          .select("*")
+          .eq("paciente_id", pacienteId)
+          .ilike("tipo_documento", "%encaminhamento%")
+          .order("created_at", { ascending: false })
       ]);
 
       if (cancelledRef.current) return;
@@ -122,10 +142,12 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
       if (pError) throw pError;
       if (eError) throw eError;
       if (pacError) throw pacError;
+      if (encError) throw encError;
 
       setProntuarios(pData || []);
       setEpisodios(eData || []);
       setPacienteData(pacData);
+      setEncaminhamentosEnviados(encData || []);
     } catch (err) {
       console.error("[Historico] Erro inesperado:", err);
       if (!cancelledRef.current) {
@@ -222,7 +244,6 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   };
 
   const handleDownloadPDF = (item: ProntuarioItem & { unidadeNome?: string }) => {
-    // Browser print → "Save as PDF" — uses same institutional layout
     handlePrint(item);
     toast.info("Use 'Salvar como PDF' na janela de impressão");
   };
@@ -250,7 +271,7 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   return (
     <div className="space-y-6">
-      {/* Dados Cadastrais do Paciente (Prontuário) */}
+      {/* Dados Cadastrais do Paciente */}
       {pacienteData && (
         <Card className="border-border/60 shadow-sm overflow-hidden bg-card">
           <div className="bg-muted/40 px-4 py-2.5 border-b border-border/40 flex items-center justify-between">
@@ -263,7 +284,6 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
             </Badge>
           </div>
           <CardContent className="p-4 space-y-5">
-            {/* Seção 1: Identificação */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
                 <User className="w-3 h-3 text-primary" />
@@ -271,13 +291,12 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <DataField label="Nome" value={pacienteData.nome} />
-                <DataField label="Data Nasc." value={pacienteData.data_nascimento ? new Date(pacienteData.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"} />
+                <DataField label="Data Nasc." value={formatDateBR(pacienteData.data_nascimento)} />
                 <DataField label="CPF" value={pacienteData.cpf} mono />
                 <DataField label="CNS" value={formatCNS(pacienteData.cns)} mono />
               </div>
             </div>
 
-            {/* Seção 2: Endereço */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
                 <MapPin className="w-3 h-3 text-primary" />
@@ -293,7 +312,6 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               </div>
             </div>
 
-            {/* Seção 3: Contato */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
                 <Phone className="w-3 h-3 text-primary" />
@@ -312,7 +330,6 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
               </div>
             </div>
 
-            {/* Seção 4: Complementares */}
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 border-b border-border/40 pb-1 mb-2">
                 <Activity className="w-3 h-3 text-primary" />
@@ -336,227 +353,250 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
       <Separator />
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
-        </h3>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
-            <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
-            <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
-          </Button>
-        </div>
-      </div>
+      <Tabs defaultValue="atendimentos" className="w-full">
+        <TabsList className="grid grid-cols-4 w-full h-auto p-1 bg-muted/50 rounded-lg">
+          <TabsTrigger value="atendimentos" className="gap-2 py-2">
+            <History className="w-4 h-4" /> Atendimentos
+          </TabsTrigger>
+          <TabsTrigger value="encaminhamentos" className="gap-2 py-2">
+            <Send className="w-4 h-4" /> Encaminhamentos
+          </TabsTrigger>
+          <TabsTrigger value="documentos" className="gap-2 py-2">
+            <FileText className="w-4 h-4" /> Doc. Gerados
+          </TabsTrigger>
+          <TabsTrigger value="anexos" className="gap-2 py-2">
+            <Paperclip className="w-4 h-4" /> Doc. Anexados
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Tratamentos ativos */}
-      {activeEpisodios.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" /> Tratamentos Ativos
-          </h3>
-          {activeEpisodios.map((ep) => {
-            const sessoes = prontuarios.filter((p) => p.episodio_id === ep.id).length;
-            return (
-              <Card key={ep.id} className="border-primary/20 bg-primary/5">
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm text-foreground">{ep.titulo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {ep.profissional_nome} • Início:{" "}
-                        {new Date(ep.data_inicio + "T12:00:00").toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {sessoes} sessão(ões)
-                    </Badge>
-                  </div>
-                  {ep.descricao && <p className="text-xs text-muted-foreground mt-1">{ep.descricao}</p>}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Timeline */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <FileText className="w-4 h-4 text-muted-foreground" /> Linha do Tempo ({timeline.length} registro(s))
-        </h3>
-        {timeline.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-6 gap-2">
-            <FileText className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground text-center">Nenhum atendimento registrado.</p>
+        <TabsContent value="atendimentos" className="space-y-6 pt-4 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" /> Histórico Clínico
+            </h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setHistoricoOpen(true)} className="h-8">
+                <History className="w-3.5 h-3.5 mr-1" /> Histórico completo
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setDocModalOpen(true)} className="h-8">
+                <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
+              </Button>
+            </div>
           </div>
-        ) : (
-          <ScrollArea className="max-h-[400px]">
-            <div className="relative pl-6 space-y-3">
-              <div className="absolute left-2 top-2 bottom-2 w-px bg-border" aria-hidden="true" />
-              {timeline.map((item) => {
-                const isOwn = item.profissional_id === currentProfissionalId;
-                const expanded = expandedId === item.id;
+
+          {activeEpisodios.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Activity className="w-3.5 h-3.5 text-primary" /> Tratamentos Ativos
+              </h3>
+              {activeEpisodios.map((ep) => {
+                const sessoes = prontuarios.filter((p) => p.episodio_id === ep.id).length;
                 return (
-                  <div key={item.id} className="relative">
-                    <div className="absolute -left-4 top-2 w-3 h-3 rounded-full bg-primary border-2 border-background" />
-                    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <time className="text-xs font-bold text-primary" dateTime={item.data_atendimento}>
-                                {formatDateBR(item.data_atendimento)}
-                              </time>
-                              {item.hora_atendimento && (
-                                <span className="text-xs text-muted-foreground">{item.hora_atendimento}</span>
-                              )}
-                              {item.episodioTitulo && (
-                                <Badge variant="outline" className="text-[10px]">
-                                  {item.episodioTitulo}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-foreground mt-0.5">
-                              {item.profissional_nome}
-                              {isOwn && <span className="text-xs text-primary ml-1">(você)</span>}
-                            </p>
-                            {item.unidadeNome && <p className="text-xs text-muted-foreground">{item.unidadeNome}</p>}
-                            {item.procedimentos_texto && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                <strong>Procedimentos:</strong> {item.procedimentos_texto}
-                              </p>
-                            )}
-                            {item.queixa_principal && !expanded && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                QP: {item.queixa_principal}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => setViewerItem(item)}
-                              aria-label="Visualizar prontuário"
-                              title="Visualizar"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-primary" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => setHistoricoOpen(true)}
-                              aria-label="Histórico do paciente"
-                              title="Histórico do paciente"
-                            >
-                              <History className="w-3.5 h-3.5 text-primary" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0"
-                              onClick={() => handleDownloadPDF(item)}
-                              aria-label="Baixar PDF"
-                              title="Baixar PDF"
-                            >
-                              <FileDown className="w-3.5 h-3.5 text-primary" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0"
-                                  aria-label="Mais ações"
-                                  title="Mais ações"
-                                >
-                                  <MoreVertical className="w-3.5 h-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuItem onClick={() => handlePrint(item)}>
-                                  <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExportJSON(item)}>
-                                  <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleCopyLink(item)}>
-                                  <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => { setViewerItem(item); setTimeout(() => setDocModalOpen(true), 100); }}>
-                                  <FileSignature className="w-3.5 h-3.5 mr-2" /> Gerar documento
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            {item.queixa_principal && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0"
-                                onClick={() => setExpandedId(expanded ? null : item.id)}
-                                aria-label={expanded ? "Recolher" : "Expandir"}
-                                aria-expanded={expanded}
-                              >
-                                {expanded ? (
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                )}
-                              </Button>
-                            )}
-                          </div>
+                  <Card key={ep.id} className="border-primary/20 bg-primary/5 shadow-none">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-sm text-foreground">{ep.titulo}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ep.profissional_nome} • Início: {formatDateBR(ep.data_inicio)}
+                          </p>
                         </div>
-                        {expanded && (
-                          <div className="mt-2 space-y-1 text-xs border-t pt-2">
-                            {item.queixa_principal && (
-                              <p>
-                                <strong>Queixa:</strong> {item.queixa_principal}
-                              </p>
-                            )}
-                            {item.evolucao && (
-                              <p>
-                                <strong>Evolução:</strong> {item.evolucao}
-                              </p>
-                            )}
-                            {item.conduta && (
-                              <p>
-                                <strong>Conduta:</strong> {item.conduta}
-                              </p>
-                            )}
-                            {item.outro_procedimento && (
-                              <p>
-                                <strong>Outro procedimento:</strong> {item.outro_procedimento}
-                              </p>
-                            )}
-                            {item.indicacao_retorno && (
-                              <p>
-                                <strong>Retorno:</strong> {item.indicacao_retorno}
-                              </p>
-                            )}
-                            {!isOwn && (
-                              <p className="text-warning italic mt-1">
-                                Prontuário de outro profissional (somente leitura)
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {sessoes} sessão(ões)
+                        </Badge>
+                      </div>
+                      {ep.descricao && <p className="text-xs text-muted-foreground mt-1">{ep.descricao}</p>}
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
-          </ScrollArea>
-        )}
-      </div>
+          )}
 
-      {/* Drawer de visualização rápida */}
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5" /> Linha do Tempo ({timeline.length} registro(s))
+            </h3>
+            {timeline.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 border rounded-lg bg-muted/10 border-dashed">
+                <FileText className="w-8 h-8 text-muted-foreground/40 mb-2" />
+                <p className="text-sm text-muted-foreground">Nenhum atendimento registrado.</p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[600px] pr-4">
+                <div className="relative pl-6 space-y-3">
+                  <div className="absolute left-2 top-2 bottom-2 w-px bg-border" aria-hidden="true" />
+                  {timeline.map((item) => {
+                    const isOwn = item.profissional_id === currentProfissionalId;
+                    const expanded = expandedId === item.id;
+                    return (
+                      <div key={item.id} className="relative">
+                        <div className="absolute -left-4 top-2 w-3 h-3 rounded-full bg-primary border-2 border-background" />
+                        <Card className="border shadow-sm hover:shadow-md transition-shadow">
+                          <CardContent className="p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <time className="text-xs font-bold text-primary">
+                                    {formatDateBR(item.data_atendimento)}
+                                  </time>
+                                  {item.hora_atendimento && (
+                                    <span className="text-[10px] text-muted-foreground">{item.hora_atendimento}</span>
+                                  )}
+                                  {item.episodioTitulo && (
+                                    <Badge variant="secondary" className="text-[9px] h-4 py-0">
+                                      {item.episodioTitulo}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {item.profissional_nome}
+                                  {isOwn && <span className="text-xs text-primary ml-1">(você)</span>}
+                                </p>
+                                {item.unidadeNome && <p className="text-[11px] text-muted-foreground">{item.unidadeNome}</p>}
+                                
+                                {item.procedimentos_texto && (
+                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                    <Stethoscope className="w-3 h-3 text-primary/70" />
+                                    <p className="text-[11px] text-muted-foreground font-medium">
+                                      {item.procedimentos_texto}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setViewerItem(item)} title="Visualizar">
+                                  <Eye className="w-3.5 h-3.5 text-primary" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownloadPDF(item)} title="Baixar PDF">
+                                  <FileDown className="w-3.5 h-3.5 text-primary" />
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
+                                      <MoreVertical className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem onClick={() => handlePrint(item)}>
+                                      <Printer className="w-3.5 h-3.5 mr-2" /> Imprimir
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExportJSON(item)}>
+                                      <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleCopyLink(item)}>
+                                      <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => { setViewerItem(item); setTimeout(() => setDocModalOpen(true), 100); }}>
+                                      <FileSignature className="w-3.5 h-3.5 mr-2" /> Gerar documento
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                                {item.queixa_principal && (
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setExpandedId(expanded ? null : item.id)}>
+                                    {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            {expanded && (
+                              <div className="mt-3 space-y-2 text-[11px] border-t pt-3 animate-in slide-in-from-top-1">
+                                {item.queixa_principal && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Queixa Principal</span>
+                                    <p className="text-foreground leading-relaxed">{item.queixa_principal}</p>
+                                  </div>
+                                )}
+                                {item.evolucao && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Evolução / SOAP</span>
+                                    <p className="text-foreground leading-relaxed whitespace-pre-wrap">{item.evolucao}</p>
+                                  </div>
+                                )}
+                                {item.conduta && (
+                                  <div>
+                                    <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Conduta</span>
+                                    <p className="text-foreground leading-relaxed">{item.conduta}</p>
+                                  </div>
+                                )}
+                                {!isOwn && <p className="text-[10px] text-orange-600 italic mt-2">Prontuário de outro profissional (somente leitura)</p>}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="encaminhamentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
+           <div className="flex items-center gap-2 mb-2">
+             <Send className="w-4 h-4 text-primary" />
+             <h3 className="text-sm font-semibold">Histórico de Encaminhamentos</h3>
+           </div>
+           {encaminhamentosEnviados.length === 0 ? (
+             <div className="text-center py-10 border border-dashed rounded-lg bg-muted/10">
+               <Send className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+               <p className="text-sm text-muted-foreground">Nenhum encaminhamento encontrado.</p>
+             </div>
+           ) : (
+             <div className="border rounded-lg overflow-hidden bg-card">
+               <Table className="w-full text-xs">
+                 <TableHeader className="bg-muted/50">
+                   <TableRow>
+                     <TableHead className="p-2 font-medium">Data</TableHead>
+                     <TableHead className="p-2 font-medium">Profissional</TableHead>
+                     <TableHead className="p-2 font-medium">Especialidade</TableHead>
+                     <TableHead className="p-2 font-medium">Status</TableHead>
+                     <TableHead className="p-2 font-medium text-right">Ações</TableHead>
+                   </TableRow>
+                 </TableHeader>
+                 <TableBody>
+                   {encaminhamentosEnviados.map((enc: any) => (
+                     <TableRow key={enc.id} className="hover:bg-muted/30">
+                       <TableCell className="p-2 font-medium">{new Date(enc.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                       <TableCell className="p-2">{enc.profissional_nome}</TableCell>
+                       <TableCell className="p-2 capitalize">{enc.campos_formulario?.especialidade_destino || enc.campos_formulario?.especialidade || '-'}</TableCell>
+                       <TableCell className="p-2">
+                         <Badge variant="outline" className="text-[9px] h-4 py-0 font-mono">
+                           {enc.status}
+                         </Badge>
+                       </TableCell>
+                       <TableCell className="p-2 text-right">
+                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                            const body = enc.conteudo_html;
+                            const win = window.open("", "_blank");
+                            if (win) {
+                              win.document.write(body);
+                              win.document.close();
+                            }
+                         }}>
+                           <Eye className="w-3.5 h-3.5" />
+                         </Button>
+                       </TableCell>
+                     </TableRow>
+                   ))}
+                 </TableBody>
+               </Table>
+             </div>
+           )}
+        </TabsContent>
+
+        <TabsContent value="documentos" className="space-y-4 pt-4 animate-in fade-in duration-300">
+           <DocumentosHistorico pacienteId={pacienteId} pacienteNome={pacienteNome} />
+        </TabsContent>
+
+        <TabsContent value="anexos" className="space-y-4 pt-4 animate-in fade-in duration-300">
+           <PatientAttachmentManager pacienteId={pacienteId} />
+        </TabsContent>
+      </Tabs>
+
+      {/* View Modal */}
       <Sheet open={!!viewerItem} onOpenChange={(o) => !o && setViewerItem(null)}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
           {viewerItem && (
@@ -565,48 +605,24 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                 <SheetTitle className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary" />
                   Prontuário — {formatDateBR(viewerItem.data_atendimento)}
-                  {viewerItem.hora_atendimento && (
-                    <span className="text-sm text-muted-foreground font-normal">{viewerItem.hora_atendimento}</span>
-                  )}
                 </SheetTitle>
                 <SheetDescription>
-                  {viewerItem.profissional_nome}
-                  {viewerItem.profissional_id === currentProfissionalId && (
-                    <span className="text-primary ml-1">(você)</span>
-                  )}
+                  {viewerItem.profissional_nome} {viewerItem.profissional_id === currentProfissionalId && "(você)"}
                 </SheetDescription>
               </SheetHeader>
               <Separator className="my-4" />
               <div className="space-y-4 text-sm">
-                {viewerItem.queixa_principal && (
-                  <Section label="Queixa principal" value={viewerItem.queixa_principal} />
-                )}
+                {viewerItem.queixa_principal && <Section label="Queixa principal" value={viewerItem.queixa_principal} />}
                 {viewerItem.evolucao && <Section label="Evolução / SOAP" value={viewerItem.evolucao} />}
                 {viewerItem.conduta && <Section label="Conduta" value={viewerItem.conduta} />}
-                {viewerItem.procedimentos_texto && (
-                  <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />
-                )}
-                {viewerItem.outro_procedimento && (
-                  <Section label="Outro procedimento" value={viewerItem.outro_procedimento} />
-                )}
-                {viewerItem.indicacao_retorno && (
-                  <Section label="Indicação de retorno" value={viewerItem.indicacao_retorno} />
-                )}
+                {viewerItem.procedimentos_texto && <Section label="Procedimentos" value={viewerItem.procedimentos_texto} />}
+                {viewerItem.indicacao_retorno && <Section label="Retorno" value={viewerItem.indicacao_retorno} />}
               </div>
               <Separator className="my-4" />
               <div className="flex flex-wrap justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>
-                  Fechar
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handlePrint(viewerItem)}>
-                  <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(viewerItem)}>
-                  <FileDown className="w-3.5 h-3.5 mr-1" /> Baixar PDF
-                </Button>
-                <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}>
-                  <FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => setViewerItem(null)}>Fechar</Button>
+                <Button variant="outline" size="sm" onClick={() => handlePrint(viewerItem)}><Printer className="w-3.5 h-3.5 mr-1" /> Imprimir</Button>
+                <Button size="sm" onClick={() => { setViewerItem(null); setDocModalOpen(true); }}><FileSignature className="w-3.5 h-3.5 mr-1" /> Gerar documento</Button>
               </div>
             </>
           )}
