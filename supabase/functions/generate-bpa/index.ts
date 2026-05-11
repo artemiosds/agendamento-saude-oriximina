@@ -297,9 +297,25 @@ Deno.serve(async (req) => {
       const cnes = cnesOverride || cnesUni;
       if (!cnes) motivos.push('CNES ausente');
 
-      const sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
+      const pacCd = pac ? (pac.custom_data || {}) : {};
+      const pts = pac ? ptsMapByPatient.get(pac.id) : null;
+
+      let sigtap = proc ? onlyDigits(proc.codigo_sigtap || '') : '';
+      let sourceSigtap = proc ? 'prontuario' : '';
+
+      if (!sigtap && pac) {
+        if (pacCd.sigtap_codigo) {
+          sigtap = onlyDigits(pacCd.sigtap_codigo);
+          sourceSigtap = 'paciente';
+        } else if (pts && pts.procs.length > 0) {
+          sigtap = onlyDigits(pts.procs[0].procedimento_codigo);
+          sourceSigtap = 'pts';
+        }
+      }
+
       const exigeSigtap = !isMedico(cboDigits);
-      if (exigeSigtap && (!proc || sigtap.length !== 10)) motivos.push('SIGTAP obrigatório');
+      if (exigeSigtap && sigtap.length !== 10) motivos.push('SIGTAP obrigatório não encontrado no Prontuário, no Paciente ou no PTS');
+
 
       if (motivos.length > 0) {
         pendentes.push({ 
