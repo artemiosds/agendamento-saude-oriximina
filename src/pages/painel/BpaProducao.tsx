@@ -363,12 +363,13 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq','CNS Paciente','CPF Paciente','Nome','Dt.Nasc','Idade','Sexo','Munic.Residência',
-      'Dt.Atendimento','Procedimento','SIGTAP','QTD','CID','Car.Atend.','Num.Autorização',
-      'Raça/Cor','Etnia','Nacionalidade','CEP','Cód.Logradouro','Endereço','Número','Complemento','Bairro',
-      'Telefone','E-mail','CNES','CNS Profissional','Nome Profissional','CBO','Código INE',
-      'Competência','Folha','Unidade','Origem','Fonte Proc.','Fonte CID','Prontuário ID','Status Validação',
+      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência',
+      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'Car.Atend.', 'Num.Autorização',
+      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Cód.Logradouro', 'Endereço', 'Número', 'Complemento', 'Bairro',
+      'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
+      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID', 'Status Validação', 'Motivo Pendência'
     ];
+
     const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
       // Cálculo de idade
       let idade = '';
