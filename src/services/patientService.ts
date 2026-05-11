@@ -90,71 +90,65 @@ export const patientService = {
   },
 
   mapPacienteFormToDb(formData: any, oldPaciente: any = {}) {
+    const inputCustomData = formData.customData || formData.custom_data || {};
     const cd = oldPaciente.custom_data || {};
     
-    // Normalizar telefones
-    const telNormalizado = formData.telefone_principal || formData.telefone || "";
-    const telSecNormalizado = formData.telefone_secundario || cd.telefone_secundario || cd.telefoneSecundario || "";
+    const getValue = (key: string, fallback: any = undefined) => {
+      if (formData[key] !== undefined && formData[key] !== null) return formData[key];
+      if (inputCustomData[key] !== undefined && inputCustomData[key] !== null) return inputCustomData[key];
+      return fallback;
+    };
 
-    // Mapear campos para custom_data, garantindo que NADA seja perdido
+    const telNormalizado = getValue('telefone_principal') || getValue('telefone') || "";
+    const telSecNormalizado = getValue('telefone_secundario') || getValue('telefoneSecundario') || "";
+
     const updatedCustomData = {
       ...cd,
-      // Identificação
-      sexo: formData.sexo ?? cd.sexo ?? "",
-      raca_cor: formData.raca_cor ?? cd.raca_cor ?? cd.racaCor ?? "",
-      racaCor: formData.raca_cor ?? cd.racaCor ?? cd.raca_cor ?? "",
-      etnia: formData.etnia ?? cd.etnia ?? "",
-      etnia_outra: formData.etnia_outra ?? cd.etniaOutra ?? cd.etnia_outra ?? "",
-      etniaOutra: formData.etnia_outra ?? cd.etniaOutra ?? cd.etnia_outra ?? "",
-      nacionalidade: formData.nacionalidade ?? cd.nacionalidade ?? "brasileiro",
-      pais_nascimento: formData.pais_nascimento ?? cd.paisNascimento ?? cd.pais_nascimento ?? "",
-      paisNascimento: formData.pais_nascimento ?? cd.paisNascimento ?? cd.pais_nascimento ?? "",
-      
-      // Endereço Estruturado
-      tipo_logradouro_dne: formData.tipo_logradouro_dne ?? cd.tipoLogradouroDne ?? cd.tipo_logradouro_dne ?? cd.tipoLogradouro ?? "",
-      tipoLogradouroDne: formData.tipo_logradouro_dne ?? cd.tipoLogradouroDne ?? cd.tipo_logradouro_dne ?? cd.tipoLogradouro ?? "",
-      tipoLogradouroCodigo: formData.tipo_logradouro_codigo ?? cd.tipoLogradouroCodigo ?? "",
-      tipoLogradouro: formData.tipo_logradouro_dne ?? cd.tipoLogradouro ?? cd.tipoLogradouroDne ?? cd.tipo_logradouro_dne ?? "",
-      logradouro: formData.logradouro ?? cd.logradouro ?? "",
-      numero: formData.numero ?? cd.numero ?? "",
-      complemento: formData.complemento ?? cd.complemento ?? "",
-      bairro: formData.bairro ?? cd.bairro ?? "",
-      uf: formData.uf ?? cd.uf ?? "PA",
-      cep: (formData.cep || cd.cep || "").replace(/\D/g, ""),
-      
-      // Contato
+      ...inputCustomData,
+      sexo: getValue('sexo', cd.sexo),
+      raca_cor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
+      racaCor: getValue('raca_cor', getValue('racaCor', cd.raca_cor)),
+      etnia: getValue('etnia', cd.etnia),
+      etnia_outra: getValue('etnia_outra', getValue('etniaOutra', cd.etnia_outra)),
+      etniaOutra: getValue('etnia_outra', getValue('etniaOutra', cd.etnia_outra)),
+      nacionalidade: getValue('nacionalidade', cd.nacionalidade || "brasileiro"),
+      pais_nascimento: getValue('pais_nascimento', getValue('paisNascimento', cd.pais_nascimento)),
+      tipo_logradouro_dne: getValue('tipo_logradouro_dne', getValue('tipoLogradouroDne', getValue('tipoLogradouro', cd.tipo_logradouro_dne))),
+      tipoLogradouroDne: getValue('tipo_logradouro_dne', getValue('tipoLogradouroDne', getValue('tipoLogradouro', cd.tipo_logradouro_dne))),
+      tipoLogradouroCodigo: getValue('tipo_logradouro_codigo', getValue('tipoLogradouroCodigo', cd.tipoLogradouroCodigo)),
+      logradouro: getValue('logradouro', cd.logradouro),
+      numero: getValue('numero', cd.numero),
+      complemento: getValue('complemento', cd.complemento),
+      bairro: getValue('bairro', cd.bairro),
+      uf: getValue('uf', cd.uf || "PA"),
+      cep: String(getValue('cep', cd.cep || "")).replace(/\D/g, ""),
       telefone_secundario: telSecNormalizado,
-      telefoneSecundario: telSecNormalizado,
-      
-      // Complementares/Clínicos
-      situacaoRua: formData.situacaoRua ?? cd.situacaoRua ?? false,
-      is_gestante: formData.isGestante ?? cd.is_gestante ?? false,
-      is_pne: formData.isPne ?? cd.is_pne ?? false,
-      is_autista: formData.isAutista ?? cd.is_autista ?? false,
-      menor_idade: formData.menorIdade ?? cd.menor_idade ?? false,
-      nome_responsavel: formData.nomeResponsavel ?? cd.nome_responsavel ?? "",
-      cpf_responsavel: formData.cpfResponsavel ?? cd.cpf_responsavel ?? "",
-      
-      observacoes: formData.observacoes ?? cd.observacoes ?? "",
+      situacaoRua: getValue('situacaoRua', cd.situacaoRua),
+      is_gestante: getValue('isGestante', getValue('is_gestante', cd.is_gestante)),
+      is_pne: getValue('isPne', getValue('is_pne', cd.is_pne)),
+      is_autista: getValue('isAutista', getValue('is_autista', cd.is_autista)),
+      menor_idade: getValue('menorIdade', getValue('menor_idade', cd.menor_idade)),
+      nome_responsavel: getValue('nomeResponsavel', getValue('nome_responsavel', cd.nome_responsavel)),
+      cpf_responsavel: getValue('cpfResponsavel', getValue('cpf_responsavel', cd.cpf_responsavel)),
+      observacoes: getValue('observacoes', cd.observacoes),
       data_ultima_validacao_cadastro: new Date().toISOString(),
       dados_conferidos_em: new Date().toISOString(),
     };
 
-    // Payload final com apenas as colunas REAIS da tabela pacientes
     const payload = {
-      nome: formData.nome || oldPaciente.nome,
-      nome_mae: formData.nome_mae || formData.nomeMae || oldPaciente.nome_mae,
-      data_nascimento: formData.data_nascimento || formData.dataNascimento || oldPaciente.data_nascimento || null,
-      cpf: (formData.cpf || oldPaciente.cpf || "").replace(/\D/g, ""),
-      cns: (formData.cns || oldPaciente.cns || "").replace(/\D/g, "").slice(0, 15),
-      telefone: (telNormalizado || "").replace(/\D/g, ""),
-      email: formData.email ?? oldPaciente.email ?? "",
-      municipio: formData.municipio ?? oldPaciente.municipio ?? "",
-      naturalidade: formData.naturalidade ?? oldPaciente.naturalidade ?? "",
-      naturalidade_uf: formData.naturalidade_uf ?? formData.naturalidadeUf ?? oldPaciente.naturalidade_uf ?? "",
-      unidade_id: formData.unidade_id || oldPaciente.unidade_id,
-      endereco: formData.endereco || formData.logradouro || oldPaciente.endereco || "",
-      observacoes: formData.observacoes || oldPaciente.observacoes || "",
+      nome: getValue('nome', oldPaciente.nome),
+      nome_mae: getValue('nome_mae', getValue('nomeMae', oldPaciente.nome_mae)),
+      data_nascimento: getValue('data_nascimento', getValue('dataNascimento', oldPaciente.data_nascimento)) || null,
+      cpf: String(getValue('cpf', oldPaciente.cpf || "")).replace(/\D/g, ""),
+      cns: String(getValue('cns', oldPaciente.cns || "")).replace(/\D/g, "").slice(0, 15),
+      telefone: String(telNormalizado).replace(/\D/g, ""),
+      email: getValue('email', oldPaciente.email),
+      municipio: getValue('municipio', oldPaciente.municipio),
+      naturalidade: getValue('naturalidade', oldPaciente.naturalidade),
+      naturalidade_uf: getValue('naturalidade_uf', getValue('naturalidadeUf', oldPaciente.naturalidade_uf)),
+      unidade_id: getValue('unidade_id', oldPaciente.unidade_id),
+      endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
+      observacoes: getValue('observacoes', oldPaciente.observacoes),
       custom_data: updatedCustomData,
     };
 
