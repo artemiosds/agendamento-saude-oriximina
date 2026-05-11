@@ -2813,6 +2813,9 @@ const ProntuarioPage: React.FC = () => {
                             {selCids.length > 0 && (
                               <Badge variant="secondary" className="h-5 text-[10px] shrink-0">{selCids.length} CID</Badge>
                             )}
+                            {pacienteProcHistory.find(h => h.id === proc.id)?.isGlobal && (
+                              <Badge variant="outline" className="h-5 text-[10px] shrink-0 border-primary text-primary">Vínculo Global</Badge>
+                            )}
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => toggleExpandProc(proc.id)}>
                               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                             </Button>
