@@ -650,17 +650,36 @@ const Pacientes: React.FC = () => {
     try {
       if (editId) {
         // Agora aguardamos o salvamento real para garantir sincronização e evitar race conditions
-        const { data, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
+        const { data: updatedPaciente, error } = await supabase.from("pacientes").update(dbFields).eq("id", editId).select().single();
         
         if (error) {
           console.error("Erro ao atualizar paciente:", error);
           toast.error("Erro ao salvar dados. Verifique sua conexão.");
         } else {
+          // Salvar procedimentos vinculados (persistentes)
+          if (form.patientProcedures) {
+            // Limpa procedimentos antigos e insere novos
+            await supabase.from("patient_procedures").delete().eq("patient_id", editId);
+            
+            const validProcs = (form.patientProcedures || [])
+              .filter(p => p.sigtap_codigo || p.procedimento_nome)
+              .map(p => ({
+                patient_id: editId,
+                sigtap_codigo: p.sigtap_codigo,
+                procedimento_nome: p.procedimento_nome,
+                cid: p.cid
+              }));
+              
+            if (validProcs.length > 0) {
+              const { error: procError } = await supabase.from("patient_procedures").insert(validProcs);
+              if (procError) console.error("Erro ao salvar procedimentos do paciente:", procError);
+            }
+          }
+
           // Invalidação agressiva e imediata
           await refreshPacientes();
-          await queryClient.invalidateQueries(); // Invalida todas as consultas para garantir consistência entre telas
+          await queryClient.invalidateQueries();
           
-          // Refetch explícito dos dados do paciente atualizado
           await queryClient.refetchQueries({ queryKey: queryKeys.pacientes.detail(editId) });
           
           toast.success("Dados do paciente sincronizados com sucesso!");
