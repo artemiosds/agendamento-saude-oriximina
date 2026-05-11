@@ -78,6 +78,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
   const [docModalOpen, setDocModalOpen] = useState(false);
   const cancelledRef = useRef(false);
 
+  const [pacienteData, setPacienteData] = useState<any>(null);
+
   const loadData = useCallback(async () => {
     if (!pacienteId) {
       setProntuarios([]);
