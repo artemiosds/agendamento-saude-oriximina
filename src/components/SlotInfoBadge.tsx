@@ -102,7 +102,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 <span className="ml-auto font-semibold">
                   {t.excedido
                     ? `${t.vagasOcupadas} de ${t.vagasTotal} ocupadas`
-                    : `${t.vagasLivres} de ${t.vagasTotal} livres`}
+                    : `${t.vagasLivresInternas} de ${t.vagasTotal} livres internas`}
                 </span>
                 {t.excedido ? (
                   <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
@@ -122,7 +122,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   }
 
   if (info.isTurnoMode && turnoData.length > 0 && compact) {
-    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivres, 0);
+    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivresInternas, 0);
     const allFull = turnoData.every(t => t.lotado);
     return (
       <span

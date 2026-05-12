@@ -113,6 +113,7 @@ const ProfissionaisExternos: React.FC = () => {
       setExternos(data?.profissionais || []);
       const { data: quotasData } = await supabase.from("quotas_externas").select("*").order('criado_em', { ascending: false });
       setQuotas(quotasData || []);
+      (window as any).__quotasExternasCached = quotasData || [];
     } catch (err) {
       console.error(err);
     }

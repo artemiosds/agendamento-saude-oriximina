@@ -40,7 +40,11 @@ export interface TurnoInfoResult {
   horaFim: string;
   vagasTotal: number;
   vagasOcupadas: number;
-  vagasLivres: number;
+  vagasReservadasExterno: number;
+  vagasOcupadasExterno: number;
+  vagasOcupadasInterno: number;
+  vagasLivresInternas: number;
+  vagasLivresTotal: number;
   lotado: boolean;
   excedido: boolean;
 }
@@ -1840,25 +1844,48 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ao range [horaInicio, horaFim) do turno. Já temos pré-filtro por
       // profissional+unidade+data via appointmentsByDateProfUnit (que aplica statusOcupaVaga).
       return turnoDisps.map((td) => {
-        const count = dayAppointments.filter(
+        // Encontra agendamentos ocupando vaga neste turno
+        const turnoAppCount = dayAppointments.filter(
           (a) => a.hora >= td.horaInicio && a.hora < td.horaFim,
         ).length;
+
+        // Recupera quotas externas ativas para este turno
+        const turnoQuotas = (window as any).__quotasExternasCached || [];
+        const quotasTurno = turnoQuotas.filter((q: any) => 
+          q.profissional_interno_id === profissionalId && 
+          q.unidade_id === unidadeId &&
+          q.ativo === true &&
+          (q.turno?.toLowerCase() === (td.horaInicio < '12:00' ? 'manha' : td.horaInicio < '18:00' ? 'tarde' : 'noite'))
+        );
+
+        const vagasReservadasExterno = quotasTurno.reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
+        const vagasOcupadasExterno = dayAppointments.filter(
+          (a) => a.hora >= td.horaInicio && a.hora < td.horaFim && a.origem === 'externo'
+        ).length;
+        
+        const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
+        const vagasTotal = td.vagasPorDia || 0;
+        
+        // Vagas LIVRES INTERNAS (vagas totais - reserva externa - ocupadas internas)
+        const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
+        const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
+
         const nome = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
-        const vagasTotal = td.vagasPorDia;
-        const vagasOcupadas = count; // valor REAL, pode ultrapassar o limite
-        const vagasLivres = Math.max(0, vagasTotal - vagasOcupadas);
-        const lotado = vagasOcupadas >= vagasTotal;
-        const excedido = vagasOcupadas > vagasTotal;
+        
         return {
-          turnoId: td.salaId || td.id, // salaId stores turno ID in turno mode
+          turnoId: td.salaId || td.id,
           nome,
           horaInicio: td.horaInicio,
           horaFim: td.horaFim,
           vagasTotal,
-          vagasOcupadas,
-          vagasLivres,
-          lotado,
-          excedido,
+          vagasOcupadas: turnoAppCount,
+          vagasReservadasExterno,
+          vagasOcupadasExterno,
+          vagasOcupadasInterno,
+          vagasLivresInternas,
+          vagasLivresTotal,
+          lotado: turnoAppCount >= vagasTotal,
+          excedido: turnoAppCount > vagasTotal,
         };
       }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
     },

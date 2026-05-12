@@ -902,6 +902,40 @@ const Agenda: React.FC = () => {
     // Apenas MASTER pode forçar encaixe quando o limite de vagas está atingido/excedido.
     // RECEPÇÃO e GESTÃO ficam bloqueados conforme regra de negócio.
     const canOverride = user?.role === "master";
+    
+    // NOVO: Cálculo centralizado de vagas (integração cotas externas)
+    const profTurnos = getTurnoInfo(newAg.profissionalId, prof.unidadeId, selectedDate);
+    const turnoAlvo = profTurnos.find(t => newAg.hora >= t.horaInicio && newAg.hora < t.horaFim);
+    
+    if (turnoAlvo) {
+      const isExterno = false; // Agendamento pela recepção
+      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0;
+      
+      if (excessoInterno) {
+        const msg = `⚠️ Vagas internas esgotadas. Existem ${turnoAlvo.vagasReservadasExterno} vagas reservadas para externos que não podem ser usadas pela recepção sem autorização.`;
+        if (!canOverride) {
+          toast.error(msg);
+          return;
+        }
+        const confirmou = window.confirm(`${msg}\n\nDeseja forçar o uso de uma vaga externa como MASTER? (Auditoria será registrada)`);
+        if (!confirmou) return;
+        
+        // Registrar override na auditoria
+        logAction({
+          acao: "master_override_vaga_externa",
+          entidade: "agendamento",
+          modulo: "agenda",
+          user,
+          detalhes: { 
+            profissional: prof.nome, 
+            data: selectedDate, 
+            turno: turnoAlvo.nome,
+            motivo: "Uso de vaga reservada externa por agendamento interno"
+          },
+        });
+      }
+    }
+
     try {
       const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
         p_profissional_id: newAg.profissionalId,
@@ -927,8 +961,8 @@ const Agenda: React.FC = () => {
         );
         if (!confirmou) return;
       }
-    } catch {
-      // If RPC fails, allow creation (fallback)
+    } catch (err) {
+      console.error("Slot check error:", err);
     }
 
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
@@ -1884,11 +1918,11 @@ const Agenda: React.FC = () => {
                       <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="font-display">Novo Agendamento</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label>Paciente</Label>
                     <BuscaPaciente
@@ -1905,7 +1939,7 @@ const Agenda: React.FC = () => {
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um paciente..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         {pacientes.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.nome}
@@ -1924,38 +1958,40 @@ const Agenda: React.FC = () => {
                       <p className="text-xs text-success">✓ Dados conferidos</p>
                     )}
                   </div>
-                  <div>
-                    <Label>Profissional</Label>
-                    <Select
-                      value={newAg.profissionalId}
-                      onValueChange={(v) => setNewAg((p) => ({ ...p, profissionalId: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {profissionais.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Sala</Label>
-                    <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {salasVisiveis.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Profissional</Label>
+                      <Select
+                        value={newAg.profissionalId}
+                        onValueChange={(v) => setNewAg((p) => ({ ...p, profissionalId: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {profissionais.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Sala</Label>
+                      <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {salasVisiveis.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div>
                     <Label>Tipo</Label>
@@ -1974,15 +2010,17 @@ const Agenda: React.FC = () => {
                     </Select>
                   </div>
                   <div>
-                     <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
+                    <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {newAg.profissionalId && (
-                      <SlotInfoBadge
-                        profissionalId={newAg.profissionalId}
-                        unidadeId={selectedProfUnit}
-                        date={selectedDate}
-                        hora={newAg.hora}
-                        className="mt-1 mb-2"
-                      />
+                      <div className="space-y-2">
+                        <SlotInfoBadge
+                          profissionalId={newAg.profissionalId}
+                          unidadeId={selectedProfUnit}
+                          date={selectedDate}
+                          hora={newAg.hora}
+                          className="mt-1 mb-2"
+                        />
+                      </div>
                     )}
                     {isTurnoMode ? (
                       /* === TURNO MODE: show turno cards === */
@@ -1990,23 +2028,26 @@ const Agenda: React.FC = () => {
                         {newAgTurnoInfo.map((t) => {
                           const isSelected = newAg.hora === t.horaInicio;
                           const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
-                          const lotadoBlocked = t.lotado && !isMaster;
-                          const lotadoOverride = t.lotado && isMaster;
+                          
+                          // A recepção fica bloqueada se não houver vagas LIVRES INTERNAS
+                          const lotadoBlocked = t.vagasLivresInternas <= 0 && !isMaster;
+                          const lotadoOverride = t.vagasLivresInternas <= 0 && isMaster;
+                          
                           return (
-                            <button
-                              key={t.turnoId}
-                              type="button"
-                              disabled={lotadoBlocked}
-                              onClick={() => setNewAg((p) => ({ ...p, hora: t.horaInicio }))}
-                              className={cn(
-                                'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all',
-                                isSelected && !t.lotado && 'border-primary bg-primary/5 shadow-sm',
-                                isSelected && lotadoOverride && 'border-warning bg-warning/10 shadow-sm',
-                                !isSelected && !t.lotado && 'border-border hover:border-primary/40 hover:bg-muted/30',
-                                !isSelected && lotadoOverride && 'border-warning/40 bg-warning/5 hover:border-warning hover:bg-warning/10 cursor-pointer',
-                                lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
-                              )}
-                            >
+                            <div key={t.turnoId} className="space-y-1">
+                              <button
+                                type="button"
+                                disabled={lotadoBlocked}
+                                onClick={() => setNewAg((p) => ({ ...p, hora: t.horaInicio }))}
+                                className={cn(
+                                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all',
+                                  isSelected && !lotadoOverride && 'border-primary bg-primary/5 shadow-sm',
+                                  isSelected && lotadoOverride && 'border-warning bg-warning/10 shadow-sm',
+                                  !isSelected && !lotadoBlocked && 'border-border hover:border-primary/40 hover:bg-muted/30',
+                                  !isSelected && lotadoOverride && 'border-warning/40 bg-warning/5 hover:border-warning hover:bg-warning/10 cursor-pointer',
+                                  lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
+                                )}
+                              >
                               <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -2031,23 +2072,33 @@ const Agenda: React.FC = () => {
                                   )}>
                                     {t.vagasOcupadas} de {t.vagasTotal} {isMaster ? '(forçar)' : '(excedido)'}
                                   </span>
-                                ) : t.lotado ? (
-                                  <span className={cn(
-                                    "text-xs font-bold px-2 py-1 rounded-full",
-                                    isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
-                                  )}>
-                                    {isMaster ? 'Lotado (forçar)' : 'Lotado'}
-                                  </span>
-                                ) : (
-                                  <span className={cn(
-                                    'text-sm font-bold',
-                                    pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
-                                  )}>
-                                    {t.vagasLivres} de {t.vagasTotal}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
+                                  ) : t.vagasLivresInternas <= 0 ? (
+                                    <span className={cn(
+                                      "text-xs font-bold px-2 py-1 rounded-full",
+                                      isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
+                                    )}>
+                                      {isMaster ? 'Internas Esgotadas (forçar)' : 'Internas Esgotadas'}
+                                    </span>
+                                  ) : (
+                                    <div className="flex flex-col items-end">
+                                      <span className={cn(
+                                        'text-sm font-bold',
+                                        pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
+                                      )}>
+                                        {t.vagasLivresInternas} de {t.vagasTotal}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">livres internas</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                              {t.vagasReservadasExterno > 0 && (
+                                <div className="px-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Reserva externa: <strong>{t.vagasReservadasExterno} vagas</strong></span>
+                                  <span>Ocupadas: <strong>{t.vagasOcupadasExterno}/{t.vagasReservadasExterno}</strong></span>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                         {newAg.hora && newAgTurnoInfo.find(t => t.horaInicio === newAg.hora)?.lotado && isMaster && (
@@ -3337,6 +3388,12 @@ const Agenda: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RegistrarFaltaModal
+        open={faltaTarget !== null}
+        onOpenChange={(v) => { if (!v) setFaltaTarget(null); }}
+        agendamento={faltaTarget}
+        onConfirm={(dados) => handleRegistrarFalta(dados)}
+      />
     </div>
   );
 };
