@@ -443,7 +443,7 @@ const ProfissionaisExternos: React.FC = () => {
 
       {/* Create/Edit External Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{editId ? "Editar" : "Cadastrar"} Profissional Externo</DialogTitle></DialogHeader>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
             <div className="space-y-3">
