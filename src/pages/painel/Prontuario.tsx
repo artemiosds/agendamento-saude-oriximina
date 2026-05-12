@@ -2641,6 +2641,30 @@ const ProntuarioPage: React.FC = () => {
                             <div className="text-sm space-y-2">
                               <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
                               <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
+                              
+                              {sessaoPtsSigtap.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">Procedimentos SIGTAP:</span>
+                                  {sessaoPtsSigtap.map(s => (
+                                    <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
+                                      <span>{s.procedimento_nome}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {sessaoPtsCids.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">CIDs:</span>
+                                  {sessaoPtsCids.map(c => (
+                                    <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
+                                      <span>{c.cid_descricao}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               {/* Highlighted meta based on period */}
                               <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
                                 <span className="text-xs font-semibold text-muted-foreground">
