@@ -2010,13 +2010,15 @@ const Agenda: React.FC = () => {
                   <div>
                      <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {newAg.profissionalId && (
-                      <SlotInfoBadge
-                        profissionalId={newAg.profissionalId}
-                        unidadeId={selectedProfUnit}
-                        date={selectedDate}
-                        hora={newAg.hora}
-                        className="mt-1 mb-2"
-                      />
+                      <div className="space-y-2">
+                        <SlotInfoBadge
+                          profissionalId={newAg.profissionalId}
+                          unidadeId={selectedProfUnit}
+                          date={selectedDate}
+                          hora={newAg.hora}
+                          className="mt-1 mb-2"
+                        />
+                      </div>
                     )}
                     {isTurnoMode ? (
                       /* === TURNO MODE: show turno cards === */
