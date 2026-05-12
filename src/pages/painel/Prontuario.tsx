@@ -352,6 +352,13 @@ const ProntuarioPage: React.FC = () => {
       }
 
       if (cycle) {
+        const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
+          .eq('cycle_id', cycle.id)
+          .order('session_number', { ascending: true });
+        setSessaoCycleSessions(sessions || []);
+      } else {
+        setSessaoCycleSessions([]);
+      }
     } catch (err) {
       console.error('[loadSessaoData]', err);
     }
