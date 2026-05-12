@@ -98,7 +98,12 @@ const ProfissionaisExternos: React.FC = () => {
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
   const [selectedExternoId, setSelectedExternoId] = useState<string>("");
   const [selectedProfIds, setSelectedProfIds] = useState<string[]>([]);
-  const [vagasPorProf, setVagasPorProf] = useState<Record<string, number>>({});
+  const [vagasPorProf, setVagasPorProf] = useState<Record<string, { 
+    vagas: number; 
+    turno: string; 
+    horario_inicio: string; 
+    horario_fim: string; 
+  }>>({});
   const [savingQuota, setSavingQuota] = useState(false);
 
   const loadExternos = useCallback(async () => {
