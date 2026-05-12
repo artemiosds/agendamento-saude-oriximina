@@ -2039,12 +2039,15 @@ const Agenda: React.FC = () => {
                                     {isMaster ? 'Lotado (forçar)' : 'Lotado'}
                                   </span>
                                 ) : (
-                                  <span className={cn(
-                                    'text-sm font-bold',
-                                    pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
-                                  )}>
-                                    {t.vagasLivres} de {t.vagasTotal}
-                                  </span>
+                                  <div className="flex flex-col items-end">
+                                    <span className={cn(
+                                      'text-sm font-bold',
+                                      pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
+                                    )}>
+                                      {t.vagasLivresInternas} de {t.vagasTotal}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">livres internas</span>
+                                  </div>
                                 )}
                               </div>
                             </button>
