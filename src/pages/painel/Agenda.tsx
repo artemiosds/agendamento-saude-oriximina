@@ -3392,7 +3392,7 @@ const Agenda: React.FC = () => {
         open={faltaTarget !== null}
         onOpenChange={(v) => { if (!v) setFaltaTarget(null); }}
         agendamento={faltaTarget}
-        onConfirm={(dados) => handleRegistrarFalta(faltaTarget!, dados)}
+        onConfirm={(dados) => handleRegistrarFalta(dados)}
       />
     </div>
   );
