@@ -122,7 +122,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
   }
 
   if (info.isTurnoMode && turnoData.length > 0 && compact) {
-    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivres, 0);
+    const totalLivres = turnoData.reduce((s, t) => s + t.vagasLivresInternas, 0);
     const allFull = turnoData.every(t => t.lotado);
     return (
       <span
