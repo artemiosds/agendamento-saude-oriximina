@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Calendar, Users, ClipboardList, FileText,
   Settings, Building2, UserCog, ListOrdered, LogOut, Menu,
   Activity, CalendarClock, Stethoscope, ShieldCheck, HeartPulse,
-  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown
+  ClipboardList as ClipboardListIcon, BookOpen, Lock, History, Send, ChevronDown, MonitorDot
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -95,6 +95,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Administração',
     items: [
       { to: '/painel/auditoria',               label: 'Logs & Auditoria',  icon: ShieldCheck, modulo: 'relatorios' },
+      { to: '/painel/monitoramento',           label: 'Monitoramento',     icon: MonitorDot,  modulo: 'monitoramento_sistema' },
       { to: '/painel/configuracoes',           label: 'Configurações',     icon: Settings,    modulo: null, roles_master_only: true },
       { to: '/painel/permissoes',              label: 'Permissões',        icon: Lock,        modulo: null, roles_master_only: true },
       { to: '/painel/configuracoes-avancadas', label: 'Config. Avançadas', icon: Settings,    modulo: null, roles_master_only: true },

@@ -24,7 +24,7 @@ const PERFIL_LABELS: Record<string, string> = {
 
 const MODULOS: ModuleName[] = [
   "pacientes", "encaminhamento", "fila", "triagem", "enfermagem",
-  "agenda", "atendimento", "prontuario", "tratamento", "relatorios", "usuarios",
+  "agenda", "atendimento", "prontuario", "tratamento", "relatorios", "monitoramento_sistema", "usuarios",
 ];
 const MODULO_LABELS: Record<ModuleName, string> = {
   pacientes: "Pacientes",
@@ -37,6 +37,7 @@ const MODULO_LABELS: Record<ModuleName, string> = {
   prontuario: "Prontuário",
   tratamento: "Tratamento",
   relatorios: "Relatórios",
+  monitoramento_sistema: "Monitoramento",
   usuarios: "Usuários",
 };
 const ACTIONS: (keyof ModulePermission)[] = ["can_view", "can_create", "can_edit", "can_delete", "can_execute"];

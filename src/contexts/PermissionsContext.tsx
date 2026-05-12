@@ -13,6 +13,7 @@ export type ModuleName =
   | 'prontuario'
   | 'tratamento'
   | 'relatorios'
+  | 'monitoramento_sistema'
   | 'usuarios';
 
 export interface ModulePermission {
@@ -34,7 +35,7 @@ interface PermissionsContextType {
 
 const ALL_MODULES: ModuleName[] = [
   'pacientes', 'encaminhamento', 'fila', 'triagem', 'enfermagem',
-  'agenda', 'atendimento', 'prontuario', 'tratamento', 'relatorios', 'usuarios',
+  'agenda', 'atendimento', 'prontuario', 'tratamento', 'relatorios', 'monitoramento_sistema', 'usuarios',
 ];
 
 const defaultPerm: ModulePermission = {
