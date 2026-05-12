@@ -1439,55 +1439,96 @@ const Tratamentos: React.FC = () => {
   };
 
   const handleAddIntermediateSession = async () => {
-    if (!selectedCycle || !intermediateDate || intermediateAfterSession < 0) {
-      toast.error("Selecione a data e a posição da sessão.");
+    if (!selectedCycle) {
+      toast.error("Selecione um ciclo.");
+      return;
+    }
+    if (!intermediateDate) {
+      toast.error("Informe a data da nova sessão.");
+      return;
+    }
+    if (intermediateAfterSession < 0) {
+      toast.error("Selecione onde a sessão será inserida.");
       return;
     }
     if (addingIntermediate) return; // Double-click guard
     setAddingIntermediate(true);
     try {
-      const currentSessions = sessions
-        .filter((s) => s.cycle_id === selectedCycle.id)
-        .sort((a, b) => a.session_number - b.session_number);
+      // SEMPRE busca sessões REAIS do banco (não confia no estado local)
+      // para evitar duplicações causadas por estado defasado/otimista.
+      const { data: freshSessions, error: fetchErr } = await supabase
+        .from("treatment_sessions")
+        .select("id, session_number, scheduled_date")
+        .eq("cycle_id", selectedCycle.id)
+        .order("session_number", { ascending: true });
+      if (fetchErr) throw fetchErr;
 
-      const insertPos = intermediateAfterSession; // insert after this session number
-      const newTotal = selectedCycle.total_sessions + 1;
+      const currentSessions = (freshSessions || []) as Array<{
+        id: string;
+        session_number: number;
+        scheduled_date: string;
+      }>;
 
-      // 1. Renumber sessions after insertPos
-      const toRenumber = currentSessions.filter((s) => s.session_number > insertPos);
+      const insertPos = intermediateAfterSession; // posição-base: 0 = antes da 1ª
+      const novaNumeroSessao = insertPos + 1;
+      const newTotal = currentSessions.length + 1;
+
+      // Guard anti-duplicidade: já existe sessão neste ciclo, na mesma data
+      // e mesma numeração calculada? Aborta para não duplicar.
+      const possibleDup = currentSessions.find(
+        (s) => s.scheduled_date === intermediateDate && s.session_number === novaNumeroSessao,
+      );
+      if (possibleDup) {
+        toast.error("Já existe uma sessão registrada nesta data e posição.");
+        setAddingIntermediate(false);
+        return;
+      }
+
+      // 1) Renumera APENAS sessões >= novaNumeroSessao, em ordem DESC para
+      //    evitar colisões temporárias (sem unique constraint, mas é a
+      //    ordem segura caso seja adicionada futuramente).
+      const toRenumber = currentSessions
+        .filter((s) => s.session_number >= novaNumeroSessao)
+        .sort((a, b) => b.session_number - a.session_number);
+
       for (const s of toRenumber) {
-        await supabase
+        const { error: upErr } = await supabase
           .from("treatment_sessions")
           .update({ session_number: s.session_number + 1, total_sessions: newTotal })
           .eq("id", s.id);
+        if (upErr) throw upErr;
       }
 
-      // Update total_sessions for existing sessions at or before insertPos
-      const toUpdateTotal = currentSessions.filter((s) => s.session_number <= insertPos);
+      // 2) Atualiza total_sessions nas sessões que ficaram antes da nova
+      const toUpdateTotal = currentSessions.filter((s) => s.session_number < novaNumeroSessao);
       for (const s of toUpdateTotal) {
-        await supabase
+        const { error: upErr } = await supabase
           .from("treatment_sessions")
           .update({ total_sessions: newTotal })
           .eq("id", s.id);
+        if (upErr) throw upErr;
       }
 
-      // 2. Insert new session
+      // 3) Insere UMA ÚNICA sessão intermediária na posição escolhida.
+      //    NÃO chama nenhuma função de "próxima sessão" e NÃO cria nada
+      //    extra no final.
       const { error: insertError } = await supabase.from("treatment_sessions").insert({
         cycle_id: selectedCycle.id,
         patient_id: selectedCycle.patient_id,
         professional_id: selectedCycle.professional_id,
-        session_number: insertPos + 1,
+        session_number: novaNumeroSessao,
         total_sessions: newTotal,
         scheduled_date: intermediateDate,
         status: "pendente_agendamento",
       });
       if (insertError) throw insertError;
 
-      // 3. Update cycle total
-      await supabase
+      // 4) Atualiza total do ciclo (apenas +1, nunca mais)
+      const { error: cycleErr } = await supabase
         .from("treatment_cycles")
         .update({ total_sessions: newTotal })
         .eq("id", selectedCycle.id);
+      if (cycleErr) throw cycleErr;
 
       await logAction({
         acao: "adicionar_sessao_intermediaria",
@@ -1497,25 +1538,27 @@ const Tratamentos: React.FC = () => {
         user,
         detalhes: {
           ciclo: selectedCycle.id,
-          posicao: insertPos + 1,
+          posicao: novaNumeroSessao,
           data: intermediateDate,
-          total_anterior: selectedCycle.total_sessions,
+          total_anterior: currentSessions.length,
           total_novo: newTotal,
         },
       });
 
-      toast.success(`Sessão intermediária ${insertPos + 1}/${newTotal} adicionada em ${new Date(intermediateDate + "T12:00:00").toLocaleDateString("pt-BR")}!`);
+      toast.success("Sessão intermediária criada com sucesso.");
       setAddIntermediateOpen(false);
       setIntermediateDate("");
       setIntermediateAfterSession(0);
-      // Optimistic refresh: reload only this cycle's sessions + silent stats refresh
-      await Promise.all([
-        loadSessionsForCycle(selectedCycle, true),
-        loadData(true),
-      ]);
+
+      // Atualiza UI com dados REAIS do banco (evita estado otimista duplicado)
+      await loadSessionsForCycle(selectedCycle, true);
+      await loadData(true);
     } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao adicionar sessão intermediária: " + (err?.message || ""));
+      toast.error(
+        "Não foi possível criar a sessão intermediária. Nenhuma alteração foi salva. " +
+          (err?.message || ""),
+      );
     } finally {
       setAddingIntermediate(false);
     }
@@ -3008,12 +3051,17 @@ const Tratamentos: React.FC = () => {
                 />
               </div>
               <Button
-                onClick={handleAddIntermediateSession}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddIntermediateSession();
+                }}
                 className="w-full gradient-primary text-primary-foreground"
                 disabled={!intermediateDate || addingIntermediate}
               >
                 {addingIntermediate ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adicionando...</>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
                 ) : (
                   <><Plus className="w-4 h-4 mr-2" /> Adicionar Sessão</>
                 )}
