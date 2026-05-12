@@ -231,26 +231,28 @@ const PTS: React.FC = () => {
     try {
       // 1. Link to professional (current user)
       if (user?.id) {
-        await (supabase as any).from('procedimento_profissionais').upsert({
+        const { error: profErr } = await (supabase as any).from('procedimento_profissionais').upsert({
           procedimento_codigo: item.procedimento_codigo,
           profissional_id: user.id
         }, { onConflict: 'procedimento_codigo, profissional_id' });
+        if (profErr) console.error('Erro ao vincular procedimento ao profissional:', profErr);
       }
 
       // 2. If editing an existing PTS, save to pts_sigtap
       if (editingPts) {
-        await (supabase as any).from('pts_sigtap').upsert({
+        const { error: sigtapErr } = await (supabase as any).from('pts_sigtap').upsert({
           pts_id: editingPts.id,
           procedimento_codigo: item.procedimento_codigo,
           procedimento_nome: item.procedimento_nome,
           especialidade: item.especialidade
         }, { onConflict: 'pts_id, procedimento_codigo' });
+        if (sigtapErr) console.error('Erro ao salvar pts_sigtap (fono):', sigtapErr);
       }
 
       // 3. Create/Link to Prontuario if patient selected
       if (form.patient_id) {
         const cidInfo = cids && cids.length > 0 ? `\nCIDs: ${cids.map(c => c.cid_codigo).join(', ')}` : '';
-        await (supabase as any).from('prontuarios').insert({
+        const { error: prontErr } = await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
@@ -262,6 +264,7 @@ const PTS: React.FC = () => {
           queixa_principal: 'Procedimento Fonoaudiologia (PTS)',
           observacoes: `Procedimento: ${item.procedimento_codigo} - ${item.procedimento_nome}${cidInfo}`
         });
+        if (prontErr) console.error('Erro ao criar prontuário (fono):', prontErr);
       }
     } catch (err) {
       console.error('Erro ao salvar imediato fono:', err);
@@ -325,11 +328,12 @@ const PTS: React.FC = () => {
     const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (currentProc?.especialidade === 'fonoaudiologia') {
        if (editingPts) {
-         await (supabase as any).from('pts_cid').upsert({
+         const { error } = await (supabase as any).from('pts_cid').upsert({
            pts_id: editingPts.id,
            cid_codigo: cid.cid_codigo,
            cid_descricao: cid.cid_descricao
          }, { onConflict: 'pts_id, cid_codigo' });
+         if (error) console.error('Erro ao vincular CID (fono):', error);
        }
        toast.success(`CID ${cid.cid_codigo} vinculado.`);
     } else {
@@ -351,11 +355,12 @@ const PTS: React.FC = () => {
 
     const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
-       await (supabase as any).from('pts_cid').upsert({
+       const { error } = await (supabase as any).from('pts_cid').upsert({
          pts_id: editingPts.id,
          cid_codigo: code,
          cid_descricao: 'CID informado manualmente'
        }, { onConflict: 'pts_id, cid_codigo' });
+       if (error) console.error('Erro ao vincular CID manual (fono):', error);
     }
     
     toast.info('CID aceito manualmente.');
@@ -428,6 +433,36 @@ const PTS: React.FC = () => {
   };
 
   const handleSave = async () => {
+    let finalSigtap = [...sigtapSelecionados];
+    let finalCids = [...cidsSelecionados];
+
+    // Se houver um procedimento selecionado no combo mas não adicionado, adiciona-o automaticamente
+    if (selectedProcCodigo && !finalSigtap.some(s => s.procedimento_codigo === selectedProcCodigo)) {
+      const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+      if (proc) {
+        const newItem = {
+          procedimento_codigo: proc.codigo,
+          procedimento_nome: proc.nome,
+          especialidade: proc.especialidade,
+        };
+        finalSigtap.push(newItem);
+        
+        // Se for fonoaudiologia, tenta pegar os CIDs vinculados automaticamente
+        if (proc.especialidade === 'fonoaudiologia') {
+          const { data: relatedCids } = await supabase
+            .from('sigtap_procedimento_cids')
+            .select('cid_codigo, cid_descricao')
+            .eq('procedimento_codigo', proc.codigo);
+          
+          if (relatedCids && relatedCids.length > 0) {
+            const currentCidCodes = new Set(finalCids.map(c => c.cid_codigo));
+            const toAdd = relatedCids.filter(c => !currentCidCodes.has(c.cid_codigo));
+            finalCids.push(...toAdd);
+          }
+        }
+      }
+    }
+
     if (!form.patient_id || !form.diagnostico_funcional || !form.objetivos_terapeuticos) {
       toast.error('Preencha paciente, diagnóstico funcional e objetivos.');
       return;
@@ -449,28 +484,30 @@ const PTS: React.FC = () => {
       let ptsId: string;
 
       if (editingPts) {
-        const { error } = await (supabase as any).from('pts').update(ptsPayload).eq('id', editingPts.id);
-        if (error) throw error;
+        const { error: updateError } = await (supabase as any).from('pts').update(ptsPayload).eq('id', editingPts.id);
+        if (updateError) throw updateError;
         ptsId = editingPts.id;
 
         // Delete old relationships then re-insert
-        await Promise.all([
-          (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId),
-          (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId),
-        ]);
+        const { error: delSigtapErr } = await (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId);
+        if (delSigtapErr) console.error('Erro ao deletar sigtap antigo:', delSigtapErr);
+        
+        const { error: delCidErr } = await (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId);
+        if (delCidErr) console.error('Erro ao deletar cid antigo:', delCidErr);
       } else {
-        const { data: newPts, error } = await (supabase as any)
+        const { data: newPts, error: insertError } = await (supabase as any)
           .from('pts')
           .insert(ptsPayload)
           .select('id')
           .single();
-        if (error) throw error;
+        if (insertError) throw insertError;
+        if (!newPts) throw new Error('Falha ao criar PTS: ID não retornado');
         ptsId = newPts.id;
 
         // Also create prontuario record
-        const procInfo = sigtapSelecionados.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
-        const cidInfo = cidsSelecionados.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
-        await (supabase as any).from('prontuarios').insert({
+        const procInfo = finalSigtap.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
+        const cidInfo = finalCids.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
+        const { error: prontErr } = await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
@@ -485,29 +522,32 @@ const PTS: React.FC = () => {
           conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
           observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\nSIGTAP: ${procInfo}` : ''}${cidInfo ? `\nCID: ${cidInfo}` : ''}`,
         });
+        if (prontErr) console.error('Erro ao criar registro no prontuário:', prontErr);
       }
 
       // Insert SIGTAP relationships
-      if (sigtapSelecionados.length > 0) {
-        await (supabase as any).from('pts_sigtap').insert(
-          sigtapSelecionados.map(s => ({
+      if (finalSigtap.length > 0) {
+        const { error: sigtapError } = await (supabase as any).from('pts_sigtap').insert(
+          finalSigtap.map(s => ({
             pts_id: ptsId,
             procedimento_codigo: s.procedimento_codigo,
             procedimento_nome: s.procedimento_nome,
             especialidade: s.especialidade,
           }))
         );
+        if (sigtapError) throw sigtapError;
       }
 
       // Insert CID relationships
-      if (cidsSelecionados.length > 0) {
-        await (supabase as any).from('pts_cid').insert(
-          cidsSelecionados.map(c => ({
+      if (finalCids.length > 0) {
+        const { error: cidError } = await (supabase as any).from('pts_cid').insert(
+          finalCids.map(c => ({
             pts_id: ptsId,
             cid_codigo: c.cid_codigo,
             cid_descricao: c.cid_descricao,
           }))
         );
+        if (cidError) throw cidError;
       }
 
       await logAction({
@@ -517,8 +557,8 @@ const PTS: React.FC = () => {
         detalhes: {
           paciente_nome: form.patient_name,
           especialidades: form.especialidades_envolvidas,
-          sigtap_count: sigtapSelecionados.length,
-          cid_count: cidsSelecionados.length,
+          sigtap_count: finalSigtap.length,
+          cid_count: finalCids.length,
         },
       });
 
@@ -528,7 +568,8 @@ const PTS: React.FC = () => {
       resetSigtapState();
       loadPts();
     } catch (err: any) {
-      toast.error('Erro: ' + (err?.message || 'erro'));
+      console.error('Erro no handleSave:', err);
+      toast.error('Erro ao salvar: ' + (err?.message || 'Erro desconhecido'));
     }
     setSaving(false);
   };
@@ -559,7 +600,7 @@ const PTS: React.FC = () => {
     return <div className="p-6 text-muted-foreground">Sem permissão.</div>;
   }
 
-  const showSigtap = (isFisioterapeuta || isMaster) && (sigtapProcs.length > 0 || loadingProcs);
+  const showSigtap = (sigtapProcs.length > 0 || loadingProcs);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -709,7 +750,11 @@ const PTS: React.FC = () => {
                 </div>
 
                 {sigtapProcs.length === 0 && !loadingProcs && (
-                  <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado. Execute a sincronização DATASUS nas Configurações.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {form.especialidades_envolvidas.length === 0 
+                      ? "Selecione uma especialidade acima para carregar os procedimentos SIGTAP." 
+                      : "Nenhum procedimento SIGTAP encontrado para as especialidades selecionadas."}
+                  </p>
                 )}
 
                 {/* Lista de SIGTAP selecionados */}

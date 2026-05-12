@@ -303,6 +303,8 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
+  const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
+  const [sessaoPtsCids, setSessaoPtsCids] = useState<{ cid_codigo: string; cid_descricao: string }[]>([]);
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
@@ -333,6 +335,22 @@ const ProntuarioPage: React.FC = () => {
       ]);
       const cycle = cycleRes.data;
       setSessaoCycle(cycle || null);
+      
+      const pts = ptsRes.data as ActivePTS | null;
+      setSessaoPts(pts);
+
+      if (pts) {
+        const [sigtapRes, cidRes] = await Promise.all([
+          (supabase as any).from('pts_sigtap').select('procedimento_codigo, procedimento_nome, especialidade').eq('pts_id', pts.id),
+          (supabase as any).from('pts_cid').select('cid_codigo, cid_descricao').eq('pts_id', pts.id),
+        ]);
+        setSessaoPtsSigtap(sigtapRes.data || []);
+        setSessaoPtsCids(cidRes.data || []);
+      } else {
+        setSessaoPtsSigtap([]);
+        setSessaoPtsCids([]);
+      }
+
       if (cycle) {
         const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
           .eq('cycle_id', cycle.id)
@@ -341,7 +359,6 @@ const ProntuarioPage: React.FC = () => {
       } else {
         setSessaoCycleSessions([]);
       }
-      setSessaoPts(ptsRes.data as ActivePTS | null);
     } catch (err) {
       console.error('[loadSessaoData]', err);
     }
@@ -2624,6 +2641,30 @@ const ProntuarioPage: React.FC = () => {
                             <div className="text-sm space-y-2">
                               <div><span className="text-muted-foreground">Diagnóstico Funcional:</span><p className="text-foreground">{sessaoPts.diagnostico_funcional}</p></div>
                               <div><span className="text-muted-foreground">Objetivos Terapêuticos:</span><p className="text-foreground">{sessaoPts.objetivos_terapeuticos}</p></div>
+                              
+                              {sessaoPtsSigtap.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">Procedimentos SIGTAP:</span>
+                                  {sessaoPtsSigtap.map(s => (
+                                    <div key={s.procedimento_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{s.procedimento_codigo}</Badge>
+                                      <span>{s.procedimento_nome}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {sessaoPtsCids.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-muted-foreground">CIDs:</span>
+                                  {sessaoPtsCids.map(c => (
+                                    <div key={c.cid_codigo} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="secondary" className="font-mono">{c.cid_codigo}</Badge>
+                                      <span>{c.cid_descricao}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                               {/* Highlighted meta based on period */}
                               <div className={`rounded-md p-2 border ${metaPeriod === 'curto' ? 'bg-primary/5 border-primary/20' : metaPeriod === 'medio' ? 'bg-accent border-accent-foreground/10' : 'bg-muted/50 border-border'}`}>
                                 <span className="text-xs font-semibold text-muted-foreground">
