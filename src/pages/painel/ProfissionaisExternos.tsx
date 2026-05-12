@@ -346,91 +346,104 @@ const ProfissionaisExternos: React.FC = () => {
       ) : filteredExternos.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">{externos.length === 0 ? "Nenhum profissional externo cadastrado." : "Nenhum resultado encontrado."}</CardContent></Card>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredExternos.map(ext => {
             const unidade = unidades.find((u: any) => u.id === ext.unidade_id);
             const extQuotas = quotas.filter(q => q.profissional_externo_id === ext.id);
+            const totalVagas = extQuotas.reduce((acc, curr) => acc + curr.vagas_total, 0);
+            const usadasVagas = extQuotas.reduce((acc, curr) => acc + curr.vagas_usadas, 0);
+            
             return (
-              <Card key={ext.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-semibold text-foreground">{ext.nome}</p>
-                        <Badge variant={ext.ativo ? "default" : "secondary"}>{ext.ativo ? "Ativo" : "Inativo"}</Badge>
+              <Card key={ext.id} className="overflow-hidden border-t-4 border-t-primary/20 hover:shadow-md transition-shadow">
+                <CardContent className="p-0">
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          <User className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-bold text-foreground truncate">{ext.nome}</p>
+                            <Badge variant={ext.ativo ? "default" : "secondary"} className="text-[10px] h-4">
+                              {ext.ativo ? "ATIVO" : "INATIVO"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{ext.email}</p>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">{ext.email}</p>
-                      {unidade && <p className="text-xs text-muted-foreground">Unidade: {unidade.nome}</p>}
                     </div>
-                    {canManage && (
-                      <div className="flex gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => openQuotaDialog(ext.id)} title="Gerenciar Quotas">
-                          <Ticket className="w-4 h-4" />
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(ext)}>
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => handleToggleActive(ext)}>
-                          {ext.ativo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Excluir {ext.nome}?</AlertDialogTitle>
-                              <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDelete(ext.id)}>Excluir</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+
+                    <div className="grid grid-cols-2 gap-2 py-2 border-y border-dashed">
+                      <div className="text-center p-2 rounded bg-accent/30">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Cotas Ativas</p>
+                        <p className="text-lg font-bold text-primary">{extQuotas.length}</p>
                       </div>
-                    )}
+                      <div className="text-center p-2 rounded bg-accent/30">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase">Vagas Livres</p>
+                        <p className="text-lg font-bold text-success">{totalVagas - usadasVagas}/{totalVagas}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      {unidade && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Building2 className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{unidade.nome}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="w-3 h-3 shrink-0" />
+                        <span>Desde {new Date(ext.criado_em).toLocaleDateString()}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Quotas for this external */}
+                  <div className="bg-muted/30 p-2 flex items-center justify-between border-t">
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Gerenciar Cotas">
+                        <Ticket className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(ext)} title="Editar Profissional">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleToggleActive(ext)} title={ext.ativo ? "Desativar" : "Ativar"}>
+                        {ext.ativo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => {/* TODO: Link agendamento online */}}>
+                        <Search className="w-3 h-3" /> Agenda
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir {ext.nome}?</AlertDialogTitle>
+                            <AlertDialogDescription>Esta ação não pode ser desfeita. Todos os acessos e quotas serão removidos.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(ext.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Excluir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+
                   {extQuotas.length > 0 && (
-                    <div className="mt-3 pt-3 border-t">
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">QUOTAS</p>
-                      <div className="space-y-1">
-                        {extQuotas.map(q => {
-                          const prof = profissionaisInternos.find((f: any) => f.id === q.profissional_interno_id);
-                          const restantes = q.vagas_total - q.vagas_usadas;
-                          return (
-                            <div key={q.id} className="flex flex-col p-3 rounded bg-accent/30 text-sm gap-2">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <span className="font-medium">{prof?.nome || "—"}</span>
-                                  <span className="text-muted-foreground ml-2">
-                                    {q.especialidade || (prof as any)?.profissao || ""}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant={restantes > 0 ? "default" : "destructive"}>
-                                    {restantes}/{q.vagas_total} vagas
-                                  </Badge>
-                                  {canManage && (
-                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDeleteQuota(q.id)}>
-                                      <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span className="flex items-center gap-1 uppercase">
-                                  <strong>Turno:</strong> {q.turno || "Manhã"}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <strong>Horário:</strong> {q.horario_inicio?.slice(0, 5) || "07:30"} - {q.horario_fim?.slice(0, 5) || "11:30"}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
+                    <div className="px-4 pb-4 mt-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Resumo de Turnos</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from(new Set(extQuotas.map(q => q.turno || "Manhã"))).map(turno => (
+                          <Badge key={turno} variant="outline" className="text-[9px] uppercase font-bold py-0 h-5 bg-background">
+                            {turno}
+                          </Badge>
+                        ))}
                       </div>
                     </div>
                   )}
