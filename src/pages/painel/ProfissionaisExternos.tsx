@@ -776,9 +776,6 @@ const ProfissionaisExternos: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-};
       {/* List/Manage Quotas Dialog */}
       <Dialog open={quotaListDialogOpen} onOpenChange={setQuotaListDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -974,4 +971,9 @@ const ProfissionaisExternos: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+export default ProfissionaisExternos;
 export default ProfissionaisExternos;
