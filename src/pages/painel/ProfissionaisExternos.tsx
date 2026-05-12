@@ -262,7 +262,7 @@ const ProfissionaisExternos: React.FC = () => {
         setVagasPorProf(v => { const copy = { ...v }; delete copy[profId]; return copy; });
         return next;
       }
-      setVagasPorProf(v => ({ ...v, [profId]: 5 }));
+      setVagasPorProf(v => ({ ...v, [profId]: { vagas: 5, turno: "manha", horario_inicio: "07:30", horario_fim: "11:30" } }));
       return [...prev, profId];
     });
   };
