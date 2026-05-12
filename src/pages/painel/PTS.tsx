@@ -433,8 +433,11 @@ const PTS: React.FC = () => {
   };
 
   const handleSave = async () => {
+    let finalSigtap = [...sigtapSelecionados];
+    let finalCids = [...cidsSelecionados];
+
     // Se houver um procedimento selecionado no combo mas não adicionado, adiciona-o automaticamente
-    if (selectedProcCodigo && !sigtapSelecionados.some(s => s.procedimento_codigo === selectedProcCodigo)) {
+    if (selectedProcCodigo && !finalSigtap.some(s => s.procedimento_codigo === selectedProcCodigo)) {
       const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
       if (proc) {
         const newItem = {
@@ -442,11 +445,20 @@ const PTS: React.FC = () => {
           procedimento_nome: proc.nome,
           especialidade: proc.especialidade,
         };
-        // Para fonoaudiologia, o handleAddSigtap faz mais coisas, então chamamos ele se for o caso
+        finalSigtap.push(newItem);
+        
+        // Se for fonoaudiologia, tenta pegar os CIDs vinculados automaticamente
         if (proc.especialidade === 'fonoaudiologia') {
-          await handleAddSigtap();
-        } else {
-          setSigtapSelecionados(prev => [...prev, newItem]);
+          const { data: relatedCids } = await supabase
+            .from('sigtap_procedimento_cids')
+            .select('cid_codigo, cid_descricao')
+            .eq('procedimento_codigo', proc.codigo);
+          
+          if (relatedCids && relatedCids.length > 0) {
+            const currentCidCodes = new Set(finalCids.map(c => c.cid_codigo));
+            const toAdd = relatedCids.filter(c => !currentCidCodes.has(c.cid_codigo));
+            finalCids.push(...toAdd);
+          }
         }
       }
     }
