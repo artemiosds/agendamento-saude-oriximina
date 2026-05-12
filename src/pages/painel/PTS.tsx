@@ -526,9 +526,9 @@ const PTS: React.FC = () => {
       }
 
       // Insert SIGTAP relationships
-      if (sigtapSelecionados.length > 0) {
+      if (finalSigtap.length > 0) {
         const { error: sigtapError } = await (supabase as any).from('pts_sigtap').insert(
-          sigtapSelecionados.map(s => ({
+          finalSigtap.map(s => ({
             pts_id: ptsId,
             procedimento_codigo: s.procedimento_codigo,
             procedimento_nome: s.procedimento_nome,
@@ -539,9 +539,9 @@ const PTS: React.FC = () => {
       }
 
       // Insert CID relationships
-      if (cidsSelecionados.length > 0) {
+      if (finalCids.length > 0) {
         const { error: cidError } = await (supabase as any).from('pts_cid').insert(
-          cidsSelecionados.map(c => ({
+          finalCids.map(c => ({
             pts_id: ptsId,
             cid_codigo: c.cid_codigo,
             cid_descricao: c.cid_descricao,
@@ -557,8 +557,8 @@ const PTS: React.FC = () => {
         detalhes: {
           paciente_nome: form.patient_name,
           especialidades: form.especialidades_envolvidas,
-          sigtap_count: sigtapSelecionados.length,
-          cid_count: cidsSelecionados.length,
+          sigtap_count: finalSigtap.length,
+          cid_count: finalCids.length,
         },
       });
 
