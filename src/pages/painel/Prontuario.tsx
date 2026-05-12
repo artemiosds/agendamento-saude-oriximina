@@ -335,15 +335,23 @@ const ProntuarioPage: React.FC = () => {
       ]);
       const cycle = cycleRes.data;
       setSessaoCycle(cycle || null);
-      if (cycle) {
-        const { data: sessions } = await (supabase as any).from('treatment_sessions').select('*')
-          .eq('cycle_id', cycle.id)
-          .order('session_number', { ascending: true });
-        setSessaoCycleSessions(sessions || []);
+      
+      const pts = ptsRes.data as ActivePTS | null;
+      setSessaoPts(pts);
+
+      if (pts) {
+        const [sigtapRes, cidRes] = await Promise.all([
+          (supabase as any).from('pts_sigtap').select('procedimento_codigo, procedimento_nome, especialidade').eq('pts_id', pts.id),
+          (supabase as any).from('pts_cid').select('cid_codigo, cid_descricao').eq('pts_id', pts.id),
+        ]);
+        setSessaoPtsSigtap(sigtapRes.data || []);
+        setSessaoPtsCids(cidRes.data || []);
       } else {
-        setSessaoCycleSessions([]);
+        setSessaoPtsSigtap([]);
+        setSessaoPtsCids([]);
       }
-      setSessaoPts(ptsRes.data as ActivePTS | null);
+
+      if (cycle) {
     } catch (err) {
       console.error('[loadSessaoData]', err);
     }
