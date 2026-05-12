@@ -572,7 +572,20 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                 {item.evolucao && (
                                   <div>
                                     <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Evolução / SOAP</span>
-                                    <p className="text-foreground leading-relaxed whitespace-pre-wrap">{item.evolucao}</p>
+                                    <div className="text-foreground leading-relaxed whitespace-pre-wrap">
+                                      {item.evolucao.startsWith("{") ? (
+                                        <div className="bg-muted p-2 rounded text-[10px] font-mono whitespace-pre overflow-x-auto">
+                                          {item.evolucao}
+                                        </div>
+                                      ) : item.evolucao.includes("<div") ? (
+                                        <div 
+                                          className="report-preview border p-3 rounded-md bg-white shadow-sm"
+                                          dangerouslySetInnerHTML={{ __html: item.evolucao.split("\n\n").slice(1).join("\n\n") }} 
+                                        />
+                                      ) : (
+                                        item.evolucao
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                                 {item.conduta && (
