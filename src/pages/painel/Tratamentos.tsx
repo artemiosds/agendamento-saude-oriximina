@@ -3051,12 +3051,17 @@ const Tratamentos: React.FC = () => {
                 />
               </div>
               <Button
-                onClick={handleAddIntermediateSession}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAddIntermediateSession();
+                }}
                 className="w-full gradient-primary text-primary-foreground"
                 disabled={!intermediateDate || addingIntermediate}
               >
                 {addingIntermediate ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Adicionando...</>
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
                 ) : (
                   <><Plus className="w-4 h-4 mr-2" /> Adicionar Sessão</>
                 )}
