@@ -24,6 +24,21 @@ interface ExternalProf {
   unidade_id: string;
   ativo: boolean;
   criado_em: string;
+  telefone?: string;
+  documento?: string;
+  orgao_origem?: string;
+  responsavel?: string;
+  observacoes?: string;
+  data_validade?: string;
+  permissoes?: {
+    pode_agendar: boolean;
+    pode_visualizar: boolean;
+    pode_cancelar: boolean;
+    pode_editar_paciente: boolean;
+    pode_cadastrar_paciente: boolean;
+    pode_selecionar_paciente: boolean;
+    pode_anexar_documento: boolean;
+  };
 }
 
 interface QuotaRow {
@@ -35,6 +50,11 @@ interface QuotaRow {
   vagas_usadas: number;
   periodo_inicio: string;
   periodo_fim: string;
+  turno?: string;
+  horario_inicio?: string;
+  horario_fim?: string;
+  especialidade?: string;
+  dia_semana?: number;
 }
 
 const ProfissionaisExternos: React.FC = () => {
