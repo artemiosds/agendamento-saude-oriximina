@@ -68,7 +68,11 @@ serve(async (req) => {
 
     // ── CREATE external professional ──
     if (action === "create") {
-      const { nome, email, senha, unidade_id, criado_por } = body;
+      const { 
+        nome, email, senha, unidade_id, criado_por, 
+        telefone, documento, orgao_origem, responsavel, 
+        observacoes, permissoes, data_validade 
+      } = body;
       if (!nome || !email || !senha) {
         return new Response(JSON.stringify({ error: "Nome, e-mail e senha são obrigatórios." }), { status: 200, headers: corsHeaders });
       }
@@ -99,6 +103,21 @@ serve(async (req) => {
         email: email.trim().toLowerCase(),
         unidade_id: unidade_id || "",
         criado_por: criado_por || "",
+        telefone: telefone || null,
+        documento: documento || null,
+        orgao_origem: orgao_origem || null,
+        responsavel: responsavel || null,
+        observacoes: observacoes || null,
+        permissoes: permissoes || {
+          pode_agendar: true,
+          pode_visualizar: true,
+          pode_cancelar: true,
+          pode_editar_paciente: true,
+          pode_cadastrar_paciente: true,
+          pode_selecionar_paciente: true,
+          pode_anexar_documento: true
+        },
+        data_validade: data_validade || null
       }).select().single();
 
       if (dbErr) {
@@ -118,7 +137,11 @@ serve(async (req) => {
       if (!current) return new Response(JSON.stringify({ error: "Não encontrado." }), { status: 200, headers: corsHeaders });
 
       const dbFields: Record<string, any> = {};
-      for (const key of ["nome", "email", "unidade_id", "ativo"]) {
+      const allowedFields = [
+        "nome", "email", "unidade_id", "ativo", "telefone", "documento", 
+        "orgao_origem", "responsavel", "observacoes", "permissoes", "data_validade"
+      ];
+      for (const key of allowedFields) {
         if (body[key] !== undefined) dbFields[key] = body[key];
       }
       if (dbFields.email) dbFields.email = dbFields.email.trim().toLowerCase();
