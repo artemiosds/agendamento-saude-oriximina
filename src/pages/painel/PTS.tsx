@@ -355,11 +355,12 @@ const PTS: React.FC = () => {
 
     const currentProc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
     if (currentProc?.especialidade === 'fonoaudiologia' && editingPts) {
-       await (supabase as any).from('pts_cid').upsert({
+       const { error } = await (supabase as any).from('pts_cid').upsert({
          pts_id: editingPts.id,
          cid_codigo: code,
          cid_descricao: 'CID informado manualmente'
        }, { onConflict: 'pts_id, cid_codigo' });
+       if (error) console.error('Erro ao vincular CID manual (fono):', error);
     }
     
     toast.info('CID aceito manualmente.');
