@@ -275,11 +275,16 @@ const ProfissionaisExternos: React.FC = () => {
       const inserts = selectedProfIds.map(profId => ({
         profissional_externo_id: selectedExternoId,
         profissional_interno_id: profId,
-        unidade_id: "",
-        vagas_total: vagasPorProf[profId] || 5,
+        unidade_id: form.unidade_id || "",
+        vagas_total: vagasPorProf[profId]?.vagas || 5,
         vagas_usadas: 0,
         periodo_inicio: today,
         periodo_fim: endOfYear,
+        turno: vagasPorProf[profId]?.turno || "manha",
+        horario_inicio: vagasPorProf[profId]?.horario_inicio || "07:30",
+        horario_fim: vagasPorProf[profId]?.horario_fim || "11:30",
+        especialidade: (profissionaisInternos.find(f => f.id === profId) as any)?.profissao || "Médico",
+        ativo: true
       }));
 
       const { error } = await supabase.from("quotas_externas").insert(inserts);
