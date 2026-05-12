@@ -433,6 +433,24 @@ const PTS: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Se houver um procedimento selecionado no combo mas não adicionado, adiciona-o automaticamente
+    if (selectedProcCodigo && !sigtapSelecionados.some(s => s.procedimento_codigo === selectedProcCodigo)) {
+      const proc = sigtapProcs.find(p => p.codigo === selectedProcCodigo);
+      if (proc) {
+        const newItem = {
+          procedimento_codigo: proc.codigo,
+          procedimento_nome: proc.nome,
+          especialidade: proc.especialidade,
+        };
+        // Para fonoaudiologia, o handleAddSigtap faz mais coisas, então chamamos ele se for o caso
+        if (proc.especialidade === 'fonoaudiologia') {
+          await handleAddSigtap();
+        } else {
+          setSigtapSelecionados(prev => [...prev, newItem]);
+        }
+      }
+    }
+
     if (!form.patient_id || !form.diagnostico_funcional || !form.objetivos_terapeuticos) {
       toast.error('Preencha paciente, diagnóstico funcional e objetivos.');
       return;
