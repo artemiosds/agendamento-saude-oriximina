@@ -1958,38 +1958,40 @@ const Agenda: React.FC = () => {
                       <p className="text-xs text-success">✓ Dados conferidos</p>
                     )}
                   </div>
-                  <div>
-                    <Label>Profissional</Label>
-                    <Select
-                      value={newAg.profissionalId}
-                      onValueChange={(v) => setNewAg((p) => ({ ...p, profissionalId: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {profissionais.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Sala</Label>
-                    <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v }))}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {salasVisiveis.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Profissional</Label>
+                      <Select
+                        value={newAg.profissionalId}
+                        onValueChange={(v) => setNewAg((p) => ({ ...p, profissionalId: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {profissionais.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Sala</Label>
+                      <Select value={newAg.salaId} onValueChange={(v) => setNewAg((p) => ({ ...p, salaId: v }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {salasVisiveis.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div>
                     <Label>Tipo</Label>
