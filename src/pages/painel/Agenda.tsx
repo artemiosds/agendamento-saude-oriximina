@@ -1939,7 +1939,7 @@ const Agenda: React.FC = () => {
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione um paciente..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-[300px]">
                         {pacientes.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.nome}
