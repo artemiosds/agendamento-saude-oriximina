@@ -259,20 +259,22 @@ const RelatorioAlta: React.FC = () => {
     const p = paciente;
     if (!p) return "";
 
+    const motivoLabel = MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || motivoAlta;
+    
     let html = `
       <div class="info-grid">
-        <div><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
-        <div><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
-        <div><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
-        <div><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(dataAlta)}</span></div>
-        <div><span class="info-label">Modalidades</span><br/><span class="info-value">${modalidades.join(", ") || "—"}</span></div>
-        <div><span class="info-label">Data Admissão</span><br/><span class="info-value">${fmt(p.criadoEm || "")}</span></div>
+        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
+        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
+        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(dataAlta)}</span></div>
+        <div class="info-item"><span class="info-label">Modalidades</span><br/><span class="info-value">${modalidades.join(", ") || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Data Admissão</span><br/><span class="info-value">${fmt(p.criadoEm || "")}</span></div>
       </div>
 
-      <h2>Diagnóstico</h2>
       <div class="section">
+        <div class="section-title">Diagnóstico</div>
         <div class="field"><span class="field-label">CID-10</span><div class="field-value">${cid10 || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Funções do Corpo</span><div class="field-value">${cifFuncoes || "—"}</div></div>
         <div class="field"><span class="field-label">CIF — Atividades e Participação</span><div class="field-value">${cifAtividades || "—"}</div></div>
@@ -282,20 +284,22 @@ const RelatorioAlta: React.FC = () => {
 
     profSections.forEach(s => {
       html += `
-        <h2>${s.profissao || "Profissional"} — ${s.profissional_nome}</h2>
-        <div class="section">
-          <div class="field"><span class="field-label">Período</span><div class="field-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</div></div>
-          <div class="field"><span class="field-label">Sessões realizadas</span><div class="field-value">${s.sessoes}</div></div>
+        <div class="section" style="page-break-inside: avoid;">
+          <div class="section-title">${s.profissao || "Profissional"} — ${s.profissional_nome}</div>
+          <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
+            <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(s.periodo_inicio)} a ${fmt(s.periodo_fim)}</span></div>
+            <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${s.sessoes}</span></div>
+          </div>
           <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${s.objetivos || "—"}</div></div>
-          <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${s.intervencoes || "—"}</div></div>
+          <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${s.intervencoes || "—"}</div></div>
           <div class="field"><span class="field-label">Evolução clínica e funcional</span><div class="field-value">${s.evolucao || "—"}</div></div>
           <div class="field"><span class="field-label">Metas</span><div class="field-value">${
             s.metas_status === "totalmente" ? "Totalmente atingidas" :
             s.metas_status === "parcialmente" ? "Parcialmente atingidas" : "Não atingidas"
           }${s.metas_justificativa ? ` — ${s.metas_justificativa}` : ""}</div></div>
           ${s.tecnologia_assistiva ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${s.tecnologia_assistiva}</div></div>` : ""}
-          <div class="signature" style="margin-top:20px">
-            <div class="signature-line"></div>
+          <div class="signature" style="margin-top:20px; text-align: left;">
+            <div class="signature-line" style="margin-left: 0; width: 250px;"></div>
             <div class="name">${s.profissional_nome}</div>
             <div class="role">${s.profissao} — ${s.conselho}</div>
           </div>
@@ -303,21 +307,20 @@ const RelatorioAlta: React.FC = () => {
       `;
     });
 
-    const motivoLabel = MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || motivoAlta;
     html += `
-      <h2>Motivo da Alta</h2>
-      <div class="section">
+      <div class="section" style="page-break-inside: avoid;">
+        <div class="section-title">Motivo da Alta</div>
         <div class="field-value">${motivoLabel}${motivoDetalhe ? ` — ${motivoDetalhe}` : ""}</div>
       </div>
 
-      <h2>Condição Funcional na Alta</h2>
-      <div class="section">
+      <div class="section" style="page-break-inside: avoid;">
+        <div class="section-title">Condição Funcional na Alta</div>
         <div class="field"><span class="field-label">Descrição</span><div class="field-value">${condicaoFuncional || "—"}</div></div>
         <div class="field"><span class="field-label">Nível de independência</span><div class="field-value">${nivelIndep || "—"}</div></div>
       </div>
 
-      <h2>Plano Pós-Alta</h2>
-      <div class="section">
+      <div class="section" style="page-break-inside: avoid;">
+        <div class="section-title">Plano Pós-Alta</div>
         <div class="field"><span class="field-label">Orientações ao usuário/família</span><div class="field-value">${orientacoesUsuario || "—"}</div></div>
         <div class="field"><span class="field-label">Orientações para UBS/ESF</span><div class="field-value">${orientacoesUbs || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${encaminhamentos.join(", ") || "—"}</div></div>
