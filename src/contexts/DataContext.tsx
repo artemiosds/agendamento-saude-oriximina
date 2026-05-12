@@ -40,7 +40,11 @@ export interface TurnoInfoResult {
   horaFim: string;
   vagasTotal: number;
   vagasOcupadas: number;
-  vagasLivres: number;
+  vagasReservadasExterno: number;
+  vagasOcupadasExterno: number;
+  vagasOcupadasInterno: number;
+  vagasLivresInternas: number;
+  vagasLivresTotal: number;
   lotado: boolean;
   excedido: boolean;
 }
