@@ -202,7 +202,7 @@ const RelatorioAlta: React.FC = () => {
     if (!user?.id) return;
     const { data: pronts } = await supabase
       .from("prontuarios")
-      .select("data_atendimento")
+      .select("data_atendimento, hipotese, procedimentos_texto")
       .eq("paciente_id", pid)
       .eq("profissional_id", user.id)
       .order("data_atendimento", { ascending: true });
@@ -210,6 +210,11 @@ const RelatorioAlta: React.FC = () => {
     if (pronts && pronts.length > 0) {
       setIndPeriodoInicio(pronts[0].data_atendimento);
       setIndPeriodoFim(pronts[pronts.length - 1].data_atendimento);
+      
+      // Load most recent procedures and diagnosis
+      const lastPront = pronts[pronts.length - 1];
+      if (lastPront.hipotese) setIndDiagCid(lastPront.hipotese);
+      if (lastPront.procedimentos_texto) setIndIntervencoes(lastPront.procedimentos_texto);
     }
 
     const { data: sessions } = await supabase
@@ -222,7 +227,7 @@ const RelatorioAlta: React.FC = () => {
     setIndSessoes(sessions?.length || pronts?.length || 0);
 
     const pat = pacientes.find(p => p.id === pid);
-    if (pat?.cid) setIndDiagCid(pat.cid);
+    if (pat?.cid && !indDiagCid) setIndDiagCid(pat.cid);
   };
 
   const updateProfSection = (profId: string, field: keyof ProfSection, value: any) => {
