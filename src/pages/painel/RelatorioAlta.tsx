@@ -349,33 +349,35 @@ const RelatorioAlta: React.FC = () => {
 
     return `
       <div class="info-grid">
-        <div><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
-        <div><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
-        <div><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
-        <div><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
-        <div><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
-        <div><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(indDataAlta)}</span></div>
-        <div><span class="info-label">Profissional</span><br/><span class="info-value">${profNome} — ${profissao}</span></div>
-        <div><span class="info-label">Conselho</span><br/><span class="info-value">${conselho}</span></div>
+        <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
+        <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${fmt(p.dataNascimento)} (${calcIdade(p.dataNascimento)})</span></div>
+        <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
+        <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Responsável</span><br/><span class="info-value">${p.nomeMae || "—"}</span></div>
+        <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${fmt(indDataAlta)}</span></div>
+        <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${profNome} — ${profissao}</span></div>
+        <div class="info-item"><span class="info-label">Conselho</span><br/><span class="info-value">${conselho}</span></div>
       </div>
 
-      <h2>Diagnóstico</h2>
       <div class="section">
+        <div class="section-title">Diagnóstico</div>
         <div class="field"><span class="field-label">CID-10</span><div class="field-value">${indDiagCid || "—"}</div></div>
         <div class="field"><span class="field-label">CIF</span><div class="field-value">${indCif || "—"}</div></div>
       </div>
 
-      <h2>Atendimento</h2>
       <div class="section">
-        <div class="field"><span class="field-label">Período</span><div class="field-value">${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}</div></div>
-        <div class="field"><span class="field-label">Sessões realizadas</span><div class="field-value">${indSessoes}</div></div>
-        <div class="field"><span class="field-label">Modalidade</span><div class="field-value">${indModalidade || "—"}</div></div>
+        <div class="section-title">Atendimento</div>
+        <div class="info-grid" style="margin-bottom: 10px; padding: 8px;">
+          <div><span class="info-label">Período</span><br/><span class="info-value">${fmt(indPeriodoInicio)} a ${fmt(indPeriodoFim)}</span></div>
+          <div><span class="info-label">Sessões realizadas</span><br/><span class="info-value">${indSessoes}</span></div>
+          <div><span class="info-label">Modalidade</span><br/><span class="info-value">${indModalidade || "—"}</span></div>
+        </div>
       </div>
 
-      <h2>Evolução Clínica</h2>
       <div class="section">
+        <div class="section-title">Evolução Clínica e Funcional</div>
         <div class="field"><span class="field-label">Objetivos terapêuticos</span><div class="field-value">${indObjetivos || "—"}</div></div>
-        <div class="field"><span class="field-label">Intervenções/Procedimentos</span><div class="field-value">${indIntervencoes || "—"}</div></div>
+        <div class="field"><span class="field-label">Intervenções/Procedimentos Realizados</span><div class="field-value">${indIntervencoes || "—"}</div></div>
         <div class="field"><span class="field-label">Evolução clínica e funcional</span><div class="field-value">${indEvolucao || "—"}</div></div>
         <div class="field"><span class="field-label">Metas</span><div class="field-value">${
           indMetas === "totalmente" ? "Totalmente atingidas" :
@@ -384,10 +386,10 @@ const RelatorioAlta: React.FC = () => {
         ${indTA ? `<div class="field"><span class="field-label">Tecnologia Assistiva</span><div class="field-value">${indTA}</div></div>` : ""}
       </div>
 
-      <h2>Alta</h2>
-      <div class="section">
+      <div class="section" style="page-break-inside: avoid;">
+        <div class="section-title">Alta e Orientações</div>
         <div class="field"><span class="field-label">Motivo</span><div class="field-value">${motivoLabel}${indMotivoDet ? ` — ${indMotivoDet}` : ""}</div></div>
-        <div class="field"><span class="field-label">Orientações</span><div class="field-value">${indOrientacoes || "—"}</div></div>
+        <div class="field"><span class="field-label">Orientações específicas</span><div class="field-value">${indOrientacoes || "—"}</div></div>
         <div class="field"><span class="field-label">Encaminhamentos</span><div class="field-value">${indEncaminhamento || "—"}</div></div>
       </div>
 
