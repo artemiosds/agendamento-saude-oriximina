@@ -3388,16 +3388,16 @@ const Agenda: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={faltaTarget !== null} onOpenChange={(v) => { if (!v) setFaltaTarget(null); }}>
+      {faltaTarget && (
         <RegistrarFaltaModal
-          isOpen={faltaTarget !== null}
+          open={true}
           onClose={() => setFaltaTarget(null)}
-          onConfirm={(dados) => faltaTarget && handleConfirmarFalta(faltaTarget, dados)}
-          pacienteNome={faltaTarget?.pacienteNome || ""}
-          agendamentoData={faltaTarget?.data || ""}
-          agendamentoHora={faltaTarget?.hora || ""}
+          onConfirm={(dados) => handleRegistrarFalta(faltaTarget, dados)}
+          pacienteNome={faltaTarget.pacienteNome}
+          agendamentoData={faltaTarget.data}
+          agendamentoHora={faltaTarget.hora}
         />
-      </Dialog>
+      )}
     </div>
   );
 };
