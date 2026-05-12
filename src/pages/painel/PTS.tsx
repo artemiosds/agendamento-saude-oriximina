@@ -738,7 +738,11 @@ const PTS: React.FC = () => {
                 </div>
 
                 {sigtapProcs.length === 0 && !loadingProcs && (
-                  <p className="text-xs text-muted-foreground">Nenhum procedimento SIGTAP encontrado. Execute a sincronização DATASUS nas Configurações.</p>
+                  <p className="text-xs text-muted-foreground">
+                    {form.especialidades_envolvidas.length === 0 
+                      ? "Selecione uma especialidade acima para carregar os procedimentos SIGTAP." 
+                      : "Nenhum procedimento SIGTAP encontrado para as especialidades selecionadas."}
+                  </p>
                 )}
 
                 {/* Lista de SIGTAP selecionados */}
