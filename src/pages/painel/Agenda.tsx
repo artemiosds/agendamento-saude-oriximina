@@ -1918,11 +1918,11 @@ const Agenda: React.FC = () => {
                       <Plus className="w-4 h-4 mr-2" /> Novo Agendamento
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-md">
+                  <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="font-display">Novo Agendamento</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="space-y-2">
                     <Label>Paciente</Label>
                     <BuscaPaciente
