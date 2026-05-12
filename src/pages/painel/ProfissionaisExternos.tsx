@@ -71,7 +71,27 @@ const ProfissionaisExternos: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showSenha, setShowSenha] = useState(false);
-  const [form, setForm] = useState({ nome: "", email: "", senha: "", unidade_id: "" });
+  const [form, setForm] = useState({ 
+    nome: "", 
+    email: "", 
+    senha: "", 
+    unidade_id: "",
+    telefone: "",
+    documento: "",
+    orgao_origem: "",
+    responsavel: "",
+    observacoes: "",
+    data_validade: "",
+    permissoes: {
+      pode_agendar: true,
+      pode_visualizar: true,
+      pode_cancelar: true,
+      pode_editar_paciente: true,
+      pode_cadastrar_paciente: true,
+      pode_selecionar_paciente: true,
+      pode_anexar_documento: true
+    }
+  });
 
   // Quotas
   const [quotas, setQuotas] = useState<QuotaRow[]>([]);
