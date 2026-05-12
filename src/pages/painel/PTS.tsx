@@ -505,8 +505,8 @@ const PTS: React.FC = () => {
         ptsId = newPts.id;
 
         // Also create prontuario record
-        const procInfo = sigtapSelecionados.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
-        const cidInfo = cidsSelecionados.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
+        const procInfo = finalSigtap.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
+        const cidInfo = finalCids.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
         const { error: prontErr } = await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
