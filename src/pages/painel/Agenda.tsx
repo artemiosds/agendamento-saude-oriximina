@@ -902,6 +902,40 @@ const Agenda: React.FC = () => {
     // Apenas MASTER pode forçar encaixe quando o limite de vagas está atingido/excedido.
     // RECEPÇÃO e GESTÃO ficam bloqueados conforme regra de negócio.
     const canOverride = user?.role === "master";
+    
+    // NOVO: Cálculo centralizado de vagas (integração cotas externas)
+    const profTurnos = getTurnoInfo(newAg.profissionalId, prof.unidadeId, selectedDate);
+    const turnoAlvo = profTurnos.find(t => newAg.hora >= t.horaInicio && newAg.hora < t.horaFim);
+    
+    if (turnoAlvo) {
+      const isExterno = false; // Agendamento pela recepção
+      const excessoInterno = !isExterno && turnoAlvo.vagasLivresInternas <= 0;
+      
+      if (excessoInterno) {
+        const msg = `⚠️ Vagas internas esgotadas. Existem ${turnoAlvo.vagasReservadasExterno} vagas reservadas para externos que não podem ser usadas pela recepção sem autorização.`;
+        if (!canOverride) {
+          toast.error(msg);
+          return;
+        }
+        const confirmou = window.confirm(`${msg}\n\nDeseja forçar o uso de uma vaga externa como MASTER? (Auditoria será registrada)`);
+        if (!confirmou) return;
+        
+        // Registrar override na auditoria
+        logAction({
+          acao: "master_override_vaga_externa",
+          entidade: "agendamento",
+          modulo: "agenda",
+          user,
+          detalhes: { 
+            profissional: prof.nome, 
+            data: selectedDate, 
+            turno: turnoAlvo.nome,
+            motivo: "Uso de vaga reservada externa por agendamento interno"
+          },
+        });
+      }
+    }
+
     try {
       const { data: slotCheck } = await supabase.rpc("check_slot_availability", {
         p_profissional_id: newAg.profissionalId,
@@ -927,8 +961,8 @@ const Agenda: React.FC = () => {
         );
         if (!confirmou) return;
       }
-    } catch {
-      // If RPC fails, allow creation (fallback)
+    } catch (err) {
+      console.error("Slot check error:", err);
     }
 
     const unidade = unidades.find((u) => u.id === prof.unidadeId);
