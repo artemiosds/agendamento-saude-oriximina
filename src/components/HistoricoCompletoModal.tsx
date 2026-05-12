@@ -151,15 +151,28 @@ function useFullHistory(pacienteId: string, unidades: { id: string; nome: string
 
         if (p.profissional_nome) profSet.add(p.profissional_nome);
 
+        const isReport = p.tipo_registro === "alta_multiprofissional" || p.tipo_registro === "alta_individual" || 
+                         (p.evolucao && (p.evolucao.includes("Relatório de Alta Multiprofissional") || p.evolucao.includes("Relatório de Alta Individual")));
+
+        let summary = p.queixa_principal || p.evolucao || "";
+        if (isReport && (p.observacoes?.startsWith("{") || p.evolucao?.startsWith("{"))) {
+          try {
+            const data = JSON.parse(p.observacoes?.startsWith("{") ? p.observacoes : p.evolucao);
+            const motivo = data.motivoAlta || data.motivo || "";
+            const sessoes = data.sessoes || "";
+            summary = `${isReport ? "Relatório de Alta" : "Registro"} — Motivo: ${motivo}${sessoes ? ` (${sessoes} sessões)` : ""}`;
+          } catch {}
+        }
+
         allEvents.push({
           id: `pront_${p.id}`,
-          type,
+          type: isReport ? "alta" : type,
           date: p.data_atendimento,
           time: p.hora_atendimento || undefined,
           professional: p.profissional_nome || "",
           professionalId: p.profissional_id,
           specialty: specialtyMap.get(p.profissional_id) || undefined,
-          summary: p.queixa_principal || p.evolucao || "",
+          summary: summary,
           soapSubjetivo: p.soap_subjetivo || undefined,
           soapObjetivo: p.soap_objetivo || undefined,
           soapAvaliacao: p.soap_avaliacao || undefined,

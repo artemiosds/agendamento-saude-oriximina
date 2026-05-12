@@ -29,7 +29,7 @@ import GerarDocumentoModal from "@/components/GerarDocumentoModal";
 import DocumentosHistorico from "@/components/DocumentosHistorico";
 import PatientAttachmentManager from "@/components/PatientAttachmentManager";
 import PatientReferralHistory from "@/components/Pacientes/PatientReferralHistory";
-import { buildInstitutionalCSS } from "@/lib/printLayout";
+import { buildInstitutionalCSS, docHeader, docMeta, docFooter, loadDocumentConfig } from "@/lib/printLayout";
 import { formatCNS } from "@/lib/cnsUtils";
 
 interface ProntuarioItem {
@@ -205,68 +205,161 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   const activeEpisodios = episodios.filter((e) => e.status === "ativo");
 
-  const buildProntuarioHTML = (item: ProntuarioItem & { unidadeNome?: string }) => {
-    const css = buildInstitutionalCSS();
-    const isReport = item.evolucao && (item.evolucao.includes("Relatório de Alta Multiprofissional") || item.evolucao.includes("Relatório de Alta Individual"));
+  const buildProntuarioHTML = async (item: ProntuarioItem & { unidadeNome?: string }) => {
+    const config = await loadDocumentConfig();
+    const css = buildInstitutionalCSS(config);
     
-    // If it's a discharge report, it might have HTML in evolution
-    let evolutionContent = item.evolucao || "";
-    if (isReport && evolutionContent.includes("<div")) {
-      // It's already HTML-formatted from our new handleSave
-      evolutionContent = evolutionContent.split("\n\n").slice(1).join("\n\n"); // Remove the title header since doc-meta has info
-    } else if (isReport && evolutionContent.startsWith("{")) {
-      // It's old JSON format
-      try {
-        const data = JSON.parse(evolutionContent);
-        evolutionContent = `
-          <div class="section">
-            <h3>Dados do Relatório (Legado)</h3>
-            <pre style="font-family: inherit; font-size: 10pt; white-space: pre-wrap;">${JSON.stringify(data, null, 2)}</pre>
+    // Check if it's a discharge report
+    const evol = String(item.evolucao || "");
+    const obs = String((item as any).observacoes || "");
+    const isReport = evol.includes("Relatório de Alta Multiprofissional") || 
+                     evol.includes("Relatório de Alta Individual") ||
+                     (item as any).tipo_registro === "alta_multiprofissional" ||
+                     (item as any).tipo_registro === "alta_individual";
+
+    let contentHtml = "";
+    let docTitle = isReport ? "Relatório de Alta" : "Prontuário Clínico";
+
+    if (isReport) {
+      // 1. Identification (using patientData if available)
+      const p = pacienteData || { nome: pacienteNome };
+      const calcIdade = (dn: string) => {
+        if (!dn) return "";
+        try {
+          const b = new Date(dn);
+          const diff = Date.now() - b.getTime();
+          return `${Math.floor(diff / 31557600000)} anos`;
+        } catch { return ""; }
+      };
+
+      // 2. Try to parse JSON data from observations or evolution
+      let data: any = null;
+      if (obs.startsWith("{")) {
+        try { data = JSON.parse(obs); } catch {}
+      } else if (evol.startsWith("{")) {
+        try { data = JSON.parse(evol); } catch {}
+      }
+
+      if (data) {
+        // Build structured report from JSON
+        const isMulti = (item as any).tipo_registro === "alta_multiprofissional" || evol.includes("Multiprofissional");
+        docTitle = isMulti ? "Relatório de Alta Multiprofissional" : "Relatório de Alta Individual";
+
+        contentHtml = `
+          <div class="info-grid">
+            <div class="info-item"><span class="info-label">Paciente</span><br/><span class="info-value">${p.nome}</span></div>
+            <div class="info-item"><span class="info-label">Data Nasc.</span><br/><span class="info-value">${formatDateBR(p.data_nascimento)} ${p.data_nascimento ? `(${calcIdade(p.data_nascimento)})` : ""}</span></div>
+            <div class="info-item"><span class="info-label">CNS</span><br/><span class="info-value">${p.cns || "—"}</span></div>
+            <div class="info-item"><span class="info-label">CPF</span><br/><span class="info-value">${p.cpf || "—"}</span></div>
+            <div class="info-item"><span class="info-label">Data de Alta</span><br/><span class="info-value">${formatDateBR(item.data_atendimento)}</span></div>
+            <div class="info-item"><span class="info-label">Profissional</span><br/><span class="info-value">${item.profissional_nome || "—"}</span></div>
           </div>
         `;
-      } catch {
-        evolutionContent = String(item.evolucao).replace(/\n/g, "<br/>");
+
+        if (isMulti) {
+          contentHtml += `
+            <div class="section">
+              <div class="section-title">Diagnóstico</div>
+              <div class="field"><span class="field-label">CID-10</span><div class="field-value">${data.cid10 || "—"}</div></div>
+              <div class="field"><span class="field-label">CIF — Funções</span><div class="field-value">${data.cifFuncoes || "—"}</div></div>
+            </div>
+          `;
+          
+          (data.profissionais || []).forEach((s: any) => {
+            contentHtml += `
+              <div class="section" style="page-break-inside: avoid; border: 1px solid #eee; padding: 10px; margin-top: 10px;">
+                <div class="section-title">${s.profissao || "Profissional"} — ${s.profissional_nome}</div>
+                <div class="field"><span class="field-label">Objetivos</span><div class="field-value">${s.objetivos || "—"}</div></div>
+                <div class="field"><span class="field-label">Evolução</span><div class="field-value">${s.evolucao || "—"}</div></div>
+                <div class="field"><span class="field-label">Metas</span><div class="field-value">${s.metas_status || "—"}</div></div>
+              </div>
+            `;
+          });
+        } else {
+          contentHtml += `
+            <div class="section">
+              <div class="section-title">Diagnóstico</div>
+              <div class="field"><span class="field-label">CID-10</span><div class="field-value">${data.diagCid || "—"}</div></div>
+              <div class="field"><span class="field-label">CIF</span><div class="field-value">${data.cif || "—"}</div></div>
+            </div>
+            <div class="section">
+              <div class="section-title">Evolução Clínica e Funcional</div>
+              <div class="field"><span class="field-label">Objetivos</span><div class="field-value">${data.objetivos || "—"}</div></div>
+              <div class="field"><span class="field-label">Intervenções</span><div class="field-value">${data.intervencoes || "—"}</div></div>
+              <div class="field"><span class="field-label">Evolução</span><div class="field-value">${data.evolucao || "—"}</div></div>
+            </div>
+          `;
+        }
+
+        const motivoMap: any = {
+          objetivos_atingidos: "Alta por objetivos atingidos",
+          pedido_usuario: "A pedido do usuário/família",
+          infrequencia: "Infrequência/abandono",
+          encaminhamento: "Encaminhamento para outro serviço",
+          agravamento: "Agravamento clínico",
+          obito: "Óbito"
+        };
+        const mot = isMulti ? data.motivoAlta : data.motivo;
+
+        contentHtml += `
+          <div class="section">
+            <div class="section-title">Finalização</div>
+            <div class="field"><span class="field-label">Motivo da Alta</span><div class="field-value">${motivoMap[mot] || mot || "—"}</div></div>
+            <div class="field"><span class="field-label">Orientações</span><div class="field-value">${data.orientacoes || data.orientacoesUsuario || "—"}</div></div>
+          </div>
+        `;
+      } else {
+        // Fallback if no JSON, just show evolution text cleaned up
+        contentHtml = `<div class="section-content">${evol.replace(/Relatório de Alta (Individual|Multiprofissional) — .*\n\n/, "").replace(/\n/g, "<br/>")}</div>`;
       }
     } else {
-      evolutionContent = String(item.evolucao).replace(/\n/g, "<br/>");
+      // Normal clinical record
+      const row = (label: string, val?: string) =>
+        val ? `<div class="section"><div class="section-title">${label}</div><div class="section-content">${String(val).replace(/\n/g, "<br/>")}</div></div>` : "";
+      
+      contentHtml = `
+        ${row("Queixa principal", item.queixa_principal)}
+        ${row("Evolução / SOAP", item.evolucao)}
+        ${row("Conduta", item.conduta)}
+        ${row("Procedimentos", item.procedimentos_texto)}
+        ${row("Indicação de retorno", item.indicacao_retorno)}
+      `;
     }
 
-    const row = (label: string, val?: string) =>
-      val ? `<div class="section"><h3>${label}</h3><p>${String(val).replace(/\n/g, "<br/>")}</p></div>` : "";
-    
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Prontuário ${pacienteNome}</title>${css}</head>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${docTitle}</title>${css}</head>
       <body>
-        <h1 style="margin:0 0 4px">${isReport ? "Relatório de Alta" : "Prontuário Clínico"}</h1>
-        <div class="doc-meta">
-          <strong>Paciente:</strong> ${pacienteNome} &nbsp;|&nbsp;
-          <strong>Data:</strong> ${formatDateBR(item.data_atendimento)} ${item.hora_atendimento || ""} &nbsp;|&nbsp;
-          <strong>Profissional:</strong> ${item.profissional_nome || "-"}
-          ${item.unidadeNome ? `&nbsp;|&nbsp; <strong>Unidade:</strong> ${item.unidadeNome}` : ""}
+        ${docHeader(docTitle, config)}
+        ${docMeta({
+          Paciente: pacienteNome,
+          Data: formatDateBR(item.data_atendimento),
+          Profissional: item.profissional_nome || "—"
+        })}
+        <div class="doc-content">
+          ${contentHtml}
         </div>
-        ${!isReport ? row("Queixa principal", item.queixa_principal) : ""}
-        <div class="section">${isReport ? "" : "<h3>Evolução / SOAP</h3>"}${evolutionContent}</div>
-        ${!isReport ? row("Conduta", item.conduta) : ""}
-        ${!isReport ? row("Procedimentos", item.procedimentos_texto) : ""}
-        ${!isReport ? row("Outro procedimento", item.outro_procedimento) : ""}
-        ${!isReport ? row("Indicação de retorno", item.indicacao_retorno) : ""}
-        <div style="margin-top:48px; border-top:1px solid #333; padding-top:8px; text-align:center;">
-          ${item.profissional_nome || ""}
+        <div style="margin-top:60px;">
+          <div style="width: 300px; border-top: 1px solid #000; margin: 0 auto; text-align: center; padding-top: 5px;">
+            <strong>${item.profissional_nome || "—"}</strong><br/>
+            <span style="font-size: 9pt;">Assinatura do Profissional</span>
+          </div>
         </div>
+        ${docFooter(config)}
       </body></html>`;
   };
 
-  const handlePrint = (item: ProntuarioItem & { unidadeNome?: string }) => {
+  const handlePrint = async (item: ProntuarioItem & { unidadeNome?: string }) => {
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) {
       toast.error("Permita pop-ups para imprimir");
       return;
     }
-    win.document.write(buildProntuarioHTML(item));
+    const html = await buildProntuarioHTML(item);
+    win.document.write(html);
     win.document.close();
     setTimeout(() => {
       win.focus();
       win.print();
-    }, 300);
+    }, 400);
   };
 
   const handleDownloadPDF = (item: ProntuarioItem & { unidadeNome?: string }) => {
@@ -505,8 +598,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setViewerItem(item)} title="Visualizar">
                                   <Eye className="w-3.5 h-3.5 text-primary" />
                                 </Button>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownloadPDF(item)} title="Baixar PDF">
-                                  <FileDown className="w-3.5 h-3.5 text-primary" />
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handlePrint(item)} title="Imprimir / Baixar PDF">
+                                  <Printer className="w-3.5 h-3.5 text-primary" />
                                 </Button>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -575,13 +668,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                     <div className="text-foreground leading-relaxed whitespace-pre-wrap">
                                       {item.evolucao.startsWith("{") ? (
                                         <div className="bg-muted p-2 rounded text-[10px] font-mono whitespace-pre overflow-x-auto">
-                                          {item.evolucao}
+                                          Relatório de Alta (Dados Estruturados)
                                         </div>
-                                      ) : item.evolucao.includes("<div") ? (
-                                        <div 
-                                          className="report-preview border p-3 rounded-md bg-white shadow-sm"
-                                          dangerouslySetInnerHTML={{ __html: item.evolucao.split("\n\n").slice(1).join("\n\n") }} 
-                                        />
                                       ) : (
                                         item.evolucao
                                       )}
