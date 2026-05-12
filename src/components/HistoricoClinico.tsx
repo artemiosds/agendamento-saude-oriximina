@@ -598,8 +598,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                 <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setViewerItem(item)} title="Visualizar">
                                   <Eye className="w-3.5 h-3.5 text-primary" />
                                 </Button>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDownloadPDF(item)} title="Baixar PDF">
-                                  <FileDown className="w-3.5 h-3.5 text-primary" />
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handlePrint(item)} title="Imprimir / Baixar PDF">
+                                  <Printer className="w-3.5 h-3.5 text-primary" />
                                 </Button>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -668,13 +668,8 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                     <div className="text-foreground leading-relaxed whitespace-pre-wrap">
                                       {item.evolucao.startsWith("{") ? (
                                         <div className="bg-muted p-2 rounded text-[10px] font-mono whitespace-pre overflow-x-auto">
-                                          {item.evolucao}
+                                          Relatório de Alta (Dados Estruturados)
                                         </div>
-                                      ) : item.evolucao.includes("<div") ? (
-                                        <div 
-                                          className="report-preview border p-3 rounded-md bg-white shadow-sm"
-                                          dangerouslySetInnerHTML={{ __html: item.evolucao.split("\n\n").slice(1).join("\n\n") }} 
-                                        />
                                       ) : (
                                         item.evolucao
                                       )}
