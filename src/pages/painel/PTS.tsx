@@ -231,26 +231,28 @@ const PTS: React.FC = () => {
     try {
       // 1. Link to professional (current user)
       if (user?.id) {
-        await (supabase as any).from('procedimento_profissionais').upsert({
+        const { error: profErr } = await (supabase as any).from('procedimento_profissionais').upsert({
           procedimento_codigo: item.procedimento_codigo,
           profissional_id: user.id
         }, { onConflict: 'procedimento_codigo, profissional_id' });
+        if (profErr) console.error('Erro ao vincular procedimento ao profissional:', profErr);
       }
 
       // 2. If editing an existing PTS, save to pts_sigtap
       if (editingPts) {
-        await (supabase as any).from('pts_sigtap').upsert({
+        const { error: sigtapErr } = await (supabase as any).from('pts_sigtap').upsert({
           pts_id: editingPts.id,
           procedimento_codigo: item.procedimento_codigo,
           procedimento_nome: item.procedimento_nome,
           especialidade: item.especialidade
         }, { onConflict: 'pts_id, procedimento_codigo' });
+        if (sigtapErr) console.error('Erro ao salvar pts_sigtap (fono):', sigtapErr);
       }
 
       // 3. Create/Link to Prontuario if patient selected
       if (form.patient_id) {
         const cidInfo = cids && cids.length > 0 ? `\nCIDs: ${cids.map(c => c.cid_codigo).join(', ')}` : '';
-        await (supabase as any).from('prontuarios').insert({
+        const { error: prontErr } = await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
@@ -262,6 +264,7 @@ const PTS: React.FC = () => {
           queixa_principal: 'Procedimento Fonoaudiologia (PTS)',
           observacoes: `Procedimento: ${item.procedimento_codigo} - ${item.procedimento_nome}${cidInfo}`
         });
+        if (prontErr) console.error('Erro ao criar prontuário (fono):', prontErr);
       }
     } catch (err) {
       console.error('Erro ao salvar imediato fono:', err);
