@@ -976,4 +976,3 @@ const ProfissionaisExternos: React.FC = () => {
 };
 
 export default ProfissionaisExternos;
-export default ProfissionaisExternos;
