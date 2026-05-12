@@ -173,7 +173,20 @@ const ProfissionaisExternos: React.FC = () => {
     setSaving(true);
     try {
       if (editId) {
-        const body: any = { action: "update", id: editId, nome: form.nome, email: form.email, unidade_id: form.unidade_id };
+        const body: any = { 
+          action: "update", 
+          id: editId, 
+          nome: form.nome, 
+          email: form.email, 
+          unidade_id: form.unidade_id,
+          telefone: form.telefone,
+          documento: form.documento,
+          orgao_origem: form.orgao_origem,
+          responsavel: form.responsavel,
+          observacoes: form.observacoes,
+          data_validade: form.data_validade,
+          permissoes: form.permissoes
+        };
         if (form.senha) body.senha = form.senha;
         const { data, error } = await supabase.functions.invoke("manage-external", { body });
         if (error || data?.error) { toast.error(data?.error || "Erro."); setSaving(false); return; }
@@ -181,7 +194,21 @@ const ProfissionaisExternos: React.FC = () => {
       } else {
         if (!form.senha) { toast.error("Senha obrigatória para novo cadastro."); setSaving(false); return; }
         const { data, error } = await supabase.functions.invoke("manage-external", {
-          body: { action: "create", nome: form.nome, email: form.email, senha: form.senha, unidade_id: form.unidade_id, criado_por: user?.id || "" },
+          body: { 
+            action: "create", 
+            nome: form.nome, 
+            email: form.email, 
+            senha: form.senha, 
+            unidade_id: form.unidade_id, 
+            criado_por: user?.id || "",
+            telefone: form.telefone,
+            documento: form.documento,
+            orgao_origem: form.orgao_origem,
+            responsavel: form.responsavel,
+            observacoes: form.observacoes,
+            data_validade: form.data_validade,
+            permissoes: form.permissoes
+          },
         });
         if (error || data?.error) { toast.error(data?.error || "Erro."); setSaving(false); return; }
         toast.success("Profissional externo cadastrado!");
