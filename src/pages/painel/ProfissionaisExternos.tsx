@@ -428,12 +428,14 @@ const ProfissionaisExternos: React.FC = () => {
     try {
       // Assuming a table external_appointments or similar linked to quota
       // Let's try to find appointments linked to this quota
-      const { data, error } = await supabase
+      const response = await supabase
         .from("agendamentos")
         .select("id, data_agendamento, horario, status, pacientes(nome), funcionarios(nome)")
         .eq("profissional_externo_id", quota.profissional_externo_id)
         .eq("profissional_id", quota.profissional_interno_id)
-        .eq("data_agendamento", quota.periodo_inicio); // simplified for now
+        .eq("data_agendamento", quota.periodo_inicio);
+      
+      const { data, error } = response;
 
       if (error) throw error;
       
