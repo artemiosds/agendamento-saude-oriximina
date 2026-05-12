@@ -435,8 +435,8 @@ const ProfissionaisExternos: React.FC = () => {
           data_agendamento,
           horario,
           status,
-          pacientes(nome),
-          funcionarios!agendamentos_profissional_id_fkey(nome)
+          paciente:pacientes(nome),
+          profissional:funcionarios(nome)
         `)
         .eq("profissional_externo_id", quota.profissional_externo_id)
         .eq("profissional_id", quota.profissional_interno_id)
@@ -448,9 +448,9 @@ const ProfissionaisExternos: React.FC = () => {
         id: a.id,
         data_agendamento: a.data_agendamento,
         horario: a.horario,
-        paciente_nome: a.pacientes?.nome || "Paciente não identificado",
+        paciente_nome: a.paciente?.nome || "Paciente não identificado",
         status: a.status,
-        profissional_interno_nome: a.funcionarios?.nome || "Profissional não identificado"
+        profissional_interno_nome: a.profissional?.nome || "Profissional não identificado"
       })) || []);
     } catch (err) {
       console.error("Erro ao carregar agenda da cota", err);
