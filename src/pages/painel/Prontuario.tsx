@@ -303,6 +303,8 @@ const ProntuarioPage: React.FC = () => {
   const [sessaoCycle, setSessaoCycle] = useState<ActiveCycle | null>(null);
   const [sessaoCycleSessions, setSessaoCycleSessions] = useState<CycleSession[]>([]);
   const [sessaoPts, setSessaoPts] = useState<ActivePTS | null>(null);
+  const [sessaoPtsSigtap, setSessaoPtsSigtap] = useState<{ procedimento_codigo: string; procedimento_nome: string; especialidade: string }[]>([]);
+  const [sessaoPtsCids, setSessaoPtsCids] = useState<{ cid_codigo: string; cid_descricao: string }[]>([]);
   const [sessaoDataLoading, setSessaoDataLoading] = useState(false);
   const [sessaoHighlightSOAP, setSessaoHighlightSOAP] = useState(false);
   const [soapErrors, setSoapErrors] = useState(false);
