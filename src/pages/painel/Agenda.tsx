@@ -2008,7 +2008,7 @@ const Agenda: React.FC = () => {
                     </Select>
                   </div>
                   <div>
-                     <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
+                    <Label>{isTurnoMode ? 'Turno de Atendimento' : 'Horário Disponível'}</Label>
                     {newAg.profissionalId && (
                       <div className="space-y-2">
                         <SlotInfoBadge
