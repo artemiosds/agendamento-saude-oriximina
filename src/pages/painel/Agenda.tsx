@@ -2068,26 +2068,33 @@ const Agenda: React.FC = () => {
                                   )}>
                                     {t.vagasOcupadas} de {t.vagasTotal} {isMaster ? '(forçar)' : '(excedido)'}
                                   </span>
-                                ) : t.lotado ? (
-                                  <span className={cn(
-                                    "text-xs font-bold px-2 py-1 rounded-full",
-                                    isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
-                                  )}>
-                                    {isMaster ? 'Lotado (forçar)' : 'Lotado'}
-                                  </span>
-                                ) : (
-                                  <div className="flex flex-col items-end">
+                                  ) : t.vagasLivresInternas <= 0 ? (
                                     <span className={cn(
-                                      'text-sm font-bold',
-                                      pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
+                                      "text-xs font-bold px-2 py-1 rounded-full",
+                                      isMaster ? "bg-warning/20 text-warning" : "bg-destructive/10 text-destructive"
                                     )}>
-                                      {t.vagasLivresInternas} de {t.vagasTotal}
+                                      {isMaster ? 'Internas Esgotadas (forçar)' : 'Internas Esgotadas'}
                                     </span>
-                                    <span className="text-[10px] text-muted-foreground">livres internas</span>
-                                  </div>
-                                )}
-                              </div>
-                            </button>
+                                  ) : (
+                                    <div className="flex flex-col items-end">
+                                      <span className={cn(
+                                        'text-sm font-bold',
+                                        pct >= 90 ? 'text-destructive' : pct >= 60 ? 'text-warning' : 'text-success',
+                                      )}>
+                                        {t.vagasLivresInternas} de {t.vagasTotal}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">livres internas</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                              {t.vagasReservadasExterno > 0 && (
+                                <div className="px-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Reserva externa: <strong>{t.vagasReservadasExterno} vagas</strong></span>
+                                  <span>Ocupadas: <strong>{t.vagasOcupadasExterno}/{t.vagasReservadasExterno}</strong></span>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
                         {newAg.hora && newAgTurnoInfo.find(t => t.horaInicio === newAg.hora)?.lotado && isMaster && (
