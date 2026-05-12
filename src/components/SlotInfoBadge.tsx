@@ -102,7 +102,7 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
                 <span className="ml-auto font-semibold">
                   {t.excedido
                     ? `${t.vagasOcupadas} de ${t.vagasTotal} ocupadas`
-                    : `${t.vagasLivres} de ${t.vagasTotal} livres`}
+                    : `${t.vagasLivresInternas} de ${t.vagasTotal} livres internas`}
                 </span>
                 {t.excedido ? (
                   <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
