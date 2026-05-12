@@ -401,22 +401,32 @@ const ProfissionaisExternos: React.FC = () => {
                           const prof = profissionaisInternos.find((f: any) => f.id === q.profissional_interno_id);
                           const restantes = q.vagas_total - q.vagas_usadas;
                           return (
-                            <div key={q.id} className="flex items-center justify-between p-2 rounded bg-accent/30 text-sm">
-                              <div>
-                                <span className="font-medium">{prof?.nome || "—"}</span>
-                                <span className="text-muted-foreground ml-2">
-                                  {(prof as any)?.profissao || ""}
-                                </span>
+                            <div key={q.id} className="flex flex-col p-3 rounded bg-accent/30 text-sm gap-2">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="font-medium">{prof?.nome || "—"}</span>
+                                  <span className="text-muted-foreground ml-2">
+                                    {q.especialidade || (prof as any)?.profissao || ""}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={restantes > 0 ? "default" : "destructive"}>
+                                    {restantes}/{q.vagas_total} vagas
+                                  </Badge>
+                                  {canManage && (
+                                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDeleteQuota(q.id)}>
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant={restantes > 0 ? "default" : "destructive"}>
-                                  {restantes}/{q.vagas_total} vagas
-                                </Badge>
-                                {canManage && (
-                                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDeleteQuota(q.id)}>
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                )}
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1 uppercase">
+                                  <strong>Turno:</strong> {q.turno || "Manhã"}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <strong>Horário:</strong> {q.horario_inicio?.slice(0, 5) || "07:30"} - {q.horario_fim?.slice(0, 5) || "11:30"}
+                                </span>
                               </div>
                             </div>
                           );
