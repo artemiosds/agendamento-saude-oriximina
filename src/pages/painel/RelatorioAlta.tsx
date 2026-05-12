@@ -436,6 +436,21 @@ const RelatorioAlta: React.FC = () => {
 
     const unidade = user?.unidadeId || "";
     const dataAlt = type === "multi" ? dataAlta : indDataAlta;
+    
+    const payload = type === "multi" ? {
+      modalidades, cid10, cifFuncoes, cifAtividades, cifFatores,
+      profissionais: profSections, motivoAlta, motivoDetalhe,
+      condicaoFuncional, nivelIndep, orientacoesUsuario, orientacoesUbs,
+      encaminhamentos, freqAps
+    } : {
+      diagCid: indDiagCid, cif: indCif, objetivos: indObjetivos,
+      intervencoes: indIntervencoes, evolucao: indEvolucao,
+      metas: indMetas, metasJust: indMetasJust, ta: indTA,
+      motivo: indMotivo, motivoDet: indMotivoDet,
+      orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
+      modalidade: indModalidade, sessoes: indSessoes,
+      periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim
+    };
 
     const record = {
       paciente_id: pacienteId,
@@ -445,23 +460,10 @@ const RelatorioAlta: React.FC = () => {
       unidade_id: unidade,
       data_atendimento: dataAlt,
       tipo_registro: type === "multi" ? "alta_multiprofissional" : "alta_individual",
-      observacoes: JSON.stringify(type === "multi" ? {
-        modalidades, cid10, cifFuncoes, cifAtividades, cifFatores,
-        profissionais: profSections, motivoAlta, motivoDetalhe,
-        condicaoFuncional, nivelIndep, orientacoesUsuario, orientacoesUbs,
-        encaminhamentos, freqAps
-      } : {
-        diagCid: indDiagCid, cif: indCif, objetivos: indObjetivos,
-        intervencoes: indIntervencoes, evolucao: indEvolucao,
-        metas: indMetas, metasJust: indMetasJust, ta: indTA,
-        motivo: indMotivo, motivoDet: indMotivoDet,
-        orientacoes: indOrientacoes, encaminhamento: indEncaminhamento,
-        modalidade: indModalidade, sessoes: indSessoes,
-        periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim
-      }),
+      observacoes: JSON.stringify(payload),
       evolucao: type === "multi"
-        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}\n\n${buildMultiPrintBody()}`
-        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}\n\n${buildIndPrintBody()}`,
+        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}`
+        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}`,
     };
 
     const { error } = await supabase.from("prontuarios").insert(record);
