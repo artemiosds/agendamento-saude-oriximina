@@ -155,6 +155,79 @@ export type Database = {
         }
         Relationships: []
       }
+      agendamentos_externos: {
+        Row: {
+          atualizado_em: string | null
+          cota_id: string | null
+          criado_em: string | null
+          data: string
+          documento_url: string | null
+          horario: string
+          id: string
+          observacoes: string | null
+          paciente_id: string
+          profissional_externo_id: string
+          profissional_interno_id: string | null
+          status: string
+          turno: string
+          unidade_id: string
+        }
+        Insert: {
+          atualizado_em?: string | null
+          cota_id?: string | null
+          criado_em?: string | null
+          data: string
+          documento_url?: string | null
+          horario: string
+          id?: string
+          observacoes?: string | null
+          paciente_id: string
+          profissional_externo_id: string
+          profissional_interno_id?: string | null
+          status?: string
+          turno: string
+          unidade_id: string
+        }
+        Update: {
+          atualizado_em?: string | null
+          cota_id?: string | null
+          criado_em?: string | null
+          data?: string
+          documento_url?: string | null
+          horario?: string
+          id?: string
+          observacoes?: string | null
+          paciente_id?: string
+          profissional_externo_id?: string
+          profissional_interno_id?: string | null
+          status?: string
+          turno?: string
+          unidade_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agendamentos_externos_cota_id_fkey"
+            columns: ["cota_id"]
+            isOneToOne: false
+            referencedRelation: "quotas_externas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_externos_profissional_externo_id_fkey"
+            columns: ["profissional_externo_id"]
+            isOneToOne: false
+            referencedRelation: "profissionais_externos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamentos_externos_profissional_interno_id_fkey"
+            columns: ["profissional_interno_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       atendimentos: {
         Row: {
           agendamento_id: string
@@ -1151,8 +1224,11 @@ export type Database = {
       pacientes: {
         Row: {
           auth_user_id: string | null
+          bairro: string | null
+          cep: string | null
           cid: string
           cns: string
+          complemento: string | null
           comportamento: string
           comunicacao: string
           cpf: string
@@ -1173,33 +1249,45 @@ export type Database = {
           is_gestante: boolean
           is_pne: boolean
           justificativa: string
+          logradouro: string | null
           menor_idade: boolean
           mobilidade: string
           municipio: string
+          nacionalidade: string | null
           naturalidade: string
           naturalidade_uf: string
           nome: string
           nome_mae: string
           nome_responsavel: string
+          numero: string | null
           observacao_equipamentos: string
           observacoes: string
           outro_servico_sus: boolean
           profissional_solicitante: string
+          raca_cor: string | null
+          sexo: string | null
+          situacao_rua: boolean | null
           telefone: string
+          telefone_secundario: string | null
           tipo_condicao: string
           tipo_dispositivo: string
           tipo_encaminhamento: string
+          tipo_logradouro: string | null
           transporte: string
           turno_preferido: string
           ubs_origem: string
+          uf: string | null
           unidade_id: string
           usa_dispositivo: boolean
           usa_equipamentos: boolean
         }
         Insert: {
           auth_user_id?: string | null
+          bairro?: string | null
+          cep?: string | null
           cid?: string
           cns?: string
+          complemento?: string | null
           comportamento?: string
           comunicacao?: string
           cpf?: string
@@ -1220,33 +1308,45 @@ export type Database = {
           is_gestante?: boolean
           is_pne?: boolean
           justificativa?: string
+          logradouro?: string | null
           menor_idade?: boolean
           mobilidade?: string
           municipio?: string
+          nacionalidade?: string | null
           naturalidade?: string
           naturalidade_uf?: string
           nome: string
           nome_mae?: string
           nome_responsavel?: string
+          numero?: string | null
           observacao_equipamentos?: string
           observacoes?: string
           outro_servico_sus?: boolean
           profissional_solicitante?: string
+          raca_cor?: string | null
+          sexo?: string | null
+          situacao_rua?: boolean | null
           telefone?: string
+          telefone_secundario?: string | null
           tipo_condicao?: string
           tipo_dispositivo?: string
           tipo_encaminhamento?: string
+          tipo_logradouro?: string | null
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          uf?: string | null
           unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
         }
         Update: {
           auth_user_id?: string | null
+          bairro?: string | null
+          cep?: string | null
           cid?: string
           cns?: string
+          complemento?: string | null
           comportamento?: string
           comunicacao?: string
           cpf?: string
@@ -1267,25 +1367,34 @@ export type Database = {
           is_gestante?: boolean
           is_pne?: boolean
           justificativa?: string
+          logradouro?: string | null
           menor_idade?: boolean
           mobilidade?: string
           municipio?: string
+          nacionalidade?: string | null
           naturalidade?: string
           naturalidade_uf?: string
           nome?: string
           nome_mae?: string
           nome_responsavel?: string
+          numero?: string | null
           observacao_equipamentos?: string
           observacoes?: string
           outro_servico_sus?: boolean
           profissional_solicitante?: string
+          raca_cor?: string | null
+          sexo?: string | null
+          situacao_rua?: boolean | null
           telefone?: string
+          telefone_secundario?: string | null
           tipo_condicao?: string
           tipo_dispositivo?: string
           tipo_encaminhamento?: string
+          tipo_logradouro?: string | null
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
+          uf?: string | null
           unidade_id?: string
           usa_dispositivo?: boolean
           usa_equipamentos?: boolean
@@ -1937,9 +2046,16 @@ export type Database = {
           auth_user_id: string | null
           criado_em: string
           criado_por: string
+          data_validade: string | null
+          documento: string | null
           email: string
           id: string
           nome: string
+          observacoes: string | null
+          orgao_origem: string | null
+          permissoes: Json | null
+          responsavel: string | null
+          telefone: string | null
           unidade_id: string
           updated_at: string
         }
@@ -1948,9 +2064,16 @@ export type Database = {
           auth_user_id?: string | null
           criado_em?: string
           criado_por?: string
+          data_validade?: string | null
+          documento?: string | null
           email: string
           id?: string
           nome: string
+          observacoes?: string | null
+          orgao_origem?: string | null
+          permissoes?: Json | null
+          responsavel?: string | null
+          telefone?: string | null
           unidade_id?: string
           updated_at?: string
         }
@@ -1959,9 +2082,16 @@ export type Database = {
           auth_user_id?: string | null
           criado_em?: string
           criado_por?: string
+          data_validade?: string | null
+          documento?: string | null
           email?: string
           id?: string
           nome?: string
+          observacoes?: string | null
+          orgao_origem?: string | null
+          permissoes?: Json | null
+          responsavel?: string | null
+          telefone?: string | null
           unidade_id?: string
           updated_at?: string
         }
@@ -2384,36 +2514,57 @@ export type Database = {
       }
       quotas_externas: {
         Row: {
+          ativo: boolean | null
           criado_em: string
+          dia_semana: number | null
+          duracao_atendimento: number | null
+          especialidade: string | null
+          horario_fim: string | null
+          horario_inicio: string | null
           id: string
           periodo_fim: string
           periodo_inicio: string
           profissional_externo_id: string
           profissional_interno_id: string
+          turno: string | null
           unidade_id: string
           updated_at: string
           vagas_total: number
           vagas_usadas: number
         }
         Insert: {
+          ativo?: boolean | null
           criado_em?: string
+          dia_semana?: number | null
+          duracao_atendimento?: number | null
+          especialidade?: string | null
+          horario_fim?: string | null
+          horario_inicio?: string | null
           id?: string
           periodo_fim?: string
           periodo_inicio?: string
           profissional_externo_id: string
           profissional_interno_id: string
+          turno?: string | null
           unidade_id?: string
           updated_at?: string
           vagas_total?: number
           vagas_usadas?: number
         }
         Update: {
+          ativo?: boolean | null
           criado_em?: string
+          dia_semana?: number | null
+          duracao_atendimento?: number | null
+          especialidade?: string | null
+          horario_fim?: string | null
+          horario_inicio?: string | null
           id?: string
           periodo_fim?: string
           periodo_inicio?: string
           profissional_externo_id?: string
           profissional_interno_id?: string
+          turno?: string | null
           unidade_id?: string
           updated_at?: string
           vagas_total?: number
