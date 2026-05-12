@@ -207,23 +207,48 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
 
   const buildProntuarioHTML = (item: ProntuarioItem & { unidadeNome?: string }) => {
     const css = buildInstitutionalCSS();
+    const isReport = item.evolucao && (item.evolucao.includes("Relatório de Alta Multiprofissional") || item.evolucao.includes("Relatório de Alta Individual"));
+    
+    // If it's a discharge report, it might have HTML in evolution
+    let evolutionContent = item.evolucao || "";
+    if (isReport && evolutionContent.includes("<div")) {
+      // It's already HTML-formatted from our new handleSave
+      evolutionContent = evolutionContent.split("\n\n").slice(1).join("\n\n"); // Remove the title header since doc-meta has info
+    } else if (isReport && evolutionContent.startsWith("{")) {
+      // It's old JSON format
+      try {
+        const data = JSON.parse(evolutionContent);
+        evolutionContent = `
+          <div class="section">
+            <h3>Dados do Relatório (Legado)</h3>
+            <pre style="font-family: inherit; font-size: 10pt; white-space: pre-wrap;">${JSON.stringify(data, null, 2)}</pre>
+          </div>
+        `;
+      } catch {
+        evolutionContent = String(item.evolucao).replace(/\n/g, "<br/>");
+      }
+    } else {
+      evolutionContent = String(item.evolucao).replace(/\n/g, "<br/>");
+    }
+
     const row = (label: string, val?: string) =>
       val ? `<div class="section"><h3>${label}</h3><p>${String(val).replace(/\n/g, "<br/>")}</p></div>` : "";
+    
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Prontuário ${pacienteNome}</title>${css}</head>
       <body>
-        <h1 style="margin:0 0 4px">Prontuário Clínico</h1>
+        <h1 style="margin:0 0 4px">${isReport ? "Relatório de Alta" : "Prontuário Clínico"}</h1>
         <div class="doc-meta">
           <strong>Paciente:</strong> ${pacienteNome} &nbsp;|&nbsp;
           <strong>Data:</strong> ${formatDateBR(item.data_atendimento)} ${item.hora_atendimento || ""} &nbsp;|&nbsp;
           <strong>Profissional:</strong> ${item.profissional_nome || "-"}
           ${item.unidadeNome ? `&nbsp;|&nbsp; <strong>Unidade:</strong> ${item.unidadeNome}` : ""}
         </div>
-        ${row("Queixa principal", item.queixa_principal)}
-        ${row("Evolução / SOAP", item.evolucao)}
-        ${row("Conduta", item.conduta)}
-        ${row("Procedimentos", item.procedimentos_texto)}
-        ${row("Outro procedimento", item.outro_procedimento)}
-        ${row("Indicação de retorno", item.indicacao_retorno)}
+        ${!isReport ? row("Queixa principal", item.queixa_principal) : ""}
+        <div class="section">${isReport ? "" : "<h3>Evolução / SOAP</h3>"}${evolutionContent}</div>
+        ${!isReport ? row("Conduta", item.conduta) : ""}
+        ${!isReport ? row("Procedimentos", item.procedimentos_texto) : ""}
+        ${!isReport ? row("Outro procedimento", item.outro_procedimento) : ""}
+        ${!isReport ? row("Indicação de retorno", item.indicacao_retorno) : ""}
         <div style="margin-top:48px; border-top:1px solid #333; padding-top:8px; text-align:center;">
           ${item.profissional_nome || ""}
         </div>
@@ -547,7 +572,20 @@ export const HistoricoClinico: React.FC<Props> = ({ pacienteId, pacienteNome, cu
                                 {item.evolucao && (
                                   <div>
                                     <span className="font-bold uppercase text-[9px] text-muted-foreground block mb-0.5">Evolução / SOAP</span>
-                                    <p className="text-foreground leading-relaxed whitespace-pre-wrap">{item.evolucao}</p>
+                                    <div className="text-foreground leading-relaxed whitespace-pre-wrap">
+                                      {item.evolucao.startsWith("{") ? (
+                                        <div className="bg-muted p-2 rounded text-[10px] font-mono whitespace-pre overflow-x-auto">
+                                          {item.evolucao}
+                                        </div>
+                                      ) : item.evolucao.includes("<div") ? (
+                                        <div 
+                                          className="report-preview border p-3 rounded-md bg-white shadow-sm"
+                                          dangerouslySetInnerHTML={{ __html: item.evolucao.split("\n\n").slice(1).join("\n\n") }} 
+                                        />
+                                      ) : (
+                                        item.evolucao
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                                 {item.conduta && (
