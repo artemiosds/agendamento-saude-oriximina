@@ -430,14 +430,7 @@ const ProfissionaisExternos: React.FC = () => {
       // Let's try to find appointments linked to this quota
       const { data, error } = await supabase
         .from("agendamentos")
-        .select(`
-          id,
-          data_agendamento,
-          horario,
-          status,
-          paciente:pacientes(nome),
-          profissional:funcionarios(nome)
-        `)
+        .select("id, data_agendamento, horario, status, pacientes(nome), funcionarios(nome)")
         .eq("profissional_externo_id", quota.profissional_externo_id)
         .eq("profissional_id", quota.profissional_interno_id)
         .eq("data_agendamento", quota.periodo_inicio); // simplified for now
@@ -448,9 +441,9 @@ const ProfissionaisExternos: React.FC = () => {
         id: a.id,
         data_agendamento: a.data_agendamento,
         horario: a.horario,
-        paciente_nome: a.paciente?.nome || "Paciente não identificado",
+        paciente_nome: a.pacientes?.nome || "Paciente não identificado",
         status: a.status,
-        profissional_interno_nome: a.profissional?.nome || "Profissional não identificado"
+        profissional_interno_nome: a.funcionarios?.nome || "Profissional não identificado"
       })) || []);
     } catch (err) {
       console.error("Erro ao carregar agenda da cota", err);
