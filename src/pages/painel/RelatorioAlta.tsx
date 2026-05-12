@@ -452,8 +452,8 @@ const RelatorioAlta: React.FC = () => {
         periodoInicio: indPeriodoInicio, periodoFim: indPeriodoFim
       }),
       evolucao: type === "multi"
-        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}`
-        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}`,
+        ? `Relatório de Alta Multiprofissional — ${MOTIVOS_ALTA.find(m => m.value === motivoAlta)?.label || ""}\n\n${buildMultiPrintBody()}`
+        : `Relatório de Alta Individual — ${MOTIVOS_ALTA.find(m => m.value === indMotivo)?.label || ""}\n\n${buildIndPrintBody()}`,
     };
 
     const { error } = await supabase.from("prontuarios").insert(record);
