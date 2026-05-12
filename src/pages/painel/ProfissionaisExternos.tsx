@@ -581,7 +581,7 @@ const ProfissionaisExternos: React.FC = () => {
                   const prof = profissionaisInternos.find((f: any) => f.id === id);
                   return (
                     <p key={id} className="text-sm">
-                      {prof?.nome || "—"}: <strong>{vagasPorProf[id] || 5} vagas</strong>
+                      {prof?.nome || "—"}: <strong>{vagasPorProf[id]?.vagas || 5} vagas ({vagasPorProf[id]?.turno})</strong>
                     </p>
                   );
                 })}
