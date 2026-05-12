@@ -137,7 +137,7 @@ const RelatorioAlta: React.FC = () => {
     // Get all professionals who created prontuarios for this patient
     const { data: pronts } = await supabase
       .from("prontuarios")
-      .select("profissional_id, profissional_nome, data_atendimento")
+      .select("profissional_id, profissional_nome, data_atendimento, hipotese, procedimentos_texto")
       .eq("paciente_id", pid)
       .order("data_atendimento", { ascending: true });
 
@@ -147,13 +147,14 @@ const RelatorioAlta: React.FC = () => {
     }
 
     // Group by professional
-    const profMap = new Map<string, { nome: string; datas: string[] }>();
+    const profMap = new Map<string, { nome: string; datas: string[]; lastPront?: any }>();
     pronts.forEach(p => {
       const existing = profMap.get(p.profissional_id);
       if (existing) {
         existing.datas.push(p.data_atendimento);
+        existing.lastPront = p;
       } else {
-        profMap.set(p.profissional_id, { nome: p.profissional_nome, datas: [p.data_atendimento] });
+        profMap.set(p.profissional_id, { nome: p.profissional_nome, datas: [p.data_atendimento], lastPront: p });
       }
     });
 
@@ -182,7 +183,7 @@ const RelatorioAlta: React.FC = () => {
         periodo_fim: datas[datas.length - 1] || "",
         sessoes: sessionCounts.get(profId) || val.datas.length,
         objetivos: "",
-        intervencoes: "",
+        intervencoes: val.lastPront?.procedimentos_texto || "",
         evolucao: "",
         metas_status: "totalmente",
         metas_justificativa: "",
@@ -193,9 +194,11 @@ const RelatorioAlta: React.FC = () => {
     setProfSections(sections);
     if (sections.length > 0) setTabProf(sections[0].profissional_id);
 
-    // Pre-fill CID from patient
+    // Pre-fill CID from patient or most recent prontuario
     const pat = pacientes.find(p => p.id === pid);
-    if (pat?.cid) setCid10(pat.cid);
+    const lastP = pronts[pronts.length - 1];
+    if (lastP?.hipotese) setCid10(lastP.hipotese);
+    else if (pat?.cid) setCid10(pat.cid);
   };
 
   const loadIndividualData = async (pid: string) => {
