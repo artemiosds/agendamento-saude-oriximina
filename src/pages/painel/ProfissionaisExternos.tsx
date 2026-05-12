@@ -425,24 +425,51 @@ const ProfissionaisExternos: React.FC = () => {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editId ? "Editar" : "Cadastrar"} Profissional Externo</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
-            <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
-            <div>
-              <Label>{editId ? "Nova Senha (opcional)" : "Senha *"}</Label>
-              <div className="relative">
-                <Input type={showSenha ? "text" : "password"} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Min. 6 caracteres" className="pr-10" />
-                <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+            <div className="space-y-3">
+              <h3 className="font-semibold text-sm border-b pb-1">DADOS DO EXTERNO</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2"><Label>Nome Completo *</Label><Input value={form.nome} onChange={e => setForm(p => ({ ...p, nome: e.target.value }))} /></div>
+                <div><Label>E-mail *</Label><Input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} /></div>
+                <div><Label>Telefone</Label><Input value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} /></div>
+                <div><Label>Documento/Registro</Label><Input value={form.documento} onChange={e => setForm(p => ({ ...p, documento: e.target.value }))} /></div>
+                <div><Label>Órgão/Unidade Origem</Label><Input value={form.orgao_origem} onChange={e => setForm(p => ({ ...p, orgao_origem: e.target.value }))} /></div>
+                <div><Label>Responsável</Label><Input value={form.responsavel} onChange={e => setForm(p => ({ ...p, responsavel: e.target.value }))} /></div>
+                <div><Label>Data Validade Acesso</Label><Input type="date" value={form.data_validade} onChange={e => setForm(p => ({ ...p, data_validade: e.target.value }))} /></div>
+                <div className="sm:col-span-2">
+                  <Label>Unidade Destino Principal</Label>
+                  <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>{unidadesVisiveis.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="sm:col-span-2"><Label>Observações</Label><Input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))} /></div>
               </div>
-            </div>
-            <div>
-              <Label>Unidade</Label>
-              <Select value={form.unidade_id} onValueChange={v => setForm(p => ({ ...p, unidade_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{unidadesVisiveis.map((u: any) => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}</SelectContent>
-              </Select>
+
+              <h3 className="font-semibold text-sm border-b pb-1 mt-4">PERMISSÕES</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(form.permissoes).map(([key, value]) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <Checkbox 
+                      id={key} 
+                      checked={value} 
+                      onCheckedChange={(checked) => setForm(p => ({ ...p, permissoes: { ...p.permissoes, [key]: !!checked } }))} 
+                    />
+                    <Label htmlFor={key} className="text-xs cursor-pointer">{key.replace(/_/g, " ").toUpperCase()}</Label>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="font-semibold text-sm border-b pb-1 mt-4">CONFIGURAÇÃO DE ACESSO</h3>
+              <div>
+                <Label>{editId ? "Nova Senha (opcional)" : "Senha *"}</Label>
+                <div className="relative">
+                  <Input type={showSenha ? "text" : "password"} value={form.senha} onChange={e => setForm(p => ({ ...p, senha: e.target.value }))} placeholder="Min. 6 caracteres" className="pr-10" />
+                  <button type="button" onClick={() => setShowSenha(!showSenha)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
             </div>
             <Button onClick={handleSave} disabled={saving} className="w-full gradient-primary text-primary-foreground">
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Salvar
