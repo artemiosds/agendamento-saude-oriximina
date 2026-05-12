@@ -1864,7 +1864,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ).length;
         
         const vagasOcupadasInterno = turnoAppCount - vagasOcupadasExterno;
-        const vagasTotal = td.vagas_per_dia || td.vagasPorDia || 0;
+        const vagasTotal = td.vagasPorDia || 0;
         
         // Vagas LIVRES INTERNAS (vagas totais - reserva externa - ocupadas internas)
         const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
