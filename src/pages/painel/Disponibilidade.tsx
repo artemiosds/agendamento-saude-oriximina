@@ -862,12 +862,43 @@ const Disponibilidade: React.FC = () => {
                                   </div>
                                   <div className="w-full sm:w-20">
                                     <Label className="text-[10px] uppercase text-muted-foreground mb-1 block">Vagas</Label>
-                                    <Input 
-                                      type="number" 
-                                      value={bloco.vagas} 
-                                      onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'vagas', parseInt(e.target.value) || 0)} 
-                                      className="h-8 text-sm"
-                                    />
+                                    <div className="space-y-1">
+                                      <Input 
+                                        type="number" 
+                                        value={bloco.vagas} 
+                                        onChange={e => updateBlocoInDia(diaIndex, blocoIndex, 'vagas', parseInt(e.target.value) || 0)} 
+                                        className="h-8 text-sm"
+                                      />
+                                      {(() => {
+                                        const turnoQuotas = (window as any).__quotasExternasCached || [];
+                                        const reservadasExterno = turnoQuotas
+                                          .filter((q: any) => 
+                                            q.profissional_interno_id === form.profissionalId && 
+                                            q.unidade_id === form.unidadeId &&
+                                            q.ativo === true &&
+                                            (q.dia_semana === diaIndex || q.dia_semana === undefined) &&
+                                            (q.turno?.toLowerCase() === (bloco.horaInicio < '12:00' ? 'manha' : bloco.horaInicio < '18:00' ? 'tarde' : 'noite'))
+                                          )
+                                          .reduce((acc: number, curr: any) => acc + (curr.vagas_total || 0), 0);
+                                        
+                                        if (reservadasExterno > 0) {
+                                          const disponivelRecepcao = Math.max(0, bloco.vagas - reservadasExterno);
+                                          return (
+                                            <div className="flex flex-col gap-0.5 mt-1">
+                                              <span className="text-[9px] text-primary font-bold">Reserva Ext: {reservadasExterno}</span>
+                                              <span className={cn(
+                                                "text-[9px] font-bold",
+                                                disponivelRecepcao === 0 ? "text-destructive" : "text-success"
+                                              )}>Recepção: {disponivelRecepcao}</span>
+                                              {reservadasExterno > bloco.vagas && (
+                                                <span className="text-[8px] text-destructive leading-tight font-medium">⚠️ Cotas excedem vagas totais!</span>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-1 self-end sm:self-center mt-2 sm:mt-5">
                                     <Button 
