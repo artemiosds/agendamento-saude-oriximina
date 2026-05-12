@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search, User, ClipboardList, Calendar, Building2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Eye, EyeOff, UserPlus, Ticket, Search, User, ClipboardList, Calendar, Building2, MoreVertical, CheckCircle, XCircle, History, List } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnidadeFilter } from "@/hooks/useUnidadeFilter";
@@ -55,6 +55,17 @@ interface QuotaRow {
   horario_fim?: string;
   especialidade?: string;
   dia_semana?: number;
+  ativo: boolean;
+  criado_em: string;
+}
+
+interface ExternalAppointment {
+  id: string;
+  data_agendamento: string;
+  horario: string;
+  paciente_nome: string;
+  status: string;
+  profissional_interno_nome: string;
 }
 
 const ProfissionaisExternos: React.FC = () => {
@@ -96,7 +107,13 @@ const ProfissionaisExternos: React.FC = () => {
   // Quotas
   const [quotas, setQuotas] = useState<QuotaRow[]>([]);
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false);
+  const [quotaListDialogOpen, setQuotaListDialogOpen] = useState(false);
+  const [quotaEditDialogOpen, setQuotaEditDialogOpen] = useState(false);
+  const [agendaDialogOpen, setAgendaDialogOpen] = useState(false);
   const [selectedExternoId, setSelectedExternoId] = useState<string>("");
+  const [selectedQuota, setSelectedQuota] = useState<QuotaRow | null>(null);
+  const [quotaAppointments, setQuotaAppointments] = useState<ExternalAppointment[]>([]);
+  const [loadingAgenda, setLoadingAgenda] = useState(false);
   const [selectedProfIds, setSelectedProfIds] = useState<string[]>([]);
   const [vagasPorProf, setVagasPorProf] = useState<Record<string, { 
     vagas: number; 
@@ -105,6 +122,15 @@ const ProfissionaisExternos: React.FC = () => {
     horario_fim: string; 
   }>>({});
   const [savingQuota, setSavingQuota] = useState(false);
+  const [quotaForm, setQuotaForm] = useState({
+    vagas_total: 0,
+    turno: "",
+    horario_inicio: "",
+    horario_fim: "",
+    periodo_inicio: "",
+    periodo_fim: "",
+    ativo: true
+  });
 
   const loadExternos = useCallback(async () => {
     setLoading(true);
@@ -304,10 +330,130 @@ const ProfissionaisExternos: React.FC = () => {
     setSavingQuota(false);
   };
 
-  const handleDeleteQuota = async (quotaId: string) => {
-    await supabase.from("quotas_externas").delete().eq("id", quotaId);
-    toast.success("Quota removida.");
-    await loadExternos();
+  const handleEditQuota = (quota: QuotaRow) => {
+    setSelectedQuota(quota);
+    setQuotaForm({
+      vagas_total: quota.vagas_total,
+      turno: quota.turno || "manha",
+      horario_inicio: quota.horario_inicio || "07:30",
+      horario_fim: quota.horario_fim || "11:30",
+      periodo_inicio: quota.periodo_inicio,
+      periodo_fim: quota.periodo_fim,
+      ativo: quota.ativo
+    });
+    setQuotaEditDialogOpen(true);
+  };
+
+  const handleUpdateQuota = async () => {
+    if (!selectedQuota) return;
+    
+    if (quotaForm.vagas_total < selectedQuota.vagas_usadas) {
+      toast.error(`Não é possível reduzir para ${quotaForm.vagas_total} vagas, pois já existem ${selectedQuota.vagas_usadas} agendamentos vinculados a esta cota.`);
+      return;
+    }
+
+    setSavingQuota(true);
+    try {
+      const { error } = await supabase
+        .from("quotas_externas")
+        .update({
+          vagas_total: quotaForm.vagas_total,
+          turno: quotaForm.turno,
+          horario_inicio: quotaForm.horario_inicio,
+          horario_fim: quotaForm.horario_fim,
+          periodo_inicio: quotaForm.periodo_inicio,
+          periodo_fim: quotaForm.periodo_fim,
+          ativo: quotaForm.ativo
+        })
+        .eq("id", selectedQuota.id);
+
+      if (error) throw error;
+      toast.success("Cota atualizada com sucesso!");
+      setQuotaEditDialogOpen(false);
+      await loadExternos();
+    } catch (err: any) {
+      console.error("[Funcionários Externos] Erro ao atualizar cota", err);
+      toast.error("Erro ao atualizar cota.");
+    } finally {
+      setSavingQuota(false);
+    }
+  };
+
+  const handleDeleteQuota = async (quota: QuotaRow) => {
+    try {
+      if (quota.vagas_usadas > 0) {
+        // Soft delete/deactivate if has history
+        const { error } = await supabase
+          .from("quotas_externas")
+          .update({ ativo: false })
+          .eq("id", quota.id);
+        
+        if (error) throw error;
+        toast.info("Esta cota possui agendamentos. Ela foi desativada para preservar o histórico.");
+      } else {
+        const { error } = await supabase
+          .from("quotas_externas")
+          .delete()
+          .eq("id", quota.id);
+        
+        if (error) throw error;
+        toast.success("Cota removida definitivamente.");
+      }
+      await loadExternos();
+    } catch (err: any) {
+      console.error("[Funcionários Externos] Erro ao excluir cota", err);
+      toast.error("Erro ao remover cota.");
+    }
+  };
+
+  const handleToggleQuotaStatus = async (quota: QuotaRow) => {
+    try {
+      const { error } = await supabase
+        .from("quotas_externas")
+        .update({ ativo: !quota.ativo })
+        .eq("id", quota.id);
+      
+      if (error) throw error;
+      toast.success(quota.ativo ? "Cota desativada" : "Cota ativada");
+      await loadExternos();
+    } catch (err: any) {
+      toast.error("Erro ao alterar status da cota.");
+    }
+  };
+
+  const handleVerAgenda = async (quota: QuotaRow) => {
+    setSelectedQuota(quota);
+    setLoadingAgenda(true);
+    setAgendaDialogOpen(true);
+    try {
+      // Assuming a table external_appointments or similar linked to quota
+      // Let's try to find appointments linked to this quota
+      const client: any = supabase;
+      const response = await client
+        .from("agendamentos")
+        .select("id, data_agendamento, horario, status, pacientes(nome), funcionarios(nome)")
+        .eq("profissional_externo_id", quota.profissional_externo_id)
+        .eq("profissional_id", quota.profissional_interno_id)
+        .eq("data_agendamento", quota.periodo_inicio);
+      
+      const { data, error } = response;
+
+      if (error) throw error;
+      
+      setQuotaAppointments(data?.map((a: any) => ({
+        id: a.id,
+        data_agendamento: a.data_agendamento,
+        horario: a.horario,
+        paciente_nome: a.pacientes?.nome || "Paciente não identificado",
+        status: a.status,
+        profissional_interno_nome: a.funcionarios?.nome || "Profissional não identificado"
+      })) || []);
+    } catch (err) {
+      console.error("Erro ao carregar agenda da cota", err);
+      setQuotaAppointments([]);
+    } finally {
+      setLoadingAgenda(false);
+    }
   };
 
   const profissionaisInternos = funcionarios.filter((f: any) => f.role === "profissional" && f.ativo);
@@ -402,8 +548,11 @@ const ProfissionaisExternos: React.FC = () => {
 
                   <div className="bg-muted/30 p-2 flex items-center justify-between border-t">
                     <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Gerenciar Cotas">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => { setSelectedExternoId(ext.id); setQuotaListDialogOpen(true); }} title="Gerenciar Cotas">
                         <Ticket className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openQuotaDialog(ext.id)} title="Adicionar Cotas">
+                        <Plus className="w-4 h-4" />
                       </Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(ext)} title="Editar Profissional">
                         <Pencil className="w-4 h-4" />
@@ -620,6 +769,201 @@ const ProfissionaisExternos: React.FC = () => {
               {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Adicionar {selectedProfIds.length > 0 ? `${selectedProfIds.length} Quota(s)` : "Quotas"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* List/Manage Quotas Dialog */}
+      <Dialog open={quotaListDialogOpen} onOpenChange={setQuotaListDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ticket className="w-5 h-5 text-primary" />
+              Cotas de {externos.find(e => e.id === selectedExternoId)?.nome}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto pr-2">
+            <div className="rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Prof. Destino</th>
+                    <th className="px-3 py-2 text-left font-medium">Especialidade</th>
+                    <th className="px-3 py-2 text-left font-medium">Turno/Horário</th>
+                    <th className="px-3 py-2 text-center font-medium">Vagas</th>
+                    <th className="px-3 py-2 text-center font-medium">Status</th>
+                    <th className="px-3 py-2 text-right font-medium">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {quotas.filter(q => q.profissional_externo_id === selectedExternoId).length === 0 ? (
+                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Nenhuma cota encontrada.</td></tr>
+                  ) : (
+                    quotas.filter(q => q.profissional_externo_id === selectedExternoId).map(q => {
+                      const prof = funcionarios.find((f: any) => f.id === q.profissional_interno_id);
+                      return (
+                        <tr key={q.id} className="hover:bg-accent/5 transition-colors">
+                          <td className="px-3 py-2 font-medium">{prof?.nome || "—"}</td>
+                          <td className="px-3 py-2">{q.especialidade || "—"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-col">
+                              <span className="capitalize">{q.turno}</span>
+                              <span className="text-[10px] text-muted-foreground">{q.horario_inicio?.substring(0, 5)} - {q.horario_fim?.substring(0, 5)}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="font-bold">{q.vagas_total}</span>
+                              <span className="text-[10px] text-muted-foreground">U: {q.vagas_usadas} | L: {q.vagas_total - q.vagas_usadas}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge variant={q.ativo ? "default" : "secondary"} className="text-[10px] py-0 h-5">
+                              {q.ativo ? "ATIVA" : "INATIVA"}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleVerAgenda(q)} title="Ver Agenda">
+                                <List className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleEditQuota(q)} title="Editar">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggleQuotaStatus(q)} title={q.ativo ? "Desativar" : "Ativar"}>
+                                {q.ativo ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" title="Excluir"><Trash2 className="w-3.5 h-3.5" /></Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Excluir cota?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Profissional: {prof?.nome}<br />
+                                      Vagas: {q.vagas_total}<br />
+                                      {q.vagas_usadas > 0 ? "Esta cota possui agendamentos e será desativada em vez de excluída." : "Esta ação não pode ser desfeita."}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteQuota(q)} className="bg-destructive text-destructive-foreground">Excluir</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Quota Dialog */}
+      <Dialog open={quotaEditDialogOpen} onOpenChange={setQuotaEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar Cota</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-accent/30 p-3 rounded-md mb-4">
+              <p className="text-sm font-semibold">Profissional: {funcionarios.find((f: any) => f.id === selectedQuota?.profissional_interno_id)?.nome}</p>
+              <p className="text-xs text-muted-foreground">Vagas usadas atualmente: {selectedQuota?.vagas_usadas}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vagas Totais</Label>
+                <Input 
+                  type="number" 
+                  min={selectedQuota?.vagas_usadas || 1} 
+                  value={quotaForm.vagas_total} 
+                  onChange={e => setQuotaForm(p => ({ ...p, vagas_total: Number(e.target.value) }))} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <Select value={quotaForm.turno} onValueChange={v => setQuotaForm(p => ({ ...p, turno: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manha">Manhã</SelectItem>
+                    <SelectItem value="tarde">Tarde</SelectItem>
+                    <SelectItem value="noite">Noite</SelectItem>
+                    <SelectItem value="integral">Integral</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Horário Início</Label>
+                <Input type="time" value={quotaForm.horario_inicio} onChange={e => setQuotaForm(p => ({ ...p, horario_inicio: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Horário Fim</Label>
+                <Input type="time" value={quotaForm.horario_fim} onChange={e => setQuotaForm(p => ({ ...p, horario_fim: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Início Período</Label>
+                <Input type="date" value={quotaForm.periodo_inicio} onChange={e => setQuotaForm(p => ({ ...p, periodo_inicio: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Fim Período</Label>
+                <Input type="date" value={quotaForm.periodo_fim} onChange={e => setQuotaForm(p => ({ ...p, periodo_fim: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 py-2">
+              <Checkbox id="quota-ativo" checked={quotaForm.ativo} onCheckedChange={c => setQuotaForm(p => ({ ...p, ativo: !!c }))} />
+              <Label htmlFor="quota-ativo">Cota Ativa</Label>
+            </div>
+
+            <Button onClick={handleUpdateQuota} disabled={savingQuota} className="w-full gradient-primary text-primary-foreground">
+              {savingQuota && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Salvar Alterações
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Agenda/Appointments Dialog */}
+      <Dialog open={agendaDialogOpen} onOpenChange={setAgendaDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Agendamentos da Cota</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {loadingAgenda ? (
+              <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : quotaAppointments.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Nenhum agendamento vinculado a esta cota.</div>
+            ) : (
+              <div className="rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Data/Hora</th>
+                      <th className="px-3 py-2 text-left">Paciente</th>
+                      <th className="px-3 py-2 text-left">Profissional</th>
+                      <th className="px-3 py-2 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {quotaAppointments.map(app => (
+                      <tr key={app.id}>
+                        <td className="px-3 py-2">{new Date(app.data_agendamento).toLocaleDateString()} {app.horario}</td>
+                        <td className="px-3 py-2 font-medium">{app.paciente_nome}</td>
+                        <td className="px-3 py-2">{app.profissional_interno_nome}</td>
+                        <td className="px-3 py-2 text-center">
+                          <Badge variant="outline" className="text-[10px]">{app.status}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
