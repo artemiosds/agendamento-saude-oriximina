@@ -449,28 +449,30 @@ const PTS: React.FC = () => {
       let ptsId: string;
 
       if (editingPts) {
-        const { error } = await (supabase as any).from('pts').update(ptsPayload).eq('id', editingPts.id);
-        if (error) throw error;
+        const { error: updateError } = await (supabase as any).from('pts').update(ptsPayload).eq('id', editingPts.id);
+        if (updateError) throw updateError;
         ptsId = editingPts.id;
 
         // Delete old relationships then re-insert
-        await Promise.all([
-          (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId),
-          (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId),
-        ]);
+        const { error: delSigtapErr } = await (supabase as any).from('pts_sigtap').delete().eq('pts_id', ptsId);
+        if (delSigtapErr) console.error('Erro ao deletar sigtap antigo:', delSigtapErr);
+        
+        const { error: delCidErr } = await (supabase as any).from('pts_cid').delete().eq('pts_id', ptsId);
+        if (delCidErr) console.error('Erro ao deletar cid antigo:', delCidErr);
       } else {
-        const { data: newPts, error } = await (supabase as any)
+        const { data: newPts, error: insertError } = await (supabase as any)
           .from('pts')
           .insert(ptsPayload)
           .select('id')
           .single();
-        if (error) throw error;
+        if (insertError) throw insertError;
+        if (!newPts) throw new Error('Falha ao criar PTS: ID não retornado');
         ptsId = newPts.id;
 
         // Also create prontuario record
         const procInfo = sigtapSelecionados.map(s => `${s.procedimento_codigo} - ${s.procedimento_nome}`).join('; ');
         const cidInfo = cidsSelecionados.map(c => `${c.cid_codigo} - ${c.cid_descricao}`).join('; ');
-        await (supabase as any).from('prontuarios').insert({
+        const { error: prontErr } = await (supabase as any).from('prontuarios').insert({
           paciente_id: form.patient_id,
           paciente_nome: form.patient_name,
           profissional_id: user?.id || '',
@@ -485,11 +487,12 @@ const PTS: React.FC = () => {
           conduta: `Curto prazo: ${form.metas_curto_prazo}\nMédio prazo: ${form.metas_medio_prazo}\nLongo prazo: ${form.metas_longo_prazo}`,
           observacoes: `Especialidades: ${form.especialidades_envolvidas.join(', ')}${procInfo ? `\nSIGTAP: ${procInfo}` : ''}${cidInfo ? `\nCID: ${cidInfo}` : ''}`,
         });
+        if (prontErr) console.error('Erro ao criar registro no prontuário:', prontErr);
       }
 
       // Insert SIGTAP relationships
       if (sigtapSelecionados.length > 0) {
-        await (supabase as any).from('pts_sigtap').insert(
+        const { error: sigtapError } = await (supabase as any).from('pts_sigtap').insert(
           sigtapSelecionados.map(s => ({
             pts_id: ptsId,
             procedimento_codigo: s.procedimento_codigo,
@@ -497,17 +500,19 @@ const PTS: React.FC = () => {
             especialidade: s.especialidade,
           }))
         );
+        if (sigtapError) throw sigtapError;
       }
 
       // Insert CID relationships
       if (cidsSelecionados.length > 0) {
-        await (supabase as any).from('pts_cid').insert(
+        const { error: cidError } = await (supabase as any).from('pts_cid').insert(
           cidsSelecionados.map(c => ({
             pts_id: ptsId,
             cid_codigo: c.cid_codigo,
             cid_descricao: c.cid_descricao,
           }))
         );
+        if (cidError) throw cidError;
       }
 
       await logAction({
@@ -528,7 +533,8 @@ const PTS: React.FC = () => {
       resetSigtapState();
       loadPts();
     } catch (err: any) {
-      toast.error('Erro: ' + (err?.message || 'erro'));
+      console.error('Erro no handleSave:', err);
+      toast.error('Erro ao salvar: ' + (err?.message || 'Erro desconhecido'));
     }
     setSaving(false);
   };
