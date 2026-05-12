@@ -517,15 +517,54 @@ const ProfissionaisExternos: React.FC = () => {
                           <p className="text-xs text-muted-foreground">{f.profissao || f.cargo || ""}</p>
                         </div>
                         {isSelected && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Label className="text-xs whitespace-nowrap">Vagas:</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={vagasPorProf[f.id] || 5}
-                              onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: Math.max(1, Number(e.target.value)) }))}
-                              className="w-16 h-8 text-center text-sm"
-                            />
+                          <div className="flex flex-col gap-2 mt-2 pt-2 border-t w-full">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <Label className="text-xs">Vagas:</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={vagasPorProf[f.id]?.vagas || 5}
+                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], vagas: Math.max(1, Number(e.target.value)) } }))}
+                                  className="h-8 text-center text-sm"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <Label className="text-xs">Turno:</Label>
+                                <Select 
+                                  value={vagasPorProf[f.id]?.turno || "manha"} 
+                                  onValueChange={v => setVagasPorProf(prev => ({ ...prev, [f.id]: { ...prev[f.id], turno: v } }))}
+                                >
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="manha">Manhã</SelectItem>
+                                    <SelectItem value="tarde">Tarde</SelectItem>
+                                    <SelectItem value="noite">Noite</SelectItem>
+                                    <SelectItem value="integral">Integral</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <Label className="text-xs">Início:</Label>
+                                <Input
+                                  type="time"
+                                  value={vagasPorProf[f.id]?.horario_inicio || "07:30"}
+                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_inicio: e.target.value } }))}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <Label className="text-xs">Fim:</Label>
+                                <Input
+                                  type="time"
+                                  value={vagasPorProf[f.id]?.horario_fim || "11:30"}
+                                  onChange={e => setVagasPorProf(v => ({ ...v, [f.id]: { ...v[f.id], horario_fim: e.target.value } }))}
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
