@@ -118,13 +118,53 @@ const ProfissionaisExternos: React.FC = () => {
 
   const openNew = () => {
     setEditId(null);
-    setForm({ nome: "", email: "", senha: "", unidade_id: "" });
+    setForm({ 
+      nome: "", 
+      email: "", 
+      senha: "", 
+      unidade_id: "",
+      telefone: "",
+      documento: "",
+      orgao_origem: "",
+      responsavel: "",
+      observacoes: "",
+      data_validade: "",
+      permissoes: {
+        pode_agendar: true,
+        pode_visualizar: true,
+        pode_cancelar: true,
+        pode_editar_paciente: true,
+        pode_cadastrar_paciente: true,
+        pode_selecionar_paciente: true,
+        pode_anexar_documento: true
+      }
+    });
     setDialogOpen(true);
   };
 
   const openEdit = (e: ExternalProf) => {
     setEditId(e.id);
-    setForm({ nome: e.nome, email: e.email, senha: "", unidade_id: e.unidade_id });
+    setForm({ 
+      nome: e.nome, 
+      email: e.email, 
+      senha: "", 
+      unidade_id: e.unidade_id,
+      telefone: e.telefone || "",
+      documento: e.documento || "",
+      orgao_origem: e.orgao_origem || "",
+      responsavel: e.responsavel || "",
+      observacoes: e.observacoes || "",
+      data_validade: e.data_validade || "",
+      permissoes: e.permissoes || {
+        pode_agendar: true,
+        pode_visualizar: true,
+        pode_cancelar: true,
+        pode_editar_paciente: true,
+        pode_cadastrar_paciente: true,
+        pode_selecionar_paciente: true,
+        pode_anexar_documento: true
+      }
+    });
     setDialogOpen(true);
   };
 
