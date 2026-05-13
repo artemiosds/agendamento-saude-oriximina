@@ -770,130 +770,230 @@ const Auditoria: React.FC = () => {
       {/* Detail Side Panel */}
       <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Detalhes do Log</SheetTitle>
-          </SheetHeader>
-          {selectedLog && (
-            <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Funcionário</p>
-                  <p className="text-sm font-medium">{selectedLog.user_nome || 'Sistema'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">CPF</p>
-                  <p className="text-sm font-mono">{getCpfDisplay(selectedLog)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Perfil</p>
-                  <p className="text-sm"><Badge variant="outline">{selectedLog.role}</Badge></p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <Badge className={`text-xs ${statusBadge[selectedLog.status] || ''}`}>{selectedLog.status}</Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Data/Hora</p>
-                  <p className="text-sm">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Dispositivo</p>
-                  <p className="text-sm text-muted-foreground">{String((selectedLog.detalhes as any)?.dispositivo || '-')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">IP</p>
-                  <p className="text-sm font-mono">{selectedLog.ip || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Evento</p>
-                  <p className="text-sm font-medium">{acaoLabels[selectedLog.acao] || selectedLog.acao}</p>
-                </div>
+          <SheetHeader className="border-b pb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                <Shield className="w-5 h-5" />
               </div>
-
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Módulo / Entidade</p>
-                <p className="text-sm">{moduloLabels[selectedLog.modulo] || selectedLog.modulo} → {selectedLog.entidade}</p>
-                {selectedLog.entidade_id && (
-                  <p className="text-xs font-mono text-muted-foreground mt-1">ID: {selectedLog.entidade_id}</p>
-                )}
+                <SheetTitle className="text-xl">Detalhes da Auditoria</SheetTitle>
+                <p className="text-xs text-muted-foreground font-mono">{selectedLog?.id}</p>
               </div>
-
-              {selectedLog.erro && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Erro</p>
-                  <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{selectedLog.erro}</p>
+            </div>
+          </SheetHeader>
+          
+          {selectedLog && (
+            <div className="space-y-6 mt-6 pb-20">
+              {/* 1. RESUMO DO EVENTO */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Info className="w-4 h-4" />
+                  RESUMO DO EVENTO
                 </div>
-              )}
-
-              {/* Patient info */}
-              {((selectedLog.detalhes as any)?.paciente_nome || (selectedLog.detalhes as any)?.paciente) && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Paciente Envolvido</p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-4 bg-muted/30 p-4 rounded-xl border">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
+                    <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">Nome</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.paciente_nome || (selectedLog.detalhes as any)?.paciente || '-')}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Status</p>
+                      <Badge className={`text-[10px] font-bold uppercase ${statusBadge[selectedLog.status] || ''}`}>{selectedLog.status}</Badge>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">CPF do Paciente</p>
-                      <p className="text-sm font-mono">{String((selectedLog.detalhes as any)?.paciente_cpf || '-')}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Data e Hora</p>
+                      <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
+                      <p className="text-sm font-medium">{moduloLabels[selectedLog.modulo] || selectedLog.modulo}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Entidade</p>
+                      <p className="text-sm font-medium">{selectedLog.entidade}</p>
                     </div>
                   </div>
                 </div>
-              )}
+              </section>
 
-              {/* Field-level changes for prontuario edits */}
-              {(selectedLog.detalhes as any)?.campos_alterados && Object.keys((selectedLog.detalhes as any).campos_alterados).length > 0 && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Campos Alterados</p>
-                  <div className="space-y-2">
-                    {Object.entries((selectedLog.detalhes as any).campos_alterados).map(([campo, vals]: [string, any]) => (
-                      <div key={campo} className="bg-muted/50 rounded p-2">
-                        <p className="text-xs font-medium text-foreground mb-1">{campo}</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Antes</p>
-                            <p className="text-xs bg-destructive/10 text-destructive rounded p-1">{vals.anterior || '(vazio)'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Depois</p>
-                            <p className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded p-1">{vals.novo || '(vazio)'}</p>
-                          </div>
-                        </div>
+              {/* 2. RESPONSÁVEL */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <UserCheck className="w-4 h-4" />
+                  RESPONSÁVEL
+                </div>
+                <div className="grid grid-cols-1 gap-3 bg-muted/30 p-4 rounded-xl border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                      {selectedLog.user_nome ? selectedLog.user_nome.charAt(0) : 'S'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">{selectedLog.user_nome || 'Sistema / Automação'}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{selectedLog.role}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-1">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">CPF</p>
+                      <p className="text-xs font-mono">{getCpfDisplay(selectedLog)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Unidade</p>
+                      <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos?.unidade || 'Não informada'}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 3. REGISTRO AFETADO */}
+              {(selectedLog.entidade_id || selectedLog.nome_entidade) && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <Database className="w-4 h-4" />
+                    REGISTRO AFETADO
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Identificação do Registro</p>
+                      <p className="text-sm font-bold text-foreground">{selectedLog.nome_entidade || 'N/D'}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground mt-1">ID Técnico: {selectedLog.entidade_id || 'N/D'}</p>
+                    </div>
+                    
+                    {selectedLog.detalhes_resolvidos?.paciente && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Paciente</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.paciente}</p>
                       </div>
-                    ))}
+                    )}
+                    {selectedLog.detalhes_resolvidos?.profissional && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Profissional</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.profissional}</p>
+                      </div>
+                    )}
+                    {selectedLog.detalhes_resolvidos?.agendamento && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Agendamento</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.agendamento}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </section>
               )}
 
-              {/* Duration info for atendimento */}
-              {(selectedLog.detalhes as any)?.duracao_minutos !== undefined && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Duração do Atendimento</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Início</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.hora_inicio || '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Fim</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.hora_fim || '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Duração</p>
-                      <p className="text-sm font-bold">{(selectedLog.detalhes as any)?.duracao_minutos} min</p>
-                    </div>
+              {/* 4. ALTERAÇÕES REALIZADAS */}
+              {(selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <History className="w-4 h-4" />
+                    ALTERAÇÕES REALIZADAS
                   </div>
-                </div>
+                  <div className="space-y-2">
+                    {/* Handle simple before/after if present in detalhes */}
+                    {selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedLog.detalhes.new_value).map(([key, value]: [string, any]) => {
+                          const oldValue = selectedLog.detalhes?.old_value?.[key];
+                          if (JSON.stringify(oldValue) === JSON.stringify(value)) return null;
+                          return (
+                            <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                              <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
+                              <div className="grid grid-cols-1 gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue || '(vazio)')}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                  <span className="text-xs font-medium text-foreground">{String(value || '(vazio)')}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Handle explicitly mapped fields */}
+                    {selectedLog.detalhes?.campos_alterados && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
+                          <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
+                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
+                            <div className="grid grid-cols-1 gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
               )}
 
-              {/* All details (raw) */}
-              <div className="border-t pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Dados Completos</p>
-                <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-40 text-muted-foreground">
-                  {JSON.stringify(selectedLog.detalhes, null, 2)}
-                </pre>
-              </div>
+              {/* 5. CONTEXTO TÉCNICO */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Monitor className="w-4 h-4" />
+                  CONTEXTO TÉCNICO
+                </div>
+                <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Endereço IP</p>
+                    <p className="text-xs font-mono">{selectedLog.ip || 'Local/Sistema'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Navegador</p>
+                    <p className="text-xs truncate">{String(selectedLog.detalhes?.dispositivo || selectedLog.detalhes?.user_agent || '-')}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Rota / Origem</p>
+                    <p className="text-[11px] font-mono text-muted-foreground truncate">{String(selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-')}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* 6. DADOS TÉCNICOS COMPLETOS */}
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="json-data" className="border-none">
+                  <AccordionTrigger className="hover:no-underline bg-muted/50 rounded-xl px-4 py-3 text-xs font-bold text-muted-foreground">
+                    VER DADOS TÉCNICOS COMPLETOS (JSON)
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2">
+                    <div className="relative">
+                      <pre className="text-[10px] bg-slate-950 text-slate-300 p-4 rounded-xl overflow-auto max-h-[300px] font-mono leading-relaxed">
+                        {JSON.stringify(selectedLog.detalhes, (key, value) => {
+                          // Mask sensitive data in technical view too
+                          if (['token', 'password', 'senha', 'authorization', 'bearer'].some(s => key.toLowerCase().includes(s))) {
+                            return '********';
+                          }
+                          return value;
+                        }, 2)}
+                      </pre>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="absolute top-2 right-2 text-slate-400 hover:text-white hover:bg-white/10"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(selectedLog.detalhes, null, 2));
+                          toast.success('JSON copiado!');
+                        }}
+                      >
+                        <FileText className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           )}
         </SheetContent>
