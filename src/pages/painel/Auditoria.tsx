@@ -470,25 +470,24 @@ const Auditoria: React.FC = () => {
       const { data, count, error } = await query;
       if (error) throw error;
 
-      let filtered = (data as unknown as LogEntry[]) || [];
+      let enrichedData = (data as unknown as EnrichedLog[]) || [];
 
-      // Client-side CPF filter (CPF is stored in detalhes.usuario_cpf)
-      if (filterCpf) {
-        const cpfSearch = filterCpf.replace(/\D/g, '');
-        filtered = filtered.filter(l => {
-          const cpf = String((l.detalhes as any)?.usuario_cpf || '').replace(/\D/g, '');
-          return cpf.includes(cpfSearch);
-        });
-      }
-
-      setLogs(filtered);
-      setTotalCount(filterCpf ? filtered.length : (count || 0));
+      // Batch enrichment for current page
+      const batchEnrich = async () => {
+        const promises = enrichedData.map(l => enrichLog(l));
+        const enriched = await Promise.all(promises);
+        setLogs(enriched);
+      };
+      
+      batchEnrich();
+      setTotalCount(filterCpf ? enrichedData.length : (count || 0));
     } catch (err) {
       console.error('Error loading logs:', err);
       toast.error('Erro ao carregar logs.');
     } finally {
       setLoading(false);
     }
+
   }, [page, filterDateFrom, filterDateTo, filterUser, filterRole, filterModulo, filterAcao, filterStatus, filterUnidade, filterCpf, filterEventoGrupo, search, user]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
