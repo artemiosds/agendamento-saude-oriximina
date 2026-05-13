@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useData } from '@/contexts/DataContext';
@@ -58,8 +58,18 @@ interface LogEntry {
 
 
 
+interface ResolvedEntity {
+  tipo: "paciente" | "agendamento" | "prontuario" | "profissional" | "unidade" | "documento" | "cota" | "desconhecido";
+  titulo: string;
+  subtitulo?: string;
+  detalhes?: Record<string, any>;
+  idTecnico: string;
+  carregando?: boolean;
+}
+
 interface EnrichedLog extends LogEntry {
   nome_entidade?: string;
+  entidade_resolvida?: ResolvedEntity;
   detalhes_resolvidos?: {
     paciente?: string;
     profissional?: string;
@@ -67,8 +77,8 @@ interface EnrichedLog extends LogEntry {
     unidade?: string;
     [key: string]: any;
   };
-
 }
+
 
 const ITEMS_PER_PAGE = 25;
 
@@ -208,23 +218,93 @@ const formatCpf = (cpf: string) => {
   return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
 };
 
+const formatAuditFieldLabel = (field: string): string => {
+  const labels: Record<string, string> = {
+    nome: "Nome",
+    nome_completo: "Nome completo",
+    nome_mae: "Nome da mãe",
+    data_nascimento: "Data de nascimento",
+    telefone_principal: "Telefone principal",
+    telefone: "Telefone",
+    telefone_secundario: "Telefone secundário",
+    logradouro: "Logradouro",
+    numero: "Número",
+    bairro: "Bairro",
+    municipio: "Município",
+    uf: "UF",
+    sexo: "Sexo",
+    cpf: "CPF",
+    cns: "CNS",
+    unidade_id: "Unidade",
+    profissional_id: "Profissional",
+    paciente_id: "Paciente",
+    status: "Status",
+    data: "Data",
+    hora: "Hora",
+    email: "E-mail",
+    endereco: "Endereço",
+    cid: "CID",
+    observacoes: "Observações",
+    custom_data: "Dados customizados"
+  };
+  return labels[field] || field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
+
+const formatAuditValue = (field: string, value: any): string => {
+  if (value === null || value === undefined || value === "") return "Não informado";
+  
+  if (field === "sexo") {
+    const s = String(value).toLowerCase();
+    if (s === "masculino" || s === "m") return "Masculino";
+    if (s === "feminino" || s === "f") return "Feminino";
+    return value;
+  }
+
+  if (field === "cpf") return maskCpf(String(value));
+  if (field === "cns") {
+    const s = String(value);
+    return s.length > 8 ? `${s.substring(0, 3)}...${s.substring(s.length - 3)}` : s;
+  }
+  
+  if (field === "data" || field === "data_nascimento" || field === "data_atendimento") {
+    try {
+      return format(new Date(value + 'T12:00:00'), "dd/MM/yyyy");
+    } catch {
+      return value;
+    }
+  }
+
+  return String(value);
+};
+
 const generateHumanSummary = (log: EnrichedLog) => {
   const user = log.user_nome || 'O sistema';
-  const acao = log.acao_legivel || log.acao;
-  const entidade = log.entidade_nome || log.entidade_id || log.entidade;
+  const acao = log.acao_legivel || formatAuditAction(log.acao);
+  const entidade = log.entidade_resolvida?.titulo || log.entidade_nome || log.entidade_id || log.entidade;
   const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const unidade = log.unidade_nome || 'unidade não identificada';
 
   if (log.tipo_evento === 'login') return `${user} realizou login no sistema em ${data}.`;
-  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  const entityType = log.entidade === 'paciente' ? 'o cadastro do paciente' : 
+                     log.entidade === 'agendamento' ? 'o agendamento de' : 
+                     log.entidade === 'prontuario' ? 'o prontuário de' : log.entidade;
+
+  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${entityType} "${entidade}" na ${unidade} em ${data}.`;
+  
   if (log.tipo_evento === 'edicao') {
-    const campos = log.campos_alterados?.join(', ') || 'campos';
-    return `${user} editou o registro de ${log.entidade} "${entidade}", alterando ${campos}, na ${unidade} em ${data}.`;
+    const changesCount = log.campos_alterados?.length || log.changes ? Object.keys(log.changes || {}).length : 0;
+    const campos = log.campos_alterados?.map(formatAuditFieldLabel).join(', ') || 
+                   (log.changes ? Object.keys(log.changes).map(formatAuditFieldLabel).join(', ') : 'campos');
+    
+    return `${user} editou ${entityType} "${entidade}", alterando ${changesCount} ${changesCount === 1 ? 'campo' : 'campos'} (${campos}), na ${unidade} em ${data}.`;
   }
-  if (log.tipo_evento === 'exclusao') return `${user} removeu o registro de ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  if (log.tipo_evento === 'exclusao') return `${user} removeu ${entityType} "${entidade}" na ${unidade} em ${data}.`;
   
   return `${user} realizou a ação "${acao}" em ${data}.`;
 };
+
 
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
@@ -243,36 +323,86 @@ const Auditoria: React.FC = () => {
   const [reportLoading, setReportLoading] = useState(false);
 
 
+  const cacheRef = useRef<Record<string, any>>({});
+
+  const resolveEntity = useCallback(async (log: EnrichedLog): Promise<ResolvedEntity> => {
+    const id = log.paciente_id || log.entidade_id;
+    const entidade = log.entidade;
+    const cacheKey = `${entidade}_${id}`;
+    
+    if (cacheRef.current[cacheKey]) return cacheRef.current[cacheKey];
+
+    const result: ResolvedEntity = {
+      tipo: "desconhecido",
+      titulo: log.entidade_nome || log.entidade_id || log.entidade,
+      idTecnico: log.entidade_id,
+    };
+
+    try {
+      if (entidade === 'paciente' || id?.startsWith('p')) {
+        result.tipo = "paciente";
+        const { data } = await supabase.from('pacientes').select('nome, cpf, cns, telefone, data_nascimento, sexo, unidade_id').eq('id', id).maybeSingle();
+        if (data) {
+          result.titulo = data.nome;
+          result.subtitulo = `CPF: ${maskCpf(data.cpf)} | CNS: ${data.cns || 'N/I'}`;
+          result.detalhes = data;
+        }
+      } else if (entidade === 'agendamento' || id?.startsWith('ag')) {
+        result.tipo = "agendamento";
+        const { data: ag } = await supabase.from('agendamentos').select('data, hora, paciente_nome, profissional_nome, status, unidade_id').eq('id', id).maybeSingle();
+        if (ag) {
+          result.titulo = ag.paciente_nome;
+          result.subtitulo = `${ag.profissional_nome} | ${format(new Date(ag.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${ag.hora}`;
+          result.detalhes = ag;
+        }
+      } else if (entidade === 'prontuario') {
+        result.tipo = "prontuario";
+        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome').eq('id', id).maybeSingle();
+        if (pr) {
+          result.titulo = pr.paciente_nome;
+          result.subtitulo = `${pr.profissional_nome} | ${format(new Date(pr.data_atendimento + 'T12:00:00'), 'dd/MM/yyyy')}`;
+          result.detalhes = pr;
+        }
+
+      } else if (entidade === 'funcionario' || entidade === 'profissional') {
+        result.tipo = "profissional";
+        const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).maybeSingle();
+        if (f) {
+          result.titulo = f.nome;
+          result.subtitulo = `${f.profissao || f.cargo || 'Funcionário'} | CPF: ${maskCpf(f.cpf)}`;
+          result.detalhes = f;
+        }
+      }
+    } catch (err) {
+      console.warn('Error resolving entity:', err);
+    }
+
+    cacheRef.current[cacheKey] = result;
+    return result;
+  }, []);
+
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
-    const enriched: EnrichedLog = { ...log, detalhes_resolvidos: {} };
+    const enriched: EnrichedLog = { ...log };
     
-    // Attempt to map new specialized columns
+    // Resolve entity details
+    enriched.entidade_resolvida = await resolveEntity(log);
+    
+    // Legacy support
     enriched.detalhes_resolvidos = {
-      paciente: log.detalhes?.paciente_nome || log.paciente_nome,
-      profissional: log.detalhes?.profissional_nome || log.profissional_nome,
-      agendamento: log.agendamento_id ? `ID: ${log.agendamento_id}` : undefined,
+      paciente: enriched.entidade_resolvida.titulo,
       unidade: log.unidade_nome
     };
 
-    // Lazy resolve names if needed
-    try {
-      if (log.paciente_id && !enriched.detalhes_resolvidos.paciente) {
-        const { data } = await supabase.from('pacientes').select('nome').eq('id', log.paciente_id).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.paciente = data.nome;
-      }
-      if (log.profissional_id && !enriched.detalhes_resolvidos.profissional) {
-        const { data } = await supabase.from('funcionarios').select('nome').eq('id', log.profissional_id).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.profissional = data.nome;
-      }
-    } catch (err) {
-      console.warn('Error resolving log names:', err);
-    }
+    enriched.nome_entidade = enriched.entidade_resolvida.titulo;
     
-    enriched.nome_entidade = log.entidade_nome || enriched.detalhes_resolvidos.paciente || enriched.detalhes_resolvidos.profissional || log.entidade_id;
+    // Add summary to log object for easier use in list
+    (enriched as any).human_summary = generateHumanSummary(enriched);
     
     return enriched;
-  }, []);
+  }, [resolveEntity]);
+
+
 
 
   useEffect(() => {
@@ -340,25 +470,24 @@ const Auditoria: React.FC = () => {
       const { data, count, error } = await query;
       if (error) throw error;
 
-      let filtered = (data as unknown as LogEntry[]) || [];
+      let enrichedData = (data as unknown as EnrichedLog[]) || [];
 
-      // Client-side CPF filter (CPF is stored in detalhes.usuario_cpf)
-      if (filterCpf) {
-        const cpfSearch = filterCpf.replace(/\D/g, '');
-        filtered = filtered.filter(l => {
-          const cpf = String((l.detalhes as any)?.usuario_cpf || '').replace(/\D/g, '');
-          return cpf.includes(cpfSearch);
-        });
-      }
-
-      setLogs(filtered);
-      setTotalCount(filterCpf ? filtered.length : (count || 0));
+      // Batch enrichment for current page
+      const batchEnrich = async () => {
+        const promises = enrichedData.map(l => enrichLog(l));
+        const enriched = await Promise.all(promises);
+        setLogs(enriched);
+      };
+      
+      batchEnrich();
+      setTotalCount(filterCpf ? enrichedData.length : (count || 0));
     } catch (err) {
       console.error('Error loading logs:', err);
       toast.error('Erro ao carregar logs.');
     } finally {
       setLoading(false);
     }
+
   }, [page, filterDateFrom, filterDateTo, filterUser, filterRole, filterModulo, filterAcao, filterStatus, filterUnidade, filterCpf, filterEventoGrupo, search, user]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
@@ -730,22 +859,31 @@ const Auditoria: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[200px]">
-                        <span className="text-xs font-medium block truncate" title={formatAuditAction(log.acao)}>
-                          {formatAuditAction(log.acao)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="max-w-[200px]">
                         <div className="flex flex-col gap-0.5 overflow-hidden">
-                          <span className="text-xs font-semibold truncate" title={log.paciente_nome || log.nome_entidade || log.entidade_id}>
-                            {log.paciente_nome || log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                          <span className="text-xs font-semibold truncate" title={formatAuditAction(log.acao)}>
+                            {formatAuditAction(log.acao)}
                           </span>
-                          {log.profissional_nome && (
-                            <span className="text-[10px] text-muted-foreground truncate">
-                              Prof: {log.profissional_nome}
+                          {(log as any).human_summary && (
+                            <span className="text-[9px] text-muted-foreground line-clamp-1 italic" title={(log as any).human_summary}>
+                              "{(log as any).human_summary}"
                             </span>
                           )}
                         </div>
                       </TableCell>
+
+                      <TableCell className="max-w-[200px]">
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <span className="text-xs font-semibold truncate" title={log.nome_entidade || log.entidade_id}>
+                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                          </span>
+                          {log.entidade_resolvida?.subtitulo && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              {log.entidade_resolvida.subtitulo}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+
 
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
@@ -819,7 +957,7 @@ const Auditoria: React.FC = () => {
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
                     <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
                     <p className="text-xs text-muted-foreground mt-2 italic">
-                      "{generateHumanSummary(selectedLog)}"
+                      {generateHumanSummary(selectedLog)}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -832,19 +970,19 @@ const Auditoria: React.FC = () => {
                       <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
                       <p className="text-sm font-medium">{moduloLabels[selectedLog.modulo] || selectedLog.modulo}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Entidade</p>
-                      <p className="text-sm font-medium">{selectedLog.entidade}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Tipo de Evento</p>
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">{selectedLog.tipo_evento || 'Sistema'}</Badge>
                     </div>
                   </div>
                 </div>
               </section>
+
 
               {/* 2. RESPONSÁVEL */}
               <section className="space-y-4">
@@ -876,7 +1014,7 @@ const Auditoria: React.FC = () => {
               </section>
 
               {/* 3. REGISTRO AFETADO */}
-              {(selectedLog.entidade_id || selectedLog.nome_entidade) && (
+              {(selectedLog.entidade_id || selectedLog.nome_entidade || selectedLog.entidade_resolvida) && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <Database className="w-4 h-4" />
@@ -884,97 +1022,140 @@ const Auditoria: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Identificação do Registro</p>
-                      <p className="text-sm font-bold text-foreground">{selectedLog.nome_entidade || 'N/D'}</p>
+                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">
+                        {selectedLog.entidade_resolvida?.tipo ? selectedLog.entidade_resolvida.tipo.charAt(0).toUpperCase() + selectedLog.entidade_resolvida.tipo.slice(1) : 'Identificação do Registro'}
+                      </p>
+                      <p className="text-sm font-bold text-foreground">{selectedLog.entidade_resolvida?.titulo || selectedLog.nome_entidade || 'N/D'}</p>
                       <p className="text-[10px] font-mono text-muted-foreground mt-1">ID Técnico: {selectedLog.entidade_id || 'N/D'}</p>
                     </div>
                     
-                    {selectedLog.detalhes_resolvidos?.paciente && (
+                    {selectedLog.entidade_resolvida?.subtitulo && (
                       <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Paciente</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.paciente}</p>
+                        <p className="text-xs text-muted-foreground">{selectedLog.entidade_resolvida.subtitulo}</p>
                       </div>
                     )}
-                    {selectedLog.detalhes_resolvidos?.profissional && (
-                      <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Profissional</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.profissional}</p>
-                      </div>
-                    )}
-                    {selectedLog.detalhes_resolvidos?.agendamento && (
-                      <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Agendamento</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.agendamento}</p>
+
+                    {selectedLog.entidade_resolvida?.detalhes && (
+                      <div className="border-t border-primary/10 pt-2 grid grid-cols-2 gap-2">
+                        {Object.entries(selectedLog.entidade_resolvida.detalhes).map(([k, v]) => {
+                          if (['id', 'unidade_id', 'custom_data', 'created_at', 'updated_at'].includes(k)) return null;
+                          if (!v) return null;
+                          return (
+                            <div key={k}>
+                              <p className="text-[9px] uppercase font-bold text-muted-foreground">{formatAuditFieldLabel(k)}</p>
+                              <p className="text-[11px] font-medium">{formatAuditValue(k, v)}</p>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </section>
               )}
 
+
               {/* 4. ALTERAÇÕES REALIZADAS */}
-              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
+              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados || selectedLog.detalhes?.old_data || selectedLog.detalhes?.new_data) && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <History className="w-4 h-4" />
                     ALTERAÇÕES REALIZADAS
                   </div>
                   <div className="space-y-2">
-                    {/* Handle changes column (preferred) */}
-                    {selectedLog.changes && Object.entries(selectedLog.changes).length > 0 && (
-                      <div className="space-y-2">
-                        {Object.entries(selectedLog.changes).map(([key, vals]: [string, any]) => (
-                          <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
-                            <div className="grid grid-cols-1 gap-2">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                <span className="text-xs text-muted-foreground line-through">{String(vals.from ?? '(vazio)')}</span>
+                    {/* Render changes (new structure or legacy in details) */}
+                    {(() => {
+                      const changes = selectedLog.changes || 
+                                     selectedLog.detalhes?.changes || 
+                                     selectedLog.detalhes?.alteracoes;
+                      
+                      if (changes && Object.entries(changes).length > 0) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(changes).map(([key, vals]: [string, any]) => (
+                              <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                    <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, vals.from ?? vals.before ?? vals.anterior ?? vals.old)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(key, vals.to ?? vals.after ?? vals.novo ?? vals.new)}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                <span className="text-xs font-medium text-foreground">{String(vals.to ?? '(vazio)')}</span>
-                              </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        );
+                      }
 
-                    {/* Fallback for legacy logs in detalhes */}
-                    {!selectedLog.changes && selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
-                      <div className="space-y-2">
-                        {Object.entries(selectedLog.detalhes.new_value).map(([key, value]: [string, any]) => {
-                          const oldValue = selectedLog.detalhes?.old_value?.[key];
-                          if (JSON.stringify(oldValue) === JSON.stringify(value)) return null;
+                      // Check for before/after pairs
+                      const before = selectedLog.before || selectedLog.detalhes?.old_value || selectedLog.detalhes?.before || selectedLog.detalhes?.old_data;
+                      const after = selectedLog.after || selectedLog.detalhes?.new_value || selectedLog.detalhes?.after || selectedLog.detalhes?.new_data;
+
+                      if (before && after) {
+                        const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+                        const entries = Array.from(allKeys).filter(k => {
+                          if (['id', 'created_at', 'updated_at', 'unidade_id', 'user_id', 'custom_data'].includes(k)) return false;
+                          return JSON.stringify(before[k]) !== JSON.stringify(after[k]);
+                        });
+
+                        if (entries.length > 0) {
                           return (
-                            <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                              <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
-                              <div className="grid grid-cols-1 gap-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue ?? '(vazio)')}</span>
+                            <div className="space-y-2">
+                              {entries.map(key => (
+                                <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                                  <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                      <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, before[key])}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                      <span className="text-xs font-medium text-foreground">{formatAuditValue(key, after[key])}</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                  <span className="text-xs font-medium text-foreground">{String(value ?? '(vazio)')}</span>
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           );
-                        })}
-                      </div>
-                    )}
+                        }
+                      }
 
-                    {!selectedLog.changes && !selectedLog.detalhes?.old_value && (
-                      <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed">
-                        Este log antigo não possui comparação antes/depois registrada.
-                      </p>
-                    )}
+                      // Check for fields explicitly mapped in legacy format
+                      if (selectedLog.detalhes?.campos_alterados) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
+                              <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
+                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                    <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                    <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed text-center">
+                          Este log não possui comparação antes/depois registrada.
+                        </p>
+                      );
+                    })()}
                   </div>
                 </section>
               )}
-
-
               {/* 5. CONTEXTO TÉCNICO */}
               <section className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-primary">
