@@ -324,32 +324,33 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       modulo?: string;
       status?: string;
       erro?: string;
+      before?: any;
+      after?: any;
     }) => {
-      const actor = input.user;
-      const dispositivo = getDeviceInfo();
-      const detalhes = {
-        ...(input.detalhes || {}),
-        usuario_cpf: actor?.cpf || "",
-        dispositivo,
-      };
-      // Fire-and-forget: don't block the UI waiting for IP + insert
-      getPublicIp().then((ip) => {
-        supabase.from("action_logs").insert({
-          user_id: actor?.id || "",
-          user_nome: actor?.nome || "sistema",
-          role: actor?.role || "sistema",
-          unidade_id: input.unidadeId || actor?.unidadeId || "",
-          acao: input.acao,
-          entidade: input.entidade,
-          entidade_id: input.entidadeId || "",
-          detalhes,
-          modulo: input.modulo || input.entidade || "",
-          status: input.status || "sucesso",
-          erro: input.erro || "",
-          ip,
-        }).then(null, (err: any) => console.error("Error writing action log:", err));
+      // Use the new audit service for better consistency
+      auditService.log({
+        acao: input.acao,
+        modulo: input.modulo || input.entidade || "sistema",
+        entidade: input.entidade,
+        entidadeId: input.entidadeId,
+        user: input.user ? {
+          id: input.user.id,
+          nome: input.user.nome,
+          role: input.user.role,
+          unidadeId: input.user.unidadeId,
+          cpf: input.user.cpf
+        } : null,
+        unidadeId: input.unidadeId || input.user?.unidadeId,
+        status: (input.status as any) || 'sucesso',
+        errorMessage: input.erro,
+        before: input.before,
+        after: input.after,
+        detalhes: input.detalhes as Record<string, any>
       });
     },
+    [],
+  );
+
     [],
   );
 
