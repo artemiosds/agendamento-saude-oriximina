@@ -1543,8 +1543,12 @@ const Agenda: React.FC = () => {
       entidadeId: ag.id,
       modulo: "agenda",
       user,
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId,
+      profissionalNome: ag.profissionalNome,
+      agendamentoId: ag.id,
       detalhes: {
-        paciente: ag.pacienteNome,
         tipo_falta: dados.tipoFalta,
         documento: dados.documento || "",
         descricao: dados.descricao || "",
@@ -1552,6 +1556,7 @@ const Agenda: React.FC = () => {
         origem: "agenda_profissional_acao_falta"
       },
     });
+
 
     const paciente = pacientes.find((p) => p.id === ag.pacienteId);
     const unidade = unidades.find((u) => u.id === ag.unidadeId);
