@@ -357,12 +357,13 @@ const Auditoria: React.FC = () => {
         }
       } else if (entidade === 'prontuario') {
         result.tipo = "prontuario";
-        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome, status').eq('id', id).maybeSingle();
+        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome').eq('id', id).maybeSingle();
         if (pr) {
           result.titulo = pr.paciente_nome;
           result.subtitulo = `${pr.profissional_nome} | ${format(new Date(pr.data_atendimento + 'T12:00:00'), 'dd/MM/yyyy')}`;
           result.detalhes = pr;
         }
+
       } else if (entidade === 'funcionario' || entidade === 'profissional') {
         result.tipo = "profissional";
         const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).maybeSingle();
