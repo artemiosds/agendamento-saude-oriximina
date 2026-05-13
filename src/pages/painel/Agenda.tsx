@@ -1350,6 +1350,24 @@ const Agenda: React.FC = () => {
     if (whatsappTipo) {
       whatsappService.sendByAgendamento(agId, whatsappTipo).catch(() => {});
     }
+
+    // Log the status change
+    await logAction({
+      acao: "status_change",
+      entidade: "agendamento",
+      entidadeId: agId,
+      modulo: "agenda",
+      user,
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId,
+      profissionalNome: ag.profissionalNome,
+      agendamentoId: agId,
+      before: { status: ag.status },
+      after: { status: newStatus },
+      detalhes: { novo_status: newStatus, status_anterior: ag.status },
+    });
+
     if (newStatus === "cancelado" || newStatus === "falta") {
       await handleVagaLiberada(
         {
