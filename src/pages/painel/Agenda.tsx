@@ -1784,10 +1784,17 @@ const Agenda: React.FC = () => {
       acao: "agendar_retorno",
       entidade: "agendamento",
       entidadeId: agId,
-      modulo: "agendamento",
-      detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora },
+      modulo: "agenda",
       user,
+      pacienteId: retornoAg.pacienteId,
+      pacienteNome: retornoAg.pacienteNome,
+      profissionalId: user.id,
+      profissionalNome: user.nome,
+      agendamentoId: agId,
+      after: agData,
+      detalhes: { data: retornoForm.data, hora: retornoForm.hora },
     });
+
     if (pac) {
       await notify({
         evento: "novo_agendamento",
