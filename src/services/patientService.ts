@@ -184,6 +184,23 @@ export const patientService = {
       .select()
       .single();
 
+    if (!error && data) {
+      // Registrar auditoria
+      auditService.auditUpdate({
+        modulo: 'pacientes',
+        entidade: 'paciente',
+        entidadeId: pacienteId,
+        entidadeNome: data.nome,
+        pacienteId: pacienteId,
+        pacienteNome: data.nome,
+        before: current,
+        after: data,
+        origem,
+        unidadeId: data.unidade_id
+      });
+    }
+
+
     if (error) {
       console.error("[Paciente] Erro no updatePatientFields", {
         origem, pacienteId, errorMessage: error.message, errorCode: error.code
