@@ -945,7 +945,7 @@ const Auditoria: React.FC = () => {
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
                     <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
                     <p className="text-xs text-muted-foreground mt-2 italic">
-                      "{generateHumanSummary(selectedLog)}"
+                      {generateHumanSummary(selectedLog)}
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -958,6 +958,18 @@ const Auditoria: React.FC = () => {
                       <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
+                      <p className="text-sm font-medium">{moduloLabels[selectedLog.modulo] || selectedLog.modulo}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Tipo de Evento</p>
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">{selectedLog.tipo_evento || 'Sistema'}</Badge>
+                    </div>
+                  </div>
+                </div>
+
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
