@@ -192,16 +192,84 @@ const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { funcionarios } = useData();
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logs, setLogs] = useState<EnrichedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+
+  // Helper to enrich a single log with names
+  const enrichLog = useCallback(async (log: EnrichedLog) => {
+    if (!log.entidade_id && !log.user_id) return log;
+    
+    const enriched = { ...log, detalhes_resolvidos: { ...log.detalhes } };
+    
+    try {
+      // Resolve patient
+      const patientId = log.detalhes?.paciente_id || log.detalhes?.patientId || log.detalhes?.pacienteId || (log.entidade === 'paciente' ? log.entidade_id : null);
+      if (patientId && typeof patientId === 'string') {
+        const { data } = await supabase.from('pacientes').select('nome_completo').eq('id', patientId).single();
+        if (data) enriched.detalhes_resolvidos.paciente = data.nome_completo;
+      }
+
+      // Resolve professional
+      const profId = log.detalhes?.profissional_id || log.detalhes?.profissionalId || log.detalhes?.funcionario_id || (log.entidade === 'funcionario' ? log.entidade_id : null);
+      if (profId && typeof profId === 'string') {
+        const { data } = await supabase.from('funcionarios').select('nome_completo').eq('id', profId).single();
+        if (data) enriched.detalhes_resolvidos.profissional = data.nome_completo;
+      }
+
+      // Resolve unit
+      const unitId = log.unidade_id || log.detalhes?.unidade_id;
+      if (unitId && typeof unitId === 'string') {
+        const { data } = await supabase.from('unidades').select('nome').eq('id', unitId).single();
+        if (data) enriched.detalhes_resolvidos.unidade = data.nome;
+      }
+
+      // Resolve appointment
+      const appointmentId = log.detalhes?.agendamento_id || log.detalhes?.appointmentId || (log.entidade === 'agendamento' ? log.entidade_id : null);
+      if (appointmentId && typeof appointmentId === 'string') {
+        const { data } = await supabase.from('agendamentos').select('data, hora, pacientes(nome_completo)').eq('id', appointmentId).single();
+        if (data) {
+          enriched.detalhes_resolvidos.agendamento = `${format(new Date(data.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${data.hora} - ${(data as any).pacientes?.nome_completo}`;
+        }
+      }
+
+      // Resolve record name (generic)
+      if (log.entidade === 'paciente' && enriched.detalhes_resolvidos.paciente) {
+        enriched.nome_entidade = enriched.detalhes_resolvidos.paciente;
+      } else if (log.entidade === 'funcionario' && enriched.detalhes_resolvidos.profissional) {
+        enriched.nome_entidade = enriched.detalhes_resolvidos.profissional;
+      } else if (log.detalhes?.nome) {
+        enriched.nome_entidade = String(log.detalhes.nome);
+      } else if (log.detalhes?.nome_completo) {
+        enriched.nome_entidade = String(log.detalhes.nome_completo);
+      }
+
+    } catch (err) {
+      console.warn('Error resolving log names:', err);
+    }
+    
+    return enriched;
+  }, []);
+
+  useEffect(() => {
+    if (selectedLog && !selectedLog.detalhes_resolvidos) {
+      const run = async () => {
+        setIsResolving(true);
+        const enriched = await enrichLog(selectedLog);
+        setSelectedLog(enriched);
+        setIsResolving(false);
+      };
+      run();
+    }
+  }, [selectedLog, enrichLog]);
 
   // Filters
   const [filterDateFrom, setFilterDateFrom] = useState('');
