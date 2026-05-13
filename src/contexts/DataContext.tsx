@@ -351,8 +351,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [],
   );
 
-    [],
-  );
 
   const isSlotBlocked = useCallback(
     (profissionalId: string, unidadeId: string, date: string, time?: string) => {
