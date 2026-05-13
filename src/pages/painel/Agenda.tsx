@@ -1602,14 +1602,22 @@ const Agenda: React.FC = () => {
       return;
     }
     try {
+      const ag = agendamentos.find(a => a.id === agId);
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
-        acao: "excluir",
+        acao: "excluir_agendamento",
         entidade: "agendamento",
         entidadeId: agId,
+        pacienteId: ag?.pacienteId,
+        pacienteNome: ag?.pacienteNome,
+        profissionalId: ag?.profissionalId,
+        profissionalNome: ag?.profissionalNome,
+        agendamentoId: agId,
+        before: ag,
         detalhes: { acao: "exclusão de agendamento" },
         user,
       });
+
       toast.success("Agendamento excluído!");
       await refreshAgendamentos();
     } catch (err) {
