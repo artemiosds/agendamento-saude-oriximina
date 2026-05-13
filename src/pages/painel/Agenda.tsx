@@ -986,6 +986,21 @@ const Agenda: React.FC = () => {
       criadoPor: "current",
     };
     addAgendamento(agData);
+    await logAction({
+      acao: "novo_agendamento",
+      entidade: "agendamento",
+      entidadeId: agId,
+      modulo: "agenda",
+      user,
+      pacienteId: pac.id,
+      pacienteNome: pac.nome,
+      profissionalId: prof.id,
+      profissionalNome: prof.nome,
+      agendamentoId: agId,
+      after: agData,
+      detalhes: { paciente: pac.nome, data: selectedDate, hora: newAg.hora },
+    });
+
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
     setNewAg({
