@@ -204,6 +204,24 @@ const formatCpf = (cpf: string) => {
   return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
 };
 
+const generateHumanSummary = (log: EnrichedLog) => {
+  const user = log.user_nome || 'O sistema';
+  const acao = log.acao_legivel || log.acao;
+  const entidade = log.entidade_nome || log.entidade_id || log.entidade;
+  const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const unidade = log.unidade_nome || 'unidade não identificada';
+
+  if (log.tipo_evento === 'login') return `${user} realizou login no sistema em ${data}.`;
+  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  if (log.tipo_evento === 'edicao') {
+    const campos = log.campos_alterados?.join(', ') || 'campos';
+    return `${user} editou o registro de ${log.entidade} "${entidade}", alterando ${campos}, na ${unidade} em ${data}.`;
+  }
+  if (log.tipo_evento === 'exclusao') return `${user} removeu o registro de ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  return `${user} realizou a ação "${acao}" em ${data}.`;
+};
+
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -219,6 +237,7 @@ const Auditoria: React.FC = () => {
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+
 
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
