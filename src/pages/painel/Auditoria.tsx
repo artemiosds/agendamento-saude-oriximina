@@ -323,36 +323,81 @@ const Auditoria: React.FC = () => {
   const [reportLoading, setReportLoading] = useState(false);
 
 
+  const cacheRef = useRef<Record<string, any>>({});
+
+  const resolveEntity = useCallback(async (log: EnrichedLog): Promise<ResolvedEntity> => {
+    const id = log.paciente_id || log.entidade_id;
+    const entidade = log.entidade;
+    const cacheKey = `${entidade}_${id}`;
+    
+    if (cacheRef.current[cacheKey]) return cacheRef.current[cacheKey];
+
+    const result: ResolvedEntity = {
+      tipo: "desconhecido",
+      titulo: log.entidade_nome || log.entidade_id || log.entidade,
+      idTecnico: log.entidade_id,
+    };
+
+    try {
+      if (entidade === 'paciente' || id?.startsWith('p')) {
+        result.tipo = "paciente";
+        const { data } = await supabase.from('pacientes').select('nome, cpf, cns, telefone, data_nascimento, sexo, unidade_id').eq('id', id).maybeSingle();
+        if (data) {
+          result.titulo = data.nome;
+          result.subtitulo = `CPF: ${maskCpf(data.cpf)} | CNS: ${data.cns || 'N/I'}`;
+          result.detalhes = data;
+        }
+      } else if (entidade === 'agendamento' || id?.startsWith('ag')) {
+        result.tipo = "agendamento";
+        const { data: ag } = await supabase.from('agendamentos').select('data, hora, paciente_nome, profissional_nome, status, unidade_id').eq('id', id).maybeSingle();
+        if (ag) {
+          result.titulo = ag.paciente_nome;
+          result.subtitulo = `${ag.profissional_nome} | ${format(new Date(ag.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${ag.hora}`;
+          result.detalhes = ag;
+        }
+      } else if (entidade === 'prontuario') {
+        result.tipo = "prontuario";
+        const { data: pr } = await supabase.from('prontuarios').select('data_atendimento, paciente_nome, profissional_nome, status').eq('id', id).maybeSingle();
+        if (pr) {
+          result.titulo = pr.paciente_nome;
+          result.subtitulo = `${pr.profissional_nome} | ${format(new Date(pr.data_atendimento + 'T12:00:00'), 'dd/MM/yyyy')}`;
+          result.detalhes = pr;
+        }
+      } else if (entidade === 'funcionario' || entidade === 'profissional') {
+        result.tipo = "profissional";
+        const { data: f } = await supabase.from('funcionarios').select('nome, profissao, cargo, cpf').eq('id', id).maybeSingle();
+        if (f) {
+          result.titulo = f.nome;
+          result.subtitulo = `${f.profissao || f.cargo || 'Funcionário'} | CPF: ${maskCpf(f.cpf)}`;
+          result.detalhes = f;
+        }
+      }
+    } catch (err) {
+      console.warn('Error resolving entity:', err);
+    }
+
+    cacheRef.current[cacheKey] = result;
+    return result;
+  }, []);
+
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
-    const enriched: EnrichedLog = { ...log, detalhes_resolvidos: {} };
+    const enriched: EnrichedLog = { ...log };
     
-    // Attempt to map new specialized columns
+    // Resolve entity details
+    enriched.entidade_resolvida = await resolveEntity(log);
+    
+    // Legacy support
     enriched.detalhes_resolvidos = {
-      paciente: log.detalhes?.paciente_nome || log.paciente_nome,
-      profissional: log.detalhes?.profissional_nome || log.profissional_nome,
-      agendamento: log.agendamento_id ? `ID: ${log.agendamento_id}` : undefined,
+      paciente: enriched.entidade_resolvida.titulo,
       unidade: log.unidade_nome
     };
 
-    // Lazy resolve names if needed
-    try {
-      if (log.paciente_id && !enriched.detalhes_resolvidos.paciente) {
-        const { data } = await supabase.from('pacientes').select('nome').eq('id', log.paciente_id).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.paciente = data.nome;
-      }
-      if (log.profissional_id && !enriched.detalhes_resolvidos.profissional) {
-        const { data } = await supabase.from('funcionarios').select('nome').eq('id', log.profissional_id).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.profissional = data.nome;
-      }
-    } catch (err) {
-      console.warn('Error resolving log names:', err);
-    }
-    
-    enriched.nome_entidade = log.entidade_nome || enriched.detalhes_resolvidos.paciente || enriched.detalhes_resolvidos.profissional || log.entidade_id;
+    enriched.nome_entidade = enriched.entidade_resolvida.titulo;
     
     return enriched;
-  }, []);
+  }, [resolveEntity]);
+
 
 
   useEffect(() => {
