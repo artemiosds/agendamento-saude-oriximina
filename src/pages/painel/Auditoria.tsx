@@ -316,8 +316,9 @@ const Auditoria: React.FC = () => {
       if (filterStatus) query = query.eq('status', filterStatus);
       if (filterUnidade) query = query.eq('unidade_id', filterUnidade);
       if (search) {
-        query = query.or(`user_nome.ilike.%${search}%,acao.ilike.%${search}%,entidade.ilike.%${search}%,entidade_id.ilike.%${search}%`);
+        query = query.or(`user_nome.ilike.%${search}%,acao.ilike.%${search}%,entidade.ilike.%${search}%,entidade_id.ilike.%${search}%,paciente_nome.ilike.%${search}%,profissional_nome.ilike.%${search}%,acao_legivel.ilike.%${search}%`);
       }
+
 
       // Filter by evento grupo
       if (filterEventoGrupo && filterEventoGrupo !== 'todos') {
