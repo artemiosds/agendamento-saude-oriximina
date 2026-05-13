@@ -691,33 +691,54 @@ const Auditoria: React.FC = () => {
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Data/Hora</TableHead>
                     <TableHead>Usuário</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Perfil</TableHead>
                     <TableHead>Ação</TableHead>
+                    <TableHead>Registro Afetado</TableHead>
                     <TableHead>Módulo</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Dispositivo</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedLog(log)}>
-                      <TableCell className="whitespace-nowrap text-xs">
+                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setSelectedLog(log)}>
+                      <TableCell className="whitespace-nowrap text-[11px] font-mono">
                         {format(new Date(log.created_at), 'dd/MM/yy HH:mm:ss')}
                       </TableCell>
-                      <TableCell className="text-sm font-medium">{log.user_nome || 'Sistema'}</TableCell>
-                      <TableCell className="text-xs font-mono text-muted-foreground">{getCpfDisplay(log)}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{log.role}</Badge></TableCell>
-                      <TableCell className="text-sm">{acaoLabels[log.acao] || log.acao}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{moduloLabels[log.modulo] || log.modulo || log.entidade}</TableCell>
                       <TableCell>
-                        <Badge className={`text-xs ${statusBadge[log.status] || 'bg-muted text-muted-foreground'}`}>
-                          {log.status}
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium leading-none">{log.user_nome || 'Sistema'}</span>
+                          <span className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{log.role}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <span className="text-xs font-medium block truncate" title={formatAuditAction(log.acao)}>
+                          {formatAuditAction(log.acao)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="text-xs truncate text-muted-foreground" title={log.nome_entidade || log.entidade_id || log.entidade}>
+                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
+                          {moduloLabels[log.modulo] || log.modulo || log.entidade}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        <Badge className={`text-[10px] uppercase font-bold tracking-tight shadow-none ${statusBadge[log.status] || 'bg-muted text-muted-foreground'}`}>
+                          {log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground max-w-[100px] truncate">
+                        {String(log.detalhes?.dispositivo || '-')}
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-primary/10">
+                          <Eye className="w-4 h-4 text-primary" />
                         </Button>
                       </TableCell>
                     </TableRow>
