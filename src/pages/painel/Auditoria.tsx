@@ -58,8 +58,18 @@ interface LogEntry {
 
 
 
+interface ResolvedEntity {
+  tipo: "paciente" | "agendamento" | "prontuario" | "profissional" | "unidade" | "documento" | "cota" | "desconhecido";
+  titulo: string;
+  subtitulo?: string;
+  detalhes?: Record<string, any>;
+  idTecnico: string;
+  carregando?: boolean;
+}
+
 interface EnrichedLog extends LogEntry {
   nome_entidade?: string;
+  entidade_resolvida?: ResolvedEntity;
   detalhes_resolvidos?: {
     paciente?: string;
     profissional?: string;
@@ -67,8 +77,8 @@ interface EnrichedLog extends LogEntry {
     unidade?: string;
     [key: string]: any;
   };
-
 }
+
 
 const ITEMS_PER_PAGE = 25;
 
