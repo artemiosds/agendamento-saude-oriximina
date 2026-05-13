@@ -11,7 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Download, FileText, ChevronLeft, ChevronRight, RefreshCw, Filter, X, Eye, BarChart3, User } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { 
+  Search, Download, FileText, ChevronLeft, ChevronRight, 
+  RefreshCw, Filter, X, Eye, BarChart3, User, 
+  Info, Shield, History, Monitor, Database, UserCheck, Calendar
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -30,8 +35,19 @@ interface LogEntry {
   status: string;
   erro: string;
   ip: string;
-  detalhes: Record<string, unknown>;
+  detalhes: Record<string, any>;
   created_at: string;
+}
+
+interface EnrichedLog extends LogEntry {
+  nome_entidade?: string;
+  detalhes_resolvidos?: {
+    paciente?: string;
+    profissional?: string;
+    agendamento?: string;
+    unidade?: string;
+    [key: string]: any;
+  };
 }
 
 const ITEMS_PER_PAGE = 25;
@@ -52,6 +68,68 @@ const moduloLabels: Record<string, string> = {
   auth: 'Autenticação',
   relatorio: 'Relatórios',
   portal: 'Portal Paciente',
+};
+
+const formatAuditAction = (acao: string): string => {
+  const customLabels: Record<string, string> = {
+    // Pacientes
+    edicao_paciente_pagina_pacientes: 'Edição de cadastro do paciente pela Página Pacientes',
+    criacao_paciente: 'Cadastro de novo paciente',
+    excluir_paciente: 'Exclusão de paciente',
+    
+    // Agendamentos
+    novo_agendamento: 'Criação de novo agendamento',
+    confirmar_chegada: 'Confirmação de chegada do paciente',
+    agendar_sessao_tratamento: 'Agendamento de sessão de tratamento',
+    desmarcar_sessao: 'Desmarcação de sessão',
+    agendar_ciclo_completo: 'Agendamento de ciclo completo',
+    status_change: 'Alteração de status de agendamento',
+    
+    // Atendimento / Prontuário
+    iniciar_atendimento: 'Início de atendimento clínico',
+    atendimento_iniciado: 'Atendimento iniciado',
+    atendimento_finalizado: 'Atendimento finalizado',
+    finalizar_atendimento: 'Finalização de atendimento',
+    edicao_prontuario: 'Edição de prontuário',
+    finalizar_prontuario: 'Finalização de prontuário',
+    prontuario_visualizado: 'Visualização de prontuário',
+    prontuario_criado: 'Criação de prontuário',
+    prontuario_editado: 'Edição de prontuário',
+    prontuario_exportado_pdf: 'Exportação de prontuário para PDF',
+    
+    // Autenticação
+    login: 'Tentativa de login',
+    login_sucesso: 'Login realizado com sucesso',
+    login_falha: 'Falha na tentativa de login',
+    logout: 'Saída do sistema (logout)',
+    sessao_expirada: 'Sessão de usuário expirada',
+    
+    // Outros
+    gerar_documento: 'Geração de documento oficial',
+    baixar_pdf: 'Download de arquivo PDF',
+    exportar: 'Exportação de dados',
+    imprimir: 'Impressão de documento',
+    vaga_liberada: 'Liberação de vaga na agenda',
+    fila_chamada: 'Chamada de paciente da fila',
+    fila_encaixe: 'Encaixe de paciente na fila',
+  };
+
+  if (customLabels[acao]) return customLabels[acao];
+
+  // Fallback: transform snake_case to readable text
+  return acao
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const statusBadge: Record<string, string> = {
+  sucesso: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+  erro: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  falha: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  tentativa: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  pendente: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  bloqueado: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 };
 
 const acaoLabels: Record<string, string> = {
@@ -96,17 +174,11 @@ const eventoGrupos: Record<string, { label: string; acoes: string[] }> = {
   chamada: { label: 'Chamada de Paciente', acoes: ['paciente_chamado', 'paciente_rechamado', 'fila_chamada'] },
 };
 
-const statusBadge: Record<string, string> = {
-  sucesso: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  erro: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  tentativa: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-};
-
 const maskCpf = (cpf: string) => {
   if (!cpf || cpf.length < 11) return cpf || '-';
   const clean = cpf.replace(/\D/g, '');
   if (clean.length < 11) return cpf;
-  return `***.${clean.substring(3, 6)}.${clean.substring(6, 9)}-**`;
+  return `${clean.substring(0, 3)}.***.***-${clean.substring(9)}`;
 };
 
 const formatCpf = (cpf: string) => {
@@ -120,16 +192,88 @@ const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
   const { funcionarios } = useData();
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logs, setLogs] = useState<EnrichedLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [selectedLog, setSelectedLog] = useState<EnrichedLog | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+
+  // Helper to enrich a single log with names
+  const enrichLog = useCallback(async (log: EnrichedLog) => {
+    if (!log.entidade_id && !log.user_id) return log;
+    
+    const enriched = { ...log, detalhes_resolvidos: { ...log.detalhes } };
+    
+    try {
+      // Resolve patient
+      const patientId = log.detalhes?.paciente_id || log.detalhes?.patientId || log.detalhes?.pacienteId || (log.entidade === 'paciente' ? log.entidade_id : null);
+      if (patientId && typeof patientId === 'string' && patientId.startsWith('p')) {
+        const { data } = await supabase.from('pacientes').select('nome').eq('id', patientId).maybeSingle();
+        if (data) enriched.detalhes_resolvidos.paciente = data.nome;
+      } else if (log.detalhes?.paciente_nome) {
+        enriched.detalhes_resolvidos.paciente = log.detalhes.paciente_nome;
+      }
+
+      // Resolve professional
+      const profId = log.detalhes?.profissional_id || log.detalhes?.profissionalId || log.detalhes?.funcionario_id || (log.entidade === 'funcionario' ? log.entidade_id : null);
+      if (profId && typeof profId === 'string' && profId.length > 20) {
+        const { data } = await supabase.from('funcionarios').select('nome').eq('id', profId).maybeSingle();
+        if (data) enriched.detalhes_resolvidos.profissional = data.nome;
+      }
+
+      // Resolve unit
+      const unitId = log.unidade_id || log.detalhes?.unidade_id;
+      if (unitId && typeof unitId === 'string') {
+        const { data } = await supabase.from('unidades').select('nome').eq('id', unitId).maybeSingle();
+        if (data) enriched.detalhes_resolvidos.unidade = data.nome;
+      }
+
+      // Resolve appointment
+      const appointmentId = log.detalhes?.agendamento_id || log.detalhes?.appointmentId || (log.entidade === 'agendamento' ? log.entidade_id : null);
+      if (appointmentId && typeof appointmentId === 'string' && appointmentId.startsWith('ag')) {
+        const { data } = await supabase.from('agendamentos').select('data, hora, paciente_nome').eq('id', appointmentId).maybeSingle();
+        if (data) {
+          enriched.detalhes_resolvidos.agendamento = `${format(new Date(data.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${data.hora} - ${data.paciente_nome}`;
+        }
+      }
+
+      // Resolve record name (generic)
+      if (log.entidade === 'paciente' && enriched.detalhes_resolvidos.paciente) {
+        enriched.nome_entidade = enriched.detalhes_resolvidos.paciente;
+      } else if (log.entidade === 'funcionario' && enriched.detalhes_resolvidos.profissional) {
+        enriched.nome_entidade = enriched.detalhes_resolvidos.profissional;
+      } else if (log.detalhes?.paciente_nome) {
+        enriched.nome_entidade = String(log.detalhes.paciente_nome);
+      } else if (log.detalhes?.nome) {
+        enriched.nome_entidade = String(log.detalhes.nome);
+      } else if (log.detalhes?.nome_completo) {
+        enriched.nome_entidade = String(log.detalhes.nome_completo);
+      }
+
+    } catch (err) {
+      console.warn('Error resolving log names:', err);
+    }
+    
+    return enriched;
+  }, []);
+
+  useEffect(() => {
+    if (selectedLog && !selectedLog.detalhes_resolvidos) {
+      const run = async () => {
+        setIsResolving(true);
+        const enriched = await enrichLog(selectedLog);
+        setSelectedLog(enriched);
+        setIsResolving(false);
+      };
+      run();
+    }
+  }, [selectedLog, enrichLog]);
 
   // Filters
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -547,33 +691,54 @@ const Auditoria: React.FC = () => {
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Data/Hora</TableHead>
                     <TableHead>Usuário</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Perfil</TableHead>
                     <TableHead>Ação</TableHead>
+                    <TableHead>Registro Afetado</TableHead>
                     <TableHead>Módulo</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Dispositivo</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedLog(log)}>
-                      <TableCell className="whitespace-nowrap text-xs">
+                    <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setSelectedLog(log)}>
+                      <TableCell className="whitespace-nowrap text-[11px] font-mono">
                         {format(new Date(log.created_at), 'dd/MM/yy HH:mm:ss')}
                       </TableCell>
-                      <TableCell className="text-sm font-medium">{log.user_nome || 'Sistema'}</TableCell>
-                      <TableCell className="text-xs font-mono text-muted-foreground">{getCpfDisplay(log)}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{log.role}</Badge></TableCell>
-                      <TableCell className="text-sm">{acaoLabels[log.acao] || log.acao}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{moduloLabels[log.modulo] || log.modulo || log.entidade}</TableCell>
                       <TableCell>
-                        <Badge className={`text-xs ${statusBadge[log.status] || 'bg-muted text-muted-foreground'}`}>
-                          {log.status}
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium leading-none">{log.user_nome || 'Sistema'}</span>
+                          <span className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">{log.role}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <span className="text-xs font-medium block truncate" title={formatAuditAction(log.acao)}>
+                          {formatAuditAction(log.acao)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="max-w-[180px]">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="text-xs truncate text-muted-foreground" title={log.nome_entidade || log.entidade_id || log.entidade}>
+                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
+                          {moduloLabels[log.modulo] || log.modulo || log.entidade}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                          <Eye className="w-4 h-4 text-muted-foreground" />
+                        <Badge className={`text-[10px] uppercase font-bold tracking-tight shadow-none ${statusBadge[log.status] || 'bg-muted text-muted-foreground'}`}>
+                          {log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground max-w-[100px] truncate">
+                        {String(log.detalhes?.dispositivo || '-')}
+                      </TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-full hover:bg-primary/10">
+                          <Eye className="w-4 h-4 text-primary" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -605,130 +770,230 @@ const Auditoria: React.FC = () => {
       {/* Detail Side Panel */}
       <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Detalhes do Log</SheetTitle>
-          </SheetHeader>
-          {selectedLog && (
-            <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Funcionário</p>
-                  <p className="text-sm font-medium">{selectedLog.user_nome || 'Sistema'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">CPF</p>
-                  <p className="text-sm font-mono">{getCpfDisplay(selectedLog)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Perfil</p>
-                  <p className="text-sm"><Badge variant="outline">{selectedLog.role}</Badge></p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <Badge className={`text-xs ${statusBadge[selectedLog.status] || ''}`}>{selectedLog.status}</Badge>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Data/Hora</p>
-                  <p className="text-sm">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Dispositivo</p>
-                  <p className="text-sm text-muted-foreground">{String((selectedLog.detalhes as any)?.dispositivo || '-')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">IP</p>
-                  <p className="text-sm font-mono">{selectedLog.ip || '-'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Evento</p>
-                  <p className="text-sm font-medium">{acaoLabels[selectedLog.acao] || selectedLog.acao}</p>
-                </div>
+          <SheetHeader className="border-b pb-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                <Shield className="w-5 h-5" />
               </div>
-
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Módulo / Entidade</p>
-                <p className="text-sm">{moduloLabels[selectedLog.modulo] || selectedLog.modulo} → {selectedLog.entidade}</p>
-                {selectedLog.entidade_id && (
-                  <p className="text-xs font-mono text-muted-foreground mt-1">ID: {selectedLog.entidade_id}</p>
-                )}
+                <SheetTitle className="text-xl">Detalhes da Auditoria</SheetTitle>
+                <p className="text-xs text-muted-foreground font-mono">{selectedLog?.id}</p>
               </div>
-
-              {selectedLog.erro && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Erro</p>
-                  <p className="text-sm text-destructive bg-destructive/10 p-2 rounded">{selectedLog.erro}</p>
+            </div>
+          </SheetHeader>
+          
+          {selectedLog && (
+            <div className="space-y-6 mt-6 pb-20">
+              {/* 1. RESUMO DO EVENTO */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Info className="w-4 h-4" />
+                  RESUMO DO EVENTO
                 </div>
-              )}
-
-              {/* Patient info */}
-              {((selectedLog.detalhes as any)?.paciente_nome || (selectedLog.detalhes as any)?.paciente) && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Paciente Envolvido</p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-4 bg-muted/30 p-4 rounded-xl border">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
+                    <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">Nome</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.paciente_nome || (selectedLog.detalhes as any)?.paciente || '-')}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Status</p>
+                      <Badge className={`text-[10px] font-bold uppercase ${statusBadge[selectedLog.status] || ''}`}>{selectedLog.status}</Badge>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">CPF do Paciente</p>
-                      <p className="text-sm font-mono">{String((selectedLog.detalhes as any)?.paciente_cpf || '-')}</p>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Data e Hora</p>
+                      <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
+                      <p className="text-sm font-medium">{moduloLabels[selectedLog.modulo] || selectedLog.modulo}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Entidade</p>
+                      <p className="text-sm font-medium">{selectedLog.entidade}</p>
                     </div>
                   </div>
                 </div>
-              )}
+              </section>
 
-              {/* Field-level changes for prontuario edits */}
-              {(selectedLog.detalhes as any)?.campos_alterados && Object.keys((selectedLog.detalhes as any).campos_alterados).length > 0 && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Campos Alterados</p>
-                  <div className="space-y-2">
-                    {Object.entries((selectedLog.detalhes as any).campos_alterados).map(([campo, vals]: [string, any]) => (
-                      <div key={campo} className="bg-muted/50 rounded p-2">
-                        <p className="text-xs font-medium text-foreground mb-1">{campo}</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Antes</p>
-                            <p className="text-xs bg-destructive/10 text-destructive rounded p-1">{vals.anterior || '(vazio)'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-muted-foreground">Depois</p>
-                            <p className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded p-1">{vals.novo || '(vazio)'}</p>
-                          </div>
-                        </div>
+              {/* 2. RESPONSÁVEL */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <UserCheck className="w-4 h-4" />
+                  RESPONSÁVEL
+                </div>
+                <div className="grid grid-cols-1 gap-3 bg-muted/30 p-4 rounded-xl border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                      {selectedLog.user_nome ? selectedLog.user_nome.charAt(0) : 'S'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold">{selectedLog.user_nome || 'Sistema / Automação'}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">{selectedLog.role}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-1">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">CPF</p>
+                      <p className="text-xs font-mono">{getCpfDisplay(selectedLog)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Unidade</p>
+                      <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos?.unidade || 'Não informada'}</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 3. REGISTRO AFETADO */}
+              {(selectedLog.entidade_id || selectedLog.nome_entidade) && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <Database className="w-4 h-4" />
+                    REGISTRO AFETADO
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Identificação do Registro</p>
+                      <p className="text-sm font-bold text-foreground">{selectedLog.nome_entidade || 'N/D'}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground mt-1">ID Técnico: {selectedLog.entidade_id || 'N/D'}</p>
+                    </div>
+                    
+                    {selectedLog.detalhes_resolvidos?.paciente && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Paciente</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.paciente}</p>
                       </div>
-                    ))}
+                    )}
+                    {selectedLog.detalhes_resolvidos?.profissional && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Profissional</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.profissional}</p>
+                      </div>
+                    )}
+                    {selectedLog.detalhes_resolvidos?.agendamento && (
+                      <div className="border-t border-primary/10 pt-2">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Agendamento</p>
+                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.agendamento}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </section>
               )}
 
-              {/* Duration info for atendimento */}
-              {(selectedLog.detalhes as any)?.duracao_minutos !== undefined && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Duração do Atendimento</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Início</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.hora_inicio || '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Fim</p>
-                      <p className="text-sm">{String((selectedLog.detalhes as any)?.hora_fim || '-')}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Duração</p>
-                      <p className="text-sm font-bold">{(selectedLog.detalhes as any)?.duracao_minutos} min</p>
-                    </div>
+              {/* 4. ALTERAÇÕES REALIZADAS */}
+              {(selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                    <History className="w-4 h-4" />
+                    ALTERAÇÕES REALIZADAS
                   </div>
-                </div>
+                  <div className="space-y-2">
+                    {/* Handle simple before/after if present in detalhes */}
+                    {selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedLog.detalhes.new_value).map(([key, value]: [string, any]) => {
+                          const oldValue = selectedLog.detalhes?.old_value?.[key];
+                          if (JSON.stringify(oldValue) === JSON.stringify(value)) return null;
+                          return (
+                            <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                              <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
+                              <div className="grid grid-cols-1 gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue || '(vazio)')}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                  <span className="text-xs font-medium text-foreground">{String(value || '(vazio)')}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Handle explicitly mapped fields */}
+                    {selectedLog.detalhes?.campos_alterados && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
+                          <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
+                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
+                            <div className="grid grid-cols-1 gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
               )}
 
-              {/* All details (raw) */}
-              <div className="border-t pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Dados Completos</p>
-                <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-40 text-muted-foreground">
-                  {JSON.stringify(selectedLog.detalhes, null, 2)}
-                </pre>
-              </div>
+              {/* 5. CONTEXTO TÉCNICO */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Monitor className="w-4 h-4" />
+                  CONTEXTO TÉCNICO
+                </div>
+                <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Endereço IP</p>
+                    <p className="text-xs font-mono">{selectedLog.ip || 'Local/Sistema'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Navegador</p>
+                    <p className="text-xs truncate">{String(selectedLog.detalhes?.dispositivo || selectedLog.detalhes?.user_agent || '-')}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Rota / Origem</p>
+                    <p className="text-[11px] font-mono text-muted-foreground truncate">{String(selectedLog.detalhes?.rota || selectedLog.detalhes?.origin || '-')}</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* 6. DADOS TÉCNICOS COMPLETOS */}
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="json-data" className="border-none">
+                  <AccordionTrigger className="hover:no-underline bg-muted/50 rounded-xl px-4 py-3 text-xs font-bold text-muted-foreground">
+                    VER DADOS TÉCNICOS COMPLETOS (JSON)
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-2">
+                    <div className="relative">
+                      <pre className="text-[10px] bg-slate-950 text-slate-300 p-4 rounded-xl overflow-auto max-h-[300px] font-mono leading-relaxed">
+                        {JSON.stringify(selectedLog.detalhes, (key, value) => {
+                          // Mask sensitive data in technical view too
+                          if (['token', 'password', 'senha', 'authorization', 'bearer'].some(s => key.toLowerCase().includes(s))) {
+                            return '********';
+                          }
+                          return value;
+                        }, 2)}
+                      </pre>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="absolute top-2 right-2 text-slate-400 hover:text-white hover:bg-white/10"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(selectedLog.detalhes, null, 2));
+                          toast.success('JSON copiado!');
+                        }}
+                      >
+                        <FileText className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
           )}
         </SheetContent>
