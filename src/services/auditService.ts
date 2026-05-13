@@ -58,15 +58,16 @@ export const auditService = {
     
     // Handle nested custom_data if present
     if (before.custom_data && after.custom_data) {
-      const cdDiff = this.diffObjects(before.custom_data, after.custom_data);
+      const cdDiff = this.diffObjects(before.custom_data, after.custom_data) as any;
       Object.entries(cdDiff.changes).forEach(([k, v]) => {
-        changes[`custom_data.${k}`] = v;
+        changes[`custom_data.${k}`] = v as { from: any; to: any };
         fields.push(`custom_data.${k}`);
       });
     }
     
     return { changes, fields };
   },
+
 
 
   /**
