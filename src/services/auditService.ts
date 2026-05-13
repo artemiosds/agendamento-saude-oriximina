@@ -13,6 +13,8 @@ export interface AuditParams {
   detalhes?: Record<string, any>;
   before?: any;
   after?: any;
+  oldValue?: any; // Compatibilidade legada
+  newValue?: any; // Compatibilidade legada
   pacienteId?: string;
   pacienteNome?: string;
   profissionalId?: string;
@@ -27,6 +29,7 @@ export interface AuditParams {
   status?: 'sucesso' | 'erro' | 'bloqueado' | 'pendente';
   errorMessage?: string;
   errorCode?: string;
+
 }
 
 export const auditService = {
@@ -98,15 +101,19 @@ export const auditService = {
       // Calculate changes if before/after provided
       let changes = null;
       let camposAlterados = null;
-      if (params.before && params.after) {
-        const diff = this.diffObjects(params.before, params.after);
+      const effectiveBefore = params.before || params.oldValue;
+      const effectiveAfter = params.after || params.newValue;
+
+      if (effectiveBefore && effectiveAfter) {
+        const diff = this.diffObjects(effectiveBefore, effectiveAfter);
         changes = diff.changes;
         camposAlterados = diff.fields;
       }
 
       // Mask before/after/detalhes for security
-      const safeBefore = params.before ? this.maskSensitiveData(params.before) : null;
-      const safeAfter = params.after ? this.maskSensitiveData(params.after) : null;
+      const safeBefore = effectiveBefore ? this.maskSensitiveData(effectiveBefore) : null;
+      const safeAfter = effectiveAfter ? this.maskSensitiveData(effectiveAfter) : null;
+
       const safeDetalhes = params.detalhes ? this.maskSensitiveData(params.detalhes) : {};
 
       const payload: any = {
