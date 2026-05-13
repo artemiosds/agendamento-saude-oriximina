@@ -506,16 +506,20 @@ const Auditoria: React.FC = () => {
 
   const exportCSV = () => {
     if (!logs.length) return;
-    const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Módulo', 'Entidade', 'ID Registro', 'Status', 'Erro', 'Detalhes'];
+    const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Resumo', 'Módulo', 'Registro Afetado', 'Entidade', 'ID Registro', 'Unidade', 'Status', 'IP', 'Navegador', 'Erro'];
     const rows = logs.map(l => [
       format(new Date(l.created_at), 'dd/MM/yyyy HH:mm:ss'),
       l.user_nome, getCpfDisplay(l), l.role,
       acaoLabels[l.acao] || l.acao,
+      generateHumanSummary(l),
       moduloLabels[l.modulo] || l.modulo || l.entidade,
-      l.entidade, l.entidade_id, l.status, l.error_message || '',
-      JSON.stringify(l.detalhes),
+      l.paciente_nome || l.nome_entidade || '',
+      l.entidade, l.entidade_id,
+      l.unidade_nome || '',
+      l.status, l.ip, l.navegador || '',
+      l.error_message || '',
     ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -525,6 +529,7 @@ const Auditoria: React.FC = () => {
     URL.revokeObjectURL(url);
     toast.success('CSV exportado com sucesso!');
   };
+
 
   const exportPDF = () => {
     if (!logs.length) return;
