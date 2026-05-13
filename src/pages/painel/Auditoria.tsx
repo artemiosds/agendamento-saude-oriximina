@@ -724,13 +724,19 @@ const Auditoria: React.FC = () => {
                           {formatAuditAction(log.acao)}
                         </span>
                       </TableCell>
-                      <TableCell className="max-w-[180px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="text-xs truncate text-muted-foreground" title={log.nome_entidade || log.entidade_id || log.entidade}>
-                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                      <TableCell className="max-w-[200px]">
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <span className="text-xs font-semibold truncate" title={log.paciente_nome || log.nome_entidade || log.entidade_id}>
+                            {log.paciente_nome || log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
                           </span>
+                          {log.profissional_nome && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              Prof: {log.profissional_nome}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
+
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
                           {moduloLabels[log.modulo] || log.modulo || log.entidade}
