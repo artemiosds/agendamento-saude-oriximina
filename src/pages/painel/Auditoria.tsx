@@ -859,10 +859,18 @@ const Auditoria: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[200px]">
-                        <span className="text-xs font-medium block truncate" title={formatAuditAction(log.acao)}>
-                          {formatAuditAction(log.acao)}
-                        </span>
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <span className="text-xs font-semibold truncate" title={formatAuditAction(log.acao)}>
+                            {formatAuditAction(log.acao)}
+                          </span>
+                          {(log as any).human_summary && (
+                            <span className="text-[9px] text-muted-foreground line-clamp-1 italic" title={(log as any).human_summary}>
+                              "{(log as any).human_summary}"
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
+
                       <TableCell className="max-w-[200px]">
                         <div className="flex flex-col gap-0.5 overflow-hidden">
                           <span className="text-xs font-semibold truncate" title={log.nome_entidade || log.entidade_id}>
