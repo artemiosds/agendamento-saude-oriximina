@@ -1002,7 +1002,7 @@ const Auditoria: React.FC = () => {
               </section>
 
               {/* 3. REGISTRO AFETADO */}
-              {(selectedLog.entidade_id || selectedLog.nome_entidade) && (
+              {(selectedLog.entidade_id || selectedLog.nome_entidade || selectedLog.entidade_resolvida) && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <Database className="w-4 h-4" />
@@ -1010,32 +1010,37 @@ const Auditoria: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
                     <div>
-                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">Identificação do Registro</p>
-                      <p className="text-sm font-bold text-foreground">{selectedLog.nome_entidade || 'N/D'}</p>
+                      <p className="text-[10px] uppercase font-bold text-primary tracking-wider mb-1">
+                        {selectedLog.entidade_resolvida?.tipo ? selectedLog.entidade_resolvida.tipo.charAt(0).toUpperCase() + selectedLog.entidade_resolvida.tipo.slice(1) : 'Identificação do Registro'}
+                      </p>
+                      <p className="text-sm font-bold text-foreground">{selectedLog.entidade_resolvida?.titulo || selectedLog.nome_entidade || 'N/D'}</p>
                       <p className="text-[10px] font-mono text-muted-foreground mt-1">ID Técnico: {selectedLog.entidade_id || 'N/D'}</p>
                     </div>
                     
-                    {selectedLog.detalhes_resolvidos?.paciente && (
+                    {selectedLog.entidade_resolvida?.subtitulo && (
                       <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Paciente</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.paciente}</p>
+                        <p className="text-xs text-muted-foreground">{selectedLog.entidade_resolvida.subtitulo}</p>
                       </div>
                     )}
-                    {selectedLog.detalhes_resolvidos?.profissional && (
-                      <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Profissional</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.profissional}</p>
-                      </div>
-                    )}
-                    {selectedLog.detalhes_resolvidos?.agendamento && (
-                      <div className="border-t border-primary/10 pt-2">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Agendamento</p>
-                        <p className="text-xs font-medium">{selectedLog.detalhes_resolvidos.agendamento}</p>
+
+                    {selectedLog.entidade_resolvida?.detalhes && (
+                      <div className="border-t border-primary/10 pt-2 grid grid-cols-2 gap-2">
+                        {Object.entries(selectedLog.entidade_resolvida.detalhes).map(([k, v]) => {
+                          if (['id', 'unidade_id', 'custom_data', 'created_at', 'updated_at'].includes(k)) return null;
+                          if (!v) return null;
+                          return (
+                            <div key={k}>
+                              <p className="text-[9px] uppercase font-bold text-muted-foreground">{formatAuditFieldLabel(k)}</p>
+                              <p className="text-[11px] font-medium">{formatAuditValue(k, v)}</p>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </section>
               )}
+
 
               {/* 4. ALTERAÇÕES REALIZADAS */}
               {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
