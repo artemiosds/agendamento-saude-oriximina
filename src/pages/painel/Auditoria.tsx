@@ -44,6 +44,9 @@ interface LogEntry {
   status: string;
   error_message?: string;
   ip: string;
+  navegador?: string;
+  dispositivo?: string;
+  rota?: string;
   detalhes: Record<string, any>;
   before?: any;
   after?: any;
@@ -51,6 +54,7 @@ interface LogEntry {
   campos_alterados?: string[];
   created_at: string;
 }
+
 
 
 
