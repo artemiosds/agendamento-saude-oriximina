@@ -865,16 +865,17 @@ const Auditoria: React.FC = () => {
                       </TableCell>
                       <TableCell className="max-w-[200px]">
                         <div className="flex flex-col gap-0.5 overflow-hidden">
-                          <span className="text-xs font-semibold truncate" title={log.paciente_nome || log.nome_entidade || log.entidade_id}>
-                            {log.paciente_nome || log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                          <span className="text-xs font-semibold truncate" title={log.nome_entidade || log.entidade_id}>
+                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
                           </span>
-                          {log.profissional_nome && (
+                          {log.entidade_resolvida?.subtitulo && (
                             <span className="text-[10px] text-muted-foreground truncate">
-                              Prof: {log.profissional_nome}
+                              {log.entidade_resolvida.subtitulo}
                             </span>
                           )}
                         </div>
                       </TableCell>
+
 
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
