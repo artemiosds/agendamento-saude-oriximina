@@ -1148,9 +1148,6 @@ const Auditoria: React.FC = () => {
                   </div>
                 </section>
               )}
-
-
-
               {/* 5. CONTEXTO TÉCNICO */}
               <section className="space-y-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-primary">
