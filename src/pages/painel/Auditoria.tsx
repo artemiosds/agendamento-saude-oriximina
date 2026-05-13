@@ -123,6 +123,15 @@ const formatAuditAction = (acao: string): string => {
     .join(' ');
 };
 
+const statusBadge: Record<string, string> = {
+  sucesso: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+  erro: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  falha: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  tentativa: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  pendente: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  bloqueado: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+};
+
 const acaoLabels: Record<string, string> = {
   criar: 'Criação',
   editar: 'Edição',
