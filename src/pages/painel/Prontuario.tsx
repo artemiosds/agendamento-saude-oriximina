@@ -1137,17 +1137,21 @@ const ProntuarioPage: React.FC = () => {
           entidadeId: effectiveEditId,
           modulo: "prontuario",
           user,
+          pacienteId: form.paciente_id || record.paciente_id,
+          pacienteNome: form.paciente_nome,
+          profissionalId: profIdToSave,
+          profissionalNome: profNomeToSave,
+          prontuarioId: effectiveEditId,
+          before: previousForm,
+          after: record,
           detalhes: {
-            paciente_nome: form.paciente_nome,
-            paciente_cpf: pac?.cpf || "",
             motivo_alteracao: form.motivo_alteracao,
             campos_alterados: camposAlterados,
             editado_por_id: user?.id || "",
             editado_por_nome: user?.nome || "",
-            profissional_responsavel_id: profIdToSave,
-            profissional_responsavel_nome: profNomeToSave,
           },
         });
+
       } else {
         const { data: inserted, error } = await (supabase as any)
           .from("prontuarios")
