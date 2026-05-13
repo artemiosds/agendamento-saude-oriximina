@@ -222,7 +222,7 @@ const Auditoria: React.FC = () => {
 
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
-    const enriched = { ...log, detalhes_resolvidos: {} };
+    const enriched: EnrichedLog = { ...log, detalhes_resolvidos: {} };
     
     // Attempt to map new specialized columns
     enriched.detalhes_resolvidos = {
