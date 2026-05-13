@@ -1043,67 +1043,108 @@ const Auditoria: React.FC = () => {
 
 
               {/* 4. ALTERAÇÕES REALIZADAS */}
-              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
+              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados || selectedLog.detalhes?.old_data || selectedLog.detalhes?.new_data) && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <History className="w-4 h-4" />
                     ALTERAÇÕES REALIZADAS
                   </div>
                   <div className="space-y-2">
-                    {/* Handle changes column (preferred) */}
-                    {selectedLog.changes && Object.entries(selectedLog.changes).length > 0 && (
-                      <div className="space-y-2">
-                        {Object.entries(selectedLog.changes).map(([key, vals]: [string, any]) => (
-                          <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
-                            <div className="grid grid-cols-1 gap-2">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                <span className="text-xs text-muted-foreground line-through">{String(vals.from ?? '(vazio)')}</span>
+                    {/* Render changes (new structure or legacy in details) */}
+                    {(() => {
+                      const changes = selectedLog.changes || 
+                                     selectedLog.detalhes?.changes || 
+                                     selectedLog.detalhes?.alteracoes;
+                      
+                      if (changes && Object.entries(changes).length > 0) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(changes).map(([key, vals]: [string, any]) => (
+                              <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                    <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, vals.from ?? vals.before ?? vals.anterior ?? vals.old)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                    <span className="text-xs font-medium text-foreground">{formatAuditValue(key, vals.to ?? vals.after ?? vals.novo ?? vals.new)}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                <span className="text-xs font-medium text-foreground">{String(vals.to ?? '(vazio)')}</span>
-                              </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        );
+                      }
 
-                    {/* Fallback for legacy logs in detalhes */}
-                    {!selectedLog.changes && selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
-                      <div className="space-y-2">
-                        {Object.entries(selectedLog.detalhes.new_value).map(([key, value]: [string, any]) => {
-                          const oldValue = selectedLog.detalhes?.old_value?.[key];
-                          if (JSON.stringify(oldValue) === JSON.stringify(value)) return null;
+                      // Check for before/after pairs
+                      const before = selectedLog.before || selectedLog.detalhes?.old_value || selectedLog.detalhes?.before || selectedLog.detalhes?.old_data;
+                      const after = selectedLog.after || selectedLog.detalhes?.new_value || selectedLog.detalhes?.after || selectedLog.detalhes?.new_data;
+
+                      if (before && after) {
+                        const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+                        const entries = Array.from(allKeys).filter(k => {
+                          if (['id', 'created_at', 'updated_at', 'unidade_id', 'user_id', 'custom_data'].includes(k)) return false;
+                          return JSON.stringify(before[k]) !== JSON.stringify(after[k]);
+                        });
+
+                        if (entries.length > 0) {
                           return (
-                            <div key={key} className="bg-muted/50 rounded-xl p-3 border">
-                              <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
-                              <div className="grid grid-cols-1 gap-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue ?? '(vazio)')}</span>
+                            <div className="space-y-2">
+                              {entries.map(key => (
+                                <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                                  <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{formatAuditFieldLabel(key)}</p>
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                      <span className="text-xs text-muted-foreground line-through">{formatAuditValue(key, before[key])}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                      <span className="text-xs font-medium text-foreground">{formatAuditValue(key, after[key])}</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                  <span className="text-xs font-medium text-foreground">{String(value ?? '(vazio)')}</span>
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           );
-                        })}
-                      </div>
-                    )}
+                        }
+                      }
 
-                    {!selectedLog.changes && !selectedLog.detalhes?.old_value && (
-                      <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed">
-                        Este log antigo não possui comparação antes/depois registrada.
-                      </p>
-                    )}
+                      // Check for fields explicitly mapped in legacy format
+                      if (selectedLog.detalhes?.campos_alterados) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
+                              <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
+                                <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                    <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                    <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed text-center">
+                          Este log não possui comparação antes/depois registrada.
+                        </p>
+                      );
+                    })()}
                   </div>
                 </section>
               )}
+
 
 
               {/* 5. CONTEXTO TÉCNICO */}
