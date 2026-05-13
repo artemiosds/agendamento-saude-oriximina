@@ -1273,8 +1273,15 @@ const ProntuarioPage: React.FC = () => {
           entidadeId: prontuarioId || "",
           modulo: "prontuario",
           user,
+          pacienteId: form.paciente_id || record.paciente_id,
+          pacienteNome: form.paciente_nome,
+          profissionalId: profIdToSave,
+          profissionalNome: profNomeToSave,
+          prontuarioId: prontuarioId || "",
+          after: record,
           detalhes: { paciente_nome: form.paciente_nome, paciente_cpf: pac?.cpf || "" },
         });
+
       }
 
       await Promise.all([
