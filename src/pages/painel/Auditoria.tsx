@@ -44,6 +44,9 @@ interface LogEntry {
   status: string;
   error_message?: string;
   ip: string;
+  navegador?: string;
+  dispositivo?: string;
+  rota?: string;
   detalhes: Record<string, any>;
   before?: any;
   after?: any;
@@ -51,6 +54,7 @@ interface LogEntry {
   campos_alterados?: string[];
   created_at: string;
 }
+
 
 
 
@@ -204,6 +208,24 @@ const formatCpf = (cpf: string) => {
   return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
 };
 
+const generateHumanSummary = (log: EnrichedLog) => {
+  const user = log.user_nome || 'O sistema';
+  const acao = log.acao_legivel || log.acao;
+  const entidade = log.entidade_nome || log.entidade_id || log.entidade;
+  const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const unidade = log.unidade_nome || 'unidade não identificada';
+
+  if (log.tipo_evento === 'login') return `${user} realizou login no sistema em ${data}.`;
+  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  if (log.tipo_evento === 'edicao') {
+    const campos = log.campos_alterados?.join(', ') || 'campos';
+    return `${user} editou o registro de ${log.entidade} "${entidade}", alterando ${campos}, na ${unidade} em ${data}.`;
+  }
+  if (log.tipo_evento === 'exclusao') return `${user} removeu o registro de ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  return `${user} realizou a ação "${acao}" em ${data}.`;
+};
+
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
   const { can } = usePermissions();
@@ -219,6 +241,7 @@ const Auditoria: React.FC = () => {
   const [showReport, setShowReport] = useState(false);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
+
 
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
@@ -297,8 +320,9 @@ const Auditoria: React.FC = () => {
       if (filterStatus) query = query.eq('status', filterStatus);
       if (filterUnidade) query = query.eq('unidade_id', filterUnidade);
       if (search) {
-        query = query.or(`user_nome.ilike.%${search}%,acao.ilike.%${search}%,entidade.ilike.%${search}%,entidade_id.ilike.%${search}%`);
+        query = query.or(`user_nome.ilike.%${search}%,acao.ilike.%${search}%,entidade.ilike.%${search}%,entidade_id.ilike.%${search}%,paciente_nome.ilike.%${search}%,profissional_nome.ilike.%${search}%,acao_legivel.ilike.%${search}%`);
       }
+
 
       // Filter by evento grupo
       if (filterEventoGrupo && filterEventoGrupo !== 'todos') {
@@ -486,16 +510,20 @@ const Auditoria: React.FC = () => {
 
   const exportCSV = () => {
     if (!logs.length) return;
-    const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Módulo', 'Entidade', 'ID Registro', 'Status', 'Erro', 'Detalhes'];
+    const headers = ['Data/Hora', 'Usuário', 'CPF', 'Perfil', 'Ação', 'Resumo', 'Módulo', 'Registro Afetado', 'Entidade', 'ID Registro', 'Unidade', 'Status', 'IP', 'Navegador', 'Erro'];
     const rows = logs.map(l => [
       format(new Date(l.created_at), 'dd/MM/yyyy HH:mm:ss'),
       l.user_nome, getCpfDisplay(l), l.role,
       acaoLabels[l.acao] || l.acao,
+      generateHumanSummary(l),
       moduloLabels[l.modulo] || l.modulo || l.entidade,
-      l.entidade, l.entidade_id, l.status, l.error_message || '',
-      JSON.stringify(l.detalhes),
+      l.paciente_nome || l.nome_entidade || '',
+      l.entidade, l.entidade_id,
+      l.unidade_nome || '',
+      l.status, l.ip, l.navegador || '',
+      l.error_message || '',
     ]);
-    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))].join('\n');
+    const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c || '').replace(/"/g, '""')}"`).join(';'))].join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -505,6 +533,7 @@ const Auditoria: React.FC = () => {
     URL.revokeObjectURL(url);
     toast.success('CSV exportado com sucesso!');
   };
+
 
   const exportPDF = () => {
     if (!logs.length) return;
@@ -705,13 +734,19 @@ const Auditoria: React.FC = () => {
                           {formatAuditAction(log.acao)}
                         </span>
                       </TableCell>
-                      <TableCell className="max-w-[180px]">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <span className="text-xs truncate text-muted-foreground" title={log.nome_entidade || log.entidade_id || log.entidade}>
-                            {log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
+                      <TableCell className="max-w-[200px]">
+                        <div className="flex flex-col gap-0.5 overflow-hidden">
+                          <span className="text-xs font-semibold truncate" title={log.paciente_nome || log.nome_entidade || log.entidade_id}>
+                            {log.paciente_nome || log.nome_entidade || (log.entidade_id && log.entidade_id.length > 5 ? log.entidade_id : log.entidade)}
                           </span>
+                          {log.profissional_nome && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              Prof: {log.profissional_nome}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
+
                       <TableCell>
                         <Badge variant="secondary" className="text-[10px] font-normal uppercase tracking-tight">
                           {moduloLabels[log.modulo] || log.modulo || log.entidade}
@@ -783,6 +818,9 @@ const Auditoria: React.FC = () => {
                   <div>
                     <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Ação Realizada</p>
                     <p className="text-sm font-semibold leading-tight text-foreground">{formatAuditAction(selectedLog.acao)}</p>
+                    <p className="text-xs text-muted-foreground mt-2 italic">
+                      "{generateHumanSummary(selectedLog)}"
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -794,6 +832,7 @@ const Auditoria: React.FC = () => {
                       <p className="text-sm font-medium">{format(new Date(selectedLog.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</p>
                     </div>
                   </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
@@ -873,15 +912,36 @@ const Auditoria: React.FC = () => {
               )}
 
               {/* 4. ALTERAÇÕES REALIZADAS */}
-              {(selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
+              {(selectedLog.before || selectedLog.after || selectedLog.changes || selectedLog.detalhes?.old_value || selectedLog.detalhes?.new_value || selectedLog.detalhes?.campos_alterados) && (
                 <section className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                     <History className="w-4 h-4" />
                     ALTERAÇÕES REALIZADAS
                   </div>
                   <div className="space-y-2">
-                    {/* Handle simple before/after if present in detalhes */}
-                    {selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
+                    {/* Handle changes column (preferred) */}
+                    {selectedLog.changes && Object.entries(selectedLog.changes).length > 0 && (
+                      <div className="space-y-2">
+                        {Object.entries(selectedLog.changes).map(([key, vals]: [string, any]) => (
+                          <div key={key} className="bg-muted/50 rounded-xl p-3 border">
+                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{key.replace(/_/g, ' ')}</p>
+                            <div className="grid grid-cols-1 gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
+                                <span className="text-xs text-muted-foreground line-through">{String(vals.from ?? '(vazio)')}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
+                                <span className="text-xs font-medium text-foreground">{String(vals.to ?? '(vazio)')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Fallback for legacy logs in detalhes */}
+                    {!selectedLog.changes && selectedLog.detalhes?.old_value && selectedLog.detalhes?.new_value && (
                       <div className="space-y-2">
                         {Object.entries(selectedLog.detalhes.new_value).map(([key, value]: [string, any]) => {
                           const oldValue = selectedLog.detalhes?.old_value?.[key];
@@ -892,11 +952,11 @@ const Auditoria: React.FC = () => {
                               <div className="grid grid-cols-1 gap-2">
                                 <div className="flex items-center gap-2">
                                   <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue || '(vazio)')}</span>
+                                  <span className="text-xs text-muted-foreground line-through">{String(oldValue ?? '(vazio)')}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                  <span className="text-xs font-medium text-foreground">{String(value || '(vazio)')}</span>
+                                  <span className="text-xs font-medium text-foreground">{String(value ?? '(vazio)')}</span>
                                 </div>
                               </div>
                             </div>
@@ -905,29 +965,15 @@ const Auditoria: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Handle explicitly mapped fields */}
-                    {selectedLog.detalhes?.campos_alterados && (
-                      <div className="space-y-2">
-                        {Object.entries(selectedLog.detalhes.campos_alterados).map(([campo, vals]: [string, any]) => (
-                          <div key={campo} className="bg-muted/50 rounded-xl p-3 border">
-                            <p className="text-xs font-bold text-foreground mb-2 uppercase tracking-tight">{campo}</p>
-                            <div className="grid grid-cols-1 gap-2">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-red-200 text-red-600 bg-red-50 uppercase">DE</Badge>
-                                <span className="text-xs text-muted-foreground">{String(vals.anterior || vals.old || '(vazio)')}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-[9px] border-emerald-200 text-emerald-600 bg-emerald-50 uppercase">PARA</Badge>
-                                <span className="text-xs font-medium text-foreground">{String(vals.novo || vals.new || '(vazio)')}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    {!selectedLog.changes && !selectedLog.detalhes?.old_value && (
+                      <p className="text-xs text-muted-foreground italic p-4 bg-muted/20 rounded-lg border border-dashed">
+                        Este log antigo não possui comparação antes/depois registrada.
+                      </p>
                     )}
                   </div>
                 </section>
               )}
+
 
               {/* 5. CONTEXTO TÉCNICO */}
               <section className="space-y-4">

@@ -1,5 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizePhone } from '@/lib/phoneUtils';
+import { auditService } from './auditService';
+
 
 export const patientService = {
   async getAll(limit = 1000, unidadeId?: string) {
@@ -182,6 +184,25 @@ export const patientService = {
       .select()
       .single();
 
+    if (!error && data) {
+      // Registrar auditoria
+      auditService.auditUpdate({
+        acao: 'editar_paciente',
+        modulo: 'pacientes',
+        entidade: 'paciente',
+        entidadeId: pacienteId,
+        entidadeNome: data.nome,
+        pacienteId: pacienteId,
+        pacienteNome: data.nome,
+        before: current,
+        after: data,
+        origem,
+        unidadeId: data.unidade_id
+      });
+    }
+
+
+
     if (error) {
       console.error("[Paciente] Erro no updatePatientFields", {
         origem, pacienteId, errorMessage: error.message, errorCode: error.code
@@ -206,6 +227,23 @@ export const patientService = {
       .eq('id', pacienteId)
       .select()
       .single();
+
+    if (!error && data) {
+      auditService.auditUpdate({
+        acao: 'salvar_cadastro_paciente',
+        modulo: 'pacientes',
+        entidade: 'paciente',
+        entidadeId: pacienteId,
+        entidadeNome: data.nome,
+        pacienteId: pacienteId,
+        pacienteNome: data.nome,
+        before: current,
+        after: data,
+        origem,
+        unidadeId: data.unidade_id
+      });
+    }
+
 
     if (error) {
       console.error("[Paciente] Erro no savePacienteCadastro", {

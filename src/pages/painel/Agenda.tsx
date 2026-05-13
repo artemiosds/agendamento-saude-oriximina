@@ -986,6 +986,21 @@ const Agenda: React.FC = () => {
       criadoPor: "current",
     };
     addAgendamento(agData);
+    await logAction({
+      acao: "novo_agendamento",
+      entidade: "agendamento",
+      entidadeId: agId,
+      modulo: "agenda",
+      user,
+      pacienteId: pac.id,
+      pacienteNome: pac.nome,
+      profissionalId: prof.id,
+      profissionalNome: prof.nome,
+      agendamentoId: agId,
+      after: agData,
+      detalhes: { paciente: pac.nome, data: selectedDate, hora: newAg.hora },
+    });
+
     // Close dialog immediately (optimistic)
     setDialogOpen(false);
     setNewAg({
@@ -1350,6 +1365,24 @@ const Agenda: React.FC = () => {
     if (whatsappTipo) {
       whatsappService.sendByAgendamento(agId, whatsappTipo).catch(() => {});
     }
+
+    // Log the status change
+    await logAction({
+      acao: "status_change",
+      entidade: "agendamento",
+      entidadeId: agId,
+      modulo: "agenda",
+      user,
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId,
+      profissionalNome: ag.profissionalNome,
+      agendamentoId: agId,
+      before: { status: ag.status },
+      after: { status: newStatus },
+      detalhes: { novo_status: newStatus, status_anterior: ag.status },
+    });
+
     if (newStatus === "cancelado" || newStatus === "falta") {
       await handleVagaLiberada(
         {
@@ -1414,13 +1447,20 @@ const Agenda: React.FC = () => {
       await (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id);
 
       await logAction({
-        acao: 'cancelar',
+        acao: 'cancelar_agendamento',
         entidade: 'agendamento',
         entidadeId: ag.id,
         modulo: 'agenda',
         user,
-        detalhes: { paciente: ag.pacienteNome, motivo: cancelMotivo },
+        pacienteId: ag.pacienteId,
+        pacienteNome: ag.pacienteNome,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        agendamentoId: ag.id,
+        detalhes: { motivo: cancelMotivo },
+        status: 'sucesso'
       });
+
 
       // Notify
       if (cancelConfig.notificar_profissional) {
@@ -1536,8 +1576,12 @@ const Agenda: React.FC = () => {
       entidadeId: ag.id,
       modulo: "agenda",
       user,
+      pacienteId: ag.pacienteId,
+      pacienteNome: ag.pacienteNome,
+      profissionalId: ag.profissionalId,
+      profissionalNome: ag.profissionalNome,
+      agendamentoId: ag.id,
       detalhes: {
-        paciente: ag.pacienteNome,
         tipo_falta: dados.tipoFalta,
         documento: dados.documento || "",
         descricao: dados.descricao || "",
@@ -1545,6 +1589,7 @@ const Agenda: React.FC = () => {
         origem: "agenda_profissional_acao_falta"
       },
     });
+
 
     const paciente = pacientes.find((p) => p.id === ag.pacienteId);
     const unidade = unidades.find((u) => u.id === ag.unidadeId);
@@ -1590,14 +1635,22 @@ const Agenda: React.FC = () => {
       return;
     }
     try {
+      const ag = agendamentos.find(a => a.id === agId);
       await (supabase as any).from("agendamentos").delete().eq("id", agId);
       await logAction({
-        acao: "excluir",
+        acao: "excluir_agendamento",
         entidade: "agendamento",
         entidadeId: agId,
+        pacienteId: ag?.pacienteId,
+        pacienteNome: ag?.pacienteNome,
+        profissionalId: ag?.profissionalId,
+        profissionalNome: ag?.profissionalNome,
+        agendamentoId: agId,
+        before: ag,
         detalhes: { acao: "exclusão de agendamento" },
         user,
       });
+
       toast.success("Agendamento excluído!");
       await refreshAgendamentos();
     } catch (err) {
@@ -1731,10 +1784,17 @@ const Agenda: React.FC = () => {
       acao: "agendar_retorno",
       entidade: "agendamento",
       entidadeId: agId,
-      modulo: "agendamento",
-      detalhes: { paciente: retornoAg.pacienteNome, data: retornoForm.data, hora: retornoForm.hora },
+      modulo: "agenda",
       user,
+      pacienteId: retornoAg.pacienteId,
+      pacienteNome: retornoAg.pacienteNome,
+      profissionalId: user.id,
+      profissionalNome: user.nome,
+      agendamentoId: agId,
+      after: agData,
+      detalhes: { data: retornoForm.data, hora: retornoForm.hora },
     });
+
     if (pac) {
       await notify({
         evento: "novo_agendamento",
