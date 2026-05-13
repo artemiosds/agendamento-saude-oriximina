@@ -1,5 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizePhone } from '@/lib/phoneUtils';
+import { auditService } from './auditService';
+
 
 export const patientService = {
   async getAll(limit = 1000, unidadeId?: string) {
