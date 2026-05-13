@@ -1414,13 +1414,20 @@ const Agenda: React.FC = () => {
       await (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id);
 
       await logAction({
-        acao: 'cancelar',
+        acao: 'cancelar_agendamento',
         entidade: 'agendamento',
         entidadeId: ag.id,
         modulo: 'agenda',
         user,
-        detalhes: { paciente: ag.pacienteNome, motivo: cancelMotivo },
+        pacienteId: ag.pacienteId,
+        pacienteNome: ag.pacienteNome,
+        profissionalId: ag.profissionalId,
+        profissionalNome: ag.profissionalNome,
+        agendamentoId: ag.id,
+        detalhes: { motivo: cancelMotivo },
+        status: 'sucesso'
       });
+
 
       // Notify
       if (cancelConfig.notificar_profissional) {
