@@ -1702,14 +1702,14 @@ const Tratamentos: React.FC = () => {
         .map((s: any) => s.appointment_id)
         .filter((id: any) => !!id);
 
-      // 3b. Buscar agendamentos futuros do paciente com este profissional ainda ativos
+      // 3b. Buscar agendamentos futuros (incluindo hoje) do paciente com este profissional ainda ativos
       const { data: futureAppts } = await supabase
         .from("agendamentos")
-        .select("id")
+        .select("id, data, hora")
         .eq("paciente_id", selectedCycle.patient_id)
         .eq("profissional_id", user?.id || "")
-        .gt("data", today)
-        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido")');
+        .gte("data", today)
+        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")');
 
       const apptIdsToDelete = Array.from(
         new Set([...(linkedApptIds as string[]), ...((futureAppts || []).map((a: any) => a.id))])
@@ -1723,6 +1723,27 @@ const Tratamentos: React.FC = () => {
       // 3d. Excluir agendamentos futuros vinculados (libera vagas na agenda)
       if (apptIdsToDelete.length > 0) {
         await supabase.from("agendamentos").delete().in("id", apptIdsToDelete);
+      }
+
+      // 3e. Remoção defensiva de duplicatas remanescentes (mesmo paciente+profissional+data+hora)
+      const { data: remaining } = await supabase
+        .from("agendamentos")
+        .select("id, data, hora, status, criado_em")
+        .eq("paciente_id", selectedCycle.patient_id)
+        .eq("profissional_id", user?.id || "")
+        .gte("data", today)
+        .not("status", "in", '("cancelado","falta","remarcado","realizado","atendido","concluido")')
+        .order("criado_em", { ascending: true });
+
+      const dupIds: string[] = [];
+      const seen = new Set<string>();
+      (remaining || []).forEach((a: any) => {
+        const key = `${a.data}|${a.hora}`;
+        if (seen.has(key)) dupIds.push(a.id);
+        else seen.add(key);
+      });
+      if (dupIds.length > 0) {
+        await supabase.from("agendamentos").delete().in("id", dupIds);
       }
 
       const removedCount = apptIdsToDelete.length;
