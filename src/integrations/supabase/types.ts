@@ -17,49 +17,121 @@ export type Database = {
       action_logs: {
         Row: {
           acao: string
+          acao_legivel: string | null
+          after: Json | null
+          agendamento_id: string | null
+          before: Json | null
+          campos_alterados: string[] | null
+          changes: Json | null
           created_at: string
           detalhes: Json
+          dispositivo: string | null
+          documento_id: string | null
           entidade: string
           entidade_id: string
           erro: string | null
+          error_code: string | null
+          error_message: string | null
           id: string
           ip: string | null
+          metadata: Json | null
           modulo: string
+          navegador: string | null
+          origem: string | null
+          paciente_id: string | null
+          paciente_nome: string | null
+          profissional_id: string | null
+          profissional_nome: string | null
+          prontuario_id: string | null
+          resumo_alteracao: string | null
           role: string
+          rota: string | null
+          sistema_operacional: string | null
           status: string
+          tipo_evento: string | null
           unidade_id: string
+          unidade_nome: string | null
+          user_agent: string | null
           user_id: string
           user_nome: string
         }
         Insert: {
           acao: string
+          acao_legivel?: string | null
+          after?: Json | null
+          agendamento_id?: string | null
+          before?: Json | null
+          campos_alterados?: string[] | null
+          changes?: Json | null
           created_at?: string
           detalhes?: Json
+          dispositivo?: string | null
+          documento_id?: string | null
           entidade: string
           entidade_id?: string
           erro?: string | null
+          error_code?: string | null
+          error_message?: string | null
           id?: string
           ip?: string | null
+          metadata?: Json | null
           modulo?: string
+          navegador?: string | null
+          origem?: string | null
+          paciente_id?: string | null
+          paciente_nome?: string | null
+          profissional_id?: string | null
+          profissional_nome?: string | null
+          prontuario_id?: string | null
+          resumo_alteracao?: string | null
           role?: string
+          rota?: string | null
+          sistema_operacional?: string | null
           status?: string
+          tipo_evento?: string | null
           unidade_id?: string
+          unidade_nome?: string | null
+          user_agent?: string | null
           user_id?: string
           user_nome?: string
         }
         Update: {
           acao?: string
+          acao_legivel?: string | null
+          after?: Json | null
+          agendamento_id?: string | null
+          before?: Json | null
+          campos_alterados?: string[] | null
+          changes?: Json | null
           created_at?: string
           detalhes?: Json
+          dispositivo?: string | null
+          documento_id?: string | null
           entidade?: string
           entidade_id?: string
           erro?: string | null
+          error_code?: string | null
+          error_message?: string | null
           id?: string
           ip?: string | null
+          metadata?: Json | null
           modulo?: string
+          navegador?: string | null
+          origem?: string | null
+          paciente_id?: string | null
+          paciente_nome?: string | null
+          profissional_id?: string | null
+          profissional_nome?: string | null
+          prontuario_id?: string | null
+          resumo_alteracao?: string | null
           role?: string
+          rota?: string | null
+          sistema_operacional?: string | null
           status?: string
+          tipo_evento?: string | null
           unidade_id?: string
+          unidade_nome?: string | null
+          user_agent?: string | null
           user_id?: string
           user_nome?: string
         }

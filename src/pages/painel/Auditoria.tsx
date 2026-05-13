@@ -25,19 +25,34 @@ import { openPrintDocument } from '@/lib/printLayout';
 interface LogEntry {
   id: string;
   acao: string;
+  acao_legivel?: string;
+  tipo_evento?: string;
+  modulo: string;
   entidade: string;
   entidade_id: string;
+  entidade_nome?: string;
   user_id: string;
   user_nome: string;
   role: string;
   unidade_id: string;
-  modulo: string;
+  unidade_nome?: string;
+  paciente_id?: string;
+  paciente_nome?: string;
+  profissional_id?: string;
+  profissional_nome?: string;
+  agendamento_id?: string;
   status: string;
-  erro: string;
+  error_message?: string;
   ip: string;
   detalhes: Record<string, any>;
+  before?: any;
+  after?: any;
+  changes?: Record<string, any>;
+  campos_alterados?: string[];
   created_at: string;
 }
+
+
 
 interface EnrichedLog extends LogEntry {
   nome_entidade?: string;
@@ -48,6 +63,7 @@ interface EnrichedLog extends LogEntry {
     unidade?: string;
     [key: string]: any;
   };
+
 }
 
 const ITEMS_PER_PAGE = 25;
@@ -206,62 +222,35 @@ const Auditoria: React.FC = () => {
 
   // Helper to enrich a single log with names
   const enrichLog = useCallback(async (log: EnrichedLog) => {
-    if (!log.entidade_id && !log.user_id) return log;
+    const enriched = { ...log, detalhes_resolvidos: {} };
     
-    const enriched = { ...log, detalhes_resolvidos: { ...log.detalhes } };
-    
-    try {
-      // Resolve patient
-      const patientId = log.detalhes?.paciente_id || log.detalhes?.patientId || log.detalhes?.pacienteId || (log.entidade === 'paciente' ? log.entidade_id : null);
-      if (patientId && typeof patientId === 'string' && patientId.startsWith('p')) {
-        const { data } = await supabase.from('pacientes').select('nome').eq('id', patientId).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.paciente = data.nome;
-      } else if (log.detalhes?.paciente_nome) {
-        enriched.detalhes_resolvidos.paciente = log.detalhes.paciente_nome;
-      }
+    // Attempt to map new specialized columns
+    enriched.detalhes_resolvidos = {
+      paciente: log.detalhes?.paciente_nome || log.paciente_nome,
+      profissional: log.detalhes?.profissional_nome || log.profissional_nome,
+      agendamento: log.agendamento_id ? `ID: ${log.agendamento_id}` : undefined,
+      unidade: log.unidade_nome
+    };
 
-      // Resolve professional
-      const profId = log.detalhes?.profissional_id || log.detalhes?.profissionalId || log.detalhes?.funcionario_id || (log.entidade === 'funcionario' ? log.entidade_id : null);
-      if (profId && typeof profId === 'string' && profId.length > 20) {
-        const { data } = await supabase.from('funcionarios').select('nome').eq('id', profId).maybeSingle();
+    // Lazy resolve names if needed
+    try {
+      if (log.paciente_id && !enriched.detalhes_resolvidos.paciente) {
+        const { data } = await supabase.from('pacientes').select('nome').eq('id', log.paciente_id).maybeSingle();
+        if (data) enriched.detalhes_resolvidos.paciente = data.nome;
+      }
+      if (log.profissional_id && !enriched.detalhes_resolvidos.profissional) {
+        const { data } = await supabase.from('funcionarios').select('nome').eq('id', log.profissional_id).maybeSingle();
         if (data) enriched.detalhes_resolvidos.profissional = data.nome;
       }
-
-      // Resolve unit
-      const unitId = log.unidade_id || log.detalhes?.unidade_id;
-      if (unitId && typeof unitId === 'string') {
-        const { data } = await supabase.from('unidades').select('nome').eq('id', unitId).maybeSingle();
-        if (data) enriched.detalhes_resolvidos.unidade = data.nome;
-      }
-
-      // Resolve appointment
-      const appointmentId = log.detalhes?.agendamento_id || log.detalhes?.appointmentId || (log.entidade === 'agendamento' ? log.entidade_id : null);
-      if (appointmentId && typeof appointmentId === 'string' && appointmentId.startsWith('ag')) {
-        const { data } = await supabase.from('agendamentos').select('data, hora, paciente_nome').eq('id', appointmentId).maybeSingle();
-        if (data) {
-          enriched.detalhes_resolvidos.agendamento = `${format(new Date(data.data + 'T12:00:00'), 'dd/MM/yyyy')} às ${data.hora} - ${data.paciente_nome}`;
-        }
-      }
-
-      // Resolve record name (generic)
-      if (log.entidade === 'paciente' && enriched.detalhes_resolvidos.paciente) {
-        enriched.nome_entidade = enriched.detalhes_resolvidos.paciente;
-      } else if (log.entidade === 'funcionario' && enriched.detalhes_resolvidos.profissional) {
-        enriched.nome_entidade = enriched.detalhes_resolvidos.profissional;
-      } else if (log.detalhes?.paciente_nome) {
-        enriched.nome_entidade = String(log.detalhes.paciente_nome);
-      } else if (log.detalhes?.nome) {
-        enriched.nome_entidade = String(log.detalhes.nome);
-      } else if (log.detalhes?.nome_completo) {
-        enriched.nome_entidade = String(log.detalhes.nome_completo);
-      }
-
     } catch (err) {
       console.warn('Error resolving log names:', err);
     }
     
+    enriched.nome_entidade = log.entidade_nome || enriched.detalhes_resolvidos.paciente || enriched.detalhes_resolvidos.profissional || log.entidade_id;
+    
     return enriched;
   }, []);
+
 
   useEffect(() => {
     if (selectedLog && !selectedLog.detalhes_resolvidos) {
@@ -503,7 +492,7 @@ const Auditoria: React.FC = () => {
       l.user_nome, getCpfDisplay(l), l.role,
       acaoLabels[l.acao] || l.acao,
       moduloLabels[l.modulo] || l.modulo || l.entidade,
-      l.entidade, l.entidade_id, l.status, l.erro || '',
+      l.entidade, l.entidade_id, l.status, l.error_message || '',
       JSON.stringify(l.detalhes),
     ]);
     const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))].join('\n');

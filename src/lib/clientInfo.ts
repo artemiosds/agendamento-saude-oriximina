@@ -20,18 +20,23 @@ export async function getPublicIp(): Promise<string> {
   return fetchPromise;
 }
 
-export function getDeviceInfo(): string {
+export function getDeviceInfo() {
   const ua = navigator.userAgent;
   let browser = 'Desconhecido';
   let os = 'Desconhecido';
+  let device = 'desktop';
+
   if (ua.includes('Firefox')) browser = 'Firefox';
   else if (ua.includes('Edg')) browser = 'Edge';
   else if (ua.includes('Chrome')) browser = 'Chrome';
   else if (ua.includes('Safari')) browser = 'Safari';
+
   if (ua.includes('Windows')) os = 'Windows';
   else if (ua.includes('Mac')) os = 'macOS';
   else if (ua.includes('Linux')) os = 'Linux';
-  else if (ua.includes('Android')) os = 'Android';
-  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-  return `${browser} / ${os}`;
+  else if (ua.includes('Android')) { os = 'Android'; device = 'mobile'; }
+  else if (ua.includes('iPhone') || ua.includes('iPad')) { os = 'iOS'; device = 'mobile'; }
+
+  return { browser, os, device, full: `${browser} / ${os}` };
 }
+
