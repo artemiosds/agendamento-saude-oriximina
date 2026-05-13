@@ -187,6 +187,7 @@ export const patientService = {
     if (!error && data) {
       // Registrar auditoria
       auditService.auditUpdate({
+        acao: 'editar_paciente',
         modulo: 'pacientes',
         entidade: 'paciente',
         entidadeId: pacienteId,
@@ -199,6 +200,7 @@ export const patientService = {
         unidadeId: data.unidade_id
       });
     }
+
 
 
     if (error) {
