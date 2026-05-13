@@ -10,8 +10,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, Download, FileText, ChevronLeft, ChevronRight, RefreshCw, Filter, X, Eye, BarChart3, User } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { 
+  Search, Download, FileText, ChevronLeft, ChevronRight, 
+  RefreshCw, Filter, X, Eye, BarChart3, User, 
+  Info, Shield, History, Monitor, Database, UserCheck, Calendar
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -30,8 +34,19 @@ interface LogEntry {
   status: string;
   erro: string;
   ip: string;
-  detalhes: Record<string, unknown>;
+  detalhes: Record<string, any>;
   created_at: string;
+}
+
+interface EnrichedLog extends LogEntry {
+  nome_entidade?: string;
+  detalhes_resolvidos?: {
+    paciente?: string;
+    profissional?: string;
+    agendamento?: string;
+    unidade?: string;
+    [key: string]: any;
+  };
 }
 
 const ITEMS_PER_PAGE = 25;
@@ -54,59 +69,73 @@ const moduloLabels: Record<string, string> = {
   portal: 'Portal Paciente',
 };
 
-const acaoLabels: Record<string, string> = {
-  criar: 'Criação',
-  editar: 'Edição',
-  excluir: 'Exclusão',
-  cancelar: 'Cancelamento',
-  login: 'Login',
-  login_sucesso: 'Login Sucesso',
-  login_falha: 'Login Falha',
-  logout: 'Logout',
-  sessao_expirada: 'Sessão Expirada',
-  login_erro: 'Login (erro)',
-  status_change: 'Alteração Status',
-  confirmar_chegada: 'Confirmar Chegada',
-  iniciar_atendimento: 'Iniciar Atendimento',
-  atendimento_iniciado: 'Atendimento Iniciado',
-  atendimento_finalizado: 'Atendimento Finalizado',
-  finalizar_atendimento: 'Finalizar Atendimento',
-  prontuario_visualizado: 'Prontuário Visualizado',
-  prontuario_criado: 'Prontuário Criado',
-  prontuario_editado: 'Prontuário Editado',
-  prontuario_exportado_pdf: 'Prontuário Exportado PDF',
-  paciente_chamado: 'Paciente Chamado',
-  paciente_rechamado: 'Paciente Rechamado',
-  vaga_liberada: 'Vaga Liberada',
-  fila_chamada: 'Fila - Chamada',
-  fila_encaixe: 'Fila - Encaixe',
-  exportar: 'Exportação',
-  imprimir: 'Impressão',
-  envio_email: 'Envio E-mail',
-  envio_webhook: 'Envio Webhook',
-  portal_acesso: 'Acesso Portal',
-  agendar_retorno: 'Agendar Retorno',
-};
+const formatAuditAction = (acao: string): string => {
+  const customLabels: Record<string, string> = {
+    // Pacientes
+    edicao_paciente_pagina_pacientes: 'Edição de cadastro do paciente pela Página Pacientes',
+    criacao_paciente: 'Cadastro de novo paciente',
+    excluir_paciente: 'Exclusão de paciente',
+    
+    // Agendamentos
+    novo_agendamento: 'Criação de novo agendamento',
+    confirmar_chegada: 'Confirmação de chegada do paciente',
+    agendar_sessao_tratamento: 'Agendamento de sessão de tratamento',
+    desmarcar_sessao: 'Desmarcação de sessão',
+    agendar_ciclo_completo: 'Agendamento de ciclo completo',
+    status_change: 'Alteração de status de agendamento',
+    
+    // Atendimento / Prontuário
+    iniciar_atendimento: 'Início de atendimento clínico',
+    atendimento_iniciado: 'Atendimento iniciado',
+    atendimento_finalizado: 'Atendimento finalizado',
+    finalizar_atendimento: 'Finalização de atendimento',
+    edicao_prontuario: 'Edição de prontuário',
+    finalizar_prontuario: 'Finalização de prontuário',
+    prontuario_visualizado: 'Visualização de prontuário',
+    prontuario_criado: 'Criação de prontuário',
+    prontuario_editado: 'Edição de prontuário',
+    prontuario_exportado_pdf: 'Exportação de prontuário para PDF',
+    
+    // Autenticação
+    login: 'Tentativa de login',
+    login_sucesso: 'Login realizado com sucesso',
+    login_falha: 'Falha na tentativa de login',
+    logout: 'Saída do sistema (logout)',
+    sessao_expirada: 'Sessão de usuário expirada',
+    
+    // Outros
+    gerar_documento: 'Geração de documento oficial',
+    baixar_pdf: 'Download de arquivo PDF',
+    exportar: 'Exportação de dados',
+    imprimir: 'Impressão de documento',
+    vaga_liberada: 'Liberação de vaga na agenda',
+    fila_chamada: 'Chamada de paciente da fila',
+    fila_encaixe: 'Encaixe de paciente na fila',
+  };
 
-const eventoGrupos: Record<string, { label: string; acoes: string[] }> = {
-  todos: { label: 'Todos', acoes: [] },
-  autenticacao: { label: 'Autenticação', acoes: ['login', 'login_sucesso', 'login_falha', 'logout', 'sessao_expirada', 'login_erro'] },
-  prontuario: { label: 'Prontuário', acoes: ['prontuario_visualizado', 'prontuario_criado', 'prontuario_editado', 'prontuario_exportado_pdf'] },
-  atendimento: { label: 'Atendimento', acoes: ['atendimento_iniciado', 'atendimento_finalizado', 'iniciar_atendimento', 'finalizar_atendimento'] },
-  chamada: { label: 'Chamada de Paciente', acoes: ['paciente_chamado', 'paciente_rechamado', 'fila_chamada'] },
+  if (customLabels[acao]) return customLabels[acao];
+
+  // Fallback: transform snake_case to readable text
+  return acao
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 
 const statusBadge: Record<string, string> = {
   sucesso: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
   erro: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+  falha: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   tentativa: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  pendente: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  bloqueado: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
 };
 
 const maskCpf = (cpf: string) => {
   if (!cpf || cpf.length < 11) return cpf || '-';
   const clean = cpf.replace(/\D/g, '');
   if (clean.length < 11) return cpf;
-  return `***.${clean.substring(3, 6)}.${clean.substring(6, 9)}-**`;
+  return `${clean.substring(0, 3)}.***.***-${clean.substring(9)}`;
 };
 
 const formatCpf = (cpf: string) => {
