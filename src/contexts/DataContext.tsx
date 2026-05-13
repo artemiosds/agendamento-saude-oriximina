@@ -180,13 +180,27 @@ interface DataContextType {
     acao: string;
     entidade: string;
     entidadeId?: string;
+    entidadeNome?: string;
     detalhes?: Record<string, unknown>;
     user?: User | null;
     unidadeId?: string;
+    unidadeNome?: string;
     modulo?: string;
     status?: string;
     erro?: string;
+    before?: any;
+    after?: any;
+    pacienteId?: string;
+    pacienteNome?: string;
+    profissionalId?: string;
+    profissionalNome?: string;
+    agendamentoId?: string;
+    prontuarioId?: string;
+    documentoId?: string;
+    origem?: string;
+    rota?: string;
   }) => void;
+
 }
 
 const DataContext = createContext<DataContextType | null>(null);
