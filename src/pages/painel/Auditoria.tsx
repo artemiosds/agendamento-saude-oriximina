@@ -36,9 +36,13 @@ interface LogEntry {
   role: string;
   unidade_id: string;
   unidade_nome?: string;
+  paciente_id?: string;
+  paciente_nome?: string;
+  profissional_id?: string;
+  profissional_nome?: string;
+  agendamento_id?: string;
   status: string;
   error_message?: string;
-  error_code?: string;
   ip: string;
   detalhes: Record<string, any>;
   before?: any;
@@ -47,6 +51,7 @@ interface LogEntry {
   campos_alterados?: string[];
   created_at: string;
 }
+
 
 
 interface EnrichedLog extends LogEntry {
@@ -58,6 +63,7 @@ interface EnrichedLog extends LogEntry {
     unidade?: string;
     [key: string]: any;
   };
+
 }
 
 const ITEMS_PER_PAGE = 25;
@@ -486,7 +492,7 @@ const Auditoria: React.FC = () => {
       l.user_nome, getCpfDisplay(l), l.role,
       acaoLabels[l.acao] || l.acao,
       moduloLabels[l.modulo] || l.modulo || l.entidade,
-      l.entidade, l.entidade_id, l.status, l.erro || '',
+      l.entidade, l.entidade_id, l.status, l.error_message || '',
       JSON.stringify(l.detalhes),
     ]);
     const csv = [headers.join(';'), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';'))].join('\n');
