@@ -969,20 +969,8 @@ const Auditoria: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Módulo</p>
-                      <p className="text-sm font-medium">{moduloLabels[selectedLog.modulo] || selectedLog.modulo}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider mb-1">Entidade</p>
-                      <p className="text-sm font-medium">{selectedLog.entidade}</p>
-                    </div>
-                  </div>
-                </div>
               </section>
+
 
               {/* 2. RESPONSÁVEL */}
               <section className="space-y-4">
