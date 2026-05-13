@@ -218,23 +218,93 @@ const formatCpf = (cpf: string) => {
   return `${clean.substring(0, 3)}.${clean.substring(3, 6)}.${clean.substring(6, 9)}-${clean.substring(9)}`;
 };
 
+const formatAuditFieldLabel = (field: string): string => {
+  const labels: Record<string, string> = {
+    nome: "Nome",
+    nome_completo: "Nome completo",
+    nome_mae: "Nome da mãe",
+    data_nascimento: "Data de nascimento",
+    telefone_principal: "Telefone principal",
+    telefone: "Telefone",
+    telefone_secundario: "Telefone secundário",
+    logradouro: "Logradouro",
+    numero: "Número",
+    bairro: "Bairro",
+    municipio: "Município",
+    uf: "UF",
+    sexo: "Sexo",
+    cpf: "CPF",
+    cns: "CNS",
+    unidade_id: "Unidade",
+    profissional_id: "Profissional",
+    paciente_id: "Paciente",
+    status: "Status",
+    data: "Data",
+    hora: "Hora",
+    email: "E-mail",
+    endereco: "Endereço",
+    cid: "CID",
+    observacoes: "Observações",
+    custom_data: "Dados customizados"
+  };
+  return labels[field] || field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
+
+const formatAuditValue = (field: string, value: any): string => {
+  if (value === null || value === undefined || value === "") return "Não informado";
+  
+  if (field === "sexo") {
+    const s = String(value).toLowerCase();
+    if (s === "masculino" || s === "m") return "Masculino";
+    if (s === "feminino" || s === "f") return "Feminino";
+    return value;
+  }
+
+  if (field === "cpf") return maskCpf(String(value));
+  if (field === "cns") {
+    const s = String(value);
+    return s.length > 8 ? `${s.substring(0, 3)}...${s.substring(s.length - 3)}` : s;
+  }
+  
+  if (field === "data" || field === "data_nascimento" || field === "data_atendimento") {
+    try {
+      return format(new Date(value + 'T12:00:00'), "dd/MM/yyyy");
+    } catch {
+      return value;
+    }
+  }
+
+  return String(value);
+};
+
 const generateHumanSummary = (log: EnrichedLog) => {
   const user = log.user_nome || 'O sistema';
-  const acao = log.acao_legivel || log.acao;
-  const entidade = log.entidade_nome || log.entidade_id || log.entidade;
+  const acao = log.acao_legivel || formatAuditAction(log.acao);
+  const entidade = log.entidade_resolvida?.titulo || log.entidade_nome || log.entidade_id || log.entidade;
   const data = format(new Date(log.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const unidade = log.unidade_nome || 'unidade não identificada';
 
   if (log.tipo_evento === 'login') return `${user} realizou login no sistema em ${data}.`;
-  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  const entityType = log.entidade === 'paciente' ? 'o cadastro do paciente' : 
+                     log.entidade === 'agendamento' ? 'o agendamento de' : 
+                     log.entidade === 'prontuario' ? 'o prontuário de' : log.entidade;
+
+  if (log.tipo_evento === 'criacao') return `${user} cadastrou ${entityType} "${entidade}" na ${unidade} em ${data}.`;
+  
   if (log.tipo_evento === 'edicao') {
-    const campos = log.campos_alterados?.join(', ') || 'campos';
-    return `${user} editou o registro de ${log.entidade} "${entidade}", alterando ${campos}, na ${unidade} em ${data}.`;
+    const changesCount = log.campos_alterados?.length || log.changes ? Object.keys(log.changes || {}).length : 0;
+    const campos = log.campos_alterados?.map(formatAuditFieldLabel).join(', ') || 
+                   (log.changes ? Object.keys(log.changes).map(formatAuditFieldLabel).join(', ') : 'campos');
+    
+    return `${user} editou ${entityType} "${entidade}", alterando ${changesCount} ${changesCount === 1 ? 'campo' : 'campos'} (${campos}), na ${unidade} em ${data}.`;
   }
-  if (log.tipo_evento === 'exclusao') return `${user} removeu o registro de ${log.entidade} "${entidade}" na ${unidade} em ${data}.`;
+  
+  if (log.tipo_evento === 'exclusao') return `${user} removeu ${entityType} "${entidade}" na ${unidade} em ${data}.`;
   
   return `${user} realizou a ação "${acao}" em ${data}.`;
 };
+
 
 const Auditoria: React.FC = () => {
   const { user } = useAuth();
