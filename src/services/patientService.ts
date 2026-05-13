@@ -228,6 +228,23 @@ export const patientService = {
       .select()
       .single();
 
+    if (!error && data) {
+      auditService.auditUpdate({
+        acao: 'salvar_cadastro_paciente',
+        modulo: 'pacientes',
+        entidade: 'paciente',
+        entidadeId: pacienteId,
+        entidadeNome: data.nome,
+        pacienteId: pacienteId,
+        pacienteNome: data.nome,
+        before: current,
+        after: data,
+        origem,
+        unidadeId: data.unidade_id
+      });
+    }
+
+
     if (error) {
       console.error("[Paciente] Erro no savePacienteCadastro", {
         origem, pacienteId, errorMessage: error.message
