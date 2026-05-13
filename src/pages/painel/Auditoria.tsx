@@ -123,13 +123,46 @@ const formatAuditAction = (acao: string): string => {
     .join(' ');
 };
 
-const statusBadge: Record<string, string> = {
-  sucesso: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  erro: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  falha: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  tentativa: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  pendente: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  bloqueado: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+const acaoLabels: Record<string, string> = {
+  criar: 'Criação',
+  editar: 'Edição',
+  excluir: 'Exclusão',
+  cancelar: 'Cancelamento',
+  login: 'Login',
+  login_sucesso: 'Login Sucesso',
+  login_falha: 'Login Falha',
+  logout: 'Logout',
+  sessao_expirada: 'Sessão Expirada',
+  login_erro: 'Login (erro)',
+  status_change: 'Alteração Status',
+  confirmar_chegada: 'Confirmar Chegada',
+  iniciar_atendimento: 'Iniciar Atendimento',
+  atendimento_iniciado: 'Atendimento Iniciado',
+  atendimento_finalizado: 'Atendimento Finalizado',
+  finalizar_atendimento: 'Finalizar Atendimento',
+  prontuario_visualizado: 'Prontuário Visualizado',
+  prontuario_criado: 'Prontuário Criado',
+  prontuario_editado: 'Prontuário Editado',
+  prontuario_exportado_pdf: 'Prontuário Exportado PDF',
+  paciente_chamado: 'Paciente Chamado',
+  paciente_rechamado: 'Paciente Rechamado',
+  vaga_liberada: 'Vaga Liberada',
+  fila_chamada: 'Fila - Chamada',
+  fila_encaixe: 'Fila - Encaixe',
+  exportar: 'Exportação',
+  imprimir: 'Impressão',
+  envio_email: 'Envio E-mail',
+  envio_webhook: 'Envio Webhook',
+  portal_acesso: 'Acesso Portal',
+  agendar_retorno: 'Agendar Retorno',
+};
+
+const eventoGrupos: Record<string, { label: string; acoes: string[] }> = {
+  todos: { label: 'Todos', acoes: [] },
+  autenticacao: { label: 'Autenticação', acoes: ['login', 'login_sucesso', 'login_falha', 'logout', 'sessao_expirada', 'login_erro'] },
+  prontuario: { label: 'Prontuário', acoes: ['prontuario_visualizado', 'prontuario_criado', 'prontuario_editado', 'prontuario_exportado_pdf'] },
+  atendimento: { label: 'Atendimento', acoes: ['atendimento_iniciado', 'atendimento_finalizado', 'iniciar_atendimento', 'finalizar_atendimento'] },
+  chamada: { label: 'Chamada de Paciente', acoes: ['paciente_chamado', 'paciente_rechamado', 'fila_chamada'] },
 };
 
 const maskCpf = (cpf: string) => {
