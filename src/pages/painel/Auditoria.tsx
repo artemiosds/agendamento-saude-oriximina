@@ -396,8 +396,12 @@ const Auditoria: React.FC = () => {
 
     enriched.nome_entidade = enriched.entidade_resolvida.titulo;
     
+    // Add summary to log object for easier use in list
+    (enriched as any).human_summary = generateHumanSummary(enriched);
+    
     return enriched;
   }, [resolveEntity]);
+
 
 
 
