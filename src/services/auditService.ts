@@ -35,7 +35,7 @@ export const auditService = {
   /**
    * Generates a readable description of changes between two objects
    */
-  diffObjects(before: any, after: any) {
+  diffObjects(before: any, after: any): { changes: Record<string, { from: any; to: any }>; fields: string[] } {
     if (!before || !after || typeof before !== 'object' || typeof after !== 'object') return { changes: {}, fields: [] };
     
     const changes: Record<string, { from: any; to: any }> = {};
@@ -67,6 +67,7 @@ export const auditService = {
     
     return { changes, fields };
   },
+
 
   /**
    * Masks sensitive data like passwords or tokens
