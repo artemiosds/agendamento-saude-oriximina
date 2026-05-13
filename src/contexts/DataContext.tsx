@@ -318,15 +318,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       acao: string;
       entidade: string;
       entidadeId?: string;
+      entidadeNome?: string;
       detalhes?: Record<string, unknown>;
       user?: User | null;
       unidadeId?: string;
+      unidadeNome?: string;
       modulo?: string;
       status?: string;
       erro?: string;
       before?: any;
       after?: any;
+      pacienteId?: string;
+      pacienteNome?: string;
+      profissionalId?: string;
+      profissionalNome?: string;
+      agendamentoId?: string;
+      prontuarioId?: string;
+      documentoId?: string;
+      origem?: string;
+      rota?: string;
     }) => {
+
       // Use the new audit service for better consistency
       auditService.log({
         acao: input.acao,
