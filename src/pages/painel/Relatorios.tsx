@@ -68,6 +68,7 @@ const Relatorios: React.FC = () => {
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
   const [procedimentosDB, setProcedimentosDB] = useState<any[]>([]);
+  const [cid10Descriptions, setCid10Descriptions] = useState<Record<string, string>>({});
   const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
   const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
