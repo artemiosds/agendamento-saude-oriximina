@@ -67,7 +67,7 @@ const Relatorios: React.FC = () => {
   const [atendimentosDB, setAtendimentosDB] = useState<AtendimentoDB[]>([]);
   const [filaDB, setFilaDB] = useState<FilaDB[]>([]);
   const [triagensDB, setTriagensDB] = useState<TriagemDB[]>([]);
-  const [procedimentosDB, setProcedimentosDB] = useState<{ prontuario_id: string; procedimento_id: string; proc_nome?: string; prof_nome?: string; unidade_id?: string; data?: string }[]>([]);
+  const [procedimentosDB, setProcedimentosDB] = useState<any[]>([]);
   const [treatmentCycles, setTreatmentCycles] = useState<any[]>([]);
   const [treatmentSessions, setTreatmentSessions] = useState<any[]>([]);
   const [nursingEvals, setNursingEvals] = useState<any[]>([]);
@@ -144,7 +144,7 @@ const Relatorios: React.FC = () => {
       };
       console.log("[Relatórios] buscando dados com filtros:", filters);
 
-      const fetchAllPages = async (table: string, dateField: string) => {
+      const fetchAllPages = async (table: string, dateField?: string) => {
         let allData: any[] = [];
         let from = 0;
         const PAGE_SIZE = 1000;
@@ -152,11 +152,9 @@ const Relatorios: React.FC = () => {
         while (true) {
           let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
           
-          if (dateFrom) {
-            query = query.gte(dateField, dateFrom);
-          }
-          if (dateTo) {
-            query = query.lte(dateField, dateTo);
+          if (dateField) {
+            if (dateFrom) query = query.gte(dateField, dateFrom);
+            if (dateTo) query = query.lte(dateField, dateTo);
           }
 
           if (user?.unidadeId && user?.usuario !== 'admin.sms') {
@@ -184,7 +182,18 @@ const Relatorios: React.FC = () => {
         return allData;
       };
 
-      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes] = await Promise.all([
+      const [
+        ags, 
+        prons, 
+        filaRes, 
+        triageRes, 
+        cyclesRes, 
+        sessRes, 
+        nursingRes, 
+        multiRes, 
+        ptsRes,
+        proceduresRes
+      ] = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         supabase.from('fila_espera').select('*').limit(2000),
@@ -194,33 +203,22 @@ const Relatorios: React.FC = () => {
         supabase.from('nursing_evaluations' as any).select('*'),
         supabase.from('multiprofessional_evaluations' as any).select('*'),
         supabase.from('pts' as any).select('*'),
+        supabase.from('patient_procedures' as any).select('*'),
       ]);
 
-      const agsData = ags || [];
-      const pronsData = prons || [];
-      const filaData = filaRes.data || [];
-      const triageData = triageRes.data || [];
-      const cyclesData = cyclesRes.data || [];
-      const sessData = sessRes.data || [];
-      const nursingData = nursingRes.data || [];
-      const multiData = multiRes.data || [];
-      const ptsDataResult = ptsRes.data || [];
-
-      setAgendamentosFull(agsData);
-      setProntuariosFull(pronsData);
-      setFilaDB(filaData);
-      setTriagensDB(triageData as any as TriagemDB[]);
-      setTreatmentCycles(cyclesData);
-      setTreatmentSessions(sessData);
-      setNursingEvals(nursingData);
-      setMultiEvals(multiData);
-      setPtsData(ptsDataResult);
+      setAgendamentosFull(ags || []);
+      setProntuariosFull(prons || []);
+      setFilaDB(filaRes.data || []);
+      setTriagensDB(triageRes.data as any as TriagemDB[] || []);
+      setTreatmentCycles(cyclesRes.data || []);
+      setTreatmentSessions(sessRes.data || []);
+      setNursingEvals(nursingRes.data || []);
+      setMultiEvals(multiRes.data || []);
+      setPtsData(ptsRes.data || []);
+      setProcedimentosDB(proceduresRes.data || []);
       
       setLastUpdated(new Date());
       setIsInitialLoading(false);
-      
-      console.log("[Relatórios] agendamentos retornados:", ags?.length);
-      console.log("[Relatórios] prontuários retornados:", prons?.length);
     } catch (err) { 
       console.error('Error loading report data:', err); 
     } finally {
@@ -531,65 +529,114 @@ const Relatorios: React.FC = () => {
 
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
-    // Cruza prontuários com agendamentos e pacientes
     const pacMap = new Map(pacientes.map(p => [p.id, p]));
-    const agMap = new Map(agendamentosFull.map(a => [a.id, a]));
+    const ptsByPatient = new Map<string, any[]>();
+    ptsData.forEach(p => {
+      const list = ptsByPatient.get(p.paciente_id) || [];
+      list.push(p);
+      ptsByPatient.set(p.paciente_id, list);
+    });
+
+    const proceduresByPatient = new Map<string, any[]>();
+    procedimentosDB.forEach(p => {
+      const list = proceduresByPatient.get(p.patient_id) || [];
+      list.push(p);
+      proceduresByPatient.set(p.patient_id, list);
+    });
 
     const patientStats: Record<string, {
       id: string;
       nome: string;
-      cids: string[];
-      categories: string[];
+      cids: Set<string>;
+      categories: Set<string>;
       atendimentos: number;
       procedimentos: Set<string>;
       datas: string[];
       profissionais: Set<string>;
+      origens: Set<'prontuario' | 'pts' | 'cadastro'>;
     }> = {};
 
-    // Processar CIDs e Categorias
-    prontuariosFull.forEach(p => {
-      const pac = pacMap.get(p.paciente_id);
-      const cidStr = pac?.cid || p.cid_codigo || ""; // Supõe cid_codigo se existir ou CID do paciente
-      const cids = cidStr.split(/[,;\s]+/).filter(Boolean);
-      
-      if (cids.length === 0) return;
-
-      if (!patientStats[p.paciente_id]) {
-        patientStats[p.paciente_id] = {
-          id: p.paciente_id,
-          nome: p.paciente_nome || pac?.nome || "Paciente",
-          cids: [],
-          categories: [],
+    const getOrCreatePatient = (id: string, name?: string) => {
+      if (!patientStats[id]) {
+        const pac = pacMap.get(id);
+        patientStats[id] = {
+          id,
+          nome: name || pac?.nome || "Paciente",
+          cids: new Set(),
+          categories: new Set(),
           atendimentos: 0,
           procedimentos: new Set(),
           datas: [],
-          profissionais: new Set()
+          profissionais: new Set(),
+          origens: new Set()
         };
+        
+        // Add CID from patient registration if exists
+        if (pac?.cid) {
+          const cids = pac.cid.split(/[,;\s]+/).filter(Boolean);
+          cids.forEach(c => {
+            patientStats[id].cids.add(c.toUpperCase());
+            patientStats[id].origens.add('cadastro');
+          });
+        }
       }
+      return patientStats[id];
+    };
 
-      const ps = patientStats[p.paciente_id];
-      cids.forEach(c => {
-        if (!ps.cids.includes(c)) ps.cids.push(c);
-        const cats = getCategoryByCID(c);
-        cats.forEach(cat => {
-          if (!ps.categories.includes(cat.name)) ps.categories.push(cat.name);
-        });
-      });
-
+    // 1. Process medical records (prontuarios)
+    prontuariosFull.forEach(p => {
+      const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
+      ps.origens.add('prontuario');
       ps.atendimentos++;
       ps.datas.push(p.data_atendimento);
-      ps.profissionais.add(p.profissional_id || p.profissional_nome);
+      if (p.profissional_id || p.profissional_nome) {
+        ps.profissionais.add(p.profissional_id || p.profissional_nome);
+      }
+
+      // CID from medical record
+      if (p.cid_codigo) {
+        const cids = p.cid_codigo.split(/[,;\s]+/).filter(Boolean);
+        cids.forEach(c => ps.cids.add(c.toUpperCase()));
+      }
+
+      // Procedures from medical record text
+      if (p.procedimentos_texto) {
+        const procs = p.procedimentos_texto.split(/[,;]+/).filter(Boolean);
+        procs.forEach(pr => ps.procedimentos.add(pr.trim()));
+      }
+    });
+
+    // 2. Process PTS data
+    ptsData.forEach(p => {
+      const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
+      ps.origens.add('pts');
       
-      // Procedimentos do prontuário
-      const procs = p.procedimentos_texto?.split(",") || [];
-      procs.forEach(pr => {
-        if (pr.trim()) ps.procedimentos.add(pr.trim());
+      // CID from PTS
+      if (p.cid_primario) ps.cids.add(p.cid_primario.toUpperCase());
+      if (p.cid_secundario) ps.cids.add(p.cid_secundario.toUpperCase());
+      
+      // Procedures/Goals from PTS if any
+      if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
+    });
+
+    // 3. Process linked procedures (patient_procedures table)
+    procedimentosDB.forEach(p => {
+      const ps = getOrCreatePatient(p.patient_id);
+      if (p.procedimento_nome) ps.procedimentos.add(p.procedimento_nome);
+      if (p.cid) ps.cids.add(p.cid.toUpperCase());
+    });
+
+    // After gathering all CIDs, derive categories
+    Object.values(patientStats).forEach(ps => {
+      ps.cids.forEach(cid => {
+        const cats = getCategoryByCID(cid);
+        cats.forEach(cat => ps.categories.add(cat.name));
       });
     });
 
     const patientsList = Object.values(patientStats);
 
-    // Agregações por Categoria
+    // Agregations by Category
     const byCategory: Record<string, {
       name: string;
       pacientes: number;
@@ -613,7 +660,7 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    // CIDs mais frequentes
+    // Top CIDs frequency
     const cidFrequency: Record<string, number> = {};
     patientsList.forEach(p => {
       p.cids.forEach(c => {
@@ -626,14 +673,13 @@ const Relatorios: React.FC = () => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // KPIs
     const kpis = {
       totalPacientesComCID: patientsList.length,
       tea: byCategory['TEA / Autismo']?.pacientes || 0,
       surdez: (byCategory['Pessoa Surda']?.pacientes || 0) + (byCategory['Deficiência Auditiva']?.pacientes || 0),
       fisica: byCategory['Deficiência Física']?.pacientes || 0,
       intelectual: byCategory['Deficiência Intelectual']?.pacientes || 0,
-      multiplosCids: patientsList.filter(p => p.cids.length > 1).length,
+      multiplosCids: patientsList.filter(p => p.cids.size > 1).length,
       totalAtendimentos: patientsList.reduce((acc, p) => acc + p.atendimentos, 0),
       totalProcedimentos: patientsList.reduce((acc, p) => acc + p.procedimentos.size, 0)
     };
@@ -644,7 +690,7 @@ const Relatorios: React.FC = () => {
       topCids,
       kpis
     };
-  }, [prontuariosFull, pacientes, agendamentosFull]);
+  }, [prontuariosFull, pacientes, ptsData, procedimentosDB]);
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
@@ -2738,13 +2784,20 @@ th{background:#f1f5f9;font-weight:600;}
                 </thead>
                 <tbody>
                   {clinicalReport.patients
-                    .filter(p => p.categories.includes(clinicalDetailDialog.category || ""))
+                    .filter(p => clinicalDetailDialog.category ? p.categories.has(clinicalDetailDialog.category) : true)
                     .map((p, idx) => (
                       <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="py-2 px-3 font-medium">{p.nome}</td>
+                        <td className="py-2 px-3">
+                          <div className="font-medium">{p.nome}</div>
+                          <div className="flex gap-1 mt-1">
+                            {Array.from(p.origens).map(o => (
+                              <span key={o} className="text-[9px] uppercase px-1 rounded bg-muted text-muted-foreground">{o}</span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="py-2 px-3">
                           <div className="flex flex-wrap gap-1">
-                            {p.cids.map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
+                            {Array.from(p.cids).map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
                           </div>
                         </td>
                         <td className="py-2 px-3 text-center">{p.atendimentos}</td>
