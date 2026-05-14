@@ -557,20 +557,7 @@ const Relatorios: React.FC = () => {
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
     const pacMap = new Map(pacientes.map(p => [p.id, p]));
-    const ptsByPatient = new Map<string, any[]>();
-    ptsData.forEach(p => {
-      const list = ptsByPatient.get(p.paciente_id) || [];
-      list.push(p);
-      ptsByPatient.set(p.paciente_id, list);
-    });
-
-    const proceduresByPatient = new Map<string, any[]>();
-    procedimentosDB.forEach(p => {
-      const list = proceduresByPatient.get(p.patient_id) || [];
-      list.push(p);
-      proceduresByPatient.set(p.patient_id, list);
-    });
-
+    
     const patientStats: Record<string, {
       id: string;
       nome: string;
@@ -580,7 +567,7 @@ const Relatorios: React.FC = () => {
       procedimentos: Set<string>;
       datas: string[];
       profissionais: Set<string>;
-      origens: Set<'prontuario' | 'pts' | 'cadastro'>;
+      origens: Set<'prontuario' | 'pts' | 'cadastro' | 'procedimento'>;
     }> = {};
 
     const getOrCreatePatient = (id: string, name?: string) => {
@@ -598,11 +585,12 @@ const Relatorios: React.FC = () => {
           origens: new Set()
         };
         
-        // Add CID from patient registration if exists
+        // Add CID from patient registration
         if (pac?.cid) {
           const cids = pac.cid.split(/[,;\s]+/).filter(Boolean);
           cids.forEach(c => {
-            patientStats[id].cids.add(c.toUpperCase());
+            const cid = c.toUpperCase();
+            patientStats[id].cids.add(cid);
             patientStats[id].origens.add('cadastro');
           });
         }
@@ -610,7 +598,7 @@ const Relatorios: React.FC = () => {
       return patientStats[id];
     };
 
-    // 1. Process medical records (prontuarios)
+    // 1. Process medical records
     prontuariosFull.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
       ps.origens.add('prontuario');
@@ -620,50 +608,45 @@ const Relatorios: React.FC = () => {
         ps.profissionais.add(p.profissional_id || p.profissional_nome);
       }
 
-      // CID from medical record
       if (p.cid_codigo) {
         const cids = p.cid_codigo.split(/[,;\s]+/).filter(Boolean);
         cids.forEach(c => ps.cids.add(c.toUpperCase()));
       }
 
-      // Procedures from medical record text
       if (p.procedimentos_texto) {
         const procs = p.procedimentos_texto.split(/[,;]+/).filter(Boolean);
         procs.forEach(pr => ps.procedimentos.add(pr.trim()));
       }
     });
 
-    // 2. Process PTS data
+    // 2. Process PTS
     ptsData.forEach(p => {
       const ps = getOrCreatePatient(p.paciente_id, p.paciente_nome);
       ps.origens.add('pts');
-      
-      // CID from PTS
       if (p.cid_primario) ps.cids.add(p.cid_primario.toUpperCase());
       if (p.cid_secundario) ps.cids.add(p.cid_secundario.toUpperCase());
-      
-      // Procedures/Goals from PTS if any
       if (p.objetivos_curto_prazo) ps.procedimentos.add("Objetivo PTS: " + p.objetivos_curto_prazo);
     });
 
-    // 3. Process linked procedures (patient_procedures table)
+    // 3. Process linked procedures
     procedimentosDB.forEach(p => {
       const ps = getOrCreatePatient(p.patient_id);
+      ps.origens.add('procedimento');
       if (p.procedimento_nome) ps.procedimentos.add(p.procedimento_nome);
       if (p.cid) ps.cids.add(p.cid.toUpperCase());
     });
 
-    // After gathering all CIDs, derive categories
+    // Derive categories with intelligence
     Object.values(patientStats).forEach(ps => {
       ps.cids.forEach(cid => {
-        const cats = getCategoryByCID(cid);
+        const description = cid10Descriptions[cid];
+        const cats = getCategoryByCID(cid, description);
         cats.forEach(cat => ps.categories.add(cat.name));
       });
     });
 
     const patientsList = Object.values(patientStats);
 
-    // Agregations by Category
     const byCategory: Record<string, {
       name: string;
       pacientes: number;
@@ -687,7 +670,6 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    // Top CIDs frequency
     const cidFrequency: Record<string, number> = {};
     patientsList.forEach(p => {
       p.cids.forEach(c => {
@@ -696,7 +678,11 @@ const Relatorios: React.FC = () => {
     });
 
     const topCids = Object.entries(cidFrequency)
-      .map(([cid, count]) => ({ cid, count }))
+      .map(([cid, count]) => ({ 
+        cid, 
+        count, 
+        descricao: cid10Descriptions[cid] || "Descrição não carregada" 
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
@@ -717,7 +703,7 @@ const Relatorios: React.FC = () => {
       topCids,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, procedimentosDB]);
+  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions]);
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
