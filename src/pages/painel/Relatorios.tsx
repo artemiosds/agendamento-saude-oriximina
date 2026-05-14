@@ -2396,6 +2396,110 @@ th{background:#f1f5f9;font-weight:600;}
           )}
         </TabsContent>
 
+        {/* === CLÍNICO === */}
+        <TabsContent value="clinico" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            {[
+              { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
+              { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
+              { label: 'Surdez/Aud.', value: clinicalReport.kpis.surdez, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Física', value: clinicalReport.kpis.fisica, icon: Dumbbell, color: 'text-green-600' },
+              { label: 'Def. Intelectual', value: clinicalReport.kpis.intelectual, icon: Brain, color: 'text-purple-600' },
+              { label: 'Múltiplos CIDs', value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
+              { label: 'Atendimentos', value: clinicalReport.kpis.totalAtendimentos, icon: CalendarDays, color: 'text-slate-600' },
+              { label: 'Procedimentos', value: clinicalReport.kpis.totalProcedimentos, icon: ClipboardList, color: 'text-slate-600' },
+            ].map(k => (
+              <Card key={k.label} className="shadow-card border-0">
+                <CardContent className="p-3 text-center">
+                  <k.icon className={`w-4 h-4 mx-auto mb-1 ${k.color} opacity-80`} />
+                  <p className="text-xl font-bold text-foreground leading-none">{k.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{k.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" /> Pacientes por Categoria Clínica
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={clinicalReport.byCategory} layout="vertical" margin={{ left: 100 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="pacientes" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} name="Pacientes" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" /> CIDs Mais Frequentes
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={clinicalReport.topCids}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="cid" tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="hsl(168, 60%, 42%)" radius={[4, 4, 0, 0]} name="Frequência" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground">Distribuição por Categoria e Volume</h3>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm"><Download className="w-3 h-3 mr-1" />Exportar</Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Categoria</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pacientes Únicos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total Atendimentos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total Procedimentos</th>
+                      <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clinicalReport.byCategory.map((cat, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-3 text-foreground font-medium">{cat.name}</td>
+                        <td className="py-2.5 px-2 text-center text-primary font-bold">{cat.pacientes}</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground">{cat.atendimentos}</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground">{cat.procedimentos}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 text-xs gap-1"
+                            onClick={() => setClinicalDetailDialog({ open: true, category: cat.name })}
+                          >
+                            <Info className="w-3 h-3" /> Ver Pacientes
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* === MULTIPROFISSIONAL === */}
         <TabsContent value="multiprofissional" className="space-y-5 mt-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
