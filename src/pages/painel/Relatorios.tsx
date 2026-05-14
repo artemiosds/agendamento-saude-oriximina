@@ -1424,6 +1424,7 @@ ${dataRows}
             { value: 'pts_report', label: 'PTS' },
             { value: 'tratamentos', label: 'Tratamentos' },
             { value: 'detalhado', label: 'Detalhado' },
+            { value: 'clinico', label: '🧬 Análise Clínica' },
             { value: 'mapa', label: '📍 Mapa Atendimento' },
           ].map(tab => (
             <button
