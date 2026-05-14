@@ -2711,6 +2711,54 @@ th{background:#f1f5f9;font-weight:600;}
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Clinical Detail Dialog */}
+      <Dialog 
+        open={clinicalDetailDialog.open} 
+        onOpenChange={(open) => setClinicalDetailDialog({ open, category: clinicalDetailDialog.category })}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              Pacientes - {clinicalDetailDialog.category}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left py-2 px-3 font-medium">Paciente</th>
+                    <th className="text-left py-2 px-3 font-medium">CIDs</th>
+                    <th className="text-center py-2 px-3 font-medium">Atendimentos</th>
+                    <th className="text-left py-2 px-3 font-medium">Últimos Procedimentos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clinicalReport.patients
+                    .filter(p => p.categories.includes(clinicalDetailDialog.category || ""))
+                    .map((p, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="py-2 px-3 font-medium">{p.nome}</td>
+                        <td className="py-2 px-3">
+                          <div className="flex flex-wrap gap-1">
+                            {p.cids.map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-center">{p.atendimentos}</td>
+                        <td className="py-2 px-3 text-xs text-muted-foreground">
+                          {Array.from(p.procedimentos).slice(0, 3).join(", ")}
+                          {p.procedimentos.size > 3 && "..."}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
