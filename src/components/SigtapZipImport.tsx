@@ -265,28 +265,26 @@ const SigtapZipImport: React.FC = () => {
     const procLines = procText.split(/\r?\n/);
 
     interface ProcRow { codigo: string; nome: string; especialidade: string; subgrupo: string; }
-    const procedures: ProcRow[] = [];
+    const procedureMap = new Map<string, ProcRow>();
+    let totalLinesRead = 0;
 
     for (const line of procLines) {
       if (line.length < 260) continue;
+      totalLinesRead++;
       const codigo = line.substring(PROC_LAYOUT.codigo[0], PROC_LAYOUT.codigo[1]).trim();
       const nome = line.substring(PROC_LAYOUT.nome[0], PROC_LAYOUT.nome[1]).trim();
       if (!/^\d{10}$/.test(codigo) || !nome) continue;
 
-      // Codigo SIGTAP: GG SS FF NNNN — grupo (2) + subgrupo (2) + forma (2) + sequencial (4)
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
-
-      // IMPORTAÇÃO COMPLETA: Não filtrar por especialidade.
-      // A especialidade é mapeada apenas para fins de organização posterior.
       const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
       
-      procedures.push({ codigo, nome, especialidade, subgrupo });
-
-      procedures.push({ codigo, nome, especialidade, subgrupo });
+      // Deduplicação por código para evitar erro de ON CONFLICT DO UPDATE
+      procedureMap.set(codigo, { codigo, nome, especialidade, subgrupo });
     }
 
-    addLog('info', `📋 ${procedures.length.toLocaleString('pt-BR')} procedimentos filtrados`);
+    const procedures = Array.from(procedureMap.values());
+    addLog('info', `📋 Lidas ${totalLinesRead.toLocaleString('pt-BR')} linhas. Processados ${procedures.length.toLocaleString('pt-BR')} procedimentos únicos.`);
 
     if (procedures.length === 0) {
       throw new Error('Nenhum procedimento encontrado para as especialidades selecionadas. Verifique os filtros.');
