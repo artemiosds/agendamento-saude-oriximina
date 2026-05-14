@@ -1298,6 +1298,8 @@ ${dataRows}
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
   };
 
+  const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
