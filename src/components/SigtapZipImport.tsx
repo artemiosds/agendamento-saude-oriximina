@@ -433,10 +433,8 @@ const SigtapZipImport: React.FC = () => {
   };
 
   const handleStart = async () => {
-    if (selected.size === 0) {
-      toast.error('Selecione ao menos uma especialidade');
-      return;
-    }
+    // Agora não há mais necessidade de validar selected.size pois importamos tudo
+    // O filtro de especialidades foi mantido na UI apenas para visualização/associação opcional futura.
 
     setLogs([]);
     setProgressPct(0);
