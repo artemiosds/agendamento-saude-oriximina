@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, type LucideIcon } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, Activity, Info, ChevronRight, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
@@ -18,6 +18,7 @@ import logoCerFallback from '@/assets/logo-cer-ii.png';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
+import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
