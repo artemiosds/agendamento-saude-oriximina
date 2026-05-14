@@ -307,27 +307,35 @@ const SigtapZipImport: React.FC = () => {
 
     // ============= Parse PROC↔CID relations (fixed-width) =============
     interface CidLink { procedimento_codigo: string; cid_codigo: string; cid_descricao: string; }
-    const cidLinks: CidLink[] = [];
+    const cidLinkMap = new Map<string, CidLink>();
     if (cidLinkFile) {
       const linkBytes = await zip.files[cidLinkFile].async('uint8array');
       const linkText = decodeLatin1(linkBytes);
       const linkLines = linkText.split(/\r?\n/);
-      const procedureCodes = new Set(procedures.map(p => p.codigo));
+      const procedureCodes = procedureMap; // Usar o map já deduplicado
+      
+      let linksRead = 0;
       for (const line of linkLines) {
         if (line.length < 14) continue;
         const procCodigo = line.substring(RL_PROC_CID_LAYOUT.proc[0], RL_PROC_CID_LAYOUT.proc[1]).trim();
         const cidCodigo = line.substring(RL_PROC_CID_LAYOUT.cid[0], RL_PROC_CID_LAYOUT.cid[1]).trim();
         if (!/^\d{10}$/.test(procCodigo) || !cidCodigo) continue;
-        // Importar apenas se o procedimento foi importado (garante integridade referencial se necessário)
+        
+        // Apenas vínculos de procedimentos que acabamos de ler
         if (!procedureCodes.has(procCodigo)) continue;
-        cidLinks.push({
+        
+        linksRead++;
+        // Chave composta para deduplicação: proc-cid
+        const key = `${procCodigo}-${cidCodigo}`;
+        cidLinkMap.set(key, {
           procedimento_codigo: procCodigo,
           cid_codigo: cidCodigo,
           cid_descricao: cidDescMap.get(cidCodigo) || '',
         });
       }
-      addLog('info', `🔗 ${cidLinks.length.toLocaleString('pt-BR')} vínculos procedimento↔CID`);
+      addLog('info', `🔗 Lidos ${linksRead.toLocaleString('pt-BR')} vínculos. Normalizados ${cidLinkMap.size.toLocaleString('pt-BR')} registros únicos.`);
     }
+    const cidLinks = Array.from(cidLinkMap.values());
 
     // ============= Save to database (upsert in batches) =============
     setStep('saving');
