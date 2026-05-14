@@ -539,12 +539,22 @@ const ProntuarioPage: React.FC = () => {
   const filteredProcedimentos = useMemo(() => {
     if (!user) return [];
     const q = procSearch.trim().toLowerCase();
+    
+    // Agora a base SIGTAP importada é completa e disponível para todos por padrão.
+    // O filtro por profissão/especialidade só é aplicado se a flag de disponibilização estiver desativada.
     const semFiltroProfissao = sigtapDisponibilizarTodos;
+
     return procedimentos.filter((p) => {
+      // Filtro de segurança/associação específica por profissional continua valendo
+      if (p.profissionais_ids && p.profissionais_ids.length > 0) {
+        if (!p.profissionais_ids.includes(user.id)) return false;
+      }
+
+      // Filtro por profissão só se a config global 'disponibilizarTodos' for false
       if (!semFiltroProfissao) {
         if (user.profissao && p.profissao && p.profissao.toLowerCase() !== user.profissao.toLowerCase()) return false;
-        if (p.profissionais_ids && p.profissionais_ids.length > 0 && !p.profissionais_ids.includes(user.id)) return false;
       }
+
       if (q) {
         const hay = `${p.nome} ${p.id} ${p.especialidade}`.toLowerCase();
         if (!hay.includes(q)) return false;
