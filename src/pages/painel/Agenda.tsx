@@ -2528,14 +2528,15 @@ const Agenda: React.FC = () => {
               </Card>
             ) : (
               filtered.map((ag, idx) => {
+                const today = todayLocalStr();
                 const ehHoje = isSameDay(new Date(`${ag.data}T12:00:00`), new Date());
-
+                const isFuture = ag.data > today;
                 const STATUS_LIBERADOS = ["confirmado_chegada", "aguardando_atendimento", "apto_atendimento"];
-                // Para apto_atendimento, libera independente da data (permite registrar atendimentos retroativos)
+                // Libera atendimento em datas passadas quando ainda estiver pendente/iniciável; bloqueio de futuro fica no handler.
                 const canStart =
                   isProfissional &&
                   STATUS_LIBERADOS.includes(ag.status) &&
-                  (ag.status === "apto_atendimento" || ehHoje);
+                  !isFuture;
                 const isEmAtendimento = ag.status === "em_atendimento";
                 const tipoInfo = tipoBadge[ag.tipo] || {
                   label: ag.tipo,
@@ -2847,7 +2848,7 @@ const Agenda: React.FC = () => {
                                 {ag.status === "falta" ? "Faltou" : "Cancelado"}
                               </span>
                             )}
-                            {!ehHoje && !["falta", "cancelado", "concluido"].includes(ag.status) && (
+                            {isFuture && !["falta", "cancelado", "concluido"].includes(ag.status) && (
                               <span className="text-xs text-muted-foreground px-2 py-1">
                                 📅 Agendado para{" "}
                                 {new Date(ag.data + "T12:00:00").toLocaleDateString("pt-BR", {

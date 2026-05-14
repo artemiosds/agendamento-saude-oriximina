@@ -618,32 +618,57 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadAgendamentos = useCallback(async () => {
     try {
       // PERF: reduced window from 30 to 14 days back to keep startup fast.
-      // Older appointments remain accessible through the Histórico/Auditoria pages
-      // which fetch on-demand.
+      // Older appointments remain accessible through the Histórico/Auditoria pages,
+      // but unfinished past appointments must stay in Agenda so atendimento can start.
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 14);
       const cutoff = localDateStr(cutoffDate);
 
-      let allData: any[] = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
-        let query = supabase
-          .from("agendamentos" as any)
-          .select(
-            "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por",
-          )
-          .gte("data", cutoff)
-          .order("data", { ascending: false })
-          .range(from, from + PAGE - 1);
-        // Unit isolation
-        if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
-        const { data, error } = await query;
-        if (error || !data || data.length === 0) break;
-        allData = allData.concat(data);
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
+      const columns =
+        "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
+      const terminalPastStatuses = [
+        "cancelado",
+        "cancelada",
+        "falta",
+        "faltou",
+        "concluido",
+        "finalizado",
+        "atendido",
+        "atendimento_encerrado",
+        "prontuario_finalizado",
+        "excluido",
+        "removido",
+        "inativo",
+      ];
+
+      const fetchAgendamentosPage = async (scope: "recent" | "openPast") => {
+        const rows: any[] = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+          let query = supabase
+            .from("agendamentos" as any)
+            .select(columns)
+            .order("data", { ascending: false })
+            .range(from, from + PAGE - 1);
+
+          query = scope === "recent"
+            ? query.gte("data", cutoff)
+            : query.lt("data", cutoff).not("status", "in", `(${terminalPastStatuses.join(",")})`);
+
+          if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
+          const { data, error } = await query;
+          if (error || !data || data.length === 0) break;
+          rows.push(...data);
+          if (data.length < PAGE) break;
+          from += PAGE;
+        }
+        return rows;
+      };
+
+      const recentRows = await fetchAgendamentosPage("recent");
+      const openPastRows = await fetchAgendamentosPage("openPast");
+      const allData = Array.from(new Map([...recentRows, ...openPastRows].map((row) => [row.id, row])).values());
       setAgendamentos(
         allData.map((a: any) => ({
           id: a.id,
