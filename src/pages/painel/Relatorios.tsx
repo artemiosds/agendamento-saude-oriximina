@@ -2784,13 +2784,20 @@ th{background:#f1f5f9;font-weight:600;}
                 </thead>
                 <tbody>
                   {clinicalReport.patients
-                    .filter(p => p.categories.includes(clinicalDetailDialog.category || ""))
+                    .filter(p => clinicalDetailDialog.category ? p.categories.has(clinicalDetailDialog.category) : true)
                     .map((p, idx) => (
                       <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="py-2 px-3 font-medium">{p.nome}</td>
+                        <td className="py-2 px-3">
+                          <div className="font-medium">{p.nome}</div>
+                          <div className="flex gap-1 mt-1">
+                            {Array.from(p.origens).map(o => (
+                              <span key={o} className="text-[9px] uppercase px-1 rounded bg-muted text-muted-foreground">{o}</span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="py-2 px-3">
                           <div className="flex flex-wrap gap-1">
-                            {p.cids.map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
+                            {Array.from(p.cids).map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
                           </div>
                         </td>
                         <td className="py-2 px-3 text-center">{p.atendimentos}</td>
