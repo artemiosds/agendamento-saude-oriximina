@@ -346,6 +346,7 @@ const SigtapZipImport: React.FC = () => {
 
     // Procedures: batch 1000 (increased to avoid overhead)
     const PROC_BATCH = 1000;
+    let procUpserts = 0;
     for (let i = 0; i < procedures.length; i += PROC_BATCH) {
       const batch = procedures.slice(i, i + PROC_BATCH);
       const { error } = await supabase.from('sigtap_procedimentos').upsert(
@@ -362,14 +363,16 @@ const SigtapZipImport: React.FC = () => {
         console.error('[SIGTAP] proc upsert error:', error);
         throw new Error(`Erro ao salvar lote de procedimentos: ${error.message}`);
       }
+      procUpserts += batch.length;
       done += batch.length;
       setProgressPct(Math.round((done / totalOps) * 100));
     }
-    addLog('ok', `${procedures.length.toLocaleString('pt-BR')} procedimentos salvos`);
+    addLog('ok', `${procUpserts.toLocaleString('pt-BR')} procedimentos processados (inseridos/atualizados)`);
 
     // CID links: batch 2000 (increased to avoid overhead)
     if (cidLinks.length > 0) {
       const CID_BATCH = 2000;
+      let cidUpserts = 0;
       for (let i = 0; i < cidLinks.length; i += CID_BATCH) {
         const batch = cidLinks.slice(i, i + CID_BATCH);
         const { error } = await supabase.from('sigtap_procedimento_cids').upsert(
@@ -380,10 +383,11 @@ const SigtapZipImport: React.FC = () => {
           console.error('[SIGTAP] cid upsert error:', error);
           throw new Error(`Erro ao salvar lote de vínculos CID: ${error.message}`);
         }
+        cidUpserts += batch.length;
         done += batch.length;
         setProgressPct(Math.round((done / totalOps) * 100));
       }
-      addLog('ok', `${cidLinks.length.toLocaleString('pt-BR')} vínculos CID salvos`);
+      addLog('ok', `${cidUpserts.toLocaleString('pt-BR')} vínculos CID processados (inseridos/atualizados)`);
     }
 
     // Update total_cids per procedure
