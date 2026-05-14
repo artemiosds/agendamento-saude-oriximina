@@ -2507,7 +2507,18 @@ th{background:#f1f5f9;font-weight:600;}
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="cid" tick={{ fontSize: 11 }} />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-white p-2 border rounded shadow-sm text-xs">
+                            <p className="font-bold">{payload[0].payload.cid}</p>
+                            <p className="text-muted-foreground mb-1">{payload[0].payload.descricao}</p>
+                            <p className="text-primary font-medium">{payload[0].value} pacientes</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }} />
                     <Bar dataKey="count" fill="hsl(168, 60%, 42%)" radius={[4, 4, 0, 0]} name="Frequência" />
                   </BarChart>
                 </ResponsiveContainer>
