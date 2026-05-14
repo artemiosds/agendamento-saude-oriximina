@@ -10,14 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
-import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, type LucideIcon } from 'lucide-react';
+import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, Activity, Info, ChevronRight, ClipboardList, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument } from '@/lib/printLayout';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
 import { useUnidadeFilter } from '@/hooks/useUnidadeFilter';
 import { ChartCard } from '@/components/ChartCard';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
+import { CLINICAL_CATEGORIES, getCategoryByCID } from '@/data/clinicalCategories';
 
 const COLORS = ['hsl(199, 89%, 38%)', 'hsl(168, 60%, 42%)', 'hsl(45, 93%, 47%)', 'hsl(0, 72%, 51%)', 'hsl(262, 83%, 58%)', 'hsl(200, 18%, 46%)', 'hsl(280, 60%, 50%)', 'hsl(30, 80%, 50%)'];
 
@@ -526,6 +528,123 @@ const Relatorios: React.FC = () => {
       };
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
   }, [filtered, pacientes]);
+
+  // === CLINICAL ANALYSIS REPORT ===
+  const clinicalReport = useMemo(() => {
+    // Cruza prontuários com agendamentos e pacientes
+    const pacMap = new Map(pacientes.map(p => [p.id, p]));
+    const agMap = new Map(agendamentosFull.map(a => [a.id, a]));
+
+    const patientStats: Record<string, {
+      id: string;
+      nome: string;
+      cids: string[];
+      categories: string[];
+      atendimentos: number;
+      procedimentos: Set<string>;
+      datas: string[];
+      profissionais: Set<string>;
+    }> = {};
+
+    // Processar CIDs e Categorias
+    prontuariosFull.forEach(p => {
+      const pac = pacMap.get(p.paciente_id);
+      const cidStr = pac?.cid || p.cid_codigo || ""; // Supõe cid_codigo se existir ou CID do paciente
+      const cids = cidStr.split(/[,;\s]+/).filter(Boolean);
+      
+      if (cids.length === 0) return;
+
+      if (!patientStats[p.paciente_id]) {
+        patientStats[p.paciente_id] = {
+          id: p.paciente_id,
+          nome: p.paciente_nome || pac?.nome || "Paciente",
+          cids: [],
+          categories: [],
+          atendimentos: 0,
+          procedimentos: new Set(),
+          datas: [],
+          profissionais: new Set()
+        };
+      }
+
+      const ps = patientStats[p.paciente_id];
+      cids.forEach(c => {
+        if (!ps.cids.includes(c)) ps.cids.push(c);
+        const cats = getCategoryByCID(c);
+        cats.forEach(cat => {
+          if (!ps.categories.includes(cat.name)) ps.categories.push(cat.name);
+        });
+      });
+
+      ps.atendimentos++;
+      ps.datas.push(p.data_atendimento);
+      ps.profissionais.add(p.profissional_id || p.profissional_nome);
+      
+      // Procedimentos do prontuário
+      const procs = p.procedimentos_texto?.split(",") || [];
+      procs.forEach(pr => {
+        if (pr.trim()) ps.procedimentos.add(pr.trim());
+      });
+    });
+
+    const patientsList = Object.values(patientStats);
+
+    // Agregações por Categoria
+    const byCategory: Record<string, {
+      name: string;
+      pacientes: number;
+      atendimentos: number;
+      procedimentos: number;
+      pacientesIds: string[];
+    }> = {};
+
+    CLINICAL_CATEGORIES.forEach(cat => {
+      byCategory[cat.name] = { name: cat.name, pacientes: 0, atendimentos: 0, procedimentos: 0, pacientesIds: [] };
+    });
+
+    patientsList.forEach(p => {
+      p.categories.forEach(catName => {
+        if (byCategory[catName]) {
+          byCategory[catName].pacientes++;
+          byCategory[catName].atendimentos += p.atendimentos;
+          byCategory[catName].procedimentos += p.procedimentos.size;
+          byCategory[catName].pacientesIds.push(p.id);
+        }
+      });
+    });
+
+    // CIDs mais frequentes
+    const cidFrequency: Record<string, number> = {};
+    patientsList.forEach(p => {
+      p.cids.forEach(c => {
+        cidFrequency[c] = (cidFrequency[c] || 0) + 1;
+      });
+    });
+
+    const topCids = Object.entries(cidFrequency)
+      .map(([cid, count]) => ({ cid, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // KPIs
+    const kpis = {
+      totalPacientesComCID: patientsList.length,
+      tea: byCategory['TEA / Autismo']?.pacientes || 0,
+      surdez: (byCategory['Pessoa Surda']?.pacientes || 0) + (byCategory['Deficiência Auditiva']?.pacientes || 0),
+      fisica: byCategory['Deficiência Física']?.pacientes || 0,
+      intelectual: byCategory['Deficiência Intelectual']?.pacientes || 0,
+      multiplosCids: patientsList.filter(p => p.cids.length > 1).length,
+      totalAtendimentos: patientsList.reduce((acc, p) => acc + p.atendimentos, 0),
+      totalProcedimentos: patientsList.reduce((acc, p) => acc + p.procedimentos.size, 0)
+    };
+
+    return {
+      patients: patientsList,
+      byCategory: Object.values(byCategory).sort((a, b) => b.pacientes - a.pacientes),
+      topCids,
+      kpis
+    };
+  }, [prontuariosFull, pacientes, agendamentosFull]);
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
@@ -1180,6 +1299,8 @@ ${dataRows}
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
   };
 
+  const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
@@ -1304,6 +1425,7 @@ ${dataRows}
             { value: 'pts_report', label: 'PTS' },
             { value: 'tratamentos', label: 'Tratamentos' },
             { value: 'detalhado', label: 'Detalhado' },
+            { value: 'clinico', label: '🧬 Análise Clínica' },
             { value: 'mapa', label: '📍 Mapa Atendimento' },
           ].map(tab => (
             <button
@@ -2275,6 +2397,110 @@ th{background:#f1f5f9;font-weight:600;}
           )}
         </TabsContent>
 
+        {/* === CLÍNICO === */}
+        <TabsContent value="clinico" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            {[
+              { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
+              { label: 'TEA/Autismo', value: clinicalReport.kpis.tea, icon: Brain, color: 'text-indigo-600' },
+              { label: 'Surdez/Aud.', value: clinicalReport.kpis.surdez, icon: Ear, color: 'text-blue-600' },
+              { label: 'Def. Física', value: clinicalReport.kpis.fisica, icon: Dumbbell, color: 'text-green-600' },
+              { label: 'Def. Intelectual', value: clinicalReport.kpis.intelectual, icon: Brain, color: 'text-purple-600' },
+              { label: 'Múltiplos CIDs', value: clinicalReport.kpis.multiplosCids, icon: ListOrdered, color: 'text-orange-600' },
+              { label: 'Atendimentos', value: clinicalReport.kpis.totalAtendimentos, icon: CalendarDays, color: 'text-slate-600' },
+              { label: 'Procedimentos', value: clinicalReport.kpis.totalProcedimentos, icon: ClipboardList, color: 'text-slate-600' },
+            ].map(k => (
+              <Card key={k.label} className="shadow-card border-0">
+                <CardContent className="p-3 text-center">
+                  <k.icon className={`w-4 h-4 mx-auto mb-1 ${k.color} opacity-80`} />
+                  <p className="text-xl font-bold text-foreground leading-none">{k.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">{k.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" /> Pacientes por Categoria Clínica
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={clinicalReport.byCategory} layout="vertical" margin={{ left: 100 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="pacientes" fill="hsl(199, 89%, 38%)" radius={[0, 4, 4, 0]} name="Pacientes" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-foreground mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" /> CIDs Mais Frequentes
+                </h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={clinicalReport.topCids}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="cid" tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="hsl(168, 60%, 42%)" radius={[4, 4, 0, 0]} name="Frequência" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold font-display text-foreground">Distribuição por Categoria e Volume</h3>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm"><Download className="w-3 h-3 mr-1" />Exportar</Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">Categoria</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Pacientes Únicos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total Atendimentos</th>
+                      <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Total Procedimentos</th>
+                      <th className="text-right py-2.5 px-3 text-muted-foreground font-medium">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clinicalReport.byCategory.map((cat, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-3 text-foreground font-medium">{cat.name}</td>
+                        <td className="py-2.5 px-2 text-center text-primary font-bold">{cat.pacientes}</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground">{cat.atendimentos}</td>
+                        <td className="py-2.5 px-2 text-center text-muted-foreground">{cat.procedimentos}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 text-xs gap-1"
+                            onClick={() => setClinicalDetailDialog({ open: true, category: cat.name })}
+                          >
+                            <Info className="w-3 h-3" /> Ver Pacientes
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* === MULTIPROFISSIONAL === */}
         <TabsContent value="multiprofissional" className="space-y-5 mt-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -2486,6 +2712,54 @@ th{background:#f1f5f9;font-weight:600;}
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Clinical Detail Dialog */}
+      <Dialog 
+        open={clinicalDetailDialog.open} 
+        onOpenChange={(open) => setClinicalDetailDialog({ open, category: clinicalDetailDialog.category })}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              Pacientes - {clinicalDetailDialog.category}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b">
+                    <th className="text-left py-2 px-3 font-medium">Paciente</th>
+                    <th className="text-left py-2 px-3 font-medium">CIDs</th>
+                    <th className="text-center py-2 px-3 font-medium">Atendimentos</th>
+                    <th className="text-left py-2 px-3 font-medium">Últimos Procedimentos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clinicalReport.patients
+                    .filter(p => p.categories.includes(clinicalDetailDialog.category || ""))
+                    .map((p, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="py-2 px-3 font-medium">{p.nome}</td>
+                        <td className="py-2 px-3">
+                          <div className="flex flex-wrap gap-1">
+                            {p.cids.map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3 text-center">{p.atendimentos}</td>
+                        <td className="py-2 px-3 text-xs text-muted-foreground">
+                          {Array.from(p.procedimentos).slice(0, 3).join(", ")}
+                          {p.procedimentos.size > 3 && "..."}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

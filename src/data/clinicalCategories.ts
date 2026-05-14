@@ -1,0 +1,76 @@
+
+export interface ClinicalCategory {
+  id: string;
+  name: string;
+  cidPrefixes: string[]; // e.g. ["F84", "F84.0"]
+  description?: string;
+}
+
+export const CLINICAL_CATEGORIES: ClinicalCategory[] = [
+  {
+    id: 'tea',
+    name: 'TEA / Autismo',
+    cidPrefixes: ['F84', 'F840', 'F84.0', 'F841', 'F84.1', 'F842', 'F84.2', 'F843', 'F84.3', 'F844', 'F84.4', 'F845', 'F84.5', 'F848', 'F84.8', 'F849', 'F84.9'],
+    description: 'Transtorno do Espectro Autista'
+  },
+  {
+    id: 'surdez',
+    name: 'Pessoa Surda',
+    cidPrefixes: ['H900', 'H90.0', 'H901', 'H90.1', 'H902', 'H90.2'],
+    description: 'Surdez bilateral ou profunda'
+  },
+  {
+    id: 'def_auditiva',
+    name: 'Deficiência Auditiva',
+    cidPrefixes: ['H90', 'H91'],
+    description: 'Perda auditiva condutiva ou neurossensorial'
+  },
+  {
+    id: 'def_visual',
+    name: 'Deficiência Visual',
+    cidPrefixes: ['H54', 'H540', 'H54.0', 'H541', 'H54.1', 'H542', 'H54.2'],
+    description: 'Cegueira ou visão subnormal'
+  },
+  {
+    id: 'def_fisica',
+    name: 'Deficiência Física',
+    cidPrefixes: ['G80', 'G81', 'G82', 'G83', 'M20', 'M21', 'Q65', 'Q66', 'Q67', 'Q68', 'Q69', 'Q70', 'Q71', 'Q72', 'Q73', 'Q74'],
+    description: 'Alteração completa ou parcial de um ou mais segmentos do corpo'
+  },
+  {
+    id: 'def_intelectual',
+    name: 'Deficiência Intelectual',
+    cidPrefixes: ['F70', 'F71', 'F72', 'F73', 'F78', 'F79'],
+    description: 'Funcionamento intelectual significativamente inferior à média'
+  },
+  {
+    id: 'fala_linguagem',
+    name: 'Transtornos de Fala e Linguagem',
+    cidPrefixes: ['F80', 'F800', 'F80.0', 'F801', 'F80.1', 'F802', 'F80.2', 'R47', 'R470', 'R47.0'],
+    description: 'Dificuldades na produção ou compreensão da fala'
+  },
+  {
+    id: 'neurodesenvolvimento',
+    name: 'Transtornos do Neurodesenvolvimento',
+    cidPrefixes: ['F81', 'F82', 'F88', 'F89', 'F90', 'F91', 'F92', 'F93', 'F94', 'F95', 'F98'],
+    description: 'Transtornos que afetam o desenvolvimento do sistema nervoso'
+  },
+  {
+    id: 'neurologico',
+    name: 'Condições Neurológicas',
+    cidPrefixes: ['G00', 'G99', 'I60', 'I61', 'I62', 'I63', 'I64', 'I67', 'I69'],
+    description: 'Doenças do sistema nervoso central e periférico'
+  }
+];
+
+export const getCategoryByCID = (cid: string): ClinicalCategory[] => {
+  if (!cid) return [];
+  const normalizedCID = cid.toUpperCase().replace('.', '').trim();
+  
+  return CLINICAL_CATEGORIES.filter(cat => 
+    cat.cidPrefixes.some(prefix => {
+      const normalizedPrefix = prefix.toUpperCase().replace('.', '').trim();
+      return normalizedCID.startsWith(normalizedPrefix);
+    })
+  );
+};
