@@ -320,6 +320,7 @@ const SigtapZipImport: React.FC = () => {
         const procCodigo = line.substring(RL_PROC_CID_LAYOUT.proc[0], RL_PROC_CID_LAYOUT.proc[1]).trim();
         const cidCodigo = line.substring(RL_PROC_CID_LAYOUT.cid[0], RL_PROC_CID_LAYOUT.cid[1]).trim();
         if (!/^\d{10}$/.test(procCodigo) || !cidCodigo) continue;
+        // Importar apenas se o procedimento foi importado (garante integridade referencial se necessário)
         if (!procedureCodes.has(procCodigo)) continue;
         cidLinks.push({
           procedimento_codigo: procCodigo,
