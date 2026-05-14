@@ -611,23 +611,35 @@ const SigtapZipImport: React.FC = () => {
           </Tabs>
         )}
 
-        {/* Specialty filter (visible in both tabs while idle) */}
+        {/* Status Informativo */}
         {step === 'idle' && (
-          <div className="space-y-2 pt-2 border-t">
-            <p className="text-sm font-medium">Filtrar especialidades a importar:</p>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-400">
+            <p className="font-semibold flex items-center gap-1.5 mb-1">
+              <Info className="w-3.5 h-3.5" /> Importação Completa Ativada
+            </p>
+            <p>
+              O sistema irá importar a base <strong>INTEGRAL</strong> do SIGTAP para a competência selecionada, 
+              incluindo todos os procedimentos e todos os vínculos com CID-10, independente de especialidade ou subgrupo.
+            </p>
+          </div>
+        )}
+
+        {/* Specialty filter — Agora apenas para associação opcional / visualização */}
+        {step === 'idle' && (
+          <div className="space-y-2 pt-2 border-t opacity-60">
+            <p className="text-sm font-medium">Categorias incluídas na carga (automático):</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {SPECIALTY_OPTIONS.map(s => (
-                <label key={s.key} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={selected.has(s.key)} onCheckedChange={() => toggleOne(s.key)} />
+                <div key={s.key} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                   <span>{s.label}</span>
-                  <span className="text-xs text-muted-foreground">(subgrupo{s.subgrupos.includes(',') ? 's' : ''} {s.subgrupos})</span>
-                </label>
+                </div>
               ))}
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Outros Procedimentos</span>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox checked={selected.size === SPECIALTY_OPTIONS.length} onCheckedChange={toggleAll} />
-              <span className="font-medium">Selecionar todas</span>
-            </label>
           </div>
         )}
 
