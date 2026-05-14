@@ -80,11 +80,11 @@ const SigtapSyncPanel: React.FC = () => {
                 {lastSync ? new Date(lastSync.importado_em).toLocaleString('pt-BR') : 'Nunca'}
               </span>
             </div>
-            {lastSync ? (
+            {last_sync_full ? (
               <>
                 <div>
-                  <span className="text-muted-foreground">Competência: </span>
-                  <span className="font-medium">{formatCompetencia(lastSync.competencia)}</span>
+                  <span className="text-muted-foreground">Competência Importada: </span>
+                  <span className="font-medium">{formatCompetencia(last_sync_full.competencia)}</span>
                 </div>
                 <Badge variant="outline" className="text-green-600 border-green-300">
                   <CheckCircle2 className="w-3 h-3 mr-1" /> Importado
