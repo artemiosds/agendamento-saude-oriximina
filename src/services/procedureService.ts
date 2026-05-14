@@ -193,12 +193,17 @@ export const procedureService = {
       const cfg = ((data?.configuracoes as any) || {}) as Record<string, any>;
       const sig = (cfg.config_sigtap || {}) as Record<string, any>;
       const porUnidade = (sig.por_unidade || {}) as Record<string, { disponibilizarTodos?: boolean }>;
+      
+      // POR PADRÃO, agora disponibilizamos todos para garantir acesso à base completa importada.
+      // O override pode ser usado para restringir se desejado.
       if (unidadeId && porUnidade[unidadeId] && typeof porUnidade[unidadeId].disponibilizarTodos === 'boolean') {
         return { disponibilizarTodos: !!porUnidade[unidadeId].disponibilizarTodos };
       }
-      return { disponibilizarTodos: !!sig.disponibilizarTodos };
+      
+      // Se não houver config específica, o padrão agora é TRUE para acompanhar a nova arquitetura
+      return { disponibilizarTodos: sig.disponibilizarTodos !== false };
     } catch {
-      return { disponibilizarTodos: false };
+      return { disponibilizarTodos: true };
     }
   },
 
