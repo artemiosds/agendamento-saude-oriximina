@@ -265,28 +265,26 @@ const SigtapZipImport: React.FC = () => {
     const procLines = procText.split(/\r?\n/);
 
     interface ProcRow { codigo: string; nome: string; especialidade: string; subgrupo: string; }
-    const procedures: ProcRow[] = [];
+    const procedureMap = new Map<string, ProcRow>();
+    let totalLinesRead = 0;
 
     for (const line of procLines) {
       if (line.length < 260) continue;
+      totalLinesRead++;
       const codigo = line.substring(PROC_LAYOUT.codigo[0], PROC_LAYOUT.codigo[1]).trim();
       const nome = line.substring(PROC_LAYOUT.nome[0], PROC_LAYOUT.nome[1]).trim();
       if (!/^\d{10}$/.test(codigo) || !nome) continue;
 
-      // Codigo SIGTAP: GG SS FF NNNN — grupo (2) + subgrupo (2) + forma (2) + sequencial (4)
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
-
-      // IMPORTAÇÃO COMPLETA: Não filtrar por especialidade.
-      // A especialidade é mapeada apenas para fins de organização posterior.
       const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
       
-      procedures.push({ codigo, nome, especialidade, subgrupo });
-
-      procedures.push({ codigo, nome, especialidade, subgrupo });
+      // Deduplicação por código para evitar erro de ON CONFLICT DO UPDATE
+      procedureMap.set(codigo, { codigo, nome, especialidade, subgrupo });
     }
 
-    addLog('info', `📋 ${procedures.length.toLocaleString('pt-BR')} procedimentos filtrados`);
+    const procedures = Array.from(procedureMap.values());
+    addLog('info', `📋 Lidas ${totalLinesRead.toLocaleString('pt-BR')} linhas. Processados ${procedures.length.toLocaleString('pt-BR')} procedimentos únicos.`);
 
     if (procedures.length === 0) {
       throw new Error('Nenhum procedimento encontrado para as especialidades selecionadas. Verifique os filtros.');
@@ -309,27 +307,35 @@ const SigtapZipImport: React.FC = () => {
 
     // ============= Parse PROC↔CID relations (fixed-width) =============
     interface CidLink { procedimento_codigo: string; cid_codigo: string; cid_descricao: string; }
-    const cidLinks: CidLink[] = [];
+    const cidLinkMap = new Map<string, CidLink>();
     if (cidLinkFile) {
       const linkBytes = await zip.files[cidLinkFile].async('uint8array');
       const linkText = decodeLatin1(linkBytes);
       const linkLines = linkText.split(/\r?\n/);
-      const procedureCodes = new Set(procedures.map(p => p.codigo));
+      const procedureCodes = procedureMap; // Usar o map já deduplicado
+      
+      let linksRead = 0;
       for (const line of linkLines) {
         if (line.length < 14) continue;
         const procCodigo = line.substring(RL_PROC_CID_LAYOUT.proc[0], RL_PROC_CID_LAYOUT.proc[1]).trim();
         const cidCodigo = line.substring(RL_PROC_CID_LAYOUT.cid[0], RL_PROC_CID_LAYOUT.cid[1]).trim();
         if (!/^\d{10}$/.test(procCodigo) || !cidCodigo) continue;
-        // Importar apenas se o procedimento foi importado (garante integridade referencial se necessário)
+        
+        // Apenas vínculos de procedimentos que acabamos de ler
         if (!procedureCodes.has(procCodigo)) continue;
-        cidLinks.push({
+        
+        linksRead++;
+        // Chave composta para deduplicação: proc-cid
+        const key = `${procCodigo}-${cidCodigo}`;
+        cidLinkMap.set(key, {
           procedimento_codigo: procCodigo,
           cid_codigo: cidCodigo,
           cid_descricao: cidDescMap.get(cidCodigo) || '',
         });
       }
-      addLog('info', `🔗 ${cidLinks.length.toLocaleString('pt-BR')} vínculos procedimento↔CID`);
+      addLog('info', `🔗 Lidos ${linksRead.toLocaleString('pt-BR')} vínculos. Normalizados ${cidLinkMap.size.toLocaleString('pt-BR')} registros únicos.`);
     }
+    const cidLinks = Array.from(cidLinkMap.values());
 
     // ============= Save to database (upsert in batches) =============
     setStep('saving');
@@ -340,6 +346,7 @@ const SigtapZipImport: React.FC = () => {
 
     // Procedures: batch 1000 (increased to avoid overhead)
     const PROC_BATCH = 1000;
+    let procUpserts = 0;
     for (let i = 0; i < procedures.length; i += PROC_BATCH) {
       const batch = procedures.slice(i, i + PROC_BATCH);
       const { error } = await supabase.from('sigtap_procedimentos').upsert(
@@ -356,14 +363,16 @@ const SigtapZipImport: React.FC = () => {
         console.error('[SIGTAP] proc upsert error:', error);
         throw new Error(`Erro ao salvar lote de procedimentos: ${error.message}`);
       }
+      procUpserts += batch.length;
       done += batch.length;
       setProgressPct(Math.round((done / totalOps) * 100));
     }
-    addLog('ok', `${procedures.length.toLocaleString('pt-BR')} procedimentos salvos`);
+    addLog('ok', `${procUpserts.toLocaleString('pt-BR')} procedimentos processados (inseridos/atualizados)`);
 
     // CID links: batch 2000 (increased to avoid overhead)
     if (cidLinks.length > 0) {
       const CID_BATCH = 2000;
+      let cidUpserts = 0;
       for (let i = 0; i < cidLinks.length; i += CID_BATCH) {
         const batch = cidLinks.slice(i, i + CID_BATCH);
         const { error } = await supabase.from('sigtap_procedimento_cids').upsert(
@@ -374,10 +383,11 @@ const SigtapZipImport: React.FC = () => {
           console.error('[SIGTAP] cid upsert error:', error);
           throw new Error(`Erro ao salvar lote de vínculos CID: ${error.message}`);
         }
+        cidUpserts += batch.length;
         done += batch.length;
         setProgressPct(Math.round((done / totalOps) * 100));
       }
-      addLog('ok', `${cidLinks.length.toLocaleString('pt-BR')} vínculos CID salvos`);
+      addLog('ok', `${cidUpserts.toLocaleString('pt-BR')} vínculos CID processados (inseridos/atualizados)`);
     }
 
     // Update total_cids per procedure
@@ -696,23 +706,34 @@ const SigtapZipImport: React.FC = () => {
           <div className="space-y-3 p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <p className="text-sm font-semibold text-green-700 dark:text-green-400">Importação concluída!</p>
+              <p className="text-sm font-semibold text-green-700 dark:text-green-400">Importação Completa — Sucesso!</p>
             </div>
             <div className="space-y-1">
-              {specResults.map(r => (
-                <div key={r.especialidade} className="flex items-center justify-between text-sm">
-                  <span>{r.label}:</span>
-                  <span className="text-muted-foreground">{r.procedimentos} proc | {r.cids.toLocaleString('pt-BR')} CIDs</span>
+              <div className="p-2 bg-white/50 dark:bg-black/20 rounded border border-green-100 dark:border-green-900 mb-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Métricas da Carga</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Procedimentos</p>
+                    <p className="text-sm font-bold">{totalProcs.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Vínculos CID</p>
+                    <p className="text-sm font-bold">{totalCids.toLocaleString('pt-BR')}</p>
+                  </div>
                 </div>
-              ))}
-              <hr className="border-green-200 dark:border-green-700 my-2" />
-              <div className="flex justify-between text-sm font-semibold">
-                <span>Total:</span>
-                <span>{totalProcs} procedimentos | {totalCids.toLocaleString('pt-BR')} CIDs</span>
+              </div>
+
+              <div className="space-y-1">
+                {specResults.map(r => (
+                  <div key={r.especialidade} className="flex items-center justify-between text-[11px]">
+                    <span>{r.label}:</span>
+                    <span className="text-muted-foreground">{r.procedimentos.toLocaleString('pt-BR')} proc | {r.cids.toLocaleString('pt-BR')} CIDs</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <p className="text-xs text-green-600 dark:text-green-400">
-              ✅ Procedimentos e CIDs disponíveis para busca em prontuários, tratamentos e relatórios.
+            <p className="text-[11px] text-green-600 dark:text-green-400 mt-2">
+              ✅ Base SIGTAP atualizada com sucesso. Duplicidades tratadas automaticamente.
             </p>
             <Button variant="outline" size="sm" onClick={reset}>
               <CheckCircle2 className="w-3 h-3 mr-1" /> Nova importação
