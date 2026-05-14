@@ -2821,8 +2821,22 @@ th{background:#f1f5f9;font-weight:600;}
                         </td>
                         <td className="py-2 px-3">
                           <div className="flex flex-wrap gap-1">
-                            {Array.from(p.cids).map(c => <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>)}
+                            {Array.from(p.cids).map(c => (
+                              <Badge 
+                                key={c} 
+                                variant="outline" 
+                                className="text-[10px] cursor-help" 
+                                title={cid10Descriptions[c] || "Descrição não carregada"}
+                              >
+                                {c}
+                              </Badge>
+                            ))}
                           </div>
+                          {Array.from(p.cids).length === 1 && (
+                            <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-[200px]">
+                              {cid10Descriptions[Array.from(p.cids)[0]]}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-center">{p.atendimentos}</td>
                         <td className="py-2 px-3 text-xs text-muted-foreground">
