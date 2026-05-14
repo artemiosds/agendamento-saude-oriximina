@@ -217,6 +217,32 @@ const Relatorios: React.FC = () => {
       setMultiEvals(multiRes.data || []);
       setPtsData(ptsRes.data || []);
       setProcedimentosDB(proceduresRes.data || []);
+
+      // Extract all CIDs to fetch official descriptions
+      const allCids = new Set<string>();
+      (prons || []).forEach(p => {
+        if (p.cid_codigo) p.cid_codigo.split(/[,;\s]+/).filter(Boolean).forEach((c: string) => allCids.add(c.toUpperCase()));
+      });
+      (ptsRes.data || []).forEach((p: any) => {
+        if (p.cid_primario) allCids.add(p.cid_primario.toUpperCase());
+        if (p.cid_secundario) allCids.add(p.cid_secundario.toUpperCase());
+      });
+      (proceduresRes.data || []).forEach((p: any) => {
+        if (p.cid) allCids.add(p.cid.toUpperCase());
+      });
+      
+      if (allCids.size > 0) {
+        const { data: cidData } = await supabase
+          .from('cid10_codigos')
+          .select('codigo, descricao')
+          .in('codigo', Array.from(allCids));
+        
+        if (cidData) {
+          const descMap: Record<string, string> = {};
+          cidData.forEach(c => { descMap[c.codigo] = c.descricao; });
+          setCid10Descriptions(descMap);
+        }
+      }
       
       setLastUpdated(new Date());
       setIsInitialLoading(false);
