@@ -702,23 +702,34 @@ const SigtapZipImport: React.FC = () => {
           <div className="space-y-3 p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <p className="text-sm font-semibold text-green-700 dark:text-green-400">Importação concluída!</p>
+              <p className="text-sm font-semibold text-green-700 dark:text-green-400">Importação Completa — Sucesso!</p>
             </div>
             <div className="space-y-1">
-              {specResults.map(r => (
-                <div key={r.especialidade} className="flex items-center justify-between text-sm">
-                  <span>{r.label}:</span>
-                  <span className="text-muted-foreground">{r.procedimentos} proc | {r.cids.toLocaleString('pt-BR')} CIDs</span>
+              <div className="p-2 bg-white/50 dark:bg-black/20 rounded border border-green-100 dark:border-green-900 mb-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Métricas da Carga</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Procedimentos</p>
+                    <p className="text-sm font-bold">{totalProcs.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Vínculos CID</p>
+                    <p className="text-sm font-bold">{totalCids.toLocaleString('pt-BR')}</p>
+                  </div>
                 </div>
-              ))}
-              <hr className="border-green-200 dark:border-green-700 my-2" />
-              <div className="flex justify-between text-sm font-semibold">
-                <span>Total:</span>
-                <span>{totalProcs} procedimentos | {totalCids.toLocaleString('pt-BR')} CIDs</span>
+              </div>
+
+              <div className="space-y-1">
+                {specResults.map(r => (
+                  <div key={r.especialidade} className="flex items-center justify-between text-[11px]">
+                    <span>{r.label}:</span>
+                    <span className="text-muted-foreground">{r.procedimentos.toLocaleString('pt-BR')} proc | {r.cids.toLocaleString('pt-BR')} CIDs</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <p className="text-xs text-green-600 dark:text-green-400">
-              ✅ Procedimentos e CIDs disponíveis para busca em prontuários, tratamentos e relatórios.
+            <p className="text-[11px] text-green-600 dark:text-green-400 mt-2">
+              ✅ Base SIGTAP atualizada com sucesso. Duplicidades tratadas automaticamente.
             </p>
             <Button variant="outline" size="sm" onClick={reset}>
               <CheckCircle2 className="w-3 h-3 mr-1" /> Nova importação
