@@ -277,15 +277,11 @@ const SigtapZipImport: React.FC = () => {
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
 
-      // CORREÇÃO: Não filtrar por especialidade aqui. Importar TUDO.
-      // Se não houver mapeamento, usar 'outros'
+      // IMPORTAÇÃO COMPLETA: Não filtrar por especialidade.
+      // A especialidade é mapeada apenas para fins de organização posterior.
       const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
       
-      // Se o usuário selecionou especialidades específicas E não é "outros" ou "todos", 
-      // poderíamos filtrar, mas o pedido é QUEBRAR LIMITAÇÕES.
-      // Vamos importar tudo o que estiver no arquivo que o usuário permitiu via checkboxes,
-      // mas se o usuário marcou "outros", ele pega o resto da base.
-      if (!selected.has(especialidade) && !selected.has('outros')) continue;
+      procedures.push({ codigo, nome, especialidade, subgrupo });
 
       procedures.push({ codigo, nome, especialidade, subgrupo });
     }
