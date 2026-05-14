@@ -644,7 +644,7 @@ const SigtapZipImport: React.FC = () => {
         )}
 
         {step === 'idle' && (
-          <Button onClick={handleStart} disabled={!canStart || selected.size === 0} className="w-full gradient-primary text-primary-foreground">
+          <Button onClick={handleStart} disabled={!canStart} className="w-full gradient-primary text-primary-foreground">
             <Download className="w-4 h-4 mr-2" />
             {source === 'github' ? 'Baixar do GitHub e Importar' : 'Processar ZIP e Importar'}
           </Button>
