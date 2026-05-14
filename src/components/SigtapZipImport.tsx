@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Download, FileArchive, CheckCircle2, XCircle, AlertTriangle,
-  Loader2, ExternalLink, Upload, Cloud,
+  Loader2, ExternalLink, Upload, Cloud, Info
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -41,6 +41,8 @@ const SUBGROUP_SPECIALTY_MAP: Record<string, string> = {
   '0414': 'odontologia',
 };
 
+// SPECIALTY_OPTIONS agora é usado apenas para associação opcional ou visualização, 
+// não deve limitar a importação principal.
 const SPECIALTY_OPTIONS = [
   { key: 'enfermagem', label: 'Enfermagem', subgrupos: '03.01' },
   { key: 'medico', label: 'Médico', subgrupos: '03.02' },
@@ -57,7 +59,6 @@ const SPECIALTY_OPTIONS = [
   { key: 'podologia', label: 'Podologia', subgrupos: '03.16' },
   { key: 'optometria', label: 'Optometria', subgrupos: '03.17' },
   { key: 'saude_coletiva', label: 'Saúde Coletiva', subgrupos: '03.18' },
-  { key: 'outros', label: 'Outros (Base completa)', subgrupos: 'Restante da base SIGTAP' },
 ];
 
 const GITHUB_REPO = 'RenatoKR/SIGTAP';
@@ -276,15 +277,11 @@ const SigtapZipImport: React.FC = () => {
       const grupoSub = codigo.substring(0, 4);
       const subgrupo = codigo.substring(2, 4);
 
-      // CORREÇÃO: Não filtrar por especialidade aqui. Importar TUDO.
-      // Se não houver mapeamento, usar 'outros'
+      // IMPORTAÇÃO COMPLETA: Não filtrar por especialidade.
+      // A especialidade é mapeada apenas para fins de organização posterior.
       const especialidade = SUBGROUP_SPECIALTY_MAP[grupoSub] || 'outros';
       
-      // Se o usuário selecionou especialidades específicas E não é "outros" ou "todos", 
-      // poderíamos filtrar, mas o pedido é QUEBRAR LIMITAÇÕES.
-      // Vamos importar tudo o que estiver no arquivo que o usuário permitiu via checkboxes,
-      // mas se o usuário marcou "outros", ele pega o resto da base.
-      if (!selected.has(especialidade) && !selected.has('outros')) continue;
+      procedures.push({ codigo, nome, especialidade, subgrupo });
 
       procedures.push({ codigo, nome, especialidade, subgrupo });
     }
@@ -323,6 +320,7 @@ const SigtapZipImport: React.FC = () => {
         const procCodigo = line.substring(RL_PROC_CID_LAYOUT.proc[0], RL_PROC_CID_LAYOUT.proc[1]).trim();
         const cidCodigo = line.substring(RL_PROC_CID_LAYOUT.cid[0], RL_PROC_CID_LAYOUT.cid[1]).trim();
         if (!/^\d{10}$/.test(procCodigo) || !cidCodigo) continue;
+        // Importar apenas se o procedimento foi importado (garante integridade referencial se necessário)
         if (!procedureCodes.has(procCodigo)) continue;
         cidLinks.push({
           procedimento_codigo: procCodigo,
@@ -435,10 +433,8 @@ const SigtapZipImport: React.FC = () => {
   };
 
   const handleStart = async () => {
-    if (selected.size === 0) {
-      toast.error('Selecione ao menos uma especialidade');
-      return;
-    }
+    // Agora não há mais necessidade de validar selected.size pois importamos tudo
+    // O filtro de especialidades foi mantido na UI apenas para visualização/associação opcional futura.
 
     setLogs([]);
     setProgressPct(0);
@@ -615,28 +611,40 @@ const SigtapZipImport: React.FC = () => {
           </Tabs>
         )}
 
-        {/* Specialty filter (visible in both tabs while idle) */}
+        {/* Status Informativo */}
         {step === 'idle' && (
-          <div className="space-y-2 pt-2 border-t">
-            <p className="text-sm font-medium">Filtrar especialidades a importar:</p>
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-400">
+            <p className="font-semibold flex items-center gap-1.5 mb-1">
+              <Info className="w-3.5 h-3.5" /> Importação Completa Ativada
+            </p>
+            <p>
+              O sistema irá importar a base <strong>INTEGRAL</strong> do SIGTAP para a competência selecionada, 
+              incluindo todos os procedimentos e todos os vínculos com CID-10, independente de especialidade ou subgrupo.
+            </p>
+          </div>
+        )}
+
+        {/* Specialty filter — Agora apenas para associação opcional / visualização */}
+        {step === 'idle' && (
+          <div className="space-y-2 pt-2 border-t opacity-60">
+            <p className="text-sm font-medium">Categorias incluídas na carga (automático):</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {SPECIALTY_OPTIONS.map(s => (
-                <label key={s.key} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={selected.has(s.key)} onCheckedChange={() => toggleOne(s.key)} />
+                <div key={s.key} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                   <span>{s.label}</span>
-                  <span className="text-xs text-muted-foreground">(subgrupo{s.subgrupos.includes(',') ? 's' : ''} {s.subgrupos})</span>
-                </label>
+                </div>
               ))}
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Outros Procedimentos</span>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox checked={selected.size === SPECIALTY_OPTIONS.length} onCheckedChange={toggleAll} />
-              <span className="font-medium">Selecionar todas</span>
-            </label>
           </div>
         )}
 
         {step === 'idle' && (
-          <Button onClick={handleStart} disabled={!canStart || selected.size === 0} className="w-full gradient-primary text-primary-foreground">
+          <Button onClick={handleStart} disabled={!canStart} className="w-full gradient-primary text-primary-foreground">
             <Download className="w-4 h-4 mr-2" />
             {source === 'github' ? 'Baixar do GitHub e Importar' : 'Processar ZIP e Importar'}
           </Button>

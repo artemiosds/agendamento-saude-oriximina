@@ -55,7 +55,7 @@ const VincularSigtapProcedimentos: React.FC = () => {
           .select("codigo, nome, especialidade")
           .eq("ativo", true)
           .order("nome")
-          .limit(5000),
+          .limit(15000),
       ]);
       setProcs(procsRes.data || []);
       setSigtap(sigtapRes.data || []);

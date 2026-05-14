@@ -83,8 +83,8 @@ const SigtapSyncPanel: React.FC = () => {
             {lastSync ? (
               <>
                 <div>
-                  <span className="text-muted-foreground">Competência: </span>
-                  <span className="font-medium">{formatCompetencia(lastSync.competencia)}</span>
+                  <span className="text-muted-foreground">Competência Importada: </span>
+                  <span className="font-medium text-primary">{formatCompetencia(lastSync.competencia)}</span>
                 </div>
                 <Badge variant="outline" className="text-green-600 border-green-300">
                   <CheckCircle2 className="w-3 h-3 mr-1" /> Importado
