@@ -144,7 +144,7 @@ const Relatorios: React.FC = () => {
       };
       console.log("[Relatórios] buscando dados com filtros:", filters);
 
-      const fetchAllPages = async (table: string, dateField: string) => {
+      const fetchAllPages = async (table: string, dateField?: string) => {
         let allData: any[] = [];
         let from = 0;
         const PAGE_SIZE = 1000;
@@ -152,11 +152,9 @@ const Relatorios: React.FC = () => {
         while (true) {
           let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
           
-          if (dateFrom) {
-            query = query.gte(dateField, dateFrom);
-          }
-          if (dateTo) {
-            query = query.lte(dateField, dateTo);
+          if (dateField) {
+            if (dateFrom) query = query.gte(dateField, dateFrom);
+            if (dateTo) query = query.lte(dateField, dateTo);
           }
 
           if (user?.unidadeId && user?.usuario !== 'admin.sms') {
@@ -184,7 +182,18 @@ const Relatorios: React.FC = () => {
         return allData;
       };
 
-      const [ags, prons, filaRes, triageRes, cyclesRes, sessRes, nursingRes, multiRes, ptsRes] = await Promise.all([
+      const [
+        ags, 
+        prons, 
+        filaRes, 
+        triageRes, 
+        cyclesRes, 
+        sessRes, 
+        nursingRes, 
+        multiRes, 
+        ptsRes,
+        proceduresRes
+      ] = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
         supabase.from('fila_espera').select('*').limit(2000),
@@ -194,33 +203,22 @@ const Relatorios: React.FC = () => {
         supabase.from('nursing_evaluations' as any).select('*'),
         supabase.from('multiprofessional_evaluations' as any).select('*'),
         supabase.from('pts' as any).select('*'),
+        supabase.from('patient_procedures' as any).select('*'),
       ]);
 
-      const agsData = ags || [];
-      const pronsData = prons || [];
-      const filaData = filaRes.data || [];
-      const triageData = triageRes.data || [];
-      const cyclesData = cyclesRes.data || [];
-      const sessData = sessRes.data || [];
-      const nursingData = nursingRes.data || [];
-      const multiData = multiRes.data || [];
-      const ptsDataResult = ptsRes.data || [];
-
-      setAgendamentosFull(agsData);
-      setProntuariosFull(pronsData);
-      setFilaDB(filaData);
-      setTriagensDB(triageData as any as TriagemDB[]);
-      setTreatmentCycles(cyclesData);
-      setTreatmentSessions(sessData);
-      setNursingEvals(nursingData);
-      setMultiEvals(multiData);
-      setPtsData(ptsDataResult);
+      setAgendamentosFull(ags || []);
+      setProntuariosFull(prons || []);
+      setFilaDB(filaRes.data || []);
+      setTriagensDB(triageRes.data as any as TriagemDB[] || []);
+      setTreatmentCycles(cyclesRes.data || []);
+      setTreatmentSessions(sessRes.data || []);
+      setNursingEvals(nursingRes.data || []);
+      setMultiEvals(multiRes.data || []);
+      setPtsData(ptsRes.data || []);
+      setProcedimentosDB(proceduresRes.data || []);
       
       setLastUpdated(new Date());
       setIsInitialLoading(false);
-      
-      console.log("[Relatórios] agendamentos retornados:", ags?.length);
-      console.log("[Relatórios] prontuários retornados:", prons?.length);
     } catch (err) { 
       console.error('Error loading report data:', err); 
     } finally {
