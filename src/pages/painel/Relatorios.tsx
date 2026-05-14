@@ -528,6 +528,123 @@ const Relatorios: React.FC = () => {
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
   }, [filtered, pacientes]);
 
+  // === CLINICAL ANALYSIS REPORT ===
+  const clinicalReport = useMemo(() => {
+    // Cruza prontuários com agendamentos e pacientes
+    const pacMap = new Map(pacientes.map(p => [p.id, p]));
+    const agMap = new Map(agendamentosFull.map(a => [a.id, a]));
+
+    const patientStats: Record<string, {
+      id: string;
+      nome: string;
+      cids: string[];
+      categories: string[];
+      atendimentos: number;
+      procedimentos: Set<string>;
+      datas: string[];
+      profissionais: Set<string>;
+    }> = {};
+
+    // Processar CIDs e Categorias
+    prontuariosFull.forEach(p => {
+      const pac = pacMap.get(p.paciente_id);
+      const cidStr = pac?.cid || p.cid_codigo || ""; // Supõe cid_codigo se existir ou CID do paciente
+      const cids = cidStr.split(/[,;\s]+/).filter(Boolean);
+      
+      if (cids.length === 0) return;
+
+      if (!patientStats[p.paciente_id]) {
+        patientStats[p.paciente_id] = {
+          id: p.paciente_id,
+          nome: p.paciente_nome || pac?.nome || "Paciente",
+          cids: [],
+          categories: [],
+          atendimentos: 0,
+          procedimentos: new Set(),
+          datas: [],
+          profissionais: new Set()
+        };
+      }
+
+      const ps = patientStats[p.paciente_id];
+      cids.forEach(c => {
+        if (!ps.cids.includes(c)) ps.cids.push(c);
+        const cats = getCategoryByCID(c);
+        cats.forEach(cat => {
+          if (!ps.categories.includes(cat.name)) ps.categories.push(cat.name);
+        });
+      });
+
+      ps.atendimentos++;
+      ps.datas.push(p.data_atendimento);
+      ps.profissionais.add(p.profissional_id || p.profissional_nome);
+      
+      // Procedimentos do prontuário
+      const procs = p.procedimentos_texto?.split(",") || [];
+      procs.forEach(pr => {
+        if (pr.trim()) ps.procedimentos.add(pr.trim());
+      });
+    });
+
+    const patientsList = Object.values(patientStats);
+
+    // Agregações por Categoria
+    const byCategory: Record<string, {
+      name: string;
+      pacientes: number;
+      atendimentos: number;
+      procedimentos: number;
+      pacientesIds: string[];
+    }> = {};
+
+    CLINICAL_CATEGORIES.forEach(cat => {
+      byCategory[cat.name] = { name: cat.name, pacientes: 0, atendimentos: 0, procedimentos: 0, pacientesIds: [] };
+    });
+
+    patientsList.forEach(p => {
+      p.categories.forEach(catName => {
+        if (byCategory[catName]) {
+          byCategory[catName].pacientes++;
+          byCategory[catName].atendimentos += p.atendimentos;
+          byCategory[catName].procedimentos += p.procedimentos.size;
+          byCategory[catName].pacientesIds.push(p.id);
+        }
+      });
+    });
+
+    // CIDs mais frequentes
+    const cidFrequency: Record<string, number> = {};
+    patientsList.forEach(p => {
+      p.cids.forEach(c => {
+        cidFrequency[c] = (cidFrequency[c] || 0) + 1;
+      });
+    });
+
+    const topCids = Object.entries(cidFrequency)
+      .map(([cid, count]) => ({ cid, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // KPIs
+    const kpis = {
+      totalPacientesComCID: patientsList.length,
+      tea: byCategory['TEA / Autismo']?.pacientes || 0,
+      surdez: (byCategory['Pessoa Surda']?.pacientes || 0) + (byCategory['Deficiência Auditiva']?.pacientes || 0),
+      fisica: byCategory['Deficiência Física']?.pacientes || 0,
+      intelectual: byCategory['Deficiência Intelectual']?.pacientes || 0,
+      multiplosCids: patientsList.filter(p => p.cids.length > 1).length,
+      totalAtendimentos: patientsList.reduce((acc, p) => acc + p.atendimentos, 0),
+      totalProcedimentos: patientsList.reduce((acc, p) => acc + p.procedimentos.size, 0)
+    };
+
+    return {
+      patients: patientsList,
+      byCategory: Object.values(byCategory).sort((a, b) => b.pacientes - a.pacientes),
+      topCids,
+      kpis
+    };
+  }, [prontuariosFull, pacientes, agendamentosFull]);
+
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
     const filteredFila = filaDB.filter(f => {
