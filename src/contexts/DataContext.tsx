@@ -626,22 +626,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const columns =
         "id,paciente_id,paciente_nome,unidade_id,sala_id,setor_id,profissional_id,profissional_nome,data,hora,status,tipo,observacoes,origem,google_event_id,sync_status,criado_em,criado_por";
-      const openPastStatuses = [
-        "pendente",
-        "confirmado",
-        "confirmada",
-        "agendado",
-        "aguardando",
-        "confirmado_chegada",
-        "chegada_confirmada",
-        "aguardando_triagem",
-        "triagem_concluida",
-        "aguardando_atendimento",
-        "aguardando_profissional",
-        "apto_atendimento",
-        "apto",
-        "chamado",
-        "em_atendimento",
+      const terminalPastStatuses = [
+        "cancelado",
+        "cancelada",
+        "falta",
+        "faltou",
+        "concluido",
+        "finalizado",
+        "atendido",
+        "atendimento_encerrado",
+        "prontuario_finalizado",
+        "excluido",
+        "removido",
+        "inativo",
       ];
 
       const fetchAgendamentosPage = async (scope: "recent" | "openPast") => {
@@ -657,7 +654,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           query = scope === "recent"
             ? query.gte("data", cutoff)
-            : query.lt("data", cutoff).in("status", openPastStatuses);
+            : query.lt("data", cutoff).not("status", "in", `(${terminalPastStatuses.join(",")})`);
 
           if (!isGlobalAdmin && userUnidadeId) query = query.eq('unidade_id', userUnidadeId);
           const { data, error } = await query;
