@@ -2304,13 +2304,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "prontuario_procedimentos_procedimento_id_fkey"
-            columns: ["procedimento_id"]
-            isOneToOne: false
-            referencedRelation: "procedimentos"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "prontuario_procedimentos_prontuario_id_fkey"
             columns: ["prontuario_id"]
             isOneToOne: false
