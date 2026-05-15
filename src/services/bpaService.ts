@@ -4,7 +4,7 @@ export interface LinhaBpaNormalizada {
   key: string;
   origem: 'prontuario' | 'triagem' | 'pts' | 'paciente';
   fonte_procedimento: 'prontuario' | 'paciente' | 'pts' | 'triagem';
-  fonte_cid: 'prontuario' | 'paciente' | 'pts' | 'vazio';
+  fonte_cid: 'prontuario' | 'procedimento' | 'paciente' | 'pts' | 'vazio';
   prontuario_id?: string;
   pts_id?: string;
   paciente_id: string;
@@ -16,6 +16,7 @@ export interface LinhaBpaNormalizada {
   procedimento_nome: string;
   codigo_sigtap: string;
   cid: string;
+  cids_relacionados?: string[];
   carater: string;
   qtd: number;
   status_bpa: 'ok' | 'pendente';
@@ -23,12 +24,55 @@ export interface LinhaBpaNormalizada {
   pendenciaTriagemSigtap?: boolean;
 }
 
+// Helpers ---------------------------------------------------------------------
+const inBatches = async <T,>(ids: string[], batchSize: number, fn: (batch: string[]) => Promise<T[]>): Promise<T[]> => {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const part = await fn(ids.slice(i, i + batchSize));
+    if (part?.length) out.push(...part);
+  }
+  return out;
+};
+
+const extractCidsFromProntuario = (pront: any): string[] => {
+  const cids: string[] = [];
+  const push = (v: any) => {
+    if (!v) return;
+    if (Array.isArray(v)) v.forEach(push);
+    else if (typeof v === 'string') {
+      const code = v.trim().toUpperCase();
+      if (code) cids.push(code);
+    } else if (typeof v === 'object') {
+      push(v.codigo || v.code || v.cid || v.cid10);
+    }
+  };
+  const cd = pront?.custom_data || {};
+  push(cd.cid);
+  push(cd.cids);
+  push(cd.cid_principal);
+  push(cd.diagnostico_cid);
+  push(cd.hipotese_diagnostica_cid);
+  push(pront?.hipotese);
+  return [...new Set(cids.filter(Boolean))];
+};
+
+const extractCidsFromPaciente = (pac: any): string[] => {
+  if (!pac) return [];
+  const cids: string[] = [];
+  const cd = pac.custom_data || {};
+  if (pac.cid) cids.push(String(pac.cid).toUpperCase());
+  if (Array.isArray(cd.cids)) cd.cids.forEach((c: any) => c && cids.push(String(c).toUpperCase()));
+  if (cd.cid) cids.push(String(cd.cid).toUpperCase());
+  return [...new Set(cids.filter(Boolean))];
+};
+
+// -----------------------------------------------------------------------------
 export const bpaService = {
   async resolveBpaProcedimentosECids({
     competencia,
     unidadeId,
     profissionalId,
-    triagemSigtapPadrao
+    triagemSigtapPadrao,
   }: {
     competencia: string;
     unidadeId?: string;
@@ -37,249 +81,193 @@ export const bpaService = {
   }): Promise<LinhaBpaNormalizada[]> {
     const ano = competencia.slice(0, 4);
     const mes = competencia.slice(4, 6);
-    
-    // Função para calcular range correto em formato ISO
-    const start = new Date(Number(ano), Number(mes) - 1, 1);
-    const end = new Date(Number(ano), Number(mes), 0, 23, 59, 59, 999);
-    
-    const dataInicio = start.toISOString().split('T')[0];
-    const dataFim = end.toISOString().split('T')[0];
-    
-    console.log("[BPA] competencia resolvida", { competencia, dataInicio, dataFim });
+    const dataInicio = `${ano}-${mes}-01`;
+    const lastDay = new Date(Number(ano), Number(mes), 0).getDate();
+    const dataFim = `${ano}-${mes}-${String(lastDay).padStart(2, '0')}`;
 
+    console.log('[BPA] competencia', { competencia, dataInicio, dataFim });
 
-    // 1) Fetch Prontuários (Paginado para quebrar o limite de 1000/5000)
-    const PAGE_SIZE_PRONT = 1000;
-    let fromPront = 0;
-    let allProntuarios: any[] = [];
-
-    while (true) {
-      let qPront = (supabase as any)
+    // 1) Prontuários da competência (paginado)
+    const PAGE = 1000;
+    const allProntuarios: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = (supabase as any)
         .from('prontuarios')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, custom_data')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, hipotese, custom_data')
         .gte('data_atendimento', dataInicio)
         .lte('data_atendimento', dataFim)
-        .range(fromPront, fromPront + PAGE_SIZE_PRONT - 1);
-      
-      if (unidadeId && unidadeId !== 'all') qPront = qPront.eq('unidade_id', unidadeId);
-      if (profissionalId && profissionalId !== 'all') qPront = qPront.eq('profissional_id', profissionalId);
-
-      const { data, error } = await qPront;
+        .range(from, from + PAGE - 1);
+      if (unidadeId && unidadeId !== 'all') q = q.eq('unidade_id', unidadeId);
+      if (profissionalId && profissionalId !== 'all') q = q.eq('profissional_id', profissionalId);
+      const { data, error } = await q;
       if (error) throw error;
-      if (!data || data.length === 0) break;
+      if (!data?.length) break;
       allProntuarios.push(...data);
-      if (data.length < PAGE_SIZE_PRONT) break;
-      fromPront += PAGE_SIZE_PRONT;
+      if (data.length < PAGE) break;
     }
-    
     const prots = allProntuarios;
-    const pacIds = [...new Set(prots.map(p => p.paciente_id))];
-    const prontIds = prots.map(p => p.id);
+    const pacIds = [...new Set(prots.map((p) => p.paciente_id).filter(Boolean))];
+    const prontIds = prots.map((p) => p.id);
 
-    // 2) Fetch Patients (Persistent data) - Paginado se necessário
-    let pacientes: any[] = [];
-    if (pacIds.length > 0) {
-      for (let i = 0; i < pacIds.length; i += 500) {
-        const batch = pacIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('pacientes').select('id, nome, cns, cpf, data_nascimento, cid, custom_data').in('id', batch);
-        if (data) pacientes.push(...data);
-      }
-    }
+    // 2) Pacientes em lote (com endereço completo)
+    const pacientes = await inBatches(pacIds, 500, async (batch) => {
+      const { data } = await (supabase as any)
+        .from('pacientes')
+        .select('id, nome, cns, cpf, data_nascimento, sexo, raca_cor, nacionalidade, naturalidade, naturalidade_uf, municipio, cep, tipo_logradouro, logradouro, numero, complemento, bairro, uf, telefone, email, endereco, cid, custom_data')
+        .in('id', batch);
+      return data || [];
+    });
     const pacMap = new Map<string, any>();
-    (pacientes || []).forEach((p: any) => pacMap.set(p.id, p));
+    pacientes.forEach((p: any) => pacMap.set(p.id, p));
 
-    // 3) Fetch Prontuario Procedimentos - Paginado
-    let vincs: any[] = [];
-    if (prontIds.length > 0) {
-      for (let i = 0; i < prontIds.length; i += 500) {
-        const batch = prontIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade').in('prontuario_id', batch);
-        if (data) vincs.push(...data);
-      }
-    }
+    // 3) Procedimentos vinculados aos prontuários
+    const vincs = await inBatches(prontIds, 500, async (batch) => {
+      const { data } = await (supabase as any)
+        .from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, cids_selecionados, quantidade')
+        .in('prontuario_id', batch);
+      return data || [];
+    });
 
-    const procIds = [...new Set((vincs || []).map((v: any) => v.procedimento_id))];
-    let procsData: any[] = [];
-    if (procIds.length > 0) {
-      for (let i = 0; i < procIds.length; i += 500) {
-        const batch = procIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('procedimentos').select('id, uuid, nome, codigo_sigtap').in('uuid', batch);
-        if (data) procsData.push(...data);
-      }
-    }
+    // 4) Catálogo de procedimentos (CORREÇÃO: coluna correta é 'id', não 'uuid')
+    const procIds = [...new Set(vincs.map((v: any) => v.procedimento_id).filter(Boolean))];
+    const procsData = await inBatches(procIds as string[], 500, async (batch) => {
+      const { data } = await (supabase as any)
+        .from('procedimentos')
+        .select('id, nome, codigo_sigtap')
+        .in('id', batch);
+      return data || [];
+    });
     const procsMap = new Map<string, any>();
-    (procsData || []).forEach((p: any) => procsMap.set(p.uuid, p));
+    procsData.forEach((p: any) => procsMap.set(p.id, p));
 
-    // 4) Fetch PTS (Active) - Paginado
-    let ptsData: any[] = [];
-    if (pacIds.length > 0) {
-      for (let i = 0; i < pacIds.length; i += 500) {
-        const batch = pacIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('pts').select('id, patient_id, status').in('patient_id', batch).eq('status', 'ativo');
-        if (data) ptsData.push(...data);
-      }
-    }
-    
-    const activePtsIds = (ptsData || []).map((p: any) => p.id);
-    let ptsCids: any[] = [];
-    if (activePtsIds.length > 0) {
-      for (let i = 0; i < activePtsIds.length; i += 500) {
-        const batch = activePtsIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch);
-        if (data) ptsCids.push(...data);
-      }
-    }
-
-    let ptsProcs: any[] = [];
-    if (activePtsIds.length > 0) {
-      for (let i = 0; i < activePtsIds.length; i += 500) {
-        const batch = activePtsIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', batch);
-        if (data) ptsProcs.push(...data);
-      }
-    }
-
-    // 4.5) Fetch Patient Linked Procedures (Persistent) - Paginado
-    let patientLinkedProcs: any[] = [];
-    if (pacIds.length > 0) {
-      for (let i = 0; i < pacIds.length; i += 500) {
-        const batch = pacIds.slice(i, i + 500);
-        const { data } = await (supabase as any).from('patient_procedures').select('*').in('patient_id', batch);
-        if (data) patientLinkedProcs.push(...data);
-      }
-    }
-
-    const ptsMap = new Map<string, any>();
-    (ptsData || []).forEach((p: any) => {
-      ptsMap.set(p.patient_id, {
+    // 5) PTS ativos do paciente (apoio: CID e procedimento fallback)
+    const ptsList = await inBatches(pacIds, 500, async (batch) => {
+      const { data } = await (supabase as any)
+        .from('pts')
+        .select('id, patient_id, status')
+        .in('patient_id', batch)
+        .eq('status', 'ativo');
+      return data || [];
+    });
+    const activePtsIds = ptsList.map((p: any) => p.id);
+    const ptsCids = await inBatches(activePtsIds, 500, async (batch) => {
+      const { data } = await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch);
+      return data || [];
+    });
+    const ptsProcs = await inBatches(activePtsIds, 500, async (batch) => {
+      const { data } = await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', batch);
+      return data || [];
+    });
+    const ptsByPaciente = new Map<string, { pts_id: string; cids: string[]; procs: any[] }>();
+    ptsList.forEach((p: any) => {
+      ptsByPaciente.set(p.patient_id, {
         pts_id: p.id,
-        cids: (ptsCids || []).filter((c: any) => c.pts_id === p.id).map((c: any) => c.cid_codigo),
-        procs: (ptsProcs || []).filter((pr: any) => pr.pts_id === p.id)
+        cids: ptsCids.filter((c: any) => c.pts_id === p.id).map((c: any) => String(c.cid_codigo || '').toUpperCase()).filter(Boolean),
+        procs: ptsProcs.filter((pr: any) => pr.pts_id === p.id),
       });
     });
 
-    const patientProcsMap = new Map<string, any[]>();
-    (patientLinkedProcs || []).forEach((p: any) => {
-      const arr = patientProcsMap.get(p.patient_id) || [];
-      arr.push(p);
-      patientProcsMap.set(p.patient_id, arr);
-    });
-
-
-    // 5) Fetch Triagens
-    let qTri = (supabase as any)
+    // 6) Triagens (linha extra própria)
+    const { data: triagens } = await (supabase as any)
       .from('triage_records')
       .select('id, agendamento_id, tecnico_id, criado_em')
       .gte('criado_em', `${dataInicio}T00:00:00`)
       .lte('criado_em', `${dataFim}T23:59:59`);
-    
-    const { data: triagens } = await qTri;
     const agIds = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
-    const { data: agsData } = agIds.length
-      ? await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', agIds)
-      : { data: [] };
+    const agsData = agIds.length
+      ? (await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', agIds)).data || []
+      : [];
     const agsMap = new Map<string, any>();
     (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
 
-    console.log("[BPA] resolucao da producao - pre-processamento", {
-      competencia,
-      totalProntuarios: prots.length,
-      totalTriagens: (triagens || []).length,
-      totalPacientes: pacMap.size,
-      totalPts: ptsMap.size
+    console.log('[BPA] dados carregados', {
+      prots: prots.length, vincs: vincs.length, procs: procsData.length,
+      pacientes: pacientes.length, pts: ptsList.length, triagens: (triagens || []).length,
     });
 
+    // -------------------------------------------------------------------------
+    // Montagem de linhas com dedupe estrito por prontuário + procedimento + cid
     const result: LinhaBpaNormalizada[] = [];
-    const usedCombinations = new Set<string>(); // paciente_id + data + sigtap + cid
-
-
-    // Function to add a line with deduplication
-    const addLine = (line: LinhaBpaNormalizada) => {
-      // CORREÇÃO: Incluir profissional_id no comboKey para não apagar produção válida de profissionais diferentes no mesmo dia/paciente
-      const comboKey = `${line.paciente_id}_${line.data}_${line.codigo_sigtap}_${line.cid}_${line.profissional_id}`;
-      if (usedCombinations.has(comboKey)) return;
-      usedCombinations.add(comboKey);
-      result.push(line);
+    const seen = new Set<string>();
+    const pushLine = (l: LinhaBpaNormalizada) => {
+      const key = `${l.prontuario_id || l.pts_id || 'tri'}|${l.codigo_sigtap}|${l.cid}|${l.profissional_id}|${l.data}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(l);
     };
 
-    // Process Prontuários with Procedures
-    const prontMap = new Map<string, any>();
-    prots.forEach(p => prontMap.set(p.id, p));
-
-    (vincs || []).forEach((v: any) => {
-      const pront = prontMap.get(v.prontuario_id);
-      if (!pront) return;
-      const proc = procsMap.get(v.procedimento_id);
-      
-      // RESOLVE PROCEDIMENTO
-      const sigtap = proc?.codigo_sigtap || '';
-      const procNome = proc?.nome || '';
-
-      const cidsToProcess = (v.cids_selecionados && v.cids_selecionados.length > 0) 
-        ? v.cids_selecionados 
-        : [''];
-
-      cidsToProcess.forEach((cidItem: string) => {
-        addLine({
-          key: `pron_${pront.id}_${v.procedimento_id}_${cidItem}`,
-          origem: 'prontuario',
-          fonte_procedimento: 'prontuario',
-          fonte_cid: cidItem ? 'prontuario' : 'vazio',
-          prontuario_id: pront.id,
-          paciente_id: pront.paciente_id,
-          paciente_nome: pront.paciente_nome,
-          profissional_id: pront.profissional_id,
-          profissional_nome: pront.profissional_nome,
-          unidade_id: pront.unidade_id,
-          data: pront.data_atendimento,
-          procedimento_nome: procNome,
-          codigo_sigtap: sigtap,
-          cid: cidItem,
-          carater: '01',
-          qtd: v.quantidade || 1,
-          status_bpa: 'ok',
-        });
-      });
+    // Index: prontuário → vínculos
+    const vincsByPront = new Map<string, any[]>();
+    vincs.forEach((v: any) => {
+      const arr = vincsByPront.get(v.prontuario_id) || [];
+      arr.push(v);
+      vincsByPront.set(v.prontuario_id, arr);
     });
 
-    // CORREÇÃO CRÍTICA: Processar Procedimentos Persistentes (patient_procedures) para TODOS os prontuários
-    prots.forEach(pront => {
+    for (const pront of prots) {
       const pac = pacMap.get(pront.paciente_id);
-      const pts = ptsMap.get(pront.paciente_id);
-      const linkedProcs = patientProcsMap.get(pront.paciente_id) || [];
+      const pts = ptsByPaciente.get(pront.paciente_id);
+      const cidsPront = extractCidsFromProntuario(pront);
+      const cidsPaciente = extractCidsFromPaciente(pac);
+      const cidsPts = pts?.cids || [];
 
-      // 1) Adiciona todos os procedimentos persistentes do cadastro do paciente
-      linkedProcs.forEach((lp: any) => {
-        addLine({
-          key: `pac_pers_${pront.id}_${lp.id}`,
-          origem: 'prontuario',
-          fonte_procedimento: 'paciente',
-          fonte_cid: lp.cid ? 'paciente' : 'vazio',
-          prontuario_id: pront.id,
-          paciente_id: pront.paciente_id,
-          paciente_nome: pront.paciente_nome,
-          profissional_id: pront.profissional_id,
-          profissional_nome: pront.profissional_nome,
-          unidade_id: pront.unidade_id,
-          data: pront.data_atendimento,
-          procedimento_nome: lp.procedimento_nome || 'Procedimento Vinculado',
-          codigo_sigtap: lp.sigtap_codigo || '',
-          cid: lp.cid || '',
-          carater: '01',
-          qtd: 1,
-          status_bpa: 'ok',
-        });
-      });
+      const linhasDoProntuario = vincsByPront.get(pront.id) || [];
 
-      // 2) Adiciona todos os procedimentos do PTS ativo
-      if (pts && pts.procs && pts.procs.length > 0) {
-        pts.procs.forEach((pp: any) => {
-          addLine({
-            key: `pts_pers_${pront.id}_${pp.pts_id}_${pp.procedimento_codigo}`,
+      if (linhasDoProntuario.length > 0) {
+        // Uma linha por procedimento; uma linha por CID se houver múltiplos no procedimento
+        for (const v of linhasDoProntuario) {
+          const proc = procsMap.get(v.procedimento_id);
+          const sigtap = String(proc?.codigo_sigtap || '').replace(/\D/g, '');
+          const procNome = proc?.nome || 'Procedimento';
+
+          // Resolve CID: 1) cids_selecionados no procedimento, 2) cid prontuário, 3) cid PTS, 4) cid paciente
+          let cidsAlvo: string[] = (v.cids_selecionados || []).map((c: string) => String(c).toUpperCase()).filter(Boolean);
+          let fonteCid: LinhaBpaNormalizada['fonte_cid'] = 'procedimento';
+          if (cidsAlvo.length === 0 && cidsPront.length) { cidsAlvo = cidsPront; fonteCid = 'prontuario'; }
+          if (cidsAlvo.length === 0 && cidsPts.length)   { cidsAlvo = cidsPts;   fonteCid = 'pts'; }
+          if (cidsAlvo.length === 0 && cidsPaciente.length) { cidsAlvo = cidsPaciente; fonteCid = 'paciente'; }
+          if (cidsAlvo.length === 0) { cidsAlvo = ['']; fonteCid = 'vazio'; }
+
+          // Apenas o CID principal vira linha BPA; demais ficam como "relacionados"
+          const cidPrincipal = cidsAlvo[0] || '';
+          const cidsRel = cidsAlvo.filter((c, idx) => idx > 0);
+
+          pushLine({
+            key: `pron_${pront.id}_${v.procedimento_id}_${cidPrincipal}`,
+            origem: 'prontuario',
+            fonte_procedimento: 'prontuario',
+            fonte_cid: fonteCid,
+            prontuario_id: pront.id,
+            pts_id: pts?.pts_id,
+            paciente_id: pront.paciente_id,
+            paciente_nome: pront.paciente_nome,
+            profissional_id: pront.profissional_id,
+            profissional_nome: pront.profissional_nome,
+            unidade_id: pront.unidade_id,
+            data: pront.data_atendimento,
+            procedimento_nome: procNome,
+            codigo_sigtap: sigtap,
+            cid: cidPrincipal,
+            cids_relacionados: cidsRel,
+            carater: '01',
+            qtd: v.quantidade || 1,
+            status_bpa: 'ok',
+          });
+        }
+      } else if (pts?.procs?.length) {
+        // Fallback: prontuário sem procedimento mas há PTS — usa PTS como fonte
+        for (const pp of pts.procs) {
+          const cidPrincipal = (cidsPront[0] || cidsPts[0] || cidsPaciente[0] || '');
+          const fonteCid: LinhaBpaNormalizada['fonte_cid'] = cidsPront[0]
+            ? 'prontuario' : cidsPts[0] ? 'pts' : cidsPaciente[0] ? 'paciente' : 'vazio';
+          pushLine({
+            key: `pron_pts_${pront.id}_${pp.procedimento_codigo}`,
             origem: 'prontuario',
             fonte_procedimento: 'pts',
-            fonte_cid: pts.cids.length > 0 ? 'pts' : 'vazio',
+            fonte_cid: fonteCid,
             prontuario_id: pront.id,
+            pts_id: pts.pts_id,
             paciente_id: pront.paciente_id,
             paciente_nome: pront.paciente_nome,
             profissional_id: pront.profissional_id,
@@ -287,52 +275,48 @@ export const bpaService = {
             unidade_id: pront.unidade_id,
             data: pront.data_atendimento,
             procedimento_nome: pp.procedimento_nome || 'Procedimento PTS',
-            codigo_sigtap: pp.procedimento_codigo || '',
-            cid: pts.cids[0] || '',
+            codigo_sigtap: String(pp.procedimento_codigo || '').replace(/\D/g, ''),
+            cid: cidPrincipal,
             carater: '01',
             qtd: 1,
             status_bpa: 'ok',
           });
+        }
+      } else {
+        // Prontuário sem procedimento nem PTS — gera 1 linha com pendência
+        const cidPrincipal = cidsPront[0] || cidsPaciente[0] || '';
+        const fonteCid: LinhaBpaNormalizada['fonte_cid'] = cidsPront[0] ? 'prontuario' : cidsPaciente[0] ? 'paciente' : 'vazio';
+        pushLine({
+          key: `pron_empty_${pront.id}`,
+          origem: 'prontuario',
+          fonte_procedimento: 'prontuario',
+          fonte_cid: fonteCid,
+          prontuario_id: pront.id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id,
+          profissional_nome: pront.profissional_nome,
+          unidade_id: pront.unidade_id,
+          data: pront.data_atendimento,
+          procedimento_nome: '— sem procedimento —',
+          codigo_sigtap: '',
+          cid: cidPrincipal,
+          carater: '01',
+          qtd: 1,
+          status_bpa: 'pendente',
+          motivo_pendencia: 'Prontuário sem procedimento SIGTAP vinculado',
         });
       }
-    });
+    }
 
-    // Handle prontuários that still have no procedure (fallback)
-    prots.forEach(pront => {
-      const alreadyHas = result.some(r => r.prontuario_id === pront.id && r.codigo_sigtap);
-      if (alreadyHas) return;
-
-      addLine({
-        key: `pron_fallback_${pront.id}`,
-        origem: 'prontuario',
-        fonte_procedimento: 'prontuario',
-        fonte_cid: 'vazio',
-        prontuario_id: pront.id,
-        paciente_id: pront.paciente_id,
-        paciente_nome: pront.paciente_nome,
-        profissional_id: pront.profissional_id,
-        profissional_nome: pront.profissional_nome,
-        unidade_id: pront.unidade_id,
-        data: pront.data_atendimento,
-        procedimento_nome: '— sem procedimento —',
-        codigo_sigtap: '',
-        cid: '',
-        carater: '01',
-        qtd: 1,
-        status_bpa: 'ok',
-      });
-    });
-
-    // Process Triagens
+    // Triagens — uma linha cada
     (triagens || []).forEach((t: any) => {
       const ag = agsMap.get(t.agendamento_id);
       if (!ag) return;
       if (unidadeId && unidadeId !== 'all' && ag.unidade_id !== unidadeId) return;
-      
       const pac = pacMap.get(ag.paciente_id);
-      const cid = pac?.cid || '';
-
-      addLine({
+      const cid = extractCidsFromPaciente(pac)[0] || '';
+      pushLine({
         key: `tri_${t.id}`,
         origem: 'triagem',
         fonte_procedimento: 'triagem',
@@ -343,43 +327,43 @@ export const bpaService = {
         profissional_nome: 'Técnico de Triagem',
         unidade_id: ag.unidade_id,
         data: ag.data || (t.criado_em || '').slice(0, 10),
-        procedimento_nome: triagemSigtapPadrao ? 'Acolhimento com classificação de risco' : '— SIGTAP Triagem não configurado —',
+        procedimento_nome: triagemSigtapPadrao ? 'Acolhimento com classificação de risco' : '— SIGTAP triagem não configurado —',
         codigo_sigtap: triagemSigtapPadrao || '',
-        cid: cid,
+        cid,
         carater: '01',
         qtd: 1,
-        status_bpa: 'ok',
+        status_bpa: triagemSigtapPadrao ? 'ok' : 'pendente',
+        motivo_pendencia: triagemSigtapPadrao ? undefined : 'SIGTAP da triagem não configurado',
+        pendenciaTriagemSigtap: !triagemSigtapPadrao,
       });
     });
 
-    // Final Validation and Status
-    result.forEach(row => {
+    // Validação final por linha
+    result.forEach((row) => {
       const pendencias: string[] = [];
-      if (!row.codigo_sigtap) pendencias.push("Procedimento SIGTAP não encontrado no Prontuário, no Paciente ou no PTS.");
-      
-      // Basic requirements for BPA lines
+      if (row.motivo_pendencia) pendencias.push(row.motivo_pendencia);
+      if (!row.codigo_sigtap) pendencias.push('Procedimento SIGTAP ausente');
       const pac = pacMap.get(row.paciente_id);
-      if (!pac?.cns && !pac?.cpf) pendencias.push("Paciente sem CNS ou CPF.");
-      if (!pac?.nome) pendencias.push("Paciente sem nome.");
-      if (!pac?.data_nascimento) pendencias.push("Paciente sem data de nascimento.");
-      
-      // CID mandatory check
+      if (!pac?.cns && !pac?.cpf) pendencias.push('Paciente sem CNS ou CPF');
+      if (!pac?.nome) pendencias.push('Paciente sem nome');
+      if (!pac?.data_nascimento) pendencias.push('Paciente sem data de nascimento');
+      if (!pac?.sexo && !(pac?.custom_data?.sexo)) pendencias.push('Paciente sem sexo');
+      // CID obrigatório para procedimentos clínicos (0301/0303)
       if (row.codigo_sigtap && (row.codigo_sigtap.startsWith('0301') || row.codigo_sigtap.startsWith('0303')) && !row.cid) {
-         pendencias.push("CID obrigatório não encontrado no Prontuário, no Paciente ou no PTS.");
+        pendencias.push('CID obrigatório ausente');
       }
-
-      if (pendencias.length > 0) {
+      if (pendencias.length) {
         row.status_bpa = 'pendente';
-        row.motivo_pendencia = pendencias.join(' | ');
+        row.motivo_pendencia = [...new Set(pendencias)].join(' | ');
       }
     });
 
-    console.log("[BPA] resolucao da producao - final", {
-      competencia,
-      totalValidos: result.filter(r => r.status_bpa === 'ok').length,
-      totalPendentes: result.filter(r => r.status_bpa === 'pendente').length
+    console.log('[BPA] resultado', {
+      total: result.length,
+      ok: result.filter((r) => r.status_bpa === 'ok').length,
+      pendentes: result.filter((r) => r.status_bpa === 'pendente').length,
     });
 
     return result;
-  }
+  },
 };

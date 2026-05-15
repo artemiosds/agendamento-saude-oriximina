@@ -43,10 +43,27 @@ export type LinhaBPA = LinhaBpaNormalizada;
 interface PacienteInfo {
   cns: string; cpf: string; nome: string; data_nascimento: string;
   raca_cor: string; nacionalidade: string; etnia: string;
-  sexo: string; municipio: string;
-  endereco: string; numero: string; complemento: string; bairro: string;
+  sexo: string; municipio: string; uf: string; codigo_municipio: string;
+  tipo_logradouro: string; codigo_logradouro: string;
+  logradouro: string; numero: string; complemento: string; bairro: string;
   cep: string; telefone: string; email: string;
+  endereco_legado: string;
 }
+
+// Tabela DNE (Correios) — códigos de tipo de logradouro mais usados
+const DNE_LOGRADOURO: Record<string, string> = {
+  RUA: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', ESTRADA: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
+  ALAMEDA: '003', PRACA: '062', PRAÇA: '062', ESTACAO: '034', ESTAÇÃO: '034',
+  LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094',
+  VILA: '108', VIA: '107', CONJUNTO: '023',
+};
+const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string): string => {
+  const c = String(codigoSalvo || '').trim();
+  if (c) return c.padStart(3, '0');
+  const key = String(tipo || '').toUpperCase().trim().replace(/\./g, '');
+  return DNE_LOGRADOURO[key] || '';
+};
 interface ProfInfo { cbo: string; cns: string; nome: string; }
 
 interface ValidationFlags {
@@ -122,10 +139,14 @@ const BpaProducao: React.FC = () => {
       const profIds = [...new Set(result.map((r) => r.profissional_id).filter(Boolean))];
 
       if (pacIds.length) {
-        const { data: pacs } = await (supabase as any)
-          .from('pacientes')
-          .select('id, nome, cpf, cns, data_nascimento, endereco, telefone, email, municipio, custom_data')
-          .in('id', pacIds);
+        const pacs: any[] = [];
+        for (let i = 0; i < pacIds.length; i += 500) {
+          const { data } = await (supabase as any)
+            .from('pacientes')
+            .select('id, nome, cpf, cns, data_nascimento, sexo, raca_cor, nacionalidade, naturalidade, naturalidade_uf, municipio, cep, tipo_logradouro, logradouro, numero, complemento, bairro, uf, telefone, email, endereco, custom_data')
+            .in('id', pacIds.slice(i, i + 500));
+          if (data) pacs.push(...data);
+        }
         const pm: Record<string, PacienteInfo> = {};
         (pacs || []).forEach((p: any) => {
           const cd = p.custom_data || {};
@@ -134,18 +155,23 @@ const BpaProducao: React.FC = () => {
             cpf: p.cpf || '',
             nome: p.nome || '',
             data_nascimento: p.data_nascimento || '',
-            raca_cor: cd.raca_cor || cd.racaCor || '',
-            nacionalidade: cd.nacionalidade || '',
+            raca_cor: p.raca_cor || cd.raca_cor || cd.racaCor || '',
+            nacionalidade: p.nacionalidade || cd.nacionalidade || '',
             etnia: cd.etnia || '',
-            sexo: cd.sexo || '',
-            municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || p.municipio || cd.municipio || '',
-            endereco: p.endereco || '',
-            numero: cd.numero || '',
-            complemento: cd.complemento || '',
-            bairro: cd.bairro || '',
-            cep: cd.cep || '',
+            sexo: p.sexo || cd.sexo || '',
+            municipio: p.municipio || cd.municipio || '',
+            uf: p.uf || cd.uf || '',
+            codigo_municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || '',
+            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || '',
+            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipo_logradouro_dne || '',
+            logradouro: p.logradouro || cd.logradouro || '',
+            numero: p.numero || cd.numero || '',
+            complemento: p.complemento || cd.complemento || '',
+            bairro: p.bairro || cd.bairro || '',
+            cep: p.cep || cd.cep || '',
             telefone: p.telefone || '',
             email: p.email || '',
+            endereco_legado: p.endereco || '',
           };
         });
         setPacMap(pm);
@@ -363,9 +389,9 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência',
-      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'Car.Atend.', 'Num.Autorização',
-      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Cód.Logradouro', 'Endereço', 'Número', 'Complemento', 'Bairro',
+      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência', 'UF', 'Cód.Município',
+      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
+      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
       'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
       'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID', 'Status Validação', 'Motivo Pendência'
     ];
@@ -388,12 +414,24 @@ const BpaProducao: React.FC = () => {
       const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
       const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
 
+      const codLogr = resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '');
+      const enderecoFmt = [
+        [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
+        pac.numero && `, ${pac.numero}`,
+        pac.complemento && ` - ${pac.complemento}`,
+        pac.bairro && `, ${pac.bairro}`,
+        pac.municipio && ` - ${pac.municipio}`,
+        pac.uf && `/${pac.uf}`,
+        pac.cep && ` CEP ${pac.cep}`,
+      ].filter(Boolean).join('') || pac.endereco_legado || '';
+
       return [
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', l.carater || '01', '',
+        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', pac.codigo_municipio || '',
+        l.data, procNomeFinal, sigtapFinal,
+        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
+        pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
         folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
