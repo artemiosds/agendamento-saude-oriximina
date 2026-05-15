@@ -140,20 +140,45 @@ export const bpaService = {
       return data || [];
     });
 
-    // 4) Catálogo de procedimentos (id correto)
+    // 4) Catálogo de procedimentos — busca em AMBAS as tabelas:
+    //    - procedimentos (legado/personalizados)
+    //    - sigtap_procedimentos (catálogo oficial SIGTAP — fonte canônica)
+    //    A FK do prontuario_procedimentos foi removida; agora o UUID pode vir de qualquer uma.
     const procIds = [...new Set([
       ...vincsPront.map((v: any) => v.procedimento_id),
       ...realizados.map((v: any) => v.procedimento_id),
     ].filter(Boolean))];
-    const procsData = await inBatches(procIds as string[], 500, async (batch) => {
-      const { data } = await (supabase as any)
-        .from('procedimentos')
-        .select('id, nome, codigo_sigtap')
-        .in('id', batch);
-      return data || [];
-    });
+
+    const [procsLegado, procsSigtap] = await Promise.all([
+      inBatches(procIds as string[], 500, async (batch) => {
+        const { data } = await (supabase as any)
+          .from('procedimentos')
+          .select('id, nome, codigo_sigtap')
+          .in('id', batch);
+        return data || [];
+      }),
+      inBatches(procIds as string[], 500, async (batch) => {
+        const { data } = await (supabase as any)
+          .from('sigtap_procedimentos')
+          .select('id, nome, codigo')
+          .in('id', batch);
+        return data || [];
+      }),
+    ]);
+
+    const procsData: any[] = [];
     const procsMap = new Map<string, any>();
-    procsData.forEach((p: any) => procsMap.set(p.id, p));
+    procsLegado.forEach((p: any) => {
+      const obj = { id: p.id, nome: p.nome, codigo_sigtap: p.codigo_sigtap || '' };
+      procsMap.set(p.id, obj);
+      procsData.push(obj);
+    });
+    procsSigtap.forEach((p: any) => {
+      if (procsMap.has(p.id)) return; // legado tem prioridade
+      const obj = { id: p.id, nome: p.nome, codigo_sigtap: String(p.codigo || '') };
+      procsMap.set(p.id, obj);
+      procsData.push(obj);
+    });
 
     // 4b) Fallback SIGTAP por NOME — quando procedimentos.codigo_sigtap está vazio,
     //     tenta resolver no catálogo oficial sigtap_procedimentos por nome normalizado
