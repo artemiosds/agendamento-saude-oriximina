@@ -139,10 +139,14 @@ const BpaProducao: React.FC = () => {
       const profIds = [...new Set(result.map((r) => r.profissional_id).filter(Boolean))];
 
       if (pacIds.length) {
-        const { data: pacs } = await (supabase as any)
-          .from('pacientes')
-          .select('id, nome, cpf, cns, data_nascimento, endereco, telefone, email, municipio, custom_data')
-          .in('id', pacIds);
+        const pacs: any[] = [];
+        for (let i = 0; i < pacIds.length; i += 500) {
+          const { data } = await (supabase as any)
+            .from('pacientes')
+            .select('id, nome, cpf, cns, data_nascimento, sexo, raca_cor, nacionalidade, naturalidade, naturalidade_uf, municipio, cep, tipo_logradouro, logradouro, numero, complemento, bairro, uf, telefone, email, endereco, custom_data')
+            .in('id', pacIds.slice(i, i + 500));
+          if (data) pacs.push(...data);
+        }
         const pm: Record<string, PacienteInfo> = {};
         (pacs || []).forEach((p: any) => {
           const cd = p.custom_data || {};
@@ -151,18 +155,23 @@ const BpaProducao: React.FC = () => {
             cpf: p.cpf || '',
             nome: p.nome || '',
             data_nascimento: p.data_nascimento || '',
-            raca_cor: cd.raca_cor || cd.racaCor || '',
-            nacionalidade: cd.nacionalidade || '',
+            raca_cor: p.raca_cor || cd.raca_cor || cd.racaCor || '',
+            nacionalidade: p.nacionalidade || cd.nacionalidade || '',
             etnia: cd.etnia || '',
-            sexo: cd.sexo || '',
-            municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || p.municipio || cd.municipio || '',
-            endereco: p.endereco || '',
-            numero: cd.numero || '',
-            complemento: cd.complemento || '',
-            bairro: cd.bairro || '',
-            cep: cd.cep || '',
+            sexo: p.sexo || cd.sexo || '',
+            municipio: p.municipio || cd.municipio || '',
+            uf: p.uf || cd.uf || '',
+            codigo_municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || '',
+            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || '',
+            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipo_logradouro_dne || '',
+            logradouro: p.logradouro || cd.logradouro || '',
+            numero: p.numero || cd.numero || '',
+            complemento: p.complemento || cd.complemento || '',
+            bairro: p.bairro || cd.bairro || '',
+            cep: p.cep || cd.cep || '',
             telefone: p.telefone || '',
             email: p.email || '',
+            endereco_legado: p.endereco || '',
           };
         });
         setPacMap(pm);
