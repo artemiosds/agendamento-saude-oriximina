@@ -389,9 +389,9 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência',
-      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'Car.Atend.', 'Num.Autorização',
-      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Cód.Logradouro', 'Endereço', 'Número', 'Complemento', 'Bairro',
+      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência', 'UF', 'Cód.Município',
+      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
+      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
       'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
       'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID', 'Status Validação', 'Motivo Pendência'
     ];
