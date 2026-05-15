@@ -414,12 +414,24 @@ const BpaProducao: React.FC = () => {
       const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
       const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
 
+      const codLogr = resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '');
+      const enderecoFmt = [
+        [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
+        pac.numero && `, ${pac.numero}`,
+        pac.complemento && ` - ${pac.complemento}`,
+        pac.bairro && `, ${pac.bairro}`,
+        pac.municipio && ` - ${pac.municipio}`,
+        pac.uf && `/${pac.uf}`,
+        pac.cep && ` CEP ${pac.cep}`,
+      ].filter(Boolean).join('') || pac.endereco_legado || '';
+
       return [
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', l.carater || '01', '',
+        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', pac.codigo_municipio || '',
+        l.data, procNomeFinal, sigtapFinal,
+        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', '', pac.endereco || '', pac.numero || '', pac.complemento || '', pac.bairro || '',
+        pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
         folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
