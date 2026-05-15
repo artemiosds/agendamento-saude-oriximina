@@ -43,10 +43,27 @@ export type LinhaBPA = LinhaBpaNormalizada;
 interface PacienteInfo {
   cns: string; cpf: string; nome: string; data_nascimento: string;
   raca_cor: string; nacionalidade: string; etnia: string;
-  sexo: string; municipio: string;
-  endereco: string; numero: string; complemento: string; bairro: string;
+  sexo: string; municipio: string; uf: string; codigo_municipio: string;
+  tipo_logradouro: string; codigo_logradouro: string;
+  logradouro: string; numero: string; complemento: string; bairro: string;
   cep: string; telefone: string; email: string;
+  endereco_legado: string;
 }
+
+// Tabela DNE (Correios) — códigos de tipo de logradouro mais usados
+const DNE_LOGRADOURO: Record<string, string> = {
+  RUA: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', ESTRADA: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
+  ALAMEDA: '003', PRACA: '062', PRAÇA: '062', ESTACAO: '034', ESTAÇÃO: '034',
+  LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094',
+  VILA: '108', VIA: '107', CONJUNTO: '023',
+};
+const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string): string => {
+  const c = String(codigoSalvo || '').trim();
+  if (c) return c.padStart(3, '0');
+  const key = String(tipo || '').toUpperCase().trim().replace(/\./g, '');
+  return DNE_LOGRADOURO[key] || '';
+};
 interface ProfInfo { cbo: string; cns: string; nome: string; }
 
 interface ValidationFlags {
