@@ -246,8 +246,10 @@ export const bpaService = {
     (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
 
     console.log('[BPA] dados carregados', {
-      prots: prots.length, vincs: vincs.length, procs: procsData.length,
-      pacientes: pacientes.length, pts: ptsList.length, triagens: (triagens || []).length,
+      prots: prots.length, vincsPront: vincsPront.length, realizados: realizados.length,
+      procs: procsData.length, pacientes: pacientes.length,
+      pts: ptsList.length, triagens: (triagens || []).length,
+      sigtapByName: sigtapByName.size,
     });
 
     // -------------------------------------------------------------------------
@@ -255,7 +257,7 @@ export const bpaService = {
     const result: LinhaBpaNormalizada[] = [];
     const seen = new Set<string>();
     const pushLine = (l: LinhaBpaNormalizada) => {
-      const key = `${l.prontuario_id || l.pts_id || 'tri'}|${l.codigo_sigtap}|${l.cid}|${l.profissional_id}|${l.data}`;
+      const key = `${l.prontuario_id || l.pts_id || 'rea'}|${l.codigo_sigtap}|${l.cid}|${l.profissional_id}|${l.data}|${l.procedimento_nome}`;
       if (seen.has(key)) return;
       seen.add(key);
       result.push(l);
@@ -263,10 +265,19 @@ export const bpaService = {
 
     // Index: prontuário → vínculos
     const vincsByPront = new Map<string, any[]>();
-    vincs.forEach((v: any) => {
+    vincsPront.forEach((v: any) => {
       const arr = vincsByPront.get(v.prontuario_id) || [];
       arr.push(v);
       vincsByPront.set(v.prontuario_id, arr);
+    });
+
+    // Index: paciente+data → realizados (fallback alternativo)
+    const realizadosByPacData = new Map<string, any[]>();
+    realizados.forEach((r: any) => {
+      const k = `${r.paciente_id}|${r.data_atendimento}`;
+      const arr = realizadosByPacData.get(k) || [];
+      arr.push(r);
+      realizadosByPacData.set(k, arr);
     });
 
     for (const pront of prots) {
@@ -276,24 +287,31 @@ export const bpaService = {
       const cidsPaciente = extractCidsFromPaciente(pac);
       const cidsPts = pts?.cids || [];
 
-      const linhasDoProntuario = vincsByPront.get(pront.id) || [];
+      // Mescla vínculos do prontuário + procedimentos_realizados (mesmo paciente/data)
+      const linhasDoProntuario = [...(vincsByPront.get(pront.id) || [])];
+      const realizadosCompat = realizadosByPacData.get(`${pront.paciente_id}|${pront.data_atendimento}`) || [];
+      realizadosCompat.forEach((r: any) => {
+        const jaExiste = linhasDoProntuario.some((v) => v.procedimento_id === r.procedimento_id);
+        if (!jaExiste) linhasDoProntuario.push(r);
+      });
 
       if (linhasDoProntuario.length > 0) {
-        // Uma linha por procedimento; uma linha por CID se houver múltiplos no procedimento
         for (const v of linhasDoProntuario) {
           const proc = procsMap.get(v.procedimento_id);
-          const sigtap = String(proc?.codigo_sigtap || '').replace(/\D/g, '');
-          const procNome = proc?.nome || 'Procedimento';
+          const sig = resolveSigtap(proc);
+          const sigtap = sig.codigo;
+          const procNome = sig.nome;
+          const cidsLinkados = sigtap ? (procedimentoCidsMap.get(sigtap) || []) : [];
 
-          // Resolve CID: 1) cids_selecionados no procedimento, 2) cid prontuário, 3) cid PTS, 4) cid paciente
+          // Resolve CID: 1) cids_selecionados, 2) prontuário, 3) PTS, 4) paciente, 5) link sigtap→cid
           let cidsAlvo: string[] = (v.cids_selecionados || []).map((c: string) => String(c).toUpperCase()).filter(Boolean);
           let fonteCid: LinhaBpaNormalizada['fonte_cid'] = 'procedimento';
           if (cidsAlvo.length === 0 && cidsPront.length) { cidsAlvo = cidsPront; fonteCid = 'prontuario'; }
           if (cidsAlvo.length === 0 && cidsPts.length)   { cidsAlvo = cidsPts;   fonteCid = 'pts'; }
           if (cidsAlvo.length === 0 && cidsPaciente.length) { cidsAlvo = cidsPaciente; fonteCid = 'paciente'; }
+          if (cidsAlvo.length === 0 && cidsLinkados.length) { cidsAlvo = cidsLinkados; fonteCid = 'procedimento'; }
           if (cidsAlvo.length === 0) { cidsAlvo = ['']; fonteCid = 'vazio'; }
 
-          // Apenas o CID principal vira linha BPA; demais ficam como "relacionados"
           const cidPrincipal = cidsAlvo[0] || '';
           const cidsRel = cidsAlvo.filter((c, idx) => idx > 0);
 
@@ -316,7 +334,8 @@ export const bpaService = {
             cids_relacionados: cidsRel,
             carater: '01',
             qtd: v.quantidade || 1,
-            status_bpa: 'ok',
+            status_bpa: sigtap ? 'ok' : 'pendente',
+            motivo_pendencia: sigtap ? undefined : `Procedimento "${procNome}" sem código SIGTAP no catálogo. Cadastre o codigo_sigtap em Procedimentos.`,
           });
         }
       } else if (pts?.procs?.length) {
