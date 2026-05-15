@@ -115,12 +115,20 @@ const BpaProducao: React.FC = () => {
   const ano = competencia.slice(0, 4);
   const mes = competencia.slice(4, 6);
 
-  // --- Carrega config global (procedimento SIGTAP padrão da triagem) ---
+  // --- Carrega config global (SIGTAP triagem) e tabela DNE (códigos de logradouro) ---
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from('system_config').select('configuracoes').limit(1).maybeSingle();
       const cfg = data?.configuracoes || {};
       setTriagemSigtapPadrao(String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, ''));
+
+      try {
+        const { data: dne } = await (supabase as any).from('logradouros_dne').select('codigo, descricao');
+        (dne || []).forEach((r: any) => {
+          const k = String(r.descricao || '').toUpperCase().trim();
+          if (k && r.codigo) DNE_DB[k] = String(r.codigo).padStart(3, '0');
+        });
+      } catch (e) { console.warn('[BPA] DNE load skipped', e); }
     })();
   }, []);
 
