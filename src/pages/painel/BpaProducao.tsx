@@ -58,10 +58,13 @@ const DNE_LOGRADOURO: Record<string, string> = {
   LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094',
   VILA: '108', VIA: '107', CONJUNTO: '023',
 };
+// Mapa DNE oficial carregado do banco (logradouros_dne) — preenchido em runtime
+const DNE_DB: Record<string, string> = {};
 const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string): string => {
   const c = String(codigoSalvo || '').trim();
   if (c) return c.padStart(3, '0');
   const key = String(tipo || '').toUpperCase().trim().replace(/\./g, '');
+  if (DNE_DB[key]) return DNE_DB[key];
   return DNE_LOGRADOURO[key] || '';
 };
 interface ProfInfo { cbo: string; cns: string; nome: string; }
@@ -112,12 +115,20 @@ const BpaProducao: React.FC = () => {
   const ano = competencia.slice(0, 4);
   const mes = competencia.slice(4, 6);
 
-  // --- Carrega config global (procedimento SIGTAP padrão da triagem) ---
+  // --- Carrega config global (SIGTAP triagem) e tabela DNE (códigos de logradouro) ---
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from('system_config').select('configuracoes').limit(1).maybeSingle();
       const cfg = data?.configuracoes || {};
       setTriagemSigtapPadrao(String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, ''));
+
+      try {
+        const { data: dne } = await (supabase as any).from('logradouros_dne').select('codigo, descricao');
+        (dne || []).forEach((r: any) => {
+          const k = String(r.descricao || '').toUpperCase().trim();
+          if (k && r.codigo) DNE_DB[k] = String(r.codigo).padStart(3, '0');
+        });
+      } catch (e) { console.warn('[BPA] DNE load skipped', e); }
     })();
   }, []);
 
