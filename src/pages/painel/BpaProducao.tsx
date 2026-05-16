@@ -180,6 +180,12 @@ const BpaProducao: React.FC = () => {
   const ano = competencia.slice(0, 4);
   const mes = competencia.slice(4, 6);
 
+  useEffect(() => {
+    if (user?.unidadeId && !isGlobalAdmin && unidadeFiltro === 'all') {
+      setUnidadeFiltro(user.unidadeId);
+    }
+  }, [user?.unidadeId, isGlobalAdmin, unidadeFiltro]);
+
   // --- Carrega config global (SIGTAP triagem) e tabela DNE (códigos de logradouro) ---
   useEffect(() => {
     (async () => {
@@ -434,6 +440,7 @@ const BpaProducao: React.FC = () => {
     const exportRows = linhas
       .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
       .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
+      .filter((l) => !l.duplicado)
       .filter((l) => isLinhaValida(l));
     if (!exportRows.length) {
       toast.error('Nenhuma linha válida neste período. Corrija as pendências antes de gerar.');
