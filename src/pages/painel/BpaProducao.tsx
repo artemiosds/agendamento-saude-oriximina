@@ -316,13 +316,15 @@ const BpaProducao: React.FC = () => {
   }, [linhas, origemFiltro, profissionalFiltro, sigtapFiltro, pacienteFiltro, statusFiltro, pacMap, profMap]);
 
   const stats = useMemo(() => {
-    let validos = 0, pendentes = 0, pront = 0, triagem = 0;
+    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0;
     linhasFiltradas.forEach((l) => {
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
-      if (l.origem === 'prontuario') pront++; else triagem++;
+      if (l.origem === 'prontuario') pront++;
+      else if (l.origem === 'pts') pts++;
+      else triagem++;
     });
-    return { total: linhasFiltradas.length, validos, pendentes, pront, triagem };
+    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhasFiltradas, pacMap, profMap]);
 
@@ -599,6 +601,8 @@ const BpaProducao: React.FC = () => {
       ['Total de linhas', exportRows.length],
       ['Válidas', totalValidos],
       ['Pendentes', totalPendentes],
+      ['Fonte Prontuário', exportRows.filter((r) => r.l.fonte_procedimento === 'prontuario').length],
+      ['Fonte PTS', exportRows.filter((r) => r.l.fonte_procedimento === 'pts').length],
       [],
       ['Por Profissional'],
       ['Profissional', 'Linhas'],
