@@ -48,6 +48,7 @@ type RawProcedimento = {
   nome_procedimento?: string;
   nome?: string;
   descricao?: string;
+  especialidade?: string;
   quantidade?: number;
   observacao?: string;
   cids_selecionados?: any;
