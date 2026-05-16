@@ -570,8 +570,10 @@ export const bpaService = {
     ]);
 
     const sigtapCodes = unique([
-      ...catalog.allCatalog.map((p: any) => p.codigo),
+      ...procIds.map((id) => catalog.byId.get(String(id))?.codigo),
       ...ptsProcs.map((p: any) => onlyDigits(p.procedimento_codigo)),
+      ...realizados.map((p: any) => onlyDigits(p.codigo_sigtap || p.procedimento_codigo || p.codigo)),
+      ...vincsPront.map((p: any) => onlyDigits(p.codigo_sigtap || p.procedimento_codigo || p.codigo)),
     ]).filter(Boolean);
     const sigtapCidRows = await inBatches(sigtapCodes, 500, async (batch) => ((await (supabase as any).from('sigtap_procedimento_cids').select('procedimento_codigo, cid_codigo').in('procedimento_codigo', batch)).data || []));
     const procedimentoCidsMap = new Map<string, string[]>();
