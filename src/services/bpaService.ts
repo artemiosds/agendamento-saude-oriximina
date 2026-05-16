@@ -216,7 +216,7 @@ const buildCatalog = async (procIds: string[]) => {
   const byId = new Map<string, any>();
   const byCode = new Map<string, any>();
   const byName = new Map<string, any[]>();
-  const allCatalog = [...catalog];
+  const allCatalog: any[] = [...catalog];
 
   for (const p of allCatalog) {
     const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
@@ -225,11 +225,11 @@ const buildCatalog = async (procIds: string[]) => {
     const n = normalizeName(obj.nome);
     if (n) byName.set(n, [...(byName.get(n) || []), obj]);
   }
-  for (const p of sigtapByIds) {
+  for (const p of sigtapByIds as any[]) {
     const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
     if (obj.id && !byId.has(obj.id)) byId.set(obj.id, obj);
   }
-  for (const p of legacyByIds) {
+  for (const p of legacyByIds as any[]) {
     const obj = { id: p.id, codigo: onlyDigits(p.codigo_sigtap), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'legacy' };
     if (obj.id) byId.set(obj.id, obj);
     if (obj.codigo && !byCode.has(obj.codigo)) byCode.set(obj.codigo, obj);
