@@ -60,12 +60,31 @@ const DNE_LOGRADOURO: Record<string, string> = {
 };
 // Mapa DNE oficial carregado do banco (logradouros_dne) — preenchido em runtime
 const DNE_DB: Record<string, string> = {};
-const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string): string => {
-  const c = String(codigoSalvo || '').trim();
-  if (c) return c.padStart(3, '0');
-  const key = String(tipo || '').toUpperCase().trim().replace(/\./g, '');
-  if (DNE_DB[key]) return DNE_DB[key];
-  return DNE_LOGRADOURO[key] || '';
+const normalizeAddressKey = (value: string) => String(value || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string, logradouro = ''): string => {
+  const c = String(codigoSalvo || '').replace(/\D/g, '');
+  if (c) return c.padStart(3, '0').slice(-3);
+  const candidates = [tipo, tipo.split(/\s+/)[0], logradouro.split(/\s+/)[0]].map(normalizeAddressKey);
+  for (const key of candidates) {
+    if (!key) continue;
+    if (DNE_DB[key]) return DNE_DB[key];
+    if (DNE_LOGRADOURO[key]) return DNE_LOGRADOURO[key];
+  }
+  return '';
+};
+
+const resolveCodigoMunicipio = (codigoSalvo: string, municipio: string, uf: string): string => {
+  const c = String(codigoSalvo || '').replace(/\D/g, '');
+  if (c.length >= 7) return c.slice(0, 7);
+  if (c.length === 6) return `${c}0`;
+  const key = normalizeAddressKey(`${municipio} ${uf}`);
+  if (key.includes('ORIXIMINA')) return '1505304';
+  return '';
 };
 interface ProfInfo { cbo: string; cns: string; nome: string; }
 
@@ -75,6 +94,9 @@ interface ValidationFlags {
   sigtap: boolean;
   nome: boolean;
   dataNasc: boolean;
+  codigoMunicipio: boolean;
+  codigoLogradouro: boolean;
+  statusBpa: boolean;
 }
 
 const isCboMedico = (cbo: string) => (cbo || '').replace(/\D/g, '').startsWith('225');
@@ -172,10 +194,10 @@ const BpaProducao: React.FC = () => {
             sexo: p.sexo || cd.sexo || '',
             municipio: p.municipio || cd.municipio || '',
             uf: p.uf || cd.uf || '',
-            codigo_municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || '',
-            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || '',
-            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipo_logradouro_dne || '',
-            logradouro: p.logradouro || cd.logradouro || '',
+            codigo_municipio: resolveCodigoMunicipio(cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || cd.codigo_ibge || '', p.municipio || cd.municipio || '', p.uf || cd.uf || ''),
+            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || cd.tipo_logradouro_dne || '',
+            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne || '',
+            logradouro: p.logradouro || cd.logradouro || p.endereco || '',
             numero: p.numero || cd.numero || '',
             complemento: p.complemento || cd.complemento || '',
             bairro: p.bairro || cd.bairro || '',
@@ -220,18 +242,24 @@ const BpaProducao: React.FC = () => {
     const cpf = (pac?.cpf || '').replace(/\D/g, '');
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
     const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
-    
-    // Status ok se o bpaService disse que está ok
-    const isOk = l.status_bpa === 'ok';
+    const codigoMunicipio = l.codigo_municipio || resolveCodigoMunicipio(pac?.codigo_municipio || '', pac?.municipio || '', pac?.uf || '');
+    const codigoLogradouro = l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '');
+    const exigeLogradouro = !!(pac?.tipo_logradouro || pac?.logradouro || pac?.endereco_legado);
 
     return {
       identificacao: cns.length === 15 || cpf.length === 11,
       cbo: cbo.length > 0,
-      sigtap: isOk,
+      sigtap: sigtap.length > 0,
       nome: !!(pac?.nome && pac.nome.trim().length > 0),
       dataNasc: !!(pac?.data_nascimento && pac.data_nascimento.trim().length > 0),
+      codigoMunicipio: !!codigoMunicipio,
+      codigoLogradouro: !exigeLogradouro || !!codigoLogradouro,
+      statusBpa: l.status_bpa === 'ok',
     };
   };
+
+  const isLinhaValida = (l: LinhaBPA, v = validateRow(l)) =>
+    v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc && v.codigoMunicipio && v.codigoLogradouro && v.statusBpa;
 
   const linhasFiltradas = useMemo(() => {
     return linhas.filter((l) => {
@@ -241,7 +269,7 @@ const BpaProducao: React.FC = () => {
       if (pacienteFiltro && !(l.paciente_nome || '').toLowerCase().includes(pacienteFiltro.toLowerCase())) return false;
       if (statusFiltro !== 'all') {
         const v = validateRow(l);
-        const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+        const ok = isLinhaValida(l, v);
         if (statusFiltro === 'ok' && !ok) return false;
         if (statusFiltro === 'pendente' && ok) return false;
       }
@@ -254,7 +282,7 @@ const BpaProducao: React.FC = () => {
     let validos = 0, pendentes = 0, pront = 0, triagem = 0;
     linhasFiltradas.forEach((l) => {
       const v = validateRow(l);
-      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
+      if (isLinhaValida(l, v)) validos++; else pendentes++;
       if (l.origem === 'prontuario') pront++; else triagem++;
     });
     return { total: linhasFiltradas.length, validos, pendentes, pront, triagem };
@@ -327,7 +355,7 @@ const BpaProducao: React.FC = () => {
       if (modalCompetencia && lComp !== modalCompetencia) return;
       total += 1;
       const v = validateRow(l);
-      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
+      if (isLinhaValida(l, v)) validos++; else pendentes++;
     });
     return { validos, pendentes, total };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,13 +410,15 @@ const BpaProducao: React.FC = () => {
       const pac = (pacMap[l.paciente_id] || {}) as PacienteInfo;
       const prof = (profMap[l.profissional_id] || {}) as ProfInfo;
       const v = validateRow(l);
-      const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+      const ok = isLinhaValida(l, v);
       const pend: string[] = [];
       if (!v.nome) pend.push('Nome do paciente');
       if (!v.identificacao) pend.push('CNS ou CPF');
       if (!v.dataNasc) pend.push('Data de nascimento');
       if (!pac?.sexo) pend.push('Sexo');
       if (!pac?.municipio) pend.push('Município de residência');
+      if (!v.codigoMunicipio) pend.push('Código de município');
+      if (!v.codigoLogradouro) pend.push('Código de logradouro');
       if (!v.cbo) pend.push('CBO do profissional');
       if (!v.sigtap) pend.push(l.motivo_pendencia || 'Procedimento SIGTAP/CID');
       const cnes = getCnesFromUnidade(l.unidade_id);
@@ -425,7 +455,8 @@ const BpaProducao: React.FC = () => {
       const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
       const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
 
-      const codLogr = resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '');
+      const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
+      const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
       const enderecoFmt = [
         [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
         pac.numero && `, ${pac.numero}`,
@@ -438,7 +469,7 @@ const BpaProducao: React.FC = () => {
 
       return [
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', pac.codigo_municipio || '',
+        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
         l.data, procNomeFinal, sigtapFinal,
         l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
@@ -684,6 +715,8 @@ const BpaProducao: React.FC = () => {
                     <TableHead>Nasc.</TableHead>
                     <TableHead>Sexo</TableHead>
                     <TableHead>Município</TableHead>
+                    <TableHead>Cód.Mun.</TableHead>
+                    <TableHead>Cód.Logr.</TableHead>
                     <TableHead>Data Atend.</TableHead>
                     <TableHead>Procedimento</TableHead>
                     <TableHead>Fonte Proc.</TableHead>
@@ -706,7 +739,7 @@ const BpaProducao: React.FC = () => {
                     const pac = pacMap[l.paciente_id];
                     const prof = profMap[l.profissional_id];
                     const v = validateRow(l);
-                    const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+                    const ok = isLinhaValida(l, v);
                     const isMed = isCboMedico(prof?.cbo || '');
                     const pend: string[] = [];
                     if (!v.nome) pend.push('Nome');
@@ -734,6 +767,8 @@ const BpaProducao: React.FC = () => {
                         </TableCell>
                         <TableCell className="text-xs">{pac?.sexo || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.municipio || '—'}</TableCell>
+                        <TableCell className={cn("text-xs font-mono", !v.codigoMunicipio && "text-destructive")}>{l.codigo_municipio || resolveCodigoMunicipio(pac?.codigo_municipio || '', pac?.municipio || '', pac?.uf || '') || '—'}</TableCell>
+                        <TableCell className={cn("text-xs font-mono", !v.codigoLogradouro && "text-destructive")}>{l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '') || '—'}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
                         <TableCell className="text-xs">
                           {l.procedimento_nome}
@@ -742,11 +777,9 @@ const BpaProducao: React.FC = () => {
                           )}
                         </TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
-                          {l.codigo_sigtap || (l.origem === 'prontuario' && isMed
-                            ? <span className="text-primary font-medium">0301010072</span>
-                            : <span className="italic">faltando</span>)}
+                          {l.codigo_sigtap || <span className="italic">Código SIGTAP não resolvido</span>}
                         </TableCell>
-                        <TableCell className="text-xs">{l.qtd}</TableCell>
+                        <TableCell className="text-xs">{l.qtd || 1}</TableCell>
                         <TableCell className="text-xs">{l.cid || '—'}</TableCell>
                         <TableCell className="text-xs">{l.carater}</TableCell>
                         <TableCell className="text-xs">{pac?.raca_cor || '—'}</TableCell>
@@ -761,7 +794,7 @@ const BpaProducao: React.FC = () => {
                             ? <Badge className="bg-success/10 text-success border-0 text-[10px]">OK</Badge>
                             : <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">PENDENTE</Badge>}
                         </TableCell>
-                        <TableCell className="text-[10px] text-destructive">{pend.join(', ') || '—'}</TableCell>
+                        <TableCell className="text-[10px] text-destructive max-w-xs">{[...new Set(pend)].join(' | ') || '—'}</TableCell>
                       </TableRow>
                     );
                   })}
