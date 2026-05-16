@@ -52,11 +52,11 @@ interface PacienteInfo {
 
 // Tabela DNE (Correios) — códigos de tipo de logradouro mais usados
 const DNE_LOGRADOURO: Record<string, string> = {
-  RUA: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
-  BECO: '011', ESTRADA: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
+  RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
   ALAMEDA: '003', PRACA: '062', PRAÇA: '062', ESTACAO: '034', ESTAÇÃO: '034',
   LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094',
-  VILA: '108', VIA: '107', CONJUNTO: '023',
+  VILA: '108', VIA: '107', VIELA: '109', CONJUNTO: '023',
 };
 // Mapa DNE oficial carregado do banco (logradouros_dne) — preenchido em runtime
 const DNE_DB: Record<string, string> = {};
@@ -98,8 +98,6 @@ interface ValidationFlags {
   codigoLogradouro: boolean;
   statusBpa: boolean;
 }
-
-const isCboMedico = (cbo: string) => (cbo || '').replace(/\D/g, '').startsWith('225');
 
 const currentCompetencia = (): string => {
   const d = new Date();
