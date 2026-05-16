@@ -147,8 +147,8 @@ const BpaProducao: React.FC = () => {
       try {
         const { data: dne } = await (supabase as any).from('logradouros_dne').select('codigo, descricao');
         (dne || []).forEach((r: any) => {
-          const k = String(r.descricao || '').toUpperCase().trim();
-          if (k && r.codigo) DNE_DB[k] = String(r.codigo).padStart(3, '0');
+          const k = normalizeAddressKey(String(r.descricao || ''));
+          if (k && r.codigo) DNE_DB[k] = String(r.codigo).replace(/\D/g, '').padStart(3, '0').slice(-3);
         });
       } catch (e) { console.warn('[BPA] DNE load skipped', e); }
     })();
@@ -434,7 +434,8 @@ const BpaProducao: React.FC = () => {
       'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
       'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
       'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
-      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID', 'Status Validação', 'Motivo Pendência'
+      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte Resolução SIGTAP', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID',
+      'Sugestões SIGTAP', 'Duplicado', 'Chave Dedupe', 'Status Validação', 'Motivo Pendência'
     ];
 
     const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
@@ -450,10 +451,8 @@ const BpaProducao: React.FC = () => {
         }
       }
 
-      // SIGTAP Final (se médico e vazio, usa o padrão)
-      const isMed = (prof.cbo || '').startsWith('225');
-      const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
-      const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
+      const sigtapFinal = l.codigo_sigtap || '';
+      const procNomeFinal = l.procedimento_nome;
 
       const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
       const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
@@ -476,7 +475,8 @@ const BpaProducao: React.FC = () => {
         pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
+        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_resolucao || '', l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
+        (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
       ];
 
     });
@@ -740,13 +740,15 @@ const BpaProducao: React.FC = () => {
                     const prof = profMap[l.profissional_id];
                     const v = validateRow(l);
                     const ok = isLinhaValida(l, v);
-                    const isMed = isCboMedico(prof?.cbo || '');
                     const pend: string[] = [];
                     if (!v.nome) pend.push('Nome');
                     if (!v.identificacao) pend.push('CNS/CPF');
                     if (!v.dataNasc) pend.push('Data Nasc');
                     if (!v.cbo) pend.push('CBO');
                     if (!v.sigtap) pend.push('SIGTAP');
+                    if (!v.codigoMunicipio) pend.push('Cód. Município');
+                    if (!v.codigoLogradouro) pend.push('Cód. Logradouro');
+                    if (l.motivo_pendencia) pend.push(l.motivo_pendencia);
                     if (l.pendenciaTriagemSigtap) pend.push('SIGTAP triagem');
                     return (
                       <TableRow key={l.key} className={cn(!ok && "bg-destructive/5")}>
@@ -770,17 +772,14 @@ const BpaProducao: React.FC = () => {
                         <TableCell className={cn("text-xs font-mono", !v.codigoMunicipio && "text-destructive")}>{l.codigo_municipio || resolveCodigoMunicipio(pac?.codigo_municipio || '', pac?.municipio || '', pac?.uf || '') || '—'}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.codigoLogradouro && "text-destructive")}>{l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '') || '—'}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
-                        <TableCell className="text-xs">
-                          {l.procedimento_nome}
-                          {l.origem === 'prontuario' && isMed && !l.codigo_sigtap && (
-                            <Badge className="ml-1 bg-primary/10 text-primary border-0 text-[9px]">consulta</Badge>
-                          )}
-                        </TableCell>
+                        <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
+                        <TableCell className="text-xs">{l.fonte_procedimento}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
                           {l.codigo_sigtap || <span className="italic">Código SIGTAP não resolvido</span>}
                         </TableCell>
                         <TableCell className="text-xs">{l.qtd || 1}</TableCell>
                         <TableCell className="text-xs">{l.cid || '—'}</TableCell>
+                        <TableCell className="text-xs">{l.fonte_cid}</TableCell>
                         <TableCell className="text-xs">{l.carater}</TableCell>
                         <TableCell className="text-xs">{pac?.raca_cor || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.etnia || '—'}</TableCell>
