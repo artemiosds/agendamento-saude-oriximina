@@ -495,6 +495,8 @@ export const bpaService = {
     const lastDay = new Date(Number(ano), Number(mes), 0).getDate();
     const dataFim = `${ano}-${mes}-${String(lastDay).padStart(2, '0')}`;
 
+    console.log('[BPA] filtros aplicados', { competencia, dataInicio, dataFim, unidadeId: unidadeId || 'all', profissionalId: profissionalId || 'all' });
+
     const prontuarios = await loadAll('prontuarios', 'id,paciente_id,paciente_nome,profissional_id,profissional_nome,data_atendimento,unidade_id,tipo_registro,hipotese,procedimentos_texto,outro_procedimento,custom_data', (q) => {
       let query = q.gte('data_atendimento', dataInicio).lte('data_atendimento', dataFim);
       if (unidadeId && unidadeId !== 'all') query = query.eq('unidade_id', unidadeId);
@@ -505,7 +507,7 @@ export const bpaService = {
     console.log('[BPA] prontuarios encontrados', prontuarios.length);
 
     const sessoesTratamento = await loadAll('treatment_sessions', 'id,cycle_id,patient_id,professional_id,scheduled_date,status,procedure_done', (q) => {
-      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).in('status', ['realizada', 'realizado', 'concluido']);
+      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).not('status', 'in', '(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)');
       if (profissionalId && profissionalId !== 'all') query = query.eq('professional_id', profissionalId);
       return query;
     }).catch(() => []);
@@ -531,9 +533,13 @@ export const bpaService = {
         custom_data: { treatment_session_id: sessao.id, treatment_cycle_id: sessao.cycle_id, pts_id: ciclo.pts_id, procedure_done: sessao.procedure_done, specialty: ciclo.specialty, treatment_type: ciclo.treatment_type },
       }));
     const basesProducao = [...prontuarios, ...sessoesComoAtendimento];
+    const seedPacIds = unique([
+      ...basesProducao.map((p) => p.paciente_id),
+      ...ciclosTratamento.filter((c: any) => !unidadeId || unidadeId === 'all' || c.unit_id === unidadeId).map((c: any) => c.patient_id),
+    ]);
 
     const prontIds = prontuarios.map((p) => p.id).filter(Boolean);
-    const pacIds = unique(basesProducao.map((p) => p.paciente_id));
+    const pacIds = seedPacIds;
     const profIds = unique(basesProducao.map((p) => p.profissional_id));
     const uniIds = unique(basesProducao.map((p) => p.unidade_id));
 
