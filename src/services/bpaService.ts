@@ -454,7 +454,7 @@ export const bpaService = {
       inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pacientes').select('*').in('id', batch)).data || [])),
       inBatches(profIds, 500, async (batch) => ((await (supabase as any).from('funcionarios').select('id,nome,profissao,cargo,custom_data').in('id', batch)).data || [])),
       inBatches(uniIds, 500, async (batch) => ((await (supabase as any).from('unidades').select('id,nome,endereco,custom_data').in('id', batch)).data || [])),
-      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,status,custom_data').in('patient_id', batch).eq('status', 'ativo')).data || [])),
+      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch).in('status', ['ativo', 'em_andamento', 'em andamento', 'finalizado'])).data || [])),
       loadAll('triage_records', 'id,agendamento_id,tecnico_id,criado_em', (q) => q.gte('criado_em', `${dataInicio}T00:00:00`).lte('criado_em', `${dataFim}T23:59:59`)).catch(() => []),
     ]);
 
@@ -486,21 +486,29 @@ export const bpaService = {
     const profMap = new Map(profissionais.map((p: any) => [p.id, p]));
     const uniMap = new Map(unidades.map((u: any) => [u.id, u]));
 
-    const ptsByPaciente = new Map<string, any>();
+    const ptsByPaciente = new Map<string, PtsBundle[]>();
     ptsList.forEach((p: any) => {
       const procs = ptsProcs.filter((pr: any) => pr.pts_id === p.id).map((pr: any) => ({
+        pts_id: p.id,
         procedimento_codigo: pr.procedimento_codigo,
         nome_procedimento: pr.procedimento_nome,
         codigo_sigtap: pr.procedimento_codigo,
         especialidade: pr.especialidade,
         fonte: 'pts' as FonteProc,
       }));
-      ptsByPaciente.set(p.patient_id, {
+      const bundle: PtsBundle = {
         pts_id: p.id,
+        patient_id: p.patient_id,
+        professional_id: p.professional_id,
+        unit_id: p.unit_id,
+        status: p.status,
+        especialidades_envolvidas: p.especialidades_envolvidas || [],
         cids: unique(ptsCids.filter((c: any) => c.pts_id === p.id).map((c: any) => sanitizeCid(c.cid_codigo))),
         procs,
         custom_data: p.custom_data || {},
-      });
+        updated_at: p.updated_at,
+      };
+      ptsByPaciente.set(p.patient_id, [...(ptsByPaciente.get(p.patient_id) || []), bundle]);
     });
 
     const vincsByPront = new Map<string, RawProcedimento[]>();
