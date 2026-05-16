@@ -420,6 +420,7 @@ const choosePtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: a
   const profNorm = normalizeName(`${profissional?.profissao || ''} ${profissional?.cargo || ''}`);
   return [...ptsList].sort((a, b) => {
     const score = (pts: PtsBundle) =>
+      ((pts.procs || []).length ? 8 : 0) +
       (pts.professional_id && pts.professional_id === prontuario.profissional_id ? 4 : 0) +
       (pts.unit_id && pts.unit_id === prontuario.unidade_id ? 2 : 0) +
       ((pts.especialidades_envolvidas || []).some((e) => profNorm && profNorm.includes(normalizeName(e))) ? 1 : 0) +
