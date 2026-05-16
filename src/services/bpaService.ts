@@ -677,6 +677,7 @@ export const bpaService = {
 
       if (!procedimentos.length) {
         const cidData = resolveCidForBpaProcedure({ prontuario: pront, procedimento: { fonte: 'prontuario' }, pts, paciente: pac });
+        const isMedico = normalizeName(`${prof?.profissao || ''} ${prof?.cargo || ''}`).includes('MEDIC');
         pushLine({
           key: `pron_empty_${pront.id}`,
           origem: 'prontuario',
@@ -702,7 +703,7 @@ export const bpaService = {
           carater: '01',
           qtd: 1,
           status_bpa: 'pendente',
-          motivo_pendencia: 'Procedimento não encontrado no Prontuário nem no PTS.',
+          motivo_pendencia: isMedico ? 'Configure procedimento padrão médico para exportação BPA-I.' : 'Procedimento não encontrado no Prontuário nem no PTS.',
         });
         continue;
       }
