@@ -431,6 +431,17 @@ const choosePtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: a
   })[0];
 };
 
+const sortPtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: any): PtsBundle[] => {
+  const first = choosePtsForBpa(ptsList, prontuario, profissional);
+  return [...ptsList].sort((a, b) => {
+    if (first?.pts_id === a.pts_id) return -1;
+    if (first?.pts_id === b.pts_id) return 1;
+    const aSameProf = a.professional_id && a.professional_id === prontuario.profissional_id ? 1 : 0;
+    const bSameProf = b.professional_id && b.professional_id === prontuario.profissional_id ? 1 : 0;
+    return bSameProf - aSameProf || String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+  });
+};
+
 const resolveBpaProcedimentosPaciente = ({
   pacienteId,
   prontuario,
@@ -446,15 +457,23 @@ const resolveBpaProcedimentosPaciente = ({
   realizados: RawProcedimento[];
   profissional?: any;
 }) => {
-  const pts = choosePtsForBpa(ptsList, prontuario, profissional);
+  const ptsOrdenados = sortPtsForBpa(ptsList, prontuario, profissional);
+  const pts = ptsOrdenados[0];
   const prontuarioProcedimentos = extractAllProcedimentosFromProntuario(prontuario, relacionados, realizados);
-  const ptsProcedimentos = extractProcedimentosFromPts(pts);
-  const ptsNormalizado = pts ? { ...pts, procs: ptsProcedimentos } : undefined;
+  const ptsProcedimentos = ptsOrdenados.flatMap((item) => extractProcedimentosFromPts(item));
+  const seenPtsProc = new Set<string>();
+  const ptsProcedimentosUnicos = ptsProcedimentos.filter((p) => {
+    const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;
+    if (seenPtsProc.has(key)) return false;
+    seenPtsProc.add(key);
+    return true;
+  });
+  const ptsNormalizado = pts ? { ...pts, cids: unique(ptsOrdenados.flatMap((item) => item.cids || [])), procs: ptsProcedimentosUnicos } : undefined;
   return {
     paciente_id: pacienteId,
     pts: ptsNormalizado,
-    procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentos,
-    fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
+    procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentosUnicos,
+    fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentosUnicos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
   };
 };
 
@@ -476,6 +495,8 @@ export const bpaService = {
     const lastDay = new Date(Number(ano), Number(mes), 0).getDate();
     const dataFim = `${ano}-${mes}-${String(lastDay).padStart(2, '0')}`;
 
+    console.log('[BPA] filtros aplicados', { competencia, dataInicio, dataFim, unidadeId: unidadeId || 'all', profissionalId: profissionalId || 'all' });
+
     const prontuarios = await loadAll('prontuarios', 'id,paciente_id,paciente_nome,profissional_id,profissional_nome,data_atendimento,unidade_id,tipo_registro,hipotese,procedimentos_texto,outro_procedimento,custom_data', (q) => {
       let query = q.gte('data_atendimento', dataInicio).lte('data_atendimento', dataFim);
       if (unidadeId && unidadeId !== 'all') query = query.eq('unidade_id', unidadeId);
@@ -486,7 +507,7 @@ export const bpaService = {
     console.log('[BPA] prontuarios encontrados', prontuarios.length);
 
     const sessoesTratamento = await loadAll('treatment_sessions', 'id,cycle_id,patient_id,professional_id,scheduled_date,status,procedure_done', (q) => {
-      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).in('status', ['realizada', 'realizado', 'concluido']);
+      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).not('status', 'in', '(agendada,cancelada,cancelado,falta,ausente,remarcada,remarcado)');
       if (profissionalId && profissionalId !== 'all') query = query.eq('professional_id', profissionalId);
       return query;
     }).catch(() => []);
@@ -512,9 +533,13 @@ export const bpaService = {
         custom_data: { treatment_session_id: sessao.id, treatment_cycle_id: sessao.cycle_id, pts_id: ciclo.pts_id, procedure_done: sessao.procedure_done, specialty: ciclo.specialty, treatment_type: ciclo.treatment_type },
       }));
     const basesProducao = [...prontuarios, ...sessoesComoAtendimento];
+    const seedPacIds = unique([
+      ...basesProducao.map((p) => p.paciente_id),
+      ...ciclosTratamento.filter((c: any) => !unidadeId || unidadeId === 'all' || c.unit_id === unidadeId).map((c: any) => c.patient_id),
+    ]);
 
     const prontIds = prontuarios.map((p) => p.id).filter(Boolean);
-    const pacIds = unique(basesProducao.map((p) => p.paciente_id));
+    const pacIds = seedPacIds;
     const profIds = unique(basesProducao.map((p) => p.profissional_id));
     const uniIds = unique(basesProducao.map((p) => p.unidade_id));
 
@@ -524,13 +549,17 @@ export const bpaService = {
       inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pacientes').select('*').in('id', batch)).data || [])),
       inBatches(profIds, 500, async (batch) => ((await (supabase as any).from('funcionarios').select('id,nome,profissao,cargo,custom_data').in('id', batch)).data || [])),
       inBatches(uniIds, 500, async (batch) => ((await (supabase as any).from('unidades').select('id,nome,endereco,custom_data').in('id', batch)).data || [])),
-      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch).in('status', ['ativo', 'em_andamento', 'em andamento', 'finalizado', 'encerrado', 'finalizado_alta'])).data || [])),
+      inBatches(pacIds, 500, async (batch) => {
+        const { data } = await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch);
+        return (data || []).filter((p: any) => !['excluido', 'cancelado', 'inativo'].includes(String(p.status || '').toLowerCase()));
+      }),
       loadAll('triage_records', 'id,agendamento_id,tecnico_id,criado_em', (q) => q.gte('criado_em', `${dataInicio}T00:00:00`).lte('criado_em', `${dataFim}T23:59:59`)).catch(() => []),
     ]);
 
     const procIds = unique([
       ...vincsPront.map((v: any) => v.procedimento_id),
       ...realizados.map((v: any) => v.procedimento_id),
+      ...sessoesTratamento.map((s: any) => s.procedure_done).filter((v: any) => /^[0-9a-f-]{30,}$/i.test(String(v || ''))),
     ]);
     const catalog = await buildCatalog(procIds);
 
@@ -541,8 +570,10 @@ export const bpaService = {
     ]);
 
     const sigtapCodes = unique([
-      ...catalog.allCatalog.map((p: any) => p.codigo),
+      ...procIds.map((id) => catalog.byId.get(String(id))?.codigo),
       ...ptsProcs.map((p: any) => onlyDigits(p.procedimento_codigo)),
+      ...realizados.map((p: any) => onlyDigits(p.codigo_sigtap || p.procedimento_codigo || p.codigo)),
+      ...vincsPront.map((p: any) => onlyDigits(p.codigo_sigtap || p.procedimento_codigo || p.codigo)),
     ]).filter(Boolean);
     const sigtapCidRows = await inBatches(sigtapCodes, 500, async (batch) => ((await (supabase as any).from('sigtap_procedimento_cids').select('procedimento_codigo, cid_codigo').in('procedimento_codigo', batch)).data || []));
     const procedimentoCidsMap = new Map<string, string[]>();
@@ -603,6 +634,8 @@ export const bpaService = {
     const result: LinhaBpaNormalizada[] = [];
     const seen = new Map<string, LinhaBpaNormalizada>();
     let totalProcedimentos = 0;
+    let totalProcProntuario = 0;
+    let totalProcPts = 0;
     let procedimentosSemSigtap = 0;
     let municipiosSemCodigo = 0;
     let logradourosSemCodigo = 0;
@@ -612,6 +645,9 @@ export const bpaService = {
       line.chave_dedupe = key;
       if (seen.has(key)) {
         line.duplicado = true;
+        line.status_bpa = 'pendente';
+        line.motivo_pendencia = `Duplicado ignorado: ${seen.get(key)?.procedimento_nome || line.procedimento_nome}`;
+        result.push(line);
         return;
       }
       seen.set(key, line);
@@ -633,6 +669,9 @@ export const bpaService = {
         realizados: realizadosCompat,
         profissional: prof,
       });
+      const procsProntuarioBase = extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat);
+      totalProcProntuario += procsProntuarioBase.length;
+      if (!procsProntuarioBase.length) totalProcPts += procedimentos.filter((p) => p.fonte === 'pts').length;
       const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
       const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
       if (!codigoMunicipio) municipiosSemCodigo += 1;
@@ -640,6 +679,7 @@ export const bpaService = {
 
       if (!procedimentos.length) {
         const cidData = resolveCidForBpaProcedure({ prontuario: pront, procedimento: { fonte: 'prontuario' }, pts, paciente: pac });
+        const isMedico = normalizeName(`${prof?.profissao || ''} ${prof?.cargo || ''}`).includes('MEDIC');
         pushLine({
           key: `pron_empty_${pront.id}`,
           origem: 'prontuario',
@@ -665,7 +705,7 @@ export const bpaService = {
           carater: '01',
           qtd: 1,
           status_bpa: 'pendente',
-          motivo_pendencia: 'Procedimento não encontrado no Prontuário nem no PTS.',
+          motivo_pendencia: isMedico ? 'Configure procedimento padrão médico para exportação BPA-I.' : 'Procedimento não encontrado no Prontuário nem no PTS.',
         });
         continue;
       }
@@ -775,11 +815,17 @@ export const bpaService = {
       }
     });
 
+    console.log('[BPA] pts encontrados', ptsList.length);
+    console.log('[BPA] procedimentos prontuario', totalProcProntuario);
+    console.log('[BPA] procedimentos pts', totalProcPts);
+    console.log('[BPA] linhas montadas antes do filtro', result.length);
     console.log('[BPA] procedimentos extraidos', totalProcedimentos);
     console.log('[BPA] procedimentos sem sigtap', procedimentosSemSigtap);
     console.log('[BPA] municipios sem codigo', municipiosSemCodigo);
     console.log('[BPA] logradouros sem codigo', logradourosSemCodigo);
-    console.log('[BPA] resultado', { total: result.length, ok: result.filter((r) => r.status_bpa === 'ok').length, pendentes: result.filter((r) => r.status_bpa === 'pendente').length });
+    console.log('[BPA] validos', result.filter((r) => r.status_bpa === 'ok' && !r.duplicado).length);
+    console.log('[BPA] pendentes', result.filter((r) => r.status_bpa === 'pendente' && !r.duplicado).length);
+    console.log('[BPA] resultado', { total: result.length, ok: result.filter((r) => r.status_bpa === 'ok').length, pendentes: result.filter((r) => r.status_bpa === 'pendente').length, duplicados: result.filter((r) => r.duplicado).length });
 
     return result;
   },

@@ -152,7 +152,7 @@ const calcBpaHash = (linhas: string[]) => {
 };
 
 const BpaProducao: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const { unidades, funcionarios } = useData();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
@@ -161,10 +161,10 @@ const BpaProducao: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const [competencia, setCompetencia] = useState<string>(currentCompetencia());
-  const [unidadeFiltro, setUnidadeFiltro] = useState<string>(user?.unidadeId || 'all');
+  const [unidadeFiltro, setUnidadeFiltro] = useState<string>(isGlobalAdmin ? 'all' : (user?.unidadeId || 'all'));
   const [profissionalFiltro, setProfissionalFiltro] = useState<string>('all');
   const [origemFiltro, setOrigemFiltro] = useState<'all' | Origem>('all');
-  const [statusFiltro, setStatusFiltro] = useState<'all' | 'ok' | 'pendente'>('all');
+  const [statusFiltro, setStatusFiltro] = useState<'all' | 'ok' | 'pendente' | 'duplicado'>('all');
   const [pacienteFiltro, setPacienteFiltro] = useState<string>('');
   const [sigtapFiltro, setSigtapFiltro] = useState<string>('');
   const [folha, setFolha] = useState<string>('001');
@@ -173,12 +173,18 @@ const BpaProducao: React.FC = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCompetencia, setModalCompetencia] = useState<string>(currentCompetencia());
-  const [modalUnidade, setModalUnidade] = useState<string>(user?.unidadeId || '');
+  const [modalUnidade, setModalUnidade] = useState<string>(isGlobalAdmin ? '' : (user?.unidadeId || ''));
   const [modalCnes, setModalCnes] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
   const ano = competencia.slice(0, 4);
   const mes = competencia.slice(4, 6);
+
+  useEffect(() => {
+    if (user?.unidadeId && !isGlobalAdmin && unidadeFiltro === 'all') {
+      setUnidadeFiltro(user.unidadeId);
+    }
+  }, [user?.unidadeId, isGlobalAdmin, unidadeFiltro]);
 
   // --- Carrega config global (SIGTAP triagem) e tabela DNE (códigos de logradouro) ---
   useEffect(() => {
@@ -207,6 +213,11 @@ const BpaProducao: React.FC = () => {
         profissionalId: profissionalFiltro,
         triagemSigtapPadrao
       });
+
+      console.log('[BPA] filtros aplicados', { competencia, unidadeFiltro, profissionalFiltro, origemFiltro, statusFiltro, pacienteFiltro, sigtapFiltro });
+      console.log('[BPA] linhas montadas antes do filtro', result.length);
+      console.log('[BPA] validos', result.filter((l) => l.status_bpa === 'ok' && !l.duplicado).length);
+      console.log('[BPA] pendentes', result.filter((l) => l.status_bpa === 'pendente' && !l.duplicado).length);
 
       setLinhas(result);
 
@@ -305,7 +316,7 @@ const BpaProducao: React.FC = () => {
     v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc && v.codigoMunicipio && v.codigoLogradouro && v.statusBpa;
 
   const linhasFiltradas = useMemo(() => {
-    return linhas.filter((l) => {
+    const filtradas = linhas.filter((l) => {
       if (origemFiltro !== 'all' && l.origem !== origemFiltro) return false;
       if (profissionalFiltro !== 'all' && l.profissional_id !== profissionalFiltro) return false;
       if (sigtapFiltro && !(l.codigo_sigtap || '').includes(sigtapFiltro.replace(/\D/g, ''))) return false;
@@ -313,26 +324,43 @@ const BpaProducao: React.FC = () => {
       if (statusFiltro !== 'all') {
         const v = validateRow(l);
         const ok = isLinhaValida(l, v);
+        if (statusFiltro === 'duplicado' && !l.duplicado) return false;
         if (statusFiltro === 'ok' && !ok) return false;
-        if (statusFiltro === 'pendente' && ok) return false;
+        if (statusFiltro === 'pendente' && (ok || l.duplicado)) return false;
       }
       return true;
     });
+    console.log('[BPA] filtro visual aplicado', { statusFiltro, origemFiltro, profissionalFiltro, pacienteFiltro, sigtapFiltro, antes: linhas.length, depois: filtradas.length });
+    return filtradas;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, origemFiltro, profissionalFiltro, sigtapFiltro, pacienteFiltro, statusFiltro, pacMap, profMap]);
 
   const stats = useMemo(() => {
-    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0;
-    linhasFiltradas.forEach((l) => {
+    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0, duplicados = 0;
+    linhas.forEach((l) => {
+      if (l.duplicado) { duplicados++; return; }
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
       if (l.origem === 'prontuario') pront++;
       else if (l.origem === 'pts') pts++;
       else triagem++;
     });
-    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem };
+    return { total: linhas.length, validos, pendentes, pront, pts, triagem, duplicados };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhasFiltradas, pacMap, profMap]);
+  }, [linhas, pacMap, profMap]);
+
+  const emptyFilterMessage = useMemo(() => {
+    if (linhas.length === 0) return 'Nenhuma linha encontrada na competência. Verifique competência, unidade e se há Prontuários/PTS/sessões lançados.';
+    if (linhasFiltradas.length > 0) return '';
+    return `Nenhuma linha para este filtro. Existem ${stats.pendentes} pendente(s), ${stats.validos} válida(s) e ${stats.duplicados} duplicada(s) ignorada(s) na competência.`;
+  }, [linhas.length, linhasFiltradas.length, stats.pendentes, stats.validos, stats.duplicados]);
+
+  const clearVisualFilters = () => {
+    setOrigemFiltro('all');
+    setStatusFiltro('all');
+    setPacienteFiltro('');
+    setSigtapFiltro('');
+  };
 
   const getCnesFromUnidade = (uniId: string): string => {
     if (!uniId) return '';
@@ -412,6 +440,7 @@ const BpaProducao: React.FC = () => {
     const exportRows = linhas
       .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
       .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
+      .filter((l) => !l.duplicado)
       .filter((l) => isLinhaValida(l));
     if (!exportRows.length) {
       toast.error('Nenhuma linha válida neste período. Corrija as pendências antes de gerar.');
@@ -482,7 +511,8 @@ const BpaProducao: React.FC = () => {
 
   // --- Exportação XLSX BPA-I (3 abas: BPA-I, Pendências, Resumo) ---
   const exportXlsx = () => {
-    if (linhasFiltradas.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
+    const linhasParaExportar = linhasFiltradas.length ? linhasFiltradas : linhas;
+    if (linhasParaExportar.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
 
     const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
     const uniNome = unidades.find((u: any) => u.id === uniId)?.nome || (unidadeFiltro === 'all' ? 'Todas' : '—');
@@ -492,12 +522,13 @@ const BpaProducao: React.FC = () => {
       seq: number; l: LinhaBPA; pac: PacienteInfo; prof: ProfInfo;
       cnes: string; ine: string; v: ValidationFlags; ok: boolean; pend: string[];
     };
-    const exportRows: LinhaExport[] = linhasFiltradas.map((l, idx) => {
+    const exportRows: LinhaExport[] = linhasParaExportar.map((l, idx) => {
       const pac = (pacMap[l.paciente_id] || {}) as PacienteInfo;
       const prof = (profMap[l.profissional_id] || {}) as ProfInfo;
       const v = validateRow(l);
       const ok = isLinhaValida(l, v);
       const pend: string[] = [];
+      if (l.duplicado) pend.push('Duplicado ignorado');
       if (!v.nome) pend.push('Nome do paciente');
       if (!v.identificacao) pend.push('CNS ou CPF');
       if (!v.dataNasc) pend.push('Data de nascimento');
@@ -516,53 +547,22 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência', 'UF', 'Cód.Município',
-      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
-      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
-      'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
-      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte Resolução SIGTAP', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID',
-      'Sugestões SIGTAP', 'Duplicado', 'Chave Dedupe', 'Status Validação', 'Motivo Pendência'
+      'competencia', 'fonte_procedimento', 'paciente_nome', 'paciente_cns', 'paciente_cpf', 'data_nascimento', 'sexo',
+      'municipio', 'codigo_municipio', 'uf', 'cep', 'tipo_logradouro', 'codigo_logradouro', 'logradouro', 'numero', 'bairro',
+      'profissional_nome', 'cbo', 'unidade', 'cnes', 'data_atendimento', 'procedimento_nome', 'codigo_sigtap', 'quantidade',
+      'cid_usado', 'fonte_cid', 'cids_relacionados', 'status_bpa', 'motivo_pendencia', 'prontuario_id', 'pts_id', 'duplicado', 'chave_dedupe'
     ];
 
-    const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
-      // Cálculo de idade
-      let idade = '';
-      if (pac.data_nascimento && l.data) {
-        const dN = new Date(pac.data_nascimento);
-        const dA = new Date(l.data);
-        if (!isNaN(dN.getTime()) && !isNaN(dA.getTime())) {
-          let diff = dA.getFullYear() - dN.getFullYear();
-          if (dA.getMonth() < dN.getMonth() || (dA.getMonth() === dN.getMonth() && dA.getDate() < dN.getDate())) diff--;
-          idade = String(Math.max(0, diff));
-        }
-      }
-
-      const sigtapFinal = l.codigo_sigtap || '';
-      const procNomeFinal = l.procedimento_nome;
-
+    const bpaRows = exportRows.map(({ l, pac, prof, cnes, ok, pend }) => {
       const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
       const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
-      const enderecoFmt = [
-        [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
-        pac.numero && `, ${pac.numero}`,
-        pac.complemento && ` - ${pac.complemento}`,
-        pac.bairro && `, ${pac.bairro}`,
-        pac.municipio && ` - ${pac.municipio}`,
-        pac.uf && `/${pac.uf}`,
-        pac.cep && ` CEP ${pac.cep}`,
-      ].filter(Boolean).join('') || pac.endereco_legado || '';
 
       return [
-        seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
-        l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), formatFonte(l.fonte_procedimento), formatFonte(l.fonte_cid), l.carater || '01', '',
-        pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
-        pac.telefone || '', pac.email || '',
-        cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, formatFonte(l.origem), formatFonte(l.fonte_procedimento), l.fonte_resolucao || '', formatFonte(l.fonte_cid), l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
-        (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
+        competenciaFmt, formatFonte(l.fonte_procedimento), pac.nome || l.paciente_nome || '', formatCNS(pac.cns) || '', pac.cpf || '', pac.data_nascimento || '', pac.sexo || '',
+        pac.municipio || '', codMun, pac.uf || '', pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.bairro || '',
+        prof.nome || l.profissional_nome || '', prof.cbo || '', uniNome, cnes, l.data, l.procedimento_nome || '', l.codigo_sigtap || '', l.qtd || 1,
+        l.cid || '', formatFonte(l.fonte_cid), (l.cids_relacionados || []).join(', '), ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || pend.join('; '),
+        l.prontuario_id || '', l.pts_id || '', l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '',
       ];
 
     });
@@ -739,6 +739,7 @@ const BpaProducao: React.FC = () => {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="ok">Válidos</SelectItem>
                 <SelectItem value="pendente">Pendentes</SelectItem>
+                <SelectItem value="duplicado">Duplicados</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -754,13 +755,14 @@ const BpaProducao: React.FC = () => {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Prontuário" value={stats.pront} />
         <Stat label="PTS" value={stats.pts} />
         <Stat label="Triagem" value={stats.triagem} />
         <Stat label="Válidos" value={stats.validos} variant="success" />
         <Stat label="Pendentes" value={stats.pendentes} variant="destructive" />
+        <Stat label="Duplicados" value={stats.duplicados} />
       </div>
 
       {/* Aviso SIGTAP triagem */}
@@ -791,7 +793,14 @@ const BpaProducao: React.FC = () => {
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : linhasFiltradas.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">Nenhuma linha neste período/filtro.</div>
+            <div className="p-8 text-center text-muted-foreground text-sm space-y-3">
+              <p>{emptyFilterMessage}</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setStatusFiltro('all')}>Ver todos</Button>
+                <Button variant="outline" size="sm" onClick={() => setStatusFiltro('pendente')}>Ver pendentes</Button>
+                <Button variant="outline" size="sm" onClick={clearVisualFilters}>Limpar filtros</Button>
+              </div>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
