@@ -494,7 +494,7 @@ export const bpaService = {
       inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pacientes').select('*').in('id', batch)).data || [])),
       inBatches(profIds, 500, async (batch) => ((await (supabase as any).from('funcionarios').select('id,nome,profissao,cargo,custom_data').in('id', batch)).data || [])),
       inBatches(uniIds, 500, async (batch) => ((await (supabase as any).from('unidades').select('id,nome,endereco,custom_data').in('id', batch)).data || [])),
-      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch).in('status', ['ativo', 'em_andamento', 'em andamento', 'finalizado'])).data || [])),
+      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch).in('status', ['ativo', 'em_andamento', 'em andamento', 'finalizado', 'encerrado', 'finalizado_alta'])).data || [])),
       loadAll('triage_records', 'id,agendamento_id,tecnico_id,criado_em', (q) => q.gte('criado_em', `${dataInicio}T00:00:00`).lte('criado_em', `${dataFim}T23:59:59`)).catch(() => []),
     ]);
 
