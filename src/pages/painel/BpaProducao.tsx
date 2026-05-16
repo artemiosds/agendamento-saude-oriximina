@@ -152,7 +152,7 @@ const calcBpaHash = (linhas: string[]) => {
 };
 
 const BpaProducao: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isGlobalAdmin } = useAuth();
   const { unidades, funcionarios } = useData();
 
   const [linhas, setLinhas] = useState<LinhaBPA[]>([]);
@@ -161,7 +161,7 @@ const BpaProducao: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const [competencia, setCompetencia] = useState<string>(currentCompetencia());
-  const [unidadeFiltro, setUnidadeFiltro] = useState<string>(user?.unidadeId || 'all');
+  const [unidadeFiltro, setUnidadeFiltro] = useState<string>(isGlobalAdmin ? 'all' : (user?.unidadeId || 'all'));
   const [profissionalFiltro, setProfissionalFiltro] = useState<string>('all');
   const [origemFiltro, setOrigemFiltro] = useState<'all' | Origem>('all');
   const [statusFiltro, setStatusFiltro] = useState<'all' | 'ok' | 'pendente' | 'duplicado'>('all');
@@ -173,7 +173,7 @@ const BpaProducao: React.FC = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalCompetencia, setModalCompetencia] = useState<string>(currentCompetencia());
-  const [modalUnidade, setModalUnidade] = useState<string>(user?.unidadeId || '');
+  const [modalUnidade, setModalUnidade] = useState<string>(isGlobalAdmin ? '' : (user?.unidadeId || ''));
   const [modalCnes, setModalCnes] = useState<string>('');
   const [generating, setGenerating] = useState(false);
 
