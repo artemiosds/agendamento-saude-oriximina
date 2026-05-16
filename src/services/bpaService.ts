@@ -646,7 +646,7 @@ export const bpaService = {
         const linkCids = resolved.codigo_sigtap ? (procedimentoCidsMap.get(resolved.codigo_sigtap) || []) : [];
         const cidUsado = cidData.cid_usado || linkCids[0] || '';
         const cidsRelacionados = unique([...(cidData.cids_relacionados || []), ...linkCids]).filter((c) => c !== cidUsado);
-        const fonteCid = cidData.fonte_cid !== 'nao_encontrado' ? cidData.fonte_cid : (linkCids.length ? rawProc.fonte : 'nao_encontrado');
+        const fonteCid = cidData.fonte_cid !== 'nao_encontrado' ? cidData.fonte_cid : (linkCids.length ? (rawProc.fonte === 'pts' ? 'pts' : 'prontuario') : 'nao_encontrado');
 
         pushLine({
           key: `pron_${pront.id}_${resolved.procedimento_id || rawProc.procedimento_id || normalizeName(resolved.nome_procedimento)}_${cidUsado}`,
