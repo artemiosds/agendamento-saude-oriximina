@@ -446,9 +446,10 @@ const resolveBpaProcedimentosPaciente = ({
   const pts = choosePtsForBpa(ptsList, prontuario, profissional);
   const prontuarioProcedimentos = extractAllProcedimentosFromProntuario(prontuario, relacionados, realizados);
   const ptsProcedimentos = extractProcedimentosFromPts(pts);
+  const ptsNormalizado = pts ? { ...pts, procs: ptsProcedimentos } : undefined;
   return {
     paciente_id: pacienteId,
-    pts,
+    pts: ptsNormalizado,
     procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentos,
     fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
   };
