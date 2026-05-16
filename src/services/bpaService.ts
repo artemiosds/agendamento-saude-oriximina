@@ -431,6 +431,17 @@ const choosePtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: a
   })[0];
 };
 
+const sortPtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: any): PtsBundle[] => {
+  const first = choosePtsForBpa(ptsList, prontuario, profissional);
+  return [...ptsList].sort((a, b) => {
+    if (first?.pts_id === a.pts_id) return -1;
+    if (first?.pts_id === b.pts_id) return 1;
+    const aSameProf = a.professional_id && a.professional_id === prontuario.profissional_id ? 1 : 0;
+    const bSameProf = b.professional_id && b.professional_id === prontuario.profissional_id ? 1 : 0;
+    return bSameProf - aSameProf || String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+  });
+};
+
 const resolveBpaProcedimentosPaciente = ({
   pacienteId,
   prontuario,
@@ -446,15 +457,23 @@ const resolveBpaProcedimentosPaciente = ({
   realizados: RawProcedimento[];
   profissional?: any;
 }) => {
-  const pts = choosePtsForBpa(ptsList, prontuario, profissional);
+  const ptsOrdenados = sortPtsForBpa(ptsList, prontuario, profissional);
+  const pts = ptsOrdenados[0];
   const prontuarioProcedimentos = extractAllProcedimentosFromProntuario(prontuario, relacionados, realizados);
-  const ptsProcedimentos = extractProcedimentosFromPts(pts);
-  const ptsNormalizado = pts ? { ...pts, procs: ptsProcedimentos } : undefined;
+  const ptsProcedimentos = ptsOrdenados.flatMap((item) => extractProcedimentosFromPts(item));
+  const seenPtsProc = new Set<string>();
+  const ptsProcedimentosUnicos = ptsProcedimentos.filter((p) => {
+    const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;
+    if (seenPtsProc.has(key)) return false;
+    seenPtsProc.add(key);
+    return true;
+  });
+  const ptsNormalizado = pts ? { ...pts, cids: unique(ptsOrdenados.flatMap((item) => item.cids || [])), procs: ptsProcedimentosUnicos } : undefined;
   return {
     paciente_id: pacienteId,
     pts: ptsNormalizado,
-    procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentos,
-    fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
+    procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentosUnicos,
+    fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentosUnicos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
   };
 };
 
