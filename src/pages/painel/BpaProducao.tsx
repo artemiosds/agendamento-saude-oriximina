@@ -108,6 +108,45 @@ const currentCompetencia = (): string => {
 
 const fmtCompetencia = (c: string) => c.length === 6 ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c;
 
+const removeAccents = (s: string) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const onlyDigits = (s: string | number | undefined | null) => String(s ?? '').replace(/\D/g, '');
+const padNum = (v: string | number, len: number) => onlyDigits(v).slice(-len).padStart(len, '0');
+const padText = (v: string, len: number) => {
+  const clean = removeAccents(v).toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, len);
+  return clean + ' '.repeat(Math.max(0, len - clean.length));
+};
+const formatBpaDate = (d: string) => {
+  if (/^\d{4}-\d{2}-\d{2}/.test(d || '')) return d.slice(0, 10).replace(/-/g, '');
+  const digits = onlyDigits(d);
+  if (digits.length === 8) return digits;
+  return digits.padEnd(8, '0').slice(0, 8);
+};
+const mapSexoBpa = (sexo: string) => {
+  const s = removeAccents(sexo).toLowerCase();
+  if (s.startsWith('m')) return 'M';
+  if (s.startsWith('f')) return 'F';
+  return 'I';
+};
+const mapRacaBpa = (raca: string) => {
+  const s = removeAccents(raca).toLowerCase().trim();
+  if (['branca', 'branco', '01'].includes(s)) return '01';
+  if (['preta', 'preto', 'negra', 'negro', '02'].includes(s)) return '02';
+  if (['parda', 'pardo', '03'].includes(s)) return '03';
+  if (['amarela', 'amarelo', '04'].includes(s)) return '04';
+  if (['indigena', 'indígena', '05'].includes(s)) return '05';
+  return '99';
+};
+const calcBpaHash = (linhas: string[]) => {
+  const conteudo = linhas.join('');
+  let soma = 0;
+  for (let i = 0; i < conteudo.length; i++) soma += conteudo.charCodeAt(i);
+  const tabela = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let resto = soma % 1111;
+  let hash = '';
+  for (let i = 0; i < 4; i++) { hash = tabela[resto % 36] + hash; resto = Math.floor(resto / 36); }
+  return hash;
+};
+
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
   const { unidades, funcionarios } = useData();
@@ -364,31 +403,72 @@ const BpaProducao: React.FC = () => {
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) { toast.error('Competência inválida (AAAAMM)'); return; }
     if (!modalCnes || modalCnes.length !== 7) { toast.error('CNES obrigatório (7 dígitos)'); return; }
-    if (modalPreview.total > 0 && modalPreview.validos === 0) {
-      toast.error('Nenhum atendimento válido neste período. Corrija as pendências antes de gerar.');
+    const exportRows = linhas
+      .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
+      .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
+      .filter((l) => isLinhaValida(l));
+    if (!exportRows.length) {
+      toast.error('Nenhuma linha válida neste período. Corrija as pendências antes de gerar.');
       return;
     }
     setGenerating(true);
     try {
-      const { data, error } = await (supabase as any).functions.invoke('generate-bpa', {
-        body: { competencia: modalCompetencia, unidade_id: modalUnidade || '', cnes: modalCnes || '' },
+      const linhasTxt: string[] = [];
+      let folhaNum = 1;
+      let seq = 0;
+      exportRows.forEach((l) => {
+        const pac = pacMap[l.paciente_id] || {} as PacienteInfo;
+        const prof = profMap[l.profissional_id] || {} as ProfInfo;
+        seq += 1;
+        if (seq > 99) { folhaNum += 1; seq = 1; }
+        const cpf = onlyDigits(pac.cpf);
+        const cnsPac = onlyDigits(pac.cns).length === 15 ? onlyDigits(pac.cns) : padNum(cpf, 15);
+        const codigoMunicipio = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
+        const linha =
+          '03' +
+          padNum(modalCnes, 7) +
+          padNum(modalCompetencia, 6) +
+          padNum(prof.cns || '', 15) +
+          padNum(prof.cbo || '', 6) +
+          formatBpaDate(l.data) +
+          padNum(folhaNum, 3) +
+          padNum(seq, 2) +
+          padNum(l.codigo_sigtap, 10) +
+          cnsPac +
+          mapSexoBpa(pac.sexo || '') +
+          padNum(codigoMunicipio, 6) +
+          padText(l.cid || '', 4) +
+          padNum(0, 3) +
+          padNum(l.qtd || 1, 6) +
+          padNum(l.carater || '01', 2) +
+          padText('', 13) +
+          'BPA' +
+          padText(pac.nome || l.paciente_nome || '', 30) +
+          formatBpaDate(pac.data_nascimento || '') +
+          mapRacaBpa(pac.raca_cor || '') +
+          padText(pac.etnia || '', 4) +
+          padNum(pac.nacionalidade || '010', 3) +
+          padText(cpf, 11) +
+          padNum(pac.cep || '', 8) +
+          ' '.repeat(72);
+        linhasTxt.push(linha.slice(0, 250).padEnd(250, ' '));
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const blob = new Blob([data.conteudo], { type: 'text/plain;charset=utf-8' });
+      const header = ('01' + '#BPA' + padNum(modalCompetencia, 6) + padNum(folhaNum, 6) + padNum(linhasTxt.length, 6) +
+        padText('SMS', 14) + padText('SECRETARIA DE SAUDE', 40) + padText('MS', 10) + 'M' + 'I' + calcBpaHash(linhasTxt) + ' '.repeat(159)).slice(0, 250).padEnd(250, ' ');
+      const trailer = ('99' + padNum(linhasTxt.length, 6) + ' '.repeat(242)).slice(0, 250).padEnd(250, ' ');
+      const blob = new Blob([[header, ...linhasTxt, trailer].join('\r\n') + '\r\n'], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = data.filename || `BPA_${modalCompetencia}.txt`;
+      a.href = url; a.download = `PA${modalCompetencia}.txt`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(`BPA gerado. ${data.total_exportados} procedimento(s) exportado(s).`, {
-        description: data.total_pendentes > 0 ? `${data.total_pendentes} pendentes pulados.` : undefined,
-        duration: 6000,
+      toast.success(`BPA gerado. ${linhasTxt.length} procedimento(s) exportado(s).`, {
+        description: `${linhas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
       });
       setModalOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('generate error', err);
-      toast.error('Erro ao gerar BPA: ' + (err?.message || 'desconhecido'));
+      toast.error('Erro ao gerar BPA: ' + (err instanceof Error ? err.message : 'desconhecido'));
     } finally {
       setGenerating(false);
     }
