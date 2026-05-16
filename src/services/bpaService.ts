@@ -549,13 +549,20 @@ export const bpaService = {
       inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pacientes').select('*').in('id', batch)).data || [])),
       inBatches(profIds, 500, async (batch) => ((await (supabase as any).from('funcionarios').select('id,nome,profissao,cargo,custom_data').in('id', batch)).data || [])),
       inBatches(uniIds, 500, async (batch) => ((await (supabase as any).from('unidades').select('id,nome,endereco,custom_data').in('id', batch)).data || [])),
-      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch).in('status', ['ativo', 'em_andamento', 'em andamento', 'finalizado', 'encerrado', 'finalizado_alta'])).data || [])),
+      inBatches(pacIds, 500, async (batch) => {
+        let query = (supabase as any).from('pts').select('id,patient_id,professional_id,unit_id,status,especialidades_envolvidas,custom_data,updated_at').in('patient_id', batch);
+        if (profissionalId && profissionalId !== 'all') query = query.or(`professional_id.eq.${profissionalId},professional_id.is.null`);
+        if (unidadeId && unidadeId !== 'all') query = query.or(`unit_id.eq.${unidadeId},unit_id.is.null`);
+        const { data } = await query;
+        return (data || []).filter((p: any) => !['excluido', 'cancelado', 'inativo'].includes(String(p.status || '').toLowerCase()));
+      }),
       loadAll('triage_records', 'id,agendamento_id,tecnico_id,criado_em', (q) => q.gte('criado_em', `${dataInicio}T00:00:00`).lte('criado_em', `${dataFim}T23:59:59`)).catch(() => []),
     ]);
 
     const procIds = unique([
       ...vincsPront.map((v: any) => v.procedimento_id),
       ...realizados.map((v: any) => v.procedimento_id),
+      ...sessoesTratamento.map((s: any) => s.procedure_done).filter((v: any) => /^[0-9a-f-]{30,}$/i.test(String(v || ''))),
     ]);
     const catalog = await buildCatalog(procIds);
 
