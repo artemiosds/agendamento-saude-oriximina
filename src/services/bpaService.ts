@@ -326,7 +326,7 @@ const resolveProcedimentoSigtap = (raw: RawProcedimento, catalog: Awaited<Return
   };
 };
 
-const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProcedimento[], realizados: RawProcedimento[], ptsProcs: RawProcedimento[]): RawProcedimento[] => {
+const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProcedimento[], realizados: RawProcedimento[]): RawProcedimento[] => {
   const out: RawProcedimento[] = [];
   const add = (p: RawProcedimento | null) => { if (p) out.push(p); };
   related.forEach(add);
@@ -354,8 +354,32 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
   if (!out.length && prontuario?.procedimentos_texto) {
     extractArray(prontuario.procedimentos_texto).forEach((item) => add(rawProcFromAny(item, 'prontuario')));
   }
-  // Sempre incluir procedimentos do PTS ativo, além dos do prontuário
-  ptsProcs.forEach(add);
+  const seen = new Set<string>();
+  return out.filter((p) => {
+    const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const extractProcedimentosFromPts = (pts: PtsBundle | undefined): RawProcedimento[] => {
+  if (!pts) return [];
+  const cd = pts.custom_data || {};
+  const out: RawProcedimento[] = [...(pts.procs || [])];
+  [
+    cd.procedimentos,
+    cd.procedimentos_realizados,
+    cd.procedimentosSelecionados,
+    cd.procedimentos_sigtap,
+    cd.sigtap,
+    cd.plano_terapeutico?.procedimentos,
+    cd.planos_terapeuticos?.procedimentos,
+    cd.tratamento_procedimentos,
+  ].forEach((src) => extractArray(src).forEach((item) => {
+    const raw = rawProcFromAny(item, 'pts');
+    if (raw) out.push({ ...raw, pts_id: pts.pts_id });
+  }));
 
   const seen = new Set<string>();
   return out.filter((p) => {
@@ -366,7 +390,7 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
   });
 };
 
-const extractAllCidsFromProntuarioPtsPaciente = ({ prontuario, procedimento, pts, paciente }: { prontuario: any; procedimento: RawProcedimento; pts?: any; paciente?: any }) => {
+const resolveCidForBpaProcedure = ({ prontuario, procedimento, pts, paciente }: { prontuario: any; procedimento: RawProcedimento; pts?: PtsBundle; paciente?: any }) => {
   const cd = prontuario?.custom_data || {};
   const pcd = paciente?.custom_data || {};
   const complementares = paciente?.complementares || pcd.complementares || {};
@@ -376,13 +400,20 @@ const extractAllCidsFromProntuarioPtsPaciente = ({ prontuario, procedimento, pts
     prontuario?.diagnostico_cid, prontuario?.hipotese_diagnostica, prontuario?.hipotese,
     cd.cid, cd.cids, cd.cid_principal, cd.diagnostico_cid, cd.hipotese_diagnostica, cd.hipotese_diagnostica_cid
   );
-  const ptsCids = extractCidsFromAny(pts?.cid, pts?.cid10, pts?.cid_principal, pts?.cids, pts?.cids_vinculados, pts?.diagnostico_cid, pts?.hipotese_diagnostica, ...(pts?.procs || []).map((p: any) => p.cid));
+  const ptsProcMatch = (pts?.procs || []).find((p) => {
+    const sameId = p.procedimento_id && procedimento.procedimento_id && p.procedimento_id === procedimento.procedimento_id;
+    const sameCode = onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo) && onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo) === onlyDigits(procedimento.codigo_sigtap || procedimento.sigtap_codigo || procedimento.procedimento_codigo || procedimento.codigo);
+    const sameName = normalizeName(p.nome_procedimento || p.nome || p.descricao) && normalizeName(p.nome_procedimento || p.nome || p.descricao) === normalizeName(procedimento.nome_procedimento || procedimento.nome || procedimento.descricao);
+    return sameId || sameCode || sameName;
+  });
+  const ptsProcCids = extractCidsFromAny(ptsProcMatch?.cid, ptsProcMatch?.cid10, ptsProcMatch?.cids, ptsProcMatch?.cids_vinculados, ptsProcMatch?.cids_selecionados);
+  const ptsCids = extractCidsFromAny(pts?.cids, pts?.custom_data?.cid, pts?.custom_data?.cid10, pts?.custom_data?.cid_principal, pts?.custom_data?.cids, pts?.custom_data?.diagnostico_cid, pts?.custom_data?.hipotese_diagnostica, ...(pts?.procs || []).map((p: any) => p.cid));
   const pacienteCids = extractCidsFromAny(paciente?.cid, paciente?.cid10, paciente?.cids, paciente?.diagnostico_cid, pcd.cid, pcd.cids, complementares.cid, complementares.cids);
 
-  const source: [string[], FonteCid][] = [[procCids, 'procedimento'], [prontCids, 'prontuario'], [ptsCids, 'pts'], [pacienteCids, 'paciente']];
+  const source: [string[], FonteCid][] = [[procCids, procedimento.fonte === 'pts' ? 'pts' : 'prontuario'], [prontCids, 'prontuario'], [ptsProcCids, 'pts'], [ptsCids, 'pts'], [pacienteCids, 'paciente']];
   const first = source.find(([arr]) => arr.length > 0);
-  const all = unique([...procCids, ...prontCids, ...ptsCids, ...pacienteCids]);
-  return { cid_usado: first?.[0][0] || '', cids_relacionados: all.filter((c) => c !== (first?.[0][0] || '')), fonte_cid: first?.[1] || 'vazio' as FonteCid };
+  const all = unique([...procCids, ...prontCids, ...ptsProcCids, ...ptsCids, ...pacienteCids]);
+  return { cid_usado: first?.[0][0] || '', cids_relacionados: all.filter((c) => c !== (first?.[0][0] || '')), fonte_cid: first?.[1] || 'nao_encontrado' as FonteCid };
 };
 
 export const bpaService = {
