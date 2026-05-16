@@ -52,20 +52,39 @@ interface PacienteInfo {
 
 // Tabela DNE (Correios) — códigos de tipo de logradouro mais usados
 const DNE_LOGRADOURO: Record<string, string> = {
-  RUA: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
-  BECO: '011', ESTRADA: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
+  RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072', RAMAL: '082',
   ALAMEDA: '003', PRACA: '062', PRAÇA: '062', ESTACAO: '034', ESTAÇÃO: '034',
   LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094',
-  VILA: '108', VIA: '107', CONJUNTO: '023',
+  VILA: '108', VIA: '107', VIELA: '109', CONJUNTO: '023',
 };
 // Mapa DNE oficial carregado do banco (logradouros_dne) — preenchido em runtime
 const DNE_DB: Record<string, string> = {};
-const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string): string => {
-  const c = String(codigoSalvo || '').trim();
-  if (c) return c.padStart(3, '0');
-  const key = String(tipo || '').toUpperCase().trim().replace(/\./g, '');
-  if (DNE_DB[key]) return DNE_DB[key];
-  return DNE_LOGRADOURO[key] || '';
+const normalizeAddressKey = (value: string) => String(value || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const resolveCodigoLogradouro = (codigoSalvo: string, tipo: string, logradouro = ''): string => {
+  const c = String(codigoSalvo || '').replace(/\D/g, '');
+  if (c) return c.padStart(3, '0').slice(-3);
+  const candidates = [tipo, tipo.split(/\s+/)[0], logradouro.split(/\s+/)[0]].map(normalizeAddressKey);
+  for (const key of candidates) {
+    if (!key) continue;
+    if (DNE_DB[key]) return DNE_DB[key];
+    if (DNE_LOGRADOURO[key]) return DNE_LOGRADOURO[key];
+  }
+  return '';
+};
+
+const resolveCodigoMunicipio = (codigoSalvo: string, municipio: string, uf: string): string => {
+  const c = String(codigoSalvo || '').replace(/\D/g, '');
+  if (c.length >= 7) return c.slice(0, 7);
+  if (c.length === 6) return `${c}0`;
+  const key = normalizeAddressKey(`${municipio} ${uf}`);
+  if (key.includes('ORIXIMINA')) return '1505304';
+  return '';
 };
 interface ProfInfo { cbo: string; cns: string; nome: string; }
 
@@ -75,9 +94,10 @@ interface ValidationFlags {
   sigtap: boolean;
   nome: boolean;
   dataNasc: boolean;
+  codigoMunicipio: boolean;
+  codigoLogradouro: boolean;
+  statusBpa: boolean;
 }
-
-const isCboMedico = (cbo: string) => (cbo || '').replace(/\D/g, '').startsWith('225');
 
 const currentCompetencia = (): string => {
   const d = new Date();
@@ -85,6 +105,45 @@ const currentCompetencia = (): string => {
 };
 
 const fmtCompetencia = (c: string) => c.length === 6 ? `${c.slice(4, 6)}/${c.slice(0, 4)}` : c;
+
+const removeAccents = (s: string) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const onlyDigits = (s: string | number | undefined | null) => String(s ?? '').replace(/\D/g, '');
+const padNum = (v: string | number, len: number) => onlyDigits(v).slice(-len).padStart(len, '0');
+const padText = (v: string, len: number) => {
+  const clean = removeAccents(v).toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, len);
+  return clean + ' '.repeat(Math.max(0, len - clean.length));
+};
+const formatBpaDate = (d: string) => {
+  if (/^\d{4}-\d{2}-\d{2}/.test(d || '')) return d.slice(0, 10).replace(/-/g, '');
+  const digits = onlyDigits(d);
+  if (digits.length === 8) return digits;
+  return digits.padEnd(8, '0').slice(0, 8);
+};
+const mapSexoBpa = (sexo: string) => {
+  const s = removeAccents(sexo).toLowerCase();
+  if (s.startsWith('m')) return 'M';
+  if (s.startsWith('f')) return 'F';
+  return 'I';
+};
+const mapRacaBpa = (raca: string) => {
+  const s = removeAccents(raca).toLowerCase().trim();
+  if (['branca', 'branco', '01'].includes(s)) return '01';
+  if (['preta', 'preto', 'negra', 'negro', '02'].includes(s)) return '02';
+  if (['parda', 'pardo', '03'].includes(s)) return '03';
+  if (['amarela', 'amarelo', '04'].includes(s)) return '04';
+  if (['indigena', 'indígena', '05'].includes(s)) return '05';
+  return '99';
+};
+const calcBpaHash = (linhas: string[]) => {
+  const conteudo = linhas.join('');
+  let soma = 0;
+  for (let i = 0; i < conteudo.length; i++) soma += conteudo.charCodeAt(i);
+  const tabela = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let resto = soma % 1111;
+  let hash = '';
+  for (let i = 0; i < 4; i++) { hash = tabela[resto % 36] + hash; resto = Math.floor(resto / 36); }
+  return hash;
+};
 
 const BpaProducao: React.FC = () => {
   const { user } = useAuth();
@@ -125,8 +184,8 @@ const BpaProducao: React.FC = () => {
       try {
         const { data: dne } = await (supabase as any).from('logradouros_dne').select('codigo, descricao');
         (dne || []).forEach((r: any) => {
-          const k = String(r.descricao || '').toUpperCase().trim();
-          if (k && r.codigo) DNE_DB[k] = String(r.codigo).padStart(3, '0');
+          const k = normalizeAddressKey(String(r.descricao || ''));
+          if (k && r.codigo) DNE_DB[k] = String(r.codigo).replace(/\D/g, '').padStart(3, '0').slice(-3);
         });
       } catch (e) { console.warn('[BPA] DNE load skipped', e); }
     })();
@@ -172,10 +231,10 @@ const BpaProducao: React.FC = () => {
             sexo: p.sexo || cd.sexo || '',
             municipio: p.municipio || cd.municipio || '',
             uf: p.uf || cd.uf || '',
-            codigo_municipio: cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || '',
-            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || '',
-            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipo_logradouro_dne || '',
-            logradouro: p.logradouro || cd.logradouro || '',
+            codigo_municipio: resolveCodigoMunicipio(cd.municipio_ibge || cd.codigo_ibge_municipio || cd.codigo_municipio || cd.codigo_ibge || '', p.municipio || cd.municipio || '', p.uf || cd.uf || ''),
+            tipo_logradouro: p.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || cd.tipo_logradouro_dne || '',
+            codigo_logradouro: cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.tipo_logradouro_dne || '',
+            logradouro: p.logradouro || cd.logradouro || p.endereco || '',
             numero: p.numero || cd.numero || '',
             complemento: p.complemento || cd.complemento || '',
             bairro: p.bairro || cd.bairro || '',
@@ -220,18 +279,24 @@ const BpaProducao: React.FC = () => {
     const cpf = (pac?.cpf || '').replace(/\D/g, '');
     const cbo = (prof?.cbo || '').replace(/\D/g, '');
     const sigtap = (l.codigo_sigtap || '').replace(/\D/g, '');
-    
-    // Status ok se o bpaService disse que está ok
-    const isOk = l.status_bpa === 'ok';
+    const codigoMunicipio = l.codigo_municipio || resolveCodigoMunicipio(pac?.codigo_municipio || '', pac?.municipio || '', pac?.uf || '');
+    const codigoLogradouro = l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '');
+    const exigeLogradouro = !!(pac?.tipo_logradouro || pac?.logradouro || pac?.endereco_legado);
 
     return {
       identificacao: cns.length === 15 || cpf.length === 11,
       cbo: cbo.length > 0,
-      sigtap: isOk,
+      sigtap: sigtap.length > 0,
       nome: !!(pac?.nome && pac.nome.trim().length > 0),
       dataNasc: !!(pac?.data_nascimento && pac.data_nascimento.trim().length > 0),
+      codigoMunicipio: !!codigoMunicipio,
+      codigoLogradouro: !exigeLogradouro || !!codigoLogradouro,
+      statusBpa: l.status_bpa === 'ok',
     };
   };
+
+  const isLinhaValida = (l: LinhaBPA, v = validateRow(l)) =>
+    v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc && v.codigoMunicipio && v.codigoLogradouro && v.statusBpa;
 
   const linhasFiltradas = useMemo(() => {
     return linhas.filter((l) => {
@@ -241,7 +306,7 @@ const BpaProducao: React.FC = () => {
       if (pacienteFiltro && !(l.paciente_nome || '').toLowerCase().includes(pacienteFiltro.toLowerCase())) return false;
       if (statusFiltro !== 'all') {
         const v = validateRow(l);
-        const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+        const ok = isLinhaValida(l, v);
         if (statusFiltro === 'ok' && !ok) return false;
         if (statusFiltro === 'pendente' && ok) return false;
       }
@@ -254,7 +319,7 @@ const BpaProducao: React.FC = () => {
     let validos = 0, pendentes = 0, pront = 0, triagem = 0;
     linhasFiltradas.forEach((l) => {
       const v = validateRow(l);
-      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
+      if (isLinhaValida(l, v)) validos++; else pendentes++;
       if (l.origem === 'prontuario') pront++; else triagem++;
     });
     return { total: linhasFiltradas.length, validos, pendentes, pront, triagem };
@@ -327,7 +392,7 @@ const BpaProducao: React.FC = () => {
       if (modalCompetencia && lComp !== modalCompetencia) return;
       total += 1;
       const v = validateRow(l);
-      if (v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc) validos++; else pendentes++;
+      if (isLinhaValida(l, v)) validos++; else pendentes++;
     });
     return { validos, pendentes, total };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,31 +401,72 @@ const BpaProducao: React.FC = () => {
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) { toast.error('Competência inválida (AAAAMM)'); return; }
     if (!modalCnes || modalCnes.length !== 7) { toast.error('CNES obrigatório (7 dígitos)'); return; }
-    if (modalPreview.total > 0 && modalPreview.validos === 0) {
-      toast.error('Nenhum atendimento válido neste período. Corrija as pendências antes de gerar.');
+    const exportRows = linhas
+      .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
+      .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
+      .filter((l) => isLinhaValida(l));
+    if (!exportRows.length) {
+      toast.error('Nenhuma linha válida neste período. Corrija as pendências antes de gerar.');
       return;
     }
     setGenerating(true);
     try {
-      const { data, error } = await (supabase as any).functions.invoke('generate-bpa', {
-        body: { competencia: modalCompetencia, unidade_id: modalUnidade || '', cnes: modalCnes || '' },
+      const linhasTxt: string[] = [];
+      let folhaNum = 1;
+      let seq = 0;
+      exportRows.forEach((l) => {
+        const pac = pacMap[l.paciente_id] || {} as PacienteInfo;
+        const prof = profMap[l.profissional_id] || {} as ProfInfo;
+        seq += 1;
+        if (seq > 99) { folhaNum += 1; seq = 1; }
+        const cpf = onlyDigits(pac.cpf);
+        const cnsPac = onlyDigits(pac.cns).length === 15 ? onlyDigits(pac.cns) : padNum(cpf, 15);
+        const codigoMunicipio = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
+        const linha =
+          '03' +
+          padNum(modalCnes, 7) +
+          padNum(modalCompetencia, 6) +
+          padNum(prof.cns || '', 15) +
+          padNum(prof.cbo || '', 6) +
+          formatBpaDate(l.data) +
+          padNum(folhaNum, 3) +
+          padNum(seq, 2) +
+          padNum(l.codigo_sigtap, 10) +
+          cnsPac +
+          mapSexoBpa(pac.sexo || '') +
+          padNum(codigoMunicipio, 6) +
+          padText(l.cid || '', 4) +
+          padNum(0, 3) +
+          padNum(l.qtd || 1, 6) +
+          padNum(l.carater || '01', 2) +
+          padText('', 13) +
+          'BPA' +
+          padText(pac.nome || l.paciente_nome || '', 30) +
+          formatBpaDate(pac.data_nascimento || '') +
+          mapRacaBpa(pac.raca_cor || '') +
+          padText(pac.etnia || '', 4) +
+          padNum(pac.nacionalidade || '010', 3) +
+          padText(cpf, 11) +
+          padNum(pac.cep || '', 8) +
+          ' '.repeat(72);
+        linhasTxt.push(linha.slice(0, 250).padEnd(250, ' '));
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const blob = new Blob([data.conteudo], { type: 'text/plain;charset=utf-8' });
+      const header = ('01' + '#BPA' + padNum(modalCompetencia, 6) + padNum(folhaNum, 6) + padNum(linhasTxt.length, 6) +
+        padText('SMS', 14) + padText('SECRETARIA DE SAUDE', 40) + padText('MS', 10) + 'M' + 'I' + calcBpaHash(linhasTxt) + ' '.repeat(159)).slice(0, 250).padEnd(250, ' ');
+      const trailer = ('99' + padNum(linhasTxt.length, 6) + ' '.repeat(242)).slice(0, 250).padEnd(250, ' ');
+      const blob = new Blob([[header, ...linhasTxt, trailer].join('\r\n') + '\r\n'], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = data.filename || `BPA_${modalCompetencia}.txt`;
+      a.href = url; a.download = `PA${modalCompetencia}.txt`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(`BPA gerado. ${data.total_exportados} procedimento(s) exportado(s).`, {
-        description: data.total_pendentes > 0 ? `${data.total_pendentes} pendentes pulados.` : undefined,
-        duration: 6000,
+      toast.success(`BPA gerado. ${linhasTxt.length} procedimento(s) exportado(s).`, {
+        description: `${linhas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
       });
       setModalOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('generate error', err);
-      toast.error('Erro ao gerar BPA: ' + (err?.message || 'desconhecido'));
+      toast.error('Erro ao gerar BPA: ' + (err instanceof Error ? err.message : 'desconhecido'));
     } finally {
       setGenerating(false);
     }
@@ -382,13 +488,15 @@ const BpaProducao: React.FC = () => {
       const pac = (pacMap[l.paciente_id] || {}) as PacienteInfo;
       const prof = (profMap[l.profissional_id] || {}) as ProfInfo;
       const v = validateRow(l);
-      const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
+      const ok = isLinhaValida(l, v);
       const pend: string[] = [];
       if (!v.nome) pend.push('Nome do paciente');
       if (!v.identificacao) pend.push('CNS ou CPF');
       if (!v.dataNasc) pend.push('Data de nascimento');
       if (!pac?.sexo) pend.push('Sexo');
       if (!pac?.municipio) pend.push('Município de residência');
+      if (!v.codigoMunicipio) pend.push('Código de município');
+      if (!v.codigoLogradouro) pend.push('Código de logradouro');
       if (!v.cbo) pend.push('CBO do profissional');
       if (!v.sigtap) pend.push(l.motivo_pendencia || 'Procedimento SIGTAP/CID');
       const cnes = getCnesFromUnidade(l.unidade_id);
@@ -404,7 +512,8 @@ const BpaProducao: React.FC = () => {
       'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
       'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
       'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
-      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID', 'Status Validação', 'Motivo Pendência'
+      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte Resolução SIGTAP', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID',
+      'Sugestões SIGTAP', 'Duplicado', 'Chave Dedupe', 'Status Validação', 'Motivo Pendência'
     ];
 
     const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
@@ -420,12 +529,11 @@ const BpaProducao: React.FC = () => {
         }
       }
 
-      // SIGTAP Final (se médico e vazio, usa o padrão)
-      const isMed = (prof.cbo || '').startsWith('225');
-      const sigtapFinal = l.codigo_sigtap || (isMed ? '0301010072' : '');
-      const procNomeFinal = l.codigo_sigtap ? l.procedimento_nome : (isMed ? 'Consulta Médica em APS' : l.procedimento_nome);
+      const sigtapFinal = l.codigo_sigtap || '';
+      const procNomeFinal = l.procedimento_nome;
 
-      const codLogr = resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '');
+      const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
+      const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
       const enderecoFmt = [
         [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
         pac.numero && `, ${pac.numero}`,
@@ -438,14 +546,15 @@ const BpaProducao: React.FC = () => {
 
       return [
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', pac.codigo_municipio || '',
+        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
         l.data, procNomeFinal, sigtapFinal,
         l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
         pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
+        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_resolucao || '', l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
+        (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
       ];
 
     });
@@ -684,6 +793,8 @@ const BpaProducao: React.FC = () => {
                     <TableHead>Nasc.</TableHead>
                     <TableHead>Sexo</TableHead>
                     <TableHead>Município</TableHead>
+                    <TableHead>Cód.Mun.</TableHead>
+                    <TableHead>Cód.Logr.</TableHead>
                     <TableHead>Data Atend.</TableHead>
                     <TableHead>Procedimento</TableHead>
                     <TableHead>Fonte Proc.</TableHead>
@@ -706,14 +817,16 @@ const BpaProducao: React.FC = () => {
                     const pac = pacMap[l.paciente_id];
                     const prof = profMap[l.profissional_id];
                     const v = validateRow(l);
-                    const ok = v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc;
-                    const isMed = isCboMedico(prof?.cbo || '');
+                    const ok = isLinhaValida(l, v);
                     const pend: string[] = [];
                     if (!v.nome) pend.push('Nome');
                     if (!v.identificacao) pend.push('CNS/CPF');
                     if (!v.dataNasc) pend.push('Data Nasc');
                     if (!v.cbo) pend.push('CBO');
                     if (!v.sigtap) pend.push('SIGTAP');
+                    if (!v.codigoMunicipio) pend.push('Cód. Município');
+                    if (!v.codigoLogradouro) pend.push('Cód. Logradouro');
+                    if (l.motivo_pendencia) pend.push(l.motivo_pendencia);
                     if (l.pendenciaTriagemSigtap) pend.push('SIGTAP triagem');
                     return (
                       <TableRow key={l.key} className={cn(!ok && "bg-destructive/5")}>
@@ -734,20 +847,17 @@ const BpaProducao: React.FC = () => {
                         </TableCell>
                         <TableCell className="text-xs">{pac?.sexo || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.municipio || '—'}</TableCell>
+                        <TableCell className={cn("text-xs font-mono", !v.codigoMunicipio && "text-destructive")}>{l.codigo_municipio || resolveCodigoMunicipio(pac?.codigo_municipio || '', pac?.municipio || '', pac?.uf || '') || '—'}</TableCell>
+                        <TableCell className={cn("text-xs font-mono", !v.codigoLogradouro && "text-destructive")}>{l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '') || '—'}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
-                        <TableCell className="text-xs">
-                          {l.procedimento_nome}
-                          {l.origem === 'prontuario' && isMed && !l.codigo_sigtap && (
-                            <Badge className="ml-1 bg-primary/10 text-primary border-0 text-[9px]">consulta</Badge>
-                          )}
-                        </TableCell>
+                        <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
+                        <TableCell className="text-xs">{l.fonte_procedimento}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
-                          {l.codigo_sigtap || (l.origem === 'prontuario' && isMed
-                            ? <span className="text-primary font-medium">0301010072</span>
-                            : <span className="italic">faltando</span>)}
+                          {l.codigo_sigtap || <span className="italic">Código SIGTAP não resolvido</span>}
                         </TableCell>
-                        <TableCell className="text-xs">{l.qtd}</TableCell>
+                        <TableCell className="text-xs">{l.qtd || 1}</TableCell>
                         <TableCell className="text-xs">{l.cid || '—'}</TableCell>
+                        <TableCell className="text-xs">{l.fonte_cid}</TableCell>
                         <TableCell className="text-xs">{l.carater}</TableCell>
                         <TableCell className="text-xs">{pac?.raca_cor || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.etnia || '—'}</TableCell>
@@ -761,7 +871,7 @@ const BpaProducao: React.FC = () => {
                             ? <Badge className="bg-success/10 text-success border-0 text-[10px]">OK</Badge>
                             : <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">PENDENTE</Badge>}
                         </TableCell>
-                        <TableCell className="text-[10px] text-destructive">{pend.join(', ') || '—'}</TableCell>
+                        <TableCell className="text-[10px] text-destructive max-w-xs">{[...new Set(pend)].join(' | ') || '—'}</TableCell>
                       </TableRow>
                     );
                   })}
