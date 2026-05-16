@@ -667,8 +667,9 @@ export const bpaService = {
         realizados: realizadosCompat,
         profissional: prof,
       });
-      totalProcProntuario += extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat).length;
-      if (!extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat).length) totalProcPts += procedimentos.filter((p) => p.fonte === 'pts').length;
+      const procsProntuarioBase = extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat);
+      totalProcProntuario += procsProntuarioBase.length;
+      if (!procsProntuarioBase.length) totalProcPts += procedimentos.filter((p) => p.fonte === 'pts').length;
       const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
       const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
       if (!codigoMunicipio) municipiosSemCodigo += 1;
@@ -811,11 +812,17 @@ export const bpaService = {
       }
     });
 
+    console.log('[BPA] pts encontrados', ptsList.length);
+    console.log('[BPA] procedimentos prontuario', totalProcProntuario);
+    console.log('[BPA] procedimentos pts', totalProcPts);
+    console.log('[BPA] linhas montadas antes do filtro', result.length);
     console.log('[BPA] procedimentos extraidos', totalProcedimentos);
     console.log('[BPA] procedimentos sem sigtap', procedimentosSemSigtap);
     console.log('[BPA] municipios sem codigo', municipiosSemCodigo);
     console.log('[BPA] logradouros sem codigo', logradourosSemCodigo);
-    console.log('[BPA] resultado', { total: result.length, ok: result.filter((r) => r.status_bpa === 'ok').length, pendentes: result.filter((r) => r.status_bpa === 'pendente').length });
+    console.log('[BPA] validos', result.filter((r) => r.status_bpa === 'ok' && !r.duplicado).length);
+    console.log('[BPA] pendentes', result.filter((r) => r.status_bpa === 'pendente' && !r.duplicado).length);
+    console.log('[BPA] resultado', { total: result.length, ok: result.filter((r) => r.status_bpa === 'ok').length, pendentes: result.filter((r) => r.status_bpa === 'pendente').length, duplicados: result.filter((r) => r.duplicado).length });
 
     return result;
   },
