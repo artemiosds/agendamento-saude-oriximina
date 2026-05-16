@@ -546,7 +546,7 @@ const BpaProducao: React.FC = () => {
       'cid_usado', 'fonte_cid', 'cids_relacionados', 'status_bpa', 'motivo_pendencia', 'prontuario_id', 'pts_id', 'duplicado', 'chave_dedupe'
     ];
 
-    const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
+    const bpaRows = exportRows.map(({ l, pac, prof, cnes, ok, pend }) => {
       const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
       const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
 
