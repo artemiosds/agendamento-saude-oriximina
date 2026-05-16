@@ -504,7 +504,8 @@ const BpaProducao: React.FC = () => {
 
   // --- Exportação XLSX BPA-I (3 abas: BPA-I, Pendências, Resumo) ---
   const exportXlsx = () => {
-    if (linhasFiltradas.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
+    const linhasParaExportar = linhasFiltradas.length ? linhasFiltradas : linhas;
+    if (linhasParaExportar.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
 
     const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
     const uniNome = unidades.find((u: any) => u.id === uniId)?.nome || (unidadeFiltro === 'all' ? 'Todas' : '—');
@@ -514,12 +515,13 @@ const BpaProducao: React.FC = () => {
       seq: number; l: LinhaBPA; pac: PacienteInfo; prof: ProfInfo;
       cnes: string; ine: string; v: ValidationFlags; ok: boolean; pend: string[];
     };
-    const exportRows: LinhaExport[] = linhasFiltradas.map((l, idx) => {
+    const exportRows: LinhaExport[] = linhasParaExportar.map((l, idx) => {
       const pac = (pacMap[l.paciente_id] || {}) as PacienteInfo;
       const prof = (profMap[l.profissional_id] || {}) as ProfInfo;
       const v = validateRow(l);
       const ok = isLinhaValida(l, v);
       const pend: string[] = [];
+      if (l.duplicado) pend.push('Duplicado ignorado');
       if (!v.nome) pend.push('Nome do paciente');
       if (!v.identificacao) pend.push('CNS ou CPF');
       if (!v.dataNasc) pend.push('Data de nascimento');
@@ -538,53 +540,22 @@ const BpaProducao: React.FC = () => {
 
     // ── Aba BPA-I ─────────────────────────────────────────────
     const bpaHeader = [
-      'Seq', 'Competência', 'CNS Paciente', 'CPF Paciente', 'Nome', 'Dt.Nasc', 'Idade', 'Sexo', 'Munic.Residência', 'UF', 'Cód.Município',
-      'Dt.Atendimento', 'Procedimento', 'SIGTAP', 'QTD', 'CID', 'CIDs Relacionados', 'Fonte Proc.', 'Fonte CID', 'Car.Atend.', 'Num.Autorização',
-      'Raça/Cor', 'Etnia', 'Nacionalidade', 'CEP', 'Tipo Logradouro', 'Cód.Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Endereço Formatado',
-      'Telefone', 'E-mail', 'CNES', 'CNS Profissional', 'Nome Profissional', 'CBO', 'Código INE',
-      'Folha', 'Unidade', 'Origem', 'Fonte Proc.', 'Fonte Resolução SIGTAP', 'Fonte CID', 'Paciente ID', 'Prontuário ID', 'PTS ID',
-      'Sugestões SIGTAP', 'Duplicado', 'Chave Dedupe', 'Status Validação', 'Motivo Pendência'
+      'competencia', 'fonte_procedimento', 'paciente_nome', 'paciente_cns', 'paciente_cpf', 'data_nascimento', 'sexo',
+      'municipio', 'codigo_municipio', 'uf', 'cep', 'tipo_logradouro', 'codigo_logradouro', 'logradouro', 'numero', 'bairro',
+      'profissional_nome', 'cbo', 'unidade', 'cnes', 'data_atendimento', 'procedimento_nome', 'codigo_sigtap', 'quantidade',
+      'cid_usado', 'fonte_cid', 'cids_relacionados', 'status_bpa', 'motivo_pendencia', 'prontuario_id', 'pts_id', 'duplicado', 'chave_dedupe'
     ];
 
     const bpaRows = exportRows.map(({ seq, l, pac, prof, cnes, ine, ok }) => {
-      // Cálculo de idade
-      let idade = '';
-      if (pac.data_nascimento && l.data) {
-        const dN = new Date(pac.data_nascimento);
-        const dA = new Date(l.data);
-        if (!isNaN(dN.getTime()) && !isNaN(dA.getTime())) {
-          let diff = dA.getFullYear() - dN.getFullYear();
-          if (dA.getMonth() < dN.getMonth() || (dA.getMonth() === dN.getMonth() && dA.getDate() < dN.getDate())) diff--;
-          idade = String(Math.max(0, diff));
-        }
-      }
-
-      const sigtapFinal = l.codigo_sigtap || '';
-      const procNomeFinal = l.procedimento_nome;
-
       const codMun = l.codigo_municipio || resolveCodigoMunicipio(pac.codigo_municipio || '', pac.municipio || '', pac.uf || '');
       const codLogr = l.codigo_logradouro || resolveCodigoLogradouro(pac.codigo_logradouro || '', pac.tipo_logradouro || '', pac.logradouro || pac.endereco_legado || '');
-      const enderecoFmt = [
-        [pac.tipo_logradouro, pac.logradouro].filter(Boolean).join(' '),
-        pac.numero && `, ${pac.numero}`,
-        pac.complemento && ` - ${pac.complemento}`,
-        pac.bairro && `, ${pac.bairro}`,
-        pac.municipio && ` - ${pac.municipio}`,
-        pac.uf && `/${pac.uf}`,
-        pac.cep && ` CEP ${pac.cep}`,
-      ].filter(Boolean).join('') || pac.endereco_legado || '';
 
       return [
-        seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
-        idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
-        l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), formatFonte(l.fonte_procedimento), formatFonte(l.fonte_cid), l.carater || '01', '',
-        pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
-        pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
-        pac.telefone || '', pac.email || '',
-        cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, formatFonte(l.origem), formatFonte(l.fonte_procedimento), l.fonte_resolucao || '', formatFonte(l.fonte_cid), l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
-        (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
+        competenciaFmt, formatFonte(l.fonte_procedimento), pac.nome || l.paciente_nome || '', formatCNS(pac.cns) || '', pac.cpf || '', pac.data_nascimento || '', pac.sexo || '',
+        pac.municipio || '', codMun, pac.uf || '', pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.bairro || '',
+        prof.nome || l.profissional_nome || '', prof.cbo || '', uniNome, cnes, l.data, l.procedimento_nome || '', l.codigo_sigtap || '', l.qtd || 1,
+        l.cid || '', formatFonte(l.fonte_cid), (l.cids_relacionados || []).join(', '), ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || pend.join('; '),
+        l.prontuario_id || '', l.pts_id || '', l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '',
       ];
 
     });
