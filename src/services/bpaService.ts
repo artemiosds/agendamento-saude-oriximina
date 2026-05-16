@@ -416,6 +416,44 @@ const resolveCidForBpaProcedure = ({ prontuario, procedimento, pts, paciente }: 
   return { cid_usado: first?.[0][0] || '', cids_relacionados: all.filter((c) => c !== (first?.[0][0] || '')), fonte_cid: first?.[1] || 'nao_encontrado' as FonteCid };
 };
 
+const choosePtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: any): PtsBundle | undefined => {
+  const profNorm = normalizeName(`${profissional?.profissao || ''} ${profissional?.cargo || ''}`);
+  return [...ptsList].sort((a, b) => {
+    const score = (pts: PtsBundle) =>
+      (pts.professional_id && pts.professional_id === prontuario.profissional_id ? 4 : 0) +
+      (pts.unit_id && pts.unit_id === prontuario.unidade_id ? 2 : 0) +
+      ((pts.especialidades_envolvidas || []).some((e) => profNorm && profNorm.includes(normalizeName(e))) ? 1 : 0) +
+      (pts.status === 'ativo' ? 1 : 0);
+    return score(b) - score(a) || String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+  })[0];
+};
+
+const resolveBpaProcedimentosPaciente = ({
+  pacienteId,
+  prontuario,
+  ptsList,
+  relacionados,
+  realizados,
+  profissional,
+}: {
+  pacienteId: string;
+  prontuario: any;
+  ptsList: PtsBundle[];
+  relacionados: RawProcedimento[];
+  realizados: RawProcedimento[];
+  profissional?: any;
+}) => {
+  const pts = choosePtsForBpa(ptsList, prontuario, profissional);
+  const prontuarioProcedimentos = extractAllProcedimentosFromProntuario(prontuario, relacionados, realizados);
+  const ptsProcedimentos = extractProcedimentosFromPts(pts);
+  return {
+    paciente_id: pacienteId,
+    pts,
+    procedimentos: prontuarioProcedimentos.length ? prontuarioProcedimentos : ptsProcedimentos,
+    fonte_base: prontuarioProcedimentos.length ? 'prontuario' as FonteProc : (ptsProcedimentos.length ? 'pts' as FonteProc : 'prontuario' as FonteProc),
+  };
+};
+
 export const bpaService = {
   async resolveBpaProcedimentosECids({
     competencia,
