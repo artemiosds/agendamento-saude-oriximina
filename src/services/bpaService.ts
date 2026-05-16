@@ -418,8 +418,10 @@ const resolveCidForBpaProcedure = ({ prontuario, procedimento, pts, paciente }: 
 
 const choosePtsForBpa = (ptsList: PtsBundle[], prontuario: any, profissional?: any): PtsBundle | undefined => {
   const profNorm = normalizeName(`${profissional?.profissao || ''} ${profissional?.cargo || ''}`);
+  const linkedPtsId = prontuario?.custom_data?.pts_id || prontuario?.pts_id;
   return [...ptsList].sort((a, b) => {
     const score = (pts: PtsBundle) =>
+      (linkedPtsId && pts.pts_id === linkedPtsId ? 16 : 0) +
       ((pts.procs || []).length ? 8 : 0) +
       (pts.professional_id && pts.professional_id === prontuario.profissional_id ? 4 : 0) +
       (pts.unit_id && pts.unit_id === prontuario.unidade_id ? 2 : 0) +
@@ -616,7 +618,7 @@ export const bpaService = {
       result.push(line);
     };
 
-    for (const pront of prontuarios) {
+    for (const pront of basesProducao) {
       const pac = pacMap.get(pront.paciente_id);
       const prof = profMap.get(pront.profissional_id);
       const unidade = uniMap.get(pront.unidade_id);
@@ -647,9 +649,9 @@ export const bpaService = {
           prontuario_id: pront.id,
           pts_id: pts?.pts_id,
           paciente_id: pront.paciente_id,
-          paciente_nome: pront.paciente_nome,
+          paciente_nome: pront.paciente_nome || pac?.nome || '',
           profissional_id: pront.profissional_id,
-          profissional_nome: pront.profissional_nome,
+          profissional_nome: pront.profissional_nome || prof?.nome || '',
           unidade_id: pront.unidade_id,
           data: pront.data_atendimento,
           procedimento_nome: 'Prontuário sem procedimento salvo',
@@ -687,9 +689,9 @@ export const bpaService = {
           prontuario_id: pront.id,
           pts_id: pts?.pts_id,
           paciente_id: pront.paciente_id,
-          paciente_nome: pront.paciente_nome,
+          paciente_nome: pront.paciente_nome || pac?.nome || '',
           profissional_id: pront.profissional_id,
-          profissional_nome: pront.profissional_nome,
+          profissional_nome: pront.profissional_nome || prof?.nome || '',
           unidade_id: pront.unidade_id,
           data: pront.data_atendimento,
           procedimento_id: resolved.procedimento_id || rawProc.procedimento_id,
