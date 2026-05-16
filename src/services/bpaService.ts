@@ -483,10 +483,38 @@ export const bpaService = {
 
     console.log('[BPA] prontuarios encontrados', prontuarios.length);
 
+    const sessoesTratamento = await loadAll('treatment_sessions', 'id,cycle_id,patient_id,professional_id,scheduled_date,status,procedure_done', (q) => {
+      let query = q.gte('scheduled_date', dataInicio).lte('scheduled_date', dataFim).in('status', ['realizada', 'realizado', 'concluido']);
+      if (profissionalId && profissionalId !== 'all') query = query.eq('professional_id', profissionalId);
+      return query;
+    }).catch(() => []);
+    const cycleIds = unique(sessoesTratamento.map((s: any) => s.cycle_id));
+    const ciclosTratamento = cycleIds.length ? await inBatches(cycleIds, 500, async (batch) => ((await (supabase as any).from('treatment_cycles').select('id,patient_id,professional_id,unit_id,pts_id,specialty,treatment_type,custom_data').in('id', batch)).data || [])) : [];
+    const ciclosMap = new Map(ciclosTratamento.map((c: any) => [c.id, c]));
+    const prontuarioKeys = new Set(prontuarios.map((p) => `${p.paciente_id}|${p.profissional_id}|${p.data_atendimento}`));
+    const sessoesComoAtendimento = sessoesTratamento
+      .map((s: any) => ({ sessao: s, ciclo: ciclosMap.get(s.cycle_id) }))
+      .filter(({ ciclo }: any) => ciclo && (!unidadeId || unidadeId === 'all' || ciclo.unit_id === unidadeId))
+      .filter(({ sessao, ciclo }: any) => !prontuarioKeys.has(`${sessao.patient_id}|${sessao.professional_id}|${sessao.scheduled_date}`))
+      .map(({ sessao, ciclo }: any) => ({
+        id: `sessao_${sessao.id}`,
+        paciente_id: sessao.patient_id,
+        paciente_nome: '',
+        profissional_id: sessao.professional_id,
+        profissional_nome: '',
+        data_atendimento: sessao.scheduled_date,
+        unidade_id: ciclo.unit_id,
+        tipo_registro: 'sessao_tratamento',
+        procedimentos_texto: sessao.procedure_done || '',
+        outro_procedimento: '',
+        custom_data: { treatment_session_id: sessao.id, treatment_cycle_id: sessao.cycle_id, pts_id: ciclo.pts_id, procedure_done: sessao.procedure_done, specialty: ciclo.specialty, treatment_type: ciclo.treatment_type },
+      }));
+    const basesProducao = [...prontuarios, ...sessoesComoAtendimento];
+
     const prontIds = prontuarios.map((p) => p.id).filter(Boolean);
-    const pacIds = unique(prontuarios.map((p) => p.paciente_id));
-    const profIds = unique(prontuarios.map((p) => p.profissional_id));
-    const uniIds = unique(prontuarios.map((p) => p.unidade_id));
+    const pacIds = unique(basesProducao.map((p) => p.paciente_id));
+    const profIds = unique(basesProducao.map((p) => p.profissional_id));
+    const uniIds = unique(basesProducao.map((p) => p.unidade_id));
 
     const [vincsPront, realizados, pacientes, profissionais, unidades, ptsList, triagens] = await Promise.all([
       inBatches(prontIds, 500, async (batch) => ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade, observacao').in('prontuario_id', batch)).data || [])),
