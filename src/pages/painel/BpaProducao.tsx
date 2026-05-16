@@ -556,12 +556,12 @@ const BpaProducao: React.FC = () => {
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
         idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
         l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
+        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), formatFonte(l.fonte_procedimento), formatFonte(l.fonte_cid), l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
         pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_resolucao || '', l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
+        folha, uniNome, formatFonte(l.origem), formatFonte(l.fonte_procedimento), l.fonte_resolucao || '', formatFonte(l.fonte_cid), l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
         (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
       ];
 
@@ -754,7 +754,7 @@ const BpaProducao: React.FC = () => {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Prontuário" value={stats.pront} />
         <Stat label="PTS" value={stats.pts} />
