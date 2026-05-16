@@ -343,6 +343,19 @@ const BpaProducao: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, pacMap, profMap]);
 
+  const emptyFilterMessage = useMemo(() => {
+    if (linhas.length === 0) return 'Nenhuma linha encontrada na competência. Verifique competência, unidade e se há Prontuários/PTS/sessões lançados.';
+    if (linhasFiltradas.length > 0) return '';
+    return `Nenhuma linha para este filtro. Existem ${stats.pendentes} pendente(s), ${stats.validos} válida(s) e ${stats.duplicados} duplicada(s) ignorada(s) na competência.`;
+  }, [linhas.length, linhasFiltradas.length, stats.pendentes, stats.validos, stats.duplicados]);
+
+  const clearVisualFilters = () => {
+    setOrigemFiltro('all');
+    setStatusFiltro('all');
+    setPacienteFiltro('');
+    setSigtapFiltro('');
+  };
+
   const getCnesFromUnidade = (uniId: string): string => {
     if (!uniId) return '';
     const uni = unidades.find((u: any) => u.id === uniId);
@@ -748,6 +761,7 @@ const BpaProducao: React.FC = () => {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="ok">Válidos</SelectItem>
                 <SelectItem value="pendente">Pendentes</SelectItem>
+                <SelectItem value="duplicado">Duplicados</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -763,13 +777,14 @@ const BpaProducao: React.FC = () => {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Prontuário" value={stats.pront} />
         <Stat label="PTS" value={stats.pts} />
         <Stat label="Triagem" value={stats.triagem} />
         <Stat label="Válidos" value={stats.validos} variant="success" />
         <Stat label="Pendentes" value={stats.pendentes} variant="destructive" />
+        <Stat label="Duplicados" value={stats.duplicados} />
       </div>
 
       {/* Aviso SIGTAP triagem */}
@@ -800,7 +815,14 @@ const BpaProducao: React.FC = () => {
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : linhasFiltradas.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">Nenhuma linha neste período/filtro.</div>
+            <div className="p-8 text-center text-muted-foreground text-sm space-y-3">
+              <p>{emptyFilterMessage}</p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setStatusFiltro('all')}>Ver todos</Button>
+                <Button variant="outline" size="sm" onClick={() => setStatusFiltro('pendente')}>Ver pendentes</Button>
+                <Button variant="outline" size="sm" onClick={clearVisualFilters}>Limpar filtros</Button>
+              </div>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
