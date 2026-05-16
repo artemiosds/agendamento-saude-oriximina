@@ -507,7 +507,7 @@ export const bpaService = {
         data_atendimento: sessao.scheduled_date,
         unidade_id: ciclo.unit_id,
         tipo_registro: 'sessao_tratamento',
-        procedimentos_texto: sessao.procedure_done || '',
+        procedimentos_texto: '',
         outro_procedimento: '',
         custom_data: { treatment_session_id: sessao.id, treatment_cycle_id: sessao.cycle_id, pts_id: ciclo.pts_id, procedure_done: sessao.procedure_done, specialty: ciclo.specialty, treatment_type: ciclo.treatment_type },
       }));
