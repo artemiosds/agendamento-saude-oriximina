@@ -5,7 +5,7 @@ export interface LinhaBpaNormalizada {
   origem: 'prontuario' | 'triagem' | 'pts' | 'paciente';
   fonte_procedimento: 'prontuario' | 'paciente' | 'pts' | 'triagem';
   fonte_resolucao?: 'prontuario_codigo' | 'catalogo_id' | 'catalogo_nome' | 'sugestao' | 'nao_resolvido';
-  fonte_cid: 'prontuario' | 'procedimento' | 'paciente' | 'pts' | 'vazio';
+  fonte_cid: 'prontuario' | 'paciente' | 'pts' | 'nao_encontrado';
   prontuario_id?: string;
   pts_id?: string;
   paciente_id: string;
@@ -38,6 +38,7 @@ type FonteProc = LinhaBpaNormalizada['fonte_procedimento'];
 type FonteResolucao = NonNullable<LinhaBpaNormalizada['fonte_resolucao']>;
 
 type RawProcedimento = {
+  pts_id?: string;
   procedimento_id?: string;
   codigo_sigtap?: string;
   sigtap_codigo?: string;
@@ -57,6 +58,19 @@ type RawProcedimento = {
   cids?: any;
   cids_vinculados?: any;
   fonte: FonteProc;
+};
+
+type PtsBundle = {
+  pts_id: string;
+  patient_id: string;
+  professional_id?: string;
+  unit_id?: string;
+  status?: string;
+  especialidades_envolvidas?: string[];
+  custom_data?: any;
+  cids: string[];
+  procs: RawProcedimento[];
+  updated_at?: string;
 };
 
 const PAGE = 1000;
