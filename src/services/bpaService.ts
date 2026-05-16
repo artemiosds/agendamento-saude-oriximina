@@ -4,6 +4,7 @@ export interface LinhaBpaNormalizada {
   key: string;
   origem: 'prontuario' | 'triagem' | 'pts' | 'paciente';
   fonte_procedimento: 'prontuario' | 'paciente' | 'pts' | 'triagem';
+  fonte_resolucao?: 'prontuario_codigo' | 'catalogo_id' | 'catalogo_nome' | 'sugestao' | 'nao_resolvido';
   fonte_cid: 'prontuario' | 'procedimento' | 'paciente' | 'pts' | 'vazio';
   prontuario_id?: string;
   pts_id?: string;
@@ -13,10 +14,18 @@ export interface LinhaBpaNormalizada {
   profissional_nome: string;
   unidade_id: string;
   data: string;
+  procedimento_id?: string;
   procedimento_nome: string;
   codigo_sigtap: string;
   cid: string;
   cids_relacionados?: string[];
+  sugestoes_sigtap?: string[];
+  codigo_municipio?: string;
+  codigo_logradouro?: string;
+  tipo_logradouro?: string;
+  cep?: string;
+  chave_dedupe?: string;
+  duplicado?: boolean;
   carater: string;
   qtd: number;
   status_bpa: 'ok' | 'pendente';
@@ -24,49 +33,342 @@ export interface LinhaBpaNormalizada {
   pendenciaTriagemSigtap?: boolean;
 }
 
-// Helpers ---------------------------------------------------------------------
+type FonteCid = LinhaBpaNormalizada['fonte_cid'];
+type FonteProc = LinhaBpaNormalizada['fonte_procedimento'];
+type FonteResolucao = NonNullable<LinhaBpaNormalizada['fonte_resolucao']>;
+
+type RawProcedimento = {
+  procedimento_id?: string;
+  codigo_sigtap?: string;
+  sigtap_codigo?: string;
+  procedimento_codigo?: string;
+  co_procedimento?: string;
+  cod_procedimento?: string;
+  codigo?: string;
+  nome_procedimento?: string;
+  nome?: string;
+  descricao?: string;
+  quantidade?: number;
+  observacao?: string;
+  cids_selecionados?: any;
+  cid?: any;
+  cid10?: any;
+  cids?: any;
+  cids_vinculados?: any;
+  fonte: FonteProc;
+};
+
+const PAGE = 1000;
+const OX_MUNICIPIO = '1505304';
+const DNE_LOGRADOURO: Record<string, string> = {
+  RUA: '081', R: '081', AVENIDA: '008', AV: '008', TRAVESSA: '100', TV: '100',
+  BECO: '011', BC: '011', ESTRADA: '035', EST: '035', RODOVIA: '072', ROD: '072',
+  RAMAL: '082', VIA: '107', VIELA: '109', ALAMEDA: '003', PRACA: '062', PRAÇA: '062',
+  LARGO: '044', PARQUE: '055', QUADRA: '067', SERVIDAO: '094', SERVIDÃO: '094', VILA: '108',
+};
+
 const inBatches = async <T,>(ids: string[], batchSize: number, fn: (batch: string[]) => Promise<T[]>): Promise<T[]> => {
+  const unique = [...new Set(ids.filter(Boolean))];
   const out: T[] = [];
-  for (let i = 0; i < ids.length; i += batchSize) {
-    const part = await fn(ids.slice(i, i + batchSize));
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const part = await fn(unique.slice(i, i + batchSize));
     if (part?.length) out.push(...part);
   }
   return out;
 };
 
-const extractCidsFromProntuario = (pront: any): string[] => {
-  const cids: string[] = [];
-  const push = (v: any) => {
-    if (!v) return;
-    if (Array.isArray(v)) v.forEach(push);
-    else if (typeof v === 'string') {
-      const code = v.trim().toUpperCase();
-      if (code) cids.push(code);
-    } else if (typeof v === 'object') {
-      push(v.codigo || v.code || v.cid || v.cid10);
+const onlyDigits = (v: any) => String(v ?? '').replace(/\D/g, '');
+const sanitizeCid = (v: any) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+const normalizeName = (s: any) => String(s ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase()
+  .replace(/[^A-Z0-9 ]+/g, ' ')
+  .replace(/\b(COMPLETA|COMPLETO|GERAL|INDIVIDUAL|AMBULATORIAL|CLINICA|CLINICO|SESSAO|ATENDIMENTO)\b/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const tokenize = (s: any) => normalizeName(s).split(' ').filter((w) => w.length >= 4);
+
+const unique = <T,>(arr: T[]) => [...new Set(arr.filter(Boolean))];
+
+const pushCid = (bag: string[], v: any) => {
+  if (!v) return;
+  if (Array.isArray(v)) return v.forEach((x) => pushCid(bag, x));
+  if (typeof v === 'object') {
+    pushCid(bag, v.codigo || v.code || v.cid || v.cid10 || v.cid_codigo || v.value);
+    return;
+  }
+  const cid = sanitizeCid(v);
+  if (cid) bag.push(cid);
+};
+
+const extractCidsFromAny = (...sources: any[]): string[] => {
+  const out: string[] = [];
+  sources.forEach((src) => pushCid(out, src));
+  return unique(out);
+};
+
+const extractArray = (v: any): any[] => {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (!t) return [];
+    try {
+      const parsed = JSON.parse(t);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return t.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
     }
+  }
+  if (typeof v === 'object') return [v];
+  return [];
+};
+
+const rawProcFromAny = (item: any, fonte: FonteProc): RawProcedimento | null => {
+  if (!item) return null;
+  if (typeof item === 'string') {
+    const nome = item.trim();
+    return nome ? { nome_procedimento: nome, fonte, quantidade: 1 } : null;
+  }
+  const nome = item.nome_procedimento || item.procedimento_nome || item.nome || item.descricao || item.label || item.procedimento;
+  const codigo = item.codigo_sigtap || item.sigtap_codigo || item.procedimento_codigo || item.co_procedimento || item.cod_procedimento || item.codigo;
+  const procedimentoId = item.procedimento_id || item.id || item.uuid;
+  if (!nome && !codigo && !procedimentoId) return null;
+  return {
+    procedimento_id: procedimentoId ? String(procedimentoId) : undefined,
+    codigo_sigtap: item.codigo_sigtap,
+    sigtap_codigo: item.sigtap_codigo,
+    procedimento_codigo: item.procedimento_codigo,
+    co_procedimento: item.co_procedimento,
+    cod_procedimento: item.cod_procedimento,
+    codigo: item.codigo,
+    nome_procedimento: nome,
+    nome,
+    descricao: item.descricao || item.observacao,
+    quantidade: Number(item.quantidade || item.qtd || 1) || 1,
+    observacao: item.observacao || '',
+    cids_selecionados: item.cids_selecionados,
+    cid: item.cid,
+    cid10: item.cid10,
+    cids: item.cids,
+    cids_vinculados: item.cids_vinculados,
+    fonte,
   };
-  const cd = pront?.custom_data || {};
-  push(cd.cid);
-  push(cd.cids);
-  push(cd.cid_principal);
-  push(cd.diagnostico_cid);
-  push(cd.hipotese_diagnostica_cid);
-  push(pront?.hipotese);
-  return [...new Set(cids.filter(Boolean))];
 };
 
-const extractCidsFromPaciente = (pac: any): string[] => {
-  if (!pac) return [];
-  const cids: string[] = [];
-  const cd = pac.custom_data || {};
-  if (pac.cid) cids.push(String(pac.cid).toUpperCase());
-  if (Array.isArray(cd.cids)) cd.cids.forEach((c: any) => c && cids.push(String(c).toUpperCase()));
-  if (cd.cid) cids.push(String(cd.cid).toUpperCase());
-  return [...new Set(cids.filter(Boolean))];
+const resolveCodigoMunicipioPaciente = (paciente: any, unidade?: any): string => {
+  const cd = paciente?.custom_data || {};
+  const direct = onlyDigits(
+    paciente?.codigo_municipio || paciente?.municipio_codigo || paciente?.cod_municipio || paciente?.ibge_municipio || paciente?.codigo_ibge ||
+    cd.codigo_municipio || cd.municipio_codigo || cd.cod_municipio || cd.ibge_municipio || cd.codigo_ibge || cd.municipio_ibge || cd.codigo_ibge_municipio
+  );
+  if (direct.length >= 7) return direct.slice(0, 7);
+  if (direct.length === 6) return `${direct}0`;
+  const munUf = normalizeName(`${paciente?.municipio || cd.municipio || ''} ${paciente?.uf || cd.uf || ''}`);
+  const uniTxt = normalizeName(`${unidade?.nome || ''} ${unidade?.endereco || ''}`);
+  if (munUf.includes('ORIXIMINA') || (munUf.includes('PA') && munUf.includes('ORIX')) || uniTxt.includes('ORIXIMINA')) return OX_MUNICIPIO;
+  return '';
 };
 
-// -----------------------------------------------------------------------------
+const resolveCodigoLogradouroPaciente = (paciente: any, dneMap: Map<string, string>): string => {
+  const cd = paciente?.custom_data || {};
+  const direct = onlyDigits(
+    paciente?.codigo_logradouro || paciente?.tipo_logradouro_codigo || paciente?.codigo_tipo_logradouro || paciente?.tipo_logradouro_dne ||
+    cd.codigo_logradouro || cd.tipo_logradouro_codigo || cd.tipoLogradouroCodigo || cd.codigo_tipo_logradouro || cd.tipo_logradouro_dne
+  );
+  if (direct) return direct.padStart(3, '0').slice(-3);
+  const rawTipo = String(paciente?.tipo_logradouro || cd.tipo_logradouro || cd.tipoLogradouro || cd.tipo_logradouro_dne || '').trim();
+  const rawLog = String(paciente?.logradouro || cd.logradouro || paciente?.endereco || '').trim();
+  const candidates = [rawTipo, rawTipo.split(/\s+/)[0], rawLog.split(/\s+/)[0]].map((x) => normalizeName(x));
+  for (const key of candidates) {
+    if (!key) continue;
+    if (dneMap.get(key)) return dneMap.get(key)!;
+    if (DNE_LOGRADOURO[key]) return DNE_LOGRADOURO[key];
+  }
+  return '';
+};
+
+const loadAll = async (table: string, select = '*', filters?: (q: any) => any) => {
+  const all: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = (supabase as any).from(table).select(select).range(from, from + PAGE - 1);
+    if (filters) q = filters(q);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data?.length) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return all;
+};
+
+const buildCatalog = async (procIds: string[]) => {
+  const [legacyByIds, sigtapByIds, catalog, dneRows] = await Promise.all([
+    inBatches(procIds, 500, async (batch) => ((await (supabase as any).from('procedimentos').select('id,nome,descricao,especialidade,codigo_sigtap').in('id', batch)).data || [])),
+    inBatches(procIds, 500, async (batch) => ((await (supabase as any).from('sigtap_procedimentos').select('id,codigo,nome,descricao,especialidade').in('id', batch)).data || [])),
+    loadAll('sigtap_procedimentos', 'id,codigo,nome,descricao,especialidade,ativo', (q) => q.eq('ativo', true)),
+    loadAll('logradouros_dne', 'codigo,descricao').catch(() => []),
+  ]);
+
+  const byId = new Map<string, any>();
+  const byCode = new Map<string, any>();
+  const byName = new Map<string, any[]>();
+  const allCatalog = [...catalog];
+
+  for (const p of allCatalog) {
+    const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
+    if (obj.id) byId.set(obj.id, obj);
+    if (obj.codigo) byCode.set(obj.codigo, obj);
+    const n = normalizeName(obj.nome);
+    if (n) byName.set(n, [...(byName.get(n) || []), obj]);
+  }
+  for (const p of sigtapByIds) {
+    const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
+    if (obj.id && !byId.has(obj.id)) byId.set(obj.id, obj);
+  }
+  for (const p of legacyByIds) {
+    const obj = { id: p.id, codigo: onlyDigits(p.codigo_sigtap), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'legacy' };
+    if (obj.id) byId.set(obj.id, obj);
+    if (obj.codigo && !byCode.has(obj.codigo)) byCode.set(obj.codigo, obj);
+  }
+
+  const dneMap = new Map<string, string>();
+  (dneRows || []).forEach((r: any) => {
+    const key = normalizeName(r.descricao);
+    const code = onlyDigits(r.codigo).padStart(3, '0').slice(-3);
+    if (key && code) dneMap.set(key, code);
+  });
+
+  return { byId, byCode, byName, allCatalog: allCatalog.map((p: any) => ({ ...p, codigo: onlyDigits(p.codigo), norm: normalizeName(p.nome), descNorm: normalizeName(p.descricao) })), dneMap };
+};
+
+const resolveProcedimentoSigtap = (raw: RawProcedimento, catalog: Awaited<ReturnType<typeof buildCatalog>>, profissional?: any, especialidade?: string) => {
+  const directFields = [raw.codigo_sigtap, raw.sigtap_codigo, raw.procedimento_codigo, raw.co_procedimento, raw.cod_procedimento, raw.codigo];
+  for (const field of directFields) {
+    const code = onlyDigits(field);
+    if (code.length >= 8) {
+      const hit = catalog.byCode.get(code);
+      return {
+        codigo_sigtap: code,
+        nome_procedimento: raw.nome_procedimento || raw.nome || hit?.nome || `Procedimento ${code}`,
+        procedimento_id: raw.procedimento_id || hit?.id || '',
+        fonte_resolucao: 'prontuario_codigo' as FonteResolucao,
+        sugestoes_sigtap: [] as string[],
+      };
+    }
+  }
+
+  if (raw.procedimento_id) {
+    const hit = catalog.byId.get(String(raw.procedimento_id));
+    if (hit?.codigo) {
+      return {
+        codigo_sigtap: hit.codigo,
+        nome_procedimento: raw.nome_procedimento || raw.nome || hit.nome,
+        procedimento_id: String(raw.procedimento_id),
+        fonte_resolucao: 'catalogo_id' as FonteResolucao,
+        sugestoes_sigtap: [] as string[],
+      };
+    }
+  }
+
+  const name = raw.nome_procedimento || raw.nome || raw.descricao || '';
+  const norm = normalizeName(name);
+  const exact = norm ? (catalog.byName.get(norm) || []).filter((x) => x.codigo) : [];
+  if (exact.length === 1) {
+    const hit = exact[0];
+    return { codigo_sigtap: hit.codigo, nome_procedimento: name || hit.nome, procedimento_id: raw.procedimento_id || hit.id, fonte_resolucao: 'catalogo_nome' as FonteResolucao, sugestoes_sigtap: [] as string[] };
+  }
+  if (exact.length > 1) {
+    return { codigo_sigtap: '', nome_procedimento: name || 'Procedimento', procedimento_id: raw.procedimento_id || '', fonte_resolucao: 'sugestao' as FonteResolucao, sugestoes_sigtap: exact.slice(0, 5).map((h) => `${h.codigo} - ${h.nome}`) };
+  }
+
+  const tokens = tokenize(name);
+  const espNorm = normalizeName(especialidade || profissional?.profissao || profissional?.cargo || '');
+  const scored = catalog.allCatalog
+    .map((p: any) => {
+      const all = `${p.norm} ${p.descNorm}`;
+      const hits = tokens.filter((t) => all.includes(t)).length;
+      const score = hits + (espNorm && normalizeName(p.especialidade).includes(espNorm) ? 0.5 : 0);
+      const safePartial = norm && (p.norm.includes(norm) || norm.includes(p.norm)) ? 3 : 0;
+      return { p, score: score + safePartial };
+    })
+    .filter((x: any) => x.p.codigo && x.score >= Math.max(1, Math.min(2, tokens.length)))
+    .sort((a: any, b: any) => b.score - a.score || a.p.nome.localeCompare(b.p.nome));
+
+  if (scored.length === 1 || (scored[0] && scored[0].score > (scored[1]?.score || 0))) {
+    const hit = scored[0].p;
+    return { codigo_sigtap: hit.codigo, nome_procedimento: name || hit.nome, procedimento_id: raw.procedimento_id || hit.id, fonte_resolucao: 'catalogo_nome' as FonteResolucao, sugestoes_sigtap: scored.slice(0, 5).map((h: any) => `${h.p.codigo} - ${h.p.nome}`) };
+  }
+
+  return {
+    codigo_sigtap: '',
+    nome_procedimento: name || 'Procedimento encontrado',
+    procedimento_id: raw.procedimento_id || '',
+    fonte_resolucao: scored.length ? 'sugestao' as FonteResolucao : 'nao_resolvido' as FonteResolucao,
+    sugestoes_sigtap: scored.slice(0, 5).map((h: any) => `${h.p.codigo} - ${h.p.nome}`),
+  };
+};
+
+const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProcedimento[], realizados: RawProcedimento[], ptsProcs: RawProcedimento[]): RawProcedimento[] => {
+  const out: RawProcedimento[] = [];
+  const add = (p: RawProcedimento | null) => { if (p) out.push(p); };
+  related.forEach(add);
+  realizados.forEach((p) => {
+    const exists = out.some((x) => x.procedimento_id && x.procedimento_id === p.procedimento_id);
+    if (!exists) add(p);
+  });
+
+  const cd = prontuario?.custom_data || {};
+  const dados = prontuario?.dados || cd.dados || {};
+  const metadata = prontuario?.metadata || cd.metadata || {};
+  [
+    prontuario?.procedimentos,
+    prontuario?.procedimentos_realizados,
+    prontuario?.procedimentosSelecionados,
+    prontuario?.procedimentos_sigtap,
+    cd.procedimentos,
+    cd.procedimentos_realizados,
+    cd.procedimentosSelecionados,
+    cd.procedimentos_sigtap,
+    dados.procedimentos,
+    metadata.procedimentos,
+  ].forEach((src) => extractArray(src).forEach((item) => add(rawProcFromAny(item, 'prontuario'))));
+
+  if (!out.length && prontuario?.procedimentos_texto) {
+    extractArray(prontuario.procedimentos_texto).forEach((item) => add(rawProcFromAny(item, 'prontuario')));
+  }
+  if (!out.length && ptsProcs.length) ptsProcs.forEach(add);
+
+  const seen = new Set<string>();
+  return out.filter((p) => {
+    const key = `${p.procedimento_id || ''}|${onlyDigits(p.codigo_sigtap || p.sigtap_codigo || p.procedimento_codigo || p.codigo)}|${normalizeName(p.nome_procedimento || p.nome || p.descricao)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const extractAllCidsFromProntuarioPtsPaciente = ({ prontuario, procedimento, pts, paciente }: { prontuario: any; procedimento: RawProcedimento; pts?: any; paciente?: any }) => {
+  const cd = prontuario?.custom_data || {};
+  const pcd = paciente?.custom_data || {};
+  const complementares = paciente?.complementares || pcd.complementares || {};
+  const procCids = extractCidsFromAny(procedimento.cid, procedimento.cid10, procedimento.cids, procedimento.cids_vinculados, procedimento.cids_selecionados);
+  const prontCids = extractCidsFromAny(
+    prontuario?.cid, prontuario?.cid10, prontuario?.diagCid, prontuario?.cid_principal, prontuario?.cids, prontuario?.cids_vinculados,
+    prontuario?.diagnostico_cid, prontuario?.hipotese_diagnostica, prontuario?.hipotese,
+    cd.cid, cd.cids, cd.cid_principal, cd.diagnostico_cid, cd.hipotese_diagnostica, cd.hipotese_diagnostica_cid
+  );
+  const ptsCids = extractCidsFromAny(pts?.cid, pts?.cid10, pts?.cid_principal, pts?.cids, pts?.cids_vinculados, pts?.diagnostico_cid, pts?.hipotese_diagnostica, ...(pts?.procs || []).map((p: any) => p.cid));
+  const pacienteCids = extractCidsFromAny(paciente?.cid, paciente?.cid10, paciente?.cids, paciente?.diagnostico_cid, pcd.cid, pcd.cids, complementares.cid, complementares.cids);
+
+  const source: [string[], FonteCid][] = [[procCids, 'procedimento'], [prontCids, 'prontuario'], [ptsCids, 'pts'], [pacienteCids, 'paciente']];
+  const first = source.find(([arr]) => arr.length > 0);
+  const all = unique([...procCids, ...prontCids, ...ptsCids, ...pacienteCids]);
+  return { cid_usado: first?.[0][0] || '', cids_relacionados: all.filter((c) => c !== (first?.[0][0] || '')), fonte_cid: first?.[1] || 'vazio' as FonteCid };
+};
+
 export const bpaService = {
   async resolveBpaProcedimentosECids({
     competencia,
@@ -85,349 +387,215 @@ export const bpaService = {
     const lastDay = new Date(Number(ano), Number(mes), 0).getDate();
     const dataFim = `${ano}-${mes}-${String(lastDay).padStart(2, '0')}`;
 
-    console.log('[BPA] competencia', { competencia, dataInicio, dataFim });
-
-    // 1) Prontuários da competência (paginado)
-    const PAGE = 1000;
-    const allProntuarios: any[] = [];
-    for (let from = 0; ; from += PAGE) {
-      let q = (supabase as any)
-        .from('prontuarios')
-        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data_atendimento, unidade_id, tipo_registro, hipotese, custom_data')
-        .gte('data_atendimento', dataInicio)
-        .lte('data_atendimento', dataFim)
-        .range(from, from + PAGE - 1);
-      if (unidadeId && unidadeId !== 'all') q = q.eq('unidade_id', unidadeId);
-      if (profissionalId && profissionalId !== 'all') q = q.eq('profissional_id', profissionalId);
-      const { data, error } = await q;
-      if (error) throw error;
-      if (!data?.length) break;
-      allProntuarios.push(...data);
-      if (data.length < PAGE) break;
-    }
-    const prots = allProntuarios;
-    const pacIds = [...new Set(prots.map((p) => p.paciente_id).filter(Boolean))];
-    const prontIds = prots.map((p) => p.id);
-
-    // 2) Pacientes em lote (com endereço completo)
-    const pacientes = await inBatches(pacIds, 500, async (batch) => {
-      const { data } = await (supabase as any)
-        .from('pacientes')
-        .select('id, nome, cns, cpf, data_nascimento, sexo, raca_cor, nacionalidade, naturalidade, naturalidade_uf, municipio, cep, tipo_logradouro, logradouro, numero, complemento, bairro, uf, telefone, email, endereco, cid, custom_data')
-        .in('id', batch);
-      return data || [];
-    });
-    const pacMap = new Map<string, any>();
-    pacientes.forEach((p: any) => pacMap.set(p.id, p));
-
-    // 3) Procedimentos vinculados aos prontuários (fonte primária)
-    const vincsPront = await inBatches(prontIds, 500, async (batch) => {
-      const { data } = await (supabase as any)
-        .from('prontuario_procedimentos')
-        .select('prontuario_id, procedimento_id, cids_selecionados, quantidade')
-        .in('prontuario_id', batch);
-      return data || [];
+    const prontuarios = await loadAll('prontuarios', 'id,paciente_id,paciente_nome,profissional_id,profissional_nome,data_atendimento,unidade_id,tipo_registro,hipotese,procedimentos_texto,outro_procedimento,custom_data', (q) => {
+      let query = q.gte('data_atendimento', dataInicio).lte('data_atendimento', dataFim);
+      if (unidadeId && unidadeId !== 'all') query = query.eq('unidade_id', unidadeId);
+      if (profissionalId && profissionalId !== 'all') query = query.eq('profissional_id', profissionalId);
+      return query;
     });
 
-    // 3b) Procedimentos realizados (fonte alternativa, vinculada por paciente+data)
-    const realizados = await inBatches(pacIds, 500, async (batch) => {
-      const { data } = await (supabase as any)
-        .from('procedimentos_realizados')
-        .select('paciente_id, procedimento_id, data_atendimento, cids_selecionados, quantidade')
-        .in('paciente_id', batch)
-        .gte('data_atendimento', dataInicio)
-        .lte('data_atendimento', dataFim);
-      return data || [];
-    });
+    console.log('[BPA] prontuarios encontrados', prontuarios.length);
 
-    // 4) Catálogo de procedimentos — busca em AMBAS as tabelas:
-    //    - procedimentos (legado/personalizados)
-    //    - sigtap_procedimentos (catálogo oficial SIGTAP — fonte canônica)
-    //    A FK do prontuario_procedimentos foi removida; agora o UUID pode vir de qualquer uma.
-    const procIds = [...new Set([
-      ...vincsPront.map((v: any) => v.procedimento_id),
-      ...realizados.map((v: any) => v.procedimento_id),
-    ].filter(Boolean))];
+    const prontIds = prontuarios.map((p) => p.id).filter(Boolean);
+    const pacIds = unique(prontuarios.map((p) => p.paciente_id));
+    const profIds = unique(prontuarios.map((p) => p.profissional_id));
+    const uniIds = unique(prontuarios.map((p) => p.unidade_id));
 
-    const [procsLegado, procsSigtap] = await Promise.all([
-      inBatches(procIds as string[], 500, async (batch) => {
-        const { data } = await (supabase as any)
-          .from('procedimentos')
-          .select('id, nome, codigo_sigtap')
-          .in('id', batch);
-        return data || [];
-      }),
-      inBatches(procIds as string[], 500, async (batch) => {
-        const { data } = await (supabase as any)
-          .from('sigtap_procedimentos')
-          .select('id, nome, codigo')
-          .in('id', batch);
-        return data || [];
-      }),
+    const [vincsPront, realizados, pacientes, profissionais, unidades, ptsList, triagens] = await Promise.all([
+      inBatches(prontIds, 500, async (batch) => ((await (supabase as any).from('prontuario_procedimentos').select('prontuario_id, procedimento_id, cids_selecionados, quantidade, observacao').in('prontuario_id', batch)).data || [])),
+      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('procedimentos_realizados').select('paciente_id, procedimento_id, data_atendimento, cids_selecionados, quantidade, observacao').in('paciente_id', batch).gte('data_atendimento', dataInicio).lte('data_atendimento', dataFim)).data || [])),
+      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pacientes').select('*').in('id', batch)).data || [])),
+      inBatches(profIds, 500, async (batch) => ((await (supabase as any).from('funcionarios').select('id,nome,profissao,cargo,custom_data').in('id', batch)).data || [])),
+      inBatches(uniIds, 500, async (batch) => ((await (supabase as any).from('unidades').select('id,nome,endereco,custom_data').in('id', batch)).data || [])),
+      inBatches(pacIds, 500, async (batch) => ((await (supabase as any).from('pts').select('id,patient_id,status,custom_data').in('patient_id', batch).eq('status', 'ativo')).data || [])),
+      loadAll('triage_records', 'id,agendamento_id,tecnico_id,criado_em', (q) => q.gte('criado_em', `${dataInicio}T00:00:00`).lte('criado_em', `${dataFim}T23:59:59`)).catch(() => []),
     ]);
 
-    const procsData: any[] = [];
-    const procsMap = new Map<string, any>();
-    procsLegado.forEach((p: any) => {
-      const obj = { id: p.id, nome: p.nome, codigo_sigtap: p.codigo_sigtap || '' };
-      procsMap.set(p.id, obj);
-      procsData.push(obj);
-    });
-    procsSigtap.forEach((p: any) => {
-      if (procsMap.has(p.id)) return; // legado tem prioridade
-      const obj = { id: p.id, nome: p.nome, codigo_sigtap: String(p.codigo || '') };
-      procsMap.set(p.id, obj);
-      procsData.push(obj);
-    });
+    const procIds = unique([
+      ...vincsPront.map((v: any) => v.procedimento_id),
+      ...realizados.map((v: any) => v.procedimento_id),
+    ]);
+    const catalog = await buildCatalog(procIds);
 
-    // 4b) Fallback SIGTAP por NOME — quando procedimentos.codigo_sigtap está vazio,
-    //     tenta resolver no catálogo oficial sigtap_procedimentos por nome normalizado
-    const normalizeName = (s: string) =>
-      String(s || '')
-        .toUpperCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Z0-9 ]+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const procsSemSigtap = procsData.filter((p: any) => !String(p.codigo_sigtap || '').replace(/\D/g, ''));
-    const sigtapByName = new Map<string, { codigo: string; nome: string }>();
-    if (procsSemSigtap.length) {
-      const { data: sigCat } = await (supabase as any)
-        .from('sigtap_procedimentos')
-        .select('codigo, nome')
-        .eq('ativo', true);
-      (sigCat || []).forEach((s: any) => {
-        const k = normalizeName(s.nome);
-        if (k && !sigtapByName.has(k)) sigtapByName.set(k, { codigo: String(s.codigo || ''), nome: s.nome });
-      });
-    }
-    const resolveSigtap = (proc: any): { codigo: string; nome: string; fonte: 'catalogo' | 'sigtap_nome' | 'vazio' } => {
-      const direto = String(proc?.codigo_sigtap || '').replace(/\D/g, '');
-      if (direto) return { codigo: direto, nome: proc?.nome || 'Procedimento', fonte: 'catalogo' };
-      const k = normalizeName(proc?.nome || '');
-      const hit = k ? sigtapByName.get(k) : undefined;
-      if (hit) {
-        return { codigo: String(hit.codigo).replace(/\D/g, ''), nome: proc?.nome || hit.nome, fonte: 'sigtap_nome' };
-      }
-      return { codigo: '', nome: proc?.nome || 'Procedimento', fonte: 'vazio' };
-    };
+    const activePtsIds = ptsList.map((p: any) => p.id).filter(Boolean);
+    const [ptsCids, ptsProcs] = await Promise.all([
+      inBatches(activePtsIds, 500, async (batch) => ((await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch)).data || [])),
+      inBatches(activePtsIds, 500, async (batch) => ((await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome, especialidade').in('pts_id', batch)).data || [])),
+    ]);
 
-    // 4c) Mapa CID por procedimento SIGTAP (fallback de CID)
+    const sigtapCodes = unique([
+      ...catalog.allCatalog.map((p: any) => p.codigo),
+      ...ptsProcs.map((p: any) => onlyDigits(p.procedimento_codigo)),
+    ]).filter(Boolean);
+    const sigtapCidRows = await inBatches(sigtapCodes, 500, async (batch) => ((await (supabase as any).from('sigtap_procedimento_cids').select('procedimento_codigo, cid_codigo').in('procedimento_codigo', batch)).data || []));
     const procedimentoCidsMap = new Map<string, string[]>();
-    const sigtapCodes = [...new Set(procsData.map((p: any) => String(p.codigo_sigtap || '').replace(/\D/g, '')).filter(Boolean))];
-    if (sigtapCodes.length) {
-      const cidsLink = await inBatches(sigtapCodes, 500, async (batch) => {
-        const { data } = await (supabase as any)
-          .from('sigtap_procedimento_cids')
-          .select('procedimento_codigo, cid_codigo')
-          .in('procedimento_codigo', batch);
-        return data || [];
-      });
-      cidsLink.forEach((r: any) => {
-        const arr = procedimentoCidsMap.get(r.procedimento_codigo) || [];
-        if (r.cid_codigo) arr.push(String(r.cid_codigo).toUpperCase());
-        procedimentoCidsMap.set(r.procedimento_codigo, arr);
-      });
-    }
+    sigtapCidRows.forEach((r: any) => {
+      const code = onlyDigits(r.procedimento_codigo);
+      if (!code) return;
+      procedimentoCidsMap.set(code, unique([...(procedimentoCidsMap.get(code) || []), sanitizeCid(r.cid_codigo)]));
+    });
 
-    // 5) PTS ativos do paciente (apoio: CID e procedimento fallback)
-    const ptsList = await inBatches(pacIds, 500, async (batch) => {
-      const { data } = await (supabase as any)
-        .from('pts')
-        .select('id, patient_id, status')
-        .in('patient_id', batch)
-        .eq('status', 'ativo');
-      return data || [];
-    });
-    const activePtsIds = ptsList.map((p: any) => p.id);
-    const ptsCids = await inBatches(activePtsIds, 500, async (batch) => {
-      const { data } = await (supabase as any).from('pts_cid').select('pts_id, cid_codigo').in('pts_id', batch);
-      return data || [];
-    });
-    const ptsProcs = await inBatches(activePtsIds, 500, async (batch) => {
-      const { data } = await (supabase as any).from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', batch);
-      return data || [];
-    });
-    const ptsByPaciente = new Map<string, { pts_id: string; cids: string[]; procs: any[] }>();
+    const pacMap = new Map(pacientes.map((p: any) => [p.id, p]));
+    const profMap = new Map(profissionais.map((p: any) => [p.id, p]));
+    const uniMap = new Map(unidades.map((u: any) => [u.id, u]));
+
+    const ptsByPaciente = new Map<string, any>();
     ptsList.forEach((p: any) => {
+      const procs = ptsProcs.filter((pr: any) => pr.pts_id === p.id).map((pr: any) => ({
+        procedimento_codigo: pr.procedimento_codigo,
+        nome_procedimento: pr.procedimento_nome,
+        codigo_sigtap: pr.procedimento_codigo,
+        especialidade: pr.especialidade,
+        fonte: 'pts' as FonteProc,
+      }));
       ptsByPaciente.set(p.patient_id, {
         pts_id: p.id,
-        cids: ptsCids.filter((c: any) => c.pts_id === p.id).map((c: any) => String(c.cid_codigo || '').toUpperCase()).filter(Boolean),
-        procs: ptsProcs.filter((pr: any) => pr.pts_id === p.id),
+        cids: unique(ptsCids.filter((c: any) => c.pts_id === p.id).map((c: any) => sanitizeCid(c.cid_codigo))),
+        procs,
+        custom_data: p.custom_data || {},
       });
     });
 
-    // 6) Triagens (linha extra própria)
-    const { data: triagens } = await (supabase as any)
-      .from('triage_records')
-      .select('id, agendamento_id, tecnico_id, criado_em')
-      .gte('criado_em', `${dataInicio}T00:00:00`)
-      .lte('criado_em', `${dataFim}T23:59:59`);
-    const agIds = [...new Set((triagens || []).map((t: any) => t.agendamento_id).filter(Boolean))];
-    const agsData = agIds.length
-      ? (await (supabase as any).from('agendamentos').select('id, paciente_id, paciente_nome, unidade_id, data').in('id', agIds)).data || []
-      : [];
-    const agsMap = new Map<string, any>();
-    (agsData || []).forEach((a: any) => agsMap.set(a.id, a));
-
-    console.log('[BPA] dados carregados', {
-      prots: prots.length, vincsPront: vincsPront.length, realizados: realizados.length,
-      procs: procsData.length, pacientes: pacientes.length,
-      pts: ptsList.length, triagens: (triagens || []).length,
-      sigtapByName: sigtapByName.size,
-    });
-
-    // -------------------------------------------------------------------------
-    // Montagem de linhas com dedupe estrito por prontuário + procedimento + cid
-    const result: LinhaBpaNormalizada[] = [];
-    const seen = new Set<string>();
-    const pushLine = (l: LinhaBpaNormalizada) => {
-      const key = `${l.prontuario_id || l.pts_id || 'rea'}|${l.codigo_sigtap}|${l.cid}|${l.profissional_id}|${l.data}|${l.procedimento_nome}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      result.push(l);
-    };
-
-    // Index: prontuário → vínculos
-    const vincsByPront = new Map<string, any[]>();
+    const vincsByPront = new Map<string, RawProcedimento[]>();
     vincsPront.forEach((v: any) => {
       const arr = vincsByPront.get(v.prontuario_id) || [];
-      arr.push(v);
+      arr.push({ ...v, fonte: 'prontuario', quantidade: v.quantidade || 1 });
       vincsByPront.set(v.prontuario_id, arr);
     });
 
-    // Index: paciente+data → realizados (fallback alternativo)
-    const realizadosByPacData = new Map<string, any[]>();
+    const realizadosByPacData = new Map<string, RawProcedimento[]>();
     realizados.forEach((r: any) => {
       const k = `${r.paciente_id}|${r.data_atendimento}`;
       const arr = realizadosByPacData.get(k) || [];
-      arr.push(r);
+      arr.push({ ...r, fonte: 'prontuario', quantidade: r.quantidade || 1 });
       realizadosByPacData.set(k, arr);
     });
 
-    for (const pront of prots) {
+    const agIds = unique((triagens || []).map((t: any) => t.agendamento_id));
+    const agsData = agIds.length ? await inBatches(agIds, 500, async (batch) => ((await (supabase as any).from('agendamentos').select('id,paciente_id,paciente_nome,unidade_id,data').in('id', batch)).data || [])) : [];
+    const agsMap = new Map(agsData.map((a: any) => [a.id, a]));
+
+    const result: LinhaBpaNormalizada[] = [];
+    const seen = new Map<string, LinhaBpaNormalizada>();
+    let totalProcedimentos = 0;
+    let procedimentosSemSigtap = 0;
+    let municipiosSemCodigo = 0;
+    let logradourosSemCodigo = 0;
+
+    const pushLine = (line: LinhaBpaNormalizada) => {
+      const key = `${competencia}|${line.prontuario_id || line.pts_id || line.key}|${line.paciente_id}|${line.profissional_id}|${line.data}|${line.codigo_sigtap || normalizeName(line.procedimento_nome)}|${line.cid}|${line.procedimento_id || ''}`;
+      line.chave_dedupe = key;
+      if (seen.has(key)) {
+        line.duplicado = true;
+        return;
+      }
+      seen.set(key, line);
+      result.push(line);
+    };
+
+    for (const pront of prontuarios) {
       const pac = pacMap.get(pront.paciente_id);
+      const prof = profMap.get(pront.profissional_id);
+      const unidade = uniMap.get(pront.unidade_id);
       const pts = ptsByPaciente.get(pront.paciente_id);
-      const cidsPront = extractCidsFromProntuario(pront);
-      const cidsPaciente = extractCidsFromPaciente(pac);
-      const cidsPts = pts?.cids || [];
-
-      // Mescla vínculos do prontuário + procedimentos_realizados (mesmo paciente/data)
-      const linhasDoProntuario = [...(vincsByPront.get(pront.id) || [])];
+      const relacionados = vincsByPront.get(pront.id) || [];
       const realizadosCompat = realizadosByPacData.get(`${pront.paciente_id}|${pront.data_atendimento}`) || [];
-      realizadosCompat.forEach((r: any) => {
-        const jaExiste = linhasDoProntuario.some((v) => v.procedimento_id === r.procedimento_id);
-        if (!jaExiste) linhasDoProntuario.push(r);
-      });
+      const ptsFallback = (pts?.procs || []) as RawProcedimento[];
+      const procedimentos = extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat, ptsFallback);
+      const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
+      const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
+      if (!codigoMunicipio) municipiosSemCodigo += 1;
+      if (!codigoLogradouro && (pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || pac?.logradouro || pac?.endereco)) logradourosSemCodigo += 1;
 
-      if (linhasDoProntuario.length > 0) {
-        for (const v of linhasDoProntuario) {
-          const proc = procsMap.get(v.procedimento_id);
-          const sig = resolveSigtap(proc);
-          const sigtap = sig.codigo;
-          const procNome = sig.nome;
-          const cidsLinkados = sigtap ? (procedimentoCidsMap.get(sigtap) || []) : [];
-
-          // Resolve CID: 1) cids_selecionados, 2) prontuário, 3) PTS, 4) paciente, 5) link sigtap→cid
-          let cidsAlvo: string[] = (v.cids_selecionados || []).map((c: string) => String(c).toUpperCase()).filter(Boolean);
-          let fonteCid: LinhaBpaNormalizada['fonte_cid'] = 'procedimento';
-          if (cidsAlvo.length === 0 && cidsPront.length) { cidsAlvo = cidsPront; fonteCid = 'prontuario'; }
-          if (cidsAlvo.length === 0 && cidsPts.length)   { cidsAlvo = cidsPts;   fonteCid = 'pts'; }
-          if (cidsAlvo.length === 0 && cidsPaciente.length) { cidsAlvo = cidsPaciente; fonteCid = 'paciente'; }
-          if (cidsAlvo.length === 0 && cidsLinkados.length) { cidsAlvo = cidsLinkados; fonteCid = 'procedimento'; }
-          if (cidsAlvo.length === 0) { cidsAlvo = ['']; fonteCid = 'vazio'; }
-
-          const cidPrincipal = cidsAlvo[0] || '';
-          const cidsRel = cidsAlvo.filter((c, idx) => idx > 0);
-
-          pushLine({
-            key: `pron_${pront.id}_${v.procedimento_id}_${cidPrincipal}`,
-            origem: 'prontuario',
-            fonte_procedimento: 'prontuario',
-            fonte_cid: fonteCid,
-            prontuario_id: pront.id,
-            pts_id: pts?.pts_id,
-            paciente_id: pront.paciente_id,
-            paciente_nome: pront.paciente_nome,
-            profissional_id: pront.profissional_id,
-            profissional_nome: pront.profissional_nome,
-            unidade_id: pront.unidade_id,
-            data: pront.data_atendimento,
-            procedimento_nome: procNome,
-            codigo_sigtap: sigtap,
-            cid: cidPrincipal,
-            cids_relacionados: cidsRel,
-            carater: '01',
-            qtd: v.quantidade || 1,
-            status_bpa: sigtap ? 'ok' : 'pendente',
-            motivo_pendencia: sigtap ? undefined : `Procedimento "${procNome}" sem código SIGTAP no catálogo. Cadastre o codigo_sigtap em Procedimentos.`,
-          });
-        }
-      } else if (pts?.procs?.length) {
-        // Fallback: prontuário sem procedimento mas há PTS — usa PTS como fonte
-        for (const pp of pts.procs) {
-          const cidPrincipal = (cidsPront[0] || cidsPts[0] || cidsPaciente[0] || '');
-          const fonteCid: LinhaBpaNormalizada['fonte_cid'] = cidsPront[0]
-            ? 'prontuario' : cidsPts[0] ? 'pts' : cidsPaciente[0] ? 'paciente' : 'vazio';
-          pushLine({
-            key: `pron_pts_${pront.id}_${pp.procedimento_codigo}`,
-            origem: 'prontuario',
-            fonte_procedimento: 'pts',
-            fonte_cid: fonteCid,
-            prontuario_id: pront.id,
-            pts_id: pts.pts_id,
-            paciente_id: pront.paciente_id,
-            paciente_nome: pront.paciente_nome,
-            profissional_id: pront.profissional_id,
-            profissional_nome: pront.profissional_nome,
-            unidade_id: pront.unidade_id,
-            data: pront.data_atendimento,
-            procedimento_nome: pp.procedimento_nome || 'Procedimento PTS',
-            codigo_sigtap: String(pp.procedimento_codigo || '').replace(/\D/g, ''),
-            cid: cidPrincipal,
-            carater: '01',
-            qtd: 1,
-            status_bpa: 'ok',
-          });
-        }
-      } else {
-        // Prontuário sem procedimento nem PTS — gera 1 linha com pendência
-        const cidPrincipal = cidsPront[0] || cidsPaciente[0] || '';
-        const fonteCid: LinhaBpaNormalizada['fonte_cid'] = cidsPront[0] ? 'prontuario' : cidsPaciente[0] ? 'paciente' : 'vazio';
+      if (!procedimentos.length) {
+        const cidData = extractAllCidsFromProntuarioPtsPaciente({ prontuario: pront, procedimento: { fonte: 'prontuario' }, pts, paciente: pac });
         pushLine({
           key: `pron_empty_${pront.id}`,
           origem: 'prontuario',
           fonte_procedimento: 'prontuario',
-          fonte_cid: fonteCid,
+          fonte_resolucao: 'nao_resolvido',
+          fonte_cid: cidData.fonte_cid,
           prontuario_id: pront.id,
+          pts_id: pts?.pts_id,
           paciente_id: pront.paciente_id,
           paciente_nome: pront.paciente_nome,
           profissional_id: pront.profissional_id,
           profissional_nome: pront.profissional_nome,
           unidade_id: pront.unidade_id,
           data: pront.data_atendimento,
-          procedimento_nome: '— sem procedimento —',
+          procedimento_nome: 'Prontuário sem procedimento salvo',
           codigo_sigtap: '',
-          cid: cidPrincipal,
+          cid: cidData.cid_usado,
+          cids_relacionados: cidData.cids_relacionados,
+          codigo_municipio: codigoMunicipio,
+          codigo_logradouro: codigoLogradouro,
+          tipo_logradouro: pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || '',
+          cep: pac?.cep || pac?.custom_data?.cep || '',
           carater: '01',
           qtd: 1,
           status_bpa: 'pendente',
-          motivo_pendencia: 'Prontuário sem procedimento SIGTAP vinculado',
+          motivo_pendencia: 'Prontuário sem procedimento salvo',
+        });
+        continue;
+      }
+
+      for (const rawProc of procedimentos) {
+        totalProcedimentos += 1;
+        const resolved = resolveProcedimentoSigtap(rawProc, catalog, prof, rawProc.especialidade || prof?.profissao);
+        if (!resolved.codigo_sigtap) procedimentosSemSigtap += 1;
+        const cidData = extractAllCidsFromProntuarioPtsPaciente({ prontuario: pront, procedimento: rawProc, pts, paciente: pac });
+        const linkCids = resolved.codigo_sigtap ? (procedimentoCidsMap.get(resolved.codigo_sigtap) || []) : [];
+        const cidUsado = cidData.cid_usado || linkCids[0] || '';
+        const cidsRelacionados = unique([...(cidData.cids_relacionados || []), ...linkCids]).filter((c) => c !== cidUsado);
+
+        pushLine({
+          key: `pron_${pront.id}_${resolved.procedimento_id || rawProc.procedimento_id || normalizeName(resolved.nome_procedimento)}_${cidUsado}`,
+          origem: 'prontuario',
+          fonte_procedimento: rawProc.fonte,
+          fonte_resolucao: resolved.fonte_resolucao,
+          fonte_cid: cidData.fonte_cid !== 'vazio' ? cidData.fonte_cid : (linkCids.length ? 'procedimento' : 'vazio'),
+          prontuario_id: pront.id,
+          pts_id: pts?.pts_id,
+          paciente_id: pront.paciente_id,
+          paciente_nome: pront.paciente_nome,
+          profissional_id: pront.profissional_id,
+          profissional_nome: pront.profissional_nome,
+          unidade_id: pront.unidade_id,
+          data: pront.data_atendimento,
+          procedimento_id: resolved.procedimento_id || rawProc.procedimento_id,
+          procedimento_nome: resolved.nome_procedimento,
+          codigo_sigtap: resolved.codigo_sigtap,
+          cid: cidUsado,
+          cids_relacionados: cidsRelacionados,
+          sugestoes_sigtap: resolved.sugestoes_sigtap,
+          codigo_municipio: codigoMunicipio,
+          codigo_logradouro: codigoLogradouro,
+          tipo_logradouro: pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || '',
+          cep: pac?.cep || pac?.custom_data?.cep || '',
+          carater: '01',
+          qtd: Math.max(1, Number(rawProc.quantidade || 1)),
+          status_bpa: resolved.codigo_sigtap ? 'ok' : 'pendente',
+          motivo_pendencia: resolved.codigo_sigtap ? undefined : (resolved.sugestoes_sigtap?.length
+            ? `Procedimento ambíguo. Escolha o código SIGTAP correto para "${resolved.nome_procedimento}".`
+            : `Procedimento encontrado, mas sem código SIGTAP resolvido no catálogo: "${resolved.nome_procedimento}".`),
         });
       }
     }
 
-    // Triagens — uma linha cada
     (triagens || []).forEach((t: any) => {
       const ag = agsMap.get(t.agendamento_id);
       if (!ag) return;
       if (unidadeId && unidadeId !== 'all' && ag.unidade_id !== unidadeId) return;
       const pac = pacMap.get(ag.paciente_id);
-      const cid = extractCidsFromPaciente(pac)[0] || '';
+      const unidade = uniMap.get(ag.unidade_id);
+      const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
+      const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
+      const cid = extractCidsFromAny(pac?.cid, pac?.custom_data?.cid, pac?.custom_data?.cids)[0] || '';
       pushLine({
         key: `tri_${t.id}`,
         origem: 'triagem',
         fonte_procedimento: 'triagem',
+        fonte_resolucao: triagemSigtapPadrao ? 'prontuario_codigo' : 'nao_resolvido',
         fonte_cid: cid ? 'paciente' : 'vazio',
         paciente_id: ag.paciente_id,
         paciente_nome: ag.paciente_nome,
@@ -435,9 +603,13 @@ export const bpaService = {
         profissional_nome: 'Técnico de Triagem',
         unidade_id: ag.unidade_id,
         data: ag.data || (t.criado_em || '').slice(0, 10),
-        procedimento_nome: triagemSigtapPadrao ? 'Acolhimento com classificação de risco' : '— SIGTAP triagem não configurado —',
+        procedimento_nome: triagemSigtapPadrao ? 'Acolhimento com classificação de risco' : 'SIGTAP triagem não configurado',
         codigo_sigtap: triagemSigtapPadrao || '',
         cid,
+        codigo_municipio: codigoMunicipio,
+        codigo_logradouro: codigoLogradouro,
+        tipo_logradouro: pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || '',
+        cep: pac?.cep || pac?.custom_data?.cep || '',
         carater: '01',
         qtd: 1,
         status_bpa: triagemSigtapPadrao ? 'ok' : 'pendente',
@@ -446,31 +618,36 @@ export const bpaService = {
       });
     });
 
-    // Validação final por linha
     result.forEach((row) => {
       const pendencias: string[] = [];
       if (row.motivo_pendencia) pendencias.push(row.motivo_pendencia);
-      if (!row.codigo_sigtap) pendencias.push('Procedimento SIGTAP ausente');
+      if (!row.codigo_sigtap) pendencias.push(`Código SIGTAP não resolvido para "${row.procedimento_nome}"`);
       const pac = pacMap.get(row.paciente_id);
-      if (!pac?.cns && !pac?.cpf) pendencias.push('Paciente sem CNS ou CPF');
+      const prof = profMap.get(row.profissional_id);
+      const uni = uniMap.get(row.unidade_id);
+      const cns = onlyDigits(pac?.cns);
+      const cpf = onlyDigits(pac?.cpf);
+      if (!pac) pendencias.push('Paciente não identificado');
+      if (cns.length !== 15 && cpf.length !== 11) pendencias.push('Paciente sem CNS ou CPF');
       if (!pac?.nome) pendencias.push('Paciente sem nome');
       if (!pac?.data_nascimento) pendencias.push('Paciente sem data de nascimento');
-      if (!pac?.sexo && !(pac?.custom_data?.sexo)) pendencias.push('Paciente sem sexo');
-      // CID obrigatório para procedimentos clínicos (0301/0303)
-      if (row.codigo_sigtap && (row.codigo_sigtap.startsWith('0301') || row.codigo_sigtap.startsWith('0303')) && !row.cid) {
-        pendencias.push('CID obrigatório ausente');
-      }
+      if (!pac?.sexo && !pac?.custom_data?.sexo) pendencias.push('Paciente sem sexo');
+      if (!onlyDigits(prof?.custom_data?.cbo_codigo)) pendencias.push('Profissional sem CBO');
+      if (!onlyDigits(uni?.custom_data?.cnes)) pendencias.push('Unidade sem CNES');
+      if (!row.codigo_municipio) pendencias.push('Código de município não identificado');
+      if (!row.codigo_logradouro && (pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || pac?.logradouro)) pendencias.push('Código de logradouro não identificado');
+      if (row.codigo_sigtap && (row.codigo_sigtap.startsWith('0301') || row.codigo_sigtap.startsWith('0303')) && !row.cid) pendencias.push('CID obrigatório ausente');
       if (pendencias.length) {
         row.status_bpa = 'pendente';
-        row.motivo_pendencia = [...new Set(pendencias)].join(' | ');
+        row.motivo_pendencia = unique(pendencias).join(' | ');
       }
     });
 
-    console.log('[BPA] resultado', {
-      total: result.length,
-      ok: result.filter((r) => r.status_bpa === 'ok').length,
-      pendentes: result.filter((r) => r.status_bpa === 'pendente').length,
-    });
+    console.log('[BPA] procedimentos extraidos', totalProcedimentos);
+    console.log('[BPA] procedimentos sem sigtap', procedimentosSemSigtap);
+    console.log('[BPA] municipios sem codigo', municipiosSemCodigo);
+    console.log('[BPA] logradouros sem codigo', logradourosSemCodigo);
+    console.log('[BPA] resultado', { total: result.length, ok: result.filter((r) => r.status_bpa === 'ok').length, pendentes: result.filter((r) => r.status_bpa === 'pendente').length });
 
     return result;
   },
