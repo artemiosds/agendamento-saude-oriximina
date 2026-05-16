@@ -134,6 +134,12 @@ const mapRacaBpa = (raca: string) => {
   if (['indigena', 'indígena', '05'].includes(s)) return '05';
   return '99';
 };
+const formatFonte = (fonte?: string) => fonte === 'pts' ? 'PTS'
+  : fonte === 'prontuario' ? 'Prontuário'
+  : fonte === 'paciente' ? 'Paciente'
+  : fonte === 'triagem' ? 'Triagem'
+  : fonte === 'nao_encontrado' ? 'Não encontrado'
+  : fonte || '—';
 const calcBpaHash = (linhas: string[]) => {
   const conteudo = linhas.join('');
   let soma = 0;
