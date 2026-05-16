@@ -709,7 +709,7 @@ export const bpaService = {
           status_bpa: resolved.codigo_sigtap ? 'ok' : 'pendente',
           motivo_pendencia: resolved.codigo_sigtap ? undefined : (resolved.sugestoes_sigtap?.length
             ? `Procedimento ambíguo. Escolha o código SIGTAP correto para "${resolved.nome_procedimento}".`
-            : `Procedimento encontrado, mas sem código SIGTAP resolvido no catálogo: "${resolved.nome_procedimento}".`),
+            : `Procedimento encontrado no ${rawProc.fonte === 'pts' ? 'PTS' : 'Prontuário'}, mas sem código SIGTAP resolvido: "${resolved.nome_procedimento}".`),
         });
       }
     }
