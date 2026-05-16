@@ -164,7 +164,7 @@ const BpaProducao: React.FC = () => {
   const [unidadeFiltro, setUnidadeFiltro] = useState<string>(user?.unidadeId || 'all');
   const [profissionalFiltro, setProfissionalFiltro] = useState<string>('all');
   const [origemFiltro, setOrigemFiltro] = useState<'all' | Origem>('all');
-  const [statusFiltro, setStatusFiltro] = useState<'all' | 'ok' | 'pendente'>('all');
+  const [statusFiltro, setStatusFiltro] = useState<'all' | 'ok' | 'pendente' | 'duplicado'>('all');
   const [pacienteFiltro, setPacienteFiltro] = useState<string>('');
   const [sigtapFiltro, setSigtapFiltro] = useState<string>('');
   const [folha, setFolha] = useState<string>('001');
@@ -207,6 +207,11 @@ const BpaProducao: React.FC = () => {
         profissionalId: profissionalFiltro,
         triagemSigtapPadrao
       });
+
+      console.log('[BPA] filtros aplicados', { competencia, unidadeFiltro, profissionalFiltro, origemFiltro, statusFiltro, pacienteFiltro, sigtapFiltro });
+      console.log('[BPA] linhas montadas antes do filtro', result.length);
+      console.log('[BPA] validos', result.filter((l) => l.status_bpa === 'ok' && !l.duplicado).length);
+      console.log('[BPA] pendentes', result.filter((l) => l.status_bpa === 'pendente' && !l.duplicado).length);
 
       setLinhas(result);
 
@@ -305,7 +310,7 @@ const BpaProducao: React.FC = () => {
     v.identificacao && v.cbo && v.sigtap && v.nome && v.dataNasc && v.codigoMunicipio && v.codigoLogradouro && v.statusBpa;
 
   const linhasFiltradas = useMemo(() => {
-    return linhas.filter((l) => {
+    const filtradas = linhas.filter((l) => {
       if (origemFiltro !== 'all' && l.origem !== origemFiltro) return false;
       if (profissionalFiltro !== 'all' && l.profissional_id !== profissionalFiltro) return false;
       if (sigtapFiltro && !(l.codigo_sigtap || '').includes(sigtapFiltro.replace(/\D/g, ''))) return false;
@@ -313,26 +318,30 @@ const BpaProducao: React.FC = () => {
       if (statusFiltro !== 'all') {
         const v = validateRow(l);
         const ok = isLinhaValida(l, v);
+        if (statusFiltro === 'duplicado' && !l.duplicado) return false;
         if (statusFiltro === 'ok' && !ok) return false;
-        if (statusFiltro === 'pendente' && ok) return false;
+        if (statusFiltro === 'pendente' && (ok || l.duplicado)) return false;
       }
       return true;
     });
+    console.log('[BPA] filtro visual aplicado', { statusFiltro, origemFiltro, profissionalFiltro, pacienteFiltro, sigtapFiltro, antes: linhas.length, depois: filtradas.length });
+    return filtradas;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhas, origemFiltro, profissionalFiltro, sigtapFiltro, pacienteFiltro, statusFiltro, pacMap, profMap]);
 
   const stats = useMemo(() => {
-    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0;
-    linhasFiltradas.forEach((l) => {
+    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0, duplicados = 0;
+    linhas.forEach((l) => {
+      if (l.duplicado) { duplicados++; return; }
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
       if (l.origem === 'prontuario') pront++;
       else if (l.origem === 'pts') pts++;
       else triagem++;
     });
-    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem };
+    return { total: linhas.length, validos, pendentes, pront, pts, triagem, duplicados };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhasFiltradas, pacMap, profMap]);
+  }, [linhas, pacMap, profMap]);
 
   const getCnesFromUnidade = (uniId: string): string => {
     if (!uniId) return '';
