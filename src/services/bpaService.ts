@@ -340,7 +340,8 @@ const extractAllProcedimentosFromProntuario = (prontuario: any, related: RawProc
   if (!out.length && prontuario?.procedimentos_texto) {
     extractArray(prontuario.procedimentos_texto).forEach((item) => add(rawProcFromAny(item, 'prontuario')));
   }
-  if (!out.length && ptsProcs.length) ptsProcs.forEach(add);
+  // Sempre incluir procedimentos do PTS ativo, além dos do prontuário
+  ptsProcs.forEach(add);
 
   const seen = new Set<string>();
   return out.filter((p) => {
