@@ -134,6 +134,12 @@ const mapRacaBpa = (raca: string) => {
   if (['indigena', 'indígena', '05'].includes(s)) return '05';
   return '99';
 };
+const formatFonte = (fonte?: string) => fonte === 'pts' ? 'PTS'
+  : fonte === 'prontuario' ? 'Prontuário'
+  : fonte === 'paciente' ? 'Paciente'
+  : fonte === 'triagem' ? 'Triagem'
+  : fonte === 'nao_encontrado' ? 'Não encontrado'
+  : fonte || '—';
 const calcBpaHash = (linhas: string[]) => {
   const conteudo = linhas.join('');
   let soma = 0;
@@ -316,13 +322,15 @@ const BpaProducao: React.FC = () => {
   }, [linhas, origemFiltro, profissionalFiltro, sigtapFiltro, pacienteFiltro, statusFiltro, pacMap, profMap]);
 
   const stats = useMemo(() => {
-    let validos = 0, pendentes = 0, pront = 0, triagem = 0;
+    let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0;
     linhasFiltradas.forEach((l) => {
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
-      if (l.origem === 'prontuario') pront++; else triagem++;
+      if (l.origem === 'prontuario') pront++;
+      else if (l.origem === 'pts') pts++;
+      else triagem++;
     });
-    return { total: linhasFiltradas.length, validos, pendentes, pront, triagem };
+    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linhasFiltradas, pacMap, profMap]);
 
@@ -548,12 +556,12 @@ const BpaProducao: React.FC = () => {
         seq, competenciaFmt, formatCNS(pac.cns) || '', pac.cpf || '', pac.nome || '', pac.data_nascimento || '',
         idade, pac.sexo || '', pac.municipio || '', pac.uf || '', codMun,
         l.data, procNomeFinal, sigtapFinal,
-        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), l.fonte_procedimento, l.fonte_cid, l.carater || '01', '',
+        l.qtd, l.cid || '', (l.cids_relacionados || []).join(', '), formatFonte(l.fonte_procedimento), formatFonte(l.fonte_cid), l.carater || '01', '',
         pac.raca_cor || '', pac.etnia || '', pac.nacionalidade || '',
         pac.cep || '', pac.tipo_logradouro || '', codLogr, pac.logradouro || '', pac.numero || '', pac.complemento || '', pac.bairro || '', enderecoFmt,
         pac.telefone || '', pac.email || '',
         cnes, formatCNS(prof.cns) || '', prof.nome || l.profissional_nome, prof.cbo || '', ine,
-        folha, uniNome, l.origem, l.fonte_procedimento, l.fonte_resolucao || '', l.fonte_cid, l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
+        folha, uniNome, formatFonte(l.origem), formatFonte(l.fonte_procedimento), l.fonte_resolucao || '', formatFonte(l.fonte_cid), l.paciente_id || '', l.prontuario_id || '', l.pts_id || '',
         (l.sugestoes_sigtap || []).join(' | '), l.duplicado ? 'SIM' : 'NÃO', l.chave_dedupe || '', ok ? 'OK' : 'PENDENTE', l.motivo_pendencia || '',
       ];
 
@@ -599,6 +607,8 @@ const BpaProducao: React.FC = () => {
       ['Total de linhas', exportRows.length],
       ['Válidas', totalValidos],
       ['Pendentes', totalPendentes],
+      ['Fonte Prontuário', exportRows.filter((r) => r.l.fonte_procedimento === 'prontuario').length],
+      ['Fonte PTS', exportRows.filter((r) => r.l.fonte_procedimento === 'pts').length],
       [],
       ['Por Profissional'],
       ['Profissional', 'Linhas'],
@@ -636,7 +646,7 @@ const BpaProducao: React.FC = () => {
             BPA-Produção
           </h1>
           <p className="text-muted-foreground text-sm">
-            Padrão BPA-I: cabeçalho profissional/unidade + linhas com paciente/procedimento (prontuário e triagem)
+            Padrão BPA-I: cabeçalho profissional/unidade + linhas com paciente/procedimento (Prontuário, PTS e triagem)
           </p>
         </div>
         <div className="flex gap-2">
@@ -716,6 +726,7 @@ const BpaProducao: React.FC = () => {
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="prontuario">Prontuário/Atendimento</SelectItem>
+                  <SelectItem value="pts">PTS</SelectItem>
                 <SelectItem value="triagem">Triagem</SelectItem>
               </SelectContent>
             </Select>
@@ -743,9 +754,10 @@ const BpaProducao: React.FC = () => {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Prontuário" value={stats.pront} />
+        <Stat label="PTS" value={stats.pts} />
         <Stat label="Triagem" value={stats.triagem} />
         <Stat label="Válidos" value={stats.validos} variant="success" />
         <Stat label="Pendentes" value={stats.pendentes} variant="destructive" />
@@ -834,7 +846,7 @@ const BpaProducao: React.FC = () => {
                         <TableCell>
                           <Badge variant="outline" className={cn("text-[10px] capitalize",
                             l.origem === 'triagem' ? 'border-warning/50 text-warning' : 'border-primary/50 text-primary')}>
-                            {l.origem}
+                            {formatFonte(l.origem)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs font-mono">{formatCNS(pac?.cns) || '—'}</TableCell>
@@ -851,13 +863,13 @@ const BpaProducao: React.FC = () => {
                         <TableCell className={cn("text-xs font-mono", !v.codigoLogradouro && "text-destructive")}>{l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '') || '—'}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
                         <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
-                        <TableCell className="text-xs">{l.fonte_procedimento}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
+                        <TableCell className="text-xs">{formatFonte(l.fonte_procedimento)}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
                           {l.codigo_sigtap || <span className="italic">Código SIGTAP não resolvido</span>}
                         </TableCell>
                         <TableCell className="text-xs">{l.qtd || 1}</TableCell>
                         <TableCell className="text-xs">{l.cid || '—'}</TableCell>
-                        <TableCell className="text-xs">{l.fonte_cid}</TableCell>
+                        <TableCell className="text-xs">{formatFonte(l.fonte_cid)}</TableCell>
                         <TableCell className="text-xs">{l.carater}</TableCell>
                         <TableCell className="text-xs">{pac?.raca_cor || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.etnia || '—'}</TableCell>
