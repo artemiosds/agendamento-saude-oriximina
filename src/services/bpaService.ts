@@ -590,22 +590,28 @@ export const bpaService = {
       const pac = pacMap.get(pront.paciente_id);
       const prof = profMap.get(pront.profissional_id);
       const unidade = uniMap.get(pront.unidade_id);
-      const pts = ptsByPaciente.get(pront.paciente_id);
+      const ptsCandidates = ptsByPaciente.get(pront.paciente_id) || [];
       const relacionados = vincsByPront.get(pront.id) || [];
       const realizadosCompat = realizadosByPacData.get(`${pront.paciente_id}|${pront.data_atendimento}`) || [];
-      const ptsFallback = (pts?.procs || []) as RawProcedimento[];
-      const procedimentos = extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat, ptsFallback);
+      const { pts, procedimentos, fonte_base } = resolveBpaProcedimentosPaciente({
+        pacienteId: pront.paciente_id,
+        prontuario: pront,
+        ptsList: ptsCandidates,
+        relacionados,
+        realizados: realizadosCompat,
+        profissional: prof,
+      });
       const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
       const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
       if (!codigoMunicipio) municipiosSemCodigo += 1;
       if (!codigoLogradouro && (pac?.tipo_logradouro || pac?.custom_data?.tipo_logradouro || pac?.logradouro || pac?.endereco)) logradourosSemCodigo += 1;
 
       if (!procedimentos.length) {
-        const cidData = extractAllCidsFromProntuarioPtsPaciente({ prontuario: pront, procedimento: { fonte: 'prontuario' }, pts, paciente: pac });
+        const cidData = resolveCidForBpaProcedure({ prontuario: pront, procedimento: { fonte: 'prontuario' }, pts, paciente: pac });
         pushLine({
           key: `pron_empty_${pront.id}`,
           origem: 'prontuario',
-          fonte_procedimento: 'prontuario',
+          fonte_procedimento: fonte_base,
           fonte_resolucao: 'nao_resolvido',
           fonte_cid: cidData.fonte_cid,
           prontuario_id: pront.id,
@@ -627,7 +633,7 @@ export const bpaService = {
           carater: '01',
           qtd: 1,
           status_bpa: 'pendente',
-          motivo_pendencia: 'Prontuário sem procedimento salvo',
+          motivo_pendencia: 'Procedimento não encontrado no Prontuário nem no PTS.',
         });
         continue;
       }
@@ -636,17 +642,18 @@ export const bpaService = {
         totalProcedimentos += 1;
         const resolved = resolveProcedimentoSigtap(rawProc, catalog, prof, rawProc.especialidade || prof?.profissao);
         if (!resolved.codigo_sigtap) procedimentosSemSigtap += 1;
-        const cidData = extractAllCidsFromProntuarioPtsPaciente({ prontuario: pront, procedimento: rawProc, pts, paciente: pac });
+        const cidData = resolveCidForBpaProcedure({ prontuario: pront, procedimento: rawProc, pts, paciente: pac });
         const linkCids = resolved.codigo_sigtap ? (procedimentoCidsMap.get(resolved.codigo_sigtap) || []) : [];
         const cidUsado = cidData.cid_usado || linkCids[0] || '';
         const cidsRelacionados = unique([...(cidData.cids_relacionados || []), ...linkCids]).filter((c) => c !== cidUsado);
+        const fonteCid = cidData.fonte_cid !== 'nao_encontrado' ? cidData.fonte_cid : (linkCids.length ? rawProc.fonte : 'nao_encontrado');
 
         pushLine({
           key: `pron_${pront.id}_${resolved.procedimento_id || rawProc.procedimento_id || normalizeName(resolved.nome_procedimento)}_${cidUsado}`,
-          origem: 'prontuario',
+          origem: rawProc.fonte === 'pts' ? 'pts' : 'prontuario',
           fonte_procedimento: rawProc.fonte,
           fonte_resolucao: resolved.fonte_resolucao,
-          fonte_cid: cidData.fonte_cid !== 'vazio' ? cidData.fonte_cid : (linkCids.length ? 'procedimento' : 'vazio'),
+          fonte_cid: fonteCid,
           prontuario_id: pront.id,
           pts_id: pts?.pts_id,
           paciente_id: pront.paciente_id,
@@ -689,7 +696,7 @@ export const bpaService = {
         origem: 'triagem',
         fonte_procedimento: 'triagem',
         fonte_resolucao: triagemSigtapPadrao ? 'prontuario_codigo' : 'nao_resolvido',
-        fonte_cid: cid ? 'paciente' : 'vazio',
+        fonte_cid: cid ? 'paciente' : 'nao_encontrado',
         paciente_id: ag.paciente_id,
         paciente_nome: ag.paciente_nome,
         profissional_id: t.tecnico_id || '',
