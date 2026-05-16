@@ -846,7 +846,7 @@ const BpaProducao: React.FC = () => {
                         <TableCell>
                           <Badge variant="outline" className={cn("text-[10px] capitalize",
                             l.origem === 'triagem' ? 'border-warning/50 text-warning' : 'border-primary/50 text-primary')}>
-                            {l.origem}
+                            {formatFonte(l.origem)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs font-mono">{formatCNS(pac?.cns) || '—'}</TableCell>
@@ -863,13 +863,13 @@ const BpaProducao: React.FC = () => {
                         <TableCell className={cn("text-xs font-mono", !v.codigoLogradouro && "text-destructive")}>{l.codigo_logradouro || resolveCodigoLogradouro(pac?.codigo_logradouro || '', pac?.tipo_logradouro || '', pac?.logradouro || pac?.endereco_legado || '') || '—'}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{l.data}</TableCell>
                         <TableCell className="text-xs">{l.procedimento_nome}</TableCell>
-                        <TableCell className="text-xs">{l.fonte_procedimento}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
+                        <TableCell className="text-xs">{formatFonte(l.fonte_procedimento)}{l.fonte_resolucao ? ` / ${l.fonte_resolucao}` : ''}</TableCell>
                         <TableCell className={cn("text-xs font-mono", !v.sigtap && "text-destructive")}>
                           {l.codigo_sigtap || <span className="italic">Código SIGTAP não resolvido</span>}
                         </TableCell>
                         <TableCell className="text-xs">{l.qtd || 1}</TableCell>
                         <TableCell className="text-xs">{l.cid || '—'}</TableCell>
-                        <TableCell className="text-xs">{l.fonte_cid}</TableCell>
+                        <TableCell className="text-xs">{formatFonte(l.fonte_cid)}</TableCell>
                         <TableCell className="text-xs">{l.carater}</TableCell>
                         <TableCell className="text-xs">{pac?.raca_cor || '—'}</TableCell>
                         <TableCell className="text-xs">{pac?.etnia || '—'}</TableCell>
