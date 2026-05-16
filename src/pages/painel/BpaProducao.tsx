@@ -640,7 +640,7 @@ const BpaProducao: React.FC = () => {
             BPA-Produção
           </h1>
           <p className="text-muted-foreground text-sm">
-            Padrão BPA-I: cabeçalho profissional/unidade + linhas com paciente/procedimento (prontuário e triagem)
+            Padrão BPA-I: cabeçalho profissional/unidade + linhas com paciente/procedimento (Prontuário, PTS e triagem)
           </p>
         </div>
         <div className="flex gap-2">
@@ -720,6 +720,7 @@ const BpaProducao: React.FC = () => {
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="prontuario">Prontuário/Atendimento</SelectItem>
+                  <SelectItem value="pts">PTS</SelectItem>
                 <SelectItem value="triagem">Triagem</SelectItem>
               </SelectContent>
             </Select>
@@ -750,6 +751,7 @@ const BpaProducao: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Stat label="Total" value={stats.total} />
         <Stat label="Prontuário" value={stats.pront} />
+        <Stat label="PTS" value={stats.pts} />
         <Stat label="Triagem" value={stats.triagem} />
         <Stat label="Válidos" value={stats.validos} variant="success" />
         <Stat label="Pendentes" value={stats.pendentes} variant="destructive" />
