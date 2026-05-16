@@ -632,6 +632,8 @@ export const bpaService = {
     const result: LinhaBpaNormalizada[] = [];
     const seen = new Map<string, LinhaBpaNormalizada>();
     let totalProcedimentos = 0;
+    let totalProcProntuario = 0;
+    let totalProcPts = 0;
     let procedimentosSemSigtap = 0;
     let municipiosSemCodigo = 0;
     let logradourosSemCodigo = 0;
@@ -641,6 +643,9 @@ export const bpaService = {
       line.chave_dedupe = key;
       if (seen.has(key)) {
         line.duplicado = true;
+        line.status_bpa = 'pendente';
+        line.motivo_pendencia = `Duplicado ignorado: ${seen.get(key)?.procedimento_nome || line.procedimento_nome}`;
+        result.push(line);
         return;
       }
       seen.set(key, line);
@@ -662,6 +667,8 @@ export const bpaService = {
         realizados: realizadosCompat,
         profissional: prof,
       });
+      totalProcProntuario += extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat).length;
+      if (!extractAllProcedimentosFromProntuario(pront, relacionados, realizadosCompat).length) totalProcPts += procedimentos.filter((p) => p.fonte === 'pts').length;
       const codigoMunicipio = resolveCodigoMunicipioPaciente(pac, unidade);
       const codigoLogradouro = resolveCodigoLogradouroPaciente(pac, catalog.dneMap);
       if (!codigoMunicipio) municipiosSemCodigo += 1;
