@@ -79,11 +79,18 @@ const Funcionarios: React.FC = () => {
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
     profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '',
+    ativo: true, data_admissao: '', tipo_vinculo: '', setor_principal: '', turno_trabalho: '', observacoes_internas: '',
   });
   const [cbo, setCbo] = useState<CboValue | null>(null);
   const [showCboError, setShowCboError] = useState(false);
   const canManage = can('usuarios', 'can_edit');
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterUnidade, setFilterUnidade] = useState<string>('all');
+  const [filterProfissao, setFilterProfissao] = useState<string>('all');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<string>('nome_asc');
+  const [activeTab, setActiveTab] = useState<string>('internos');
+  const [viewFuncionario, setViewFuncionario] = useState<FuncionarioDB | null>(null);
 
   const loadFuncionarios = async () => {
     setLoading(true);
