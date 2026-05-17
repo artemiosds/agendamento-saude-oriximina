@@ -23,7 +23,7 @@ serve(async (req) => {
     const { action } = body;
 
     if (action === "create") {
-      const { nome, usuario, email, cpf, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho, pode_agendar_retorno, coren, cbo_codigo, cbo_descricao } = body;
+      const { nome, usuario, email, cpf, senha, setor, unidade_id, sala_id, cargo, role, criado_por, tempo_atendimento, profissao, tipo_conselho, numero_conselho, uf_conselho, pode_agendar_retorno, coren, cbo_codigo, cbo_descricao, cns } = body;
 
       if (!nome || !usuario || !email || !senha) {
         return new Response(
