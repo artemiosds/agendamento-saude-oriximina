@@ -205,13 +205,7 @@ serve(async (req) => {
 
   const message: string = body.mensagem || `Olá! Mensagem de teste do sistema (${cfg.nome_clinica || "clínica"}).`;
 
-  const tokRes = await fetchInstanceToken(cfg);
-  if (!tokRes.token) {
-    await persistStatus(supabase, cfg.uazapi_instance || "(sem instância)", tokRes.status_detailed, tokRes.error);
-    return jsonResponse({ success: false, error: tokRes.error || "Falha ao resolver instância", status_detailed: tokRes.status_detailed });
-  }
-
-  const r = await sendText(cfg, tokRes.token, phone, message);
+  const r = await sendText(cfg, phone, message);
   const success = r.ok && (r.data?.status === "success" || r.data?.success === true || !!r.data?.id || !!r.data?.message);
 
   if (success) {
