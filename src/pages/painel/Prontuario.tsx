@@ -1582,6 +1582,11 @@ const ProntuarioPage: React.FC = () => {
     }
   }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
 
+  // Keep latest performAutosave in a ref so the debounce effect doesn't re-run
+  // every time selectedProcIds/procDetails/selectedCidsByProc/procedimentos change.
+  const performAutosaveRef = useRef(performAutosave);
+  useEffect(() => { performAutosaveRef.current = performAutosave; }, [performAutosave]);
+
   // Debounced trigger watching form changes while dialog is open
   useEffect(() => {
     if (!dialogOpen) return;
@@ -1602,9 +1607,9 @@ const ProntuarioPage: React.FC = () => {
     if (hash === lastAutosaveHashRef.current) return;
     lastAutosaveHashRef.current = hash;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2500);
+    autosaveTimerRef.current = setTimeout(() => { void performAutosaveRef.current(); }, 2500);
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
-  }, [dialogOpen, form, performAutosave]);
+  }, [dialogOpen, form, selectedProcIds, procDetails, selectedCidsByProc]);
 
   // Flush on tab hide / before unload
   useEffect(() => {
@@ -2159,6 +2164,23 @@ const ProntuarioPage: React.FC = () => {
   });
   const queryPacienteNome = searchParams.get("pacienteNome");
 
+  // Stable derived data for the side history panel — prevents re-renders on every keystroke
+  const pacienteForPanel = useMemo(() => {
+    if (form.paciente_id) {
+      return pacienteByIdMap.get(form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null);
+    }
+    return form.paciente_nome ? { nome: form.paciente_nome } : null;
+  }, [form.paciente_id, form.paciente_nome, pacienteByIdMap]);
+
+  const funcionariosLight = useMemo(
+    () => funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true })),
+    [funcionarios],
+  );
+
+  const handleViewProntuarioFromHistory = useCallback((p: any) => {
+    setViewerProntuario(p);
+  }, []);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -2313,10 +2335,8 @@ const ProntuarioPage: React.FC = () => {
                 frequencia_cardiaca: triagem.frequencia_cardiaca,
                 classificacao_risco: (triagem as any).classificacao_risco,
               } : null}
-              funcionarios={funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true }))}
-              onPacienteUpdated={() => {
-                loadProntuarios();
-              }}
+              funcionarios={funcionariosLight}
+              onPacienteUpdated={loadProntuarios}
             />
           )}
 
@@ -2445,7 +2465,7 @@ const ProntuarioPage: React.FC = () => {
           {patientHistory.length > 0 && (
             <HistoricoCentralList
               items={patientHistory}
-              onView={(p) => setViewerProntuario(p)}
+              onView={handleViewProntuarioFromHistory}
             />
           )}
 
@@ -3494,10 +3514,10 @@ const ProntuarioPage: React.FC = () => {
 
           {/* Painel direito fixo — Histórico do paciente */}
           <HistoricoPacientePanel
-            paciente={pacientes.find(p => p.id === form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null)}
+            paciente={pacienteForPanel}
             historico={patientHistory}
             currentId={editId || undefined}
-            onView={(p) => setViewerProntuario(p)}
+            onView={handleViewProntuarioFromHistory}
           />
           </div>{/* end grid split */}
 
