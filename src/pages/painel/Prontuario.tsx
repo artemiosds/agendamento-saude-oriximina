@@ -33,6 +33,8 @@ import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History,
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
@@ -2183,8 +2185,8 @@ const ProntuarioPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="w-[95vw] max-w-5xl h-[95vh] max-h-[95vh] flex flex-col overflow-hidden" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
+        <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
               <div className="text-xs flex items-center gap-1.5" aria-live="polite">
@@ -2207,7 +2209,18 @@ const ProntuarioPage: React.FC = () => {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-4">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
+          <div className="flex flex-col min-h-0 overflow-hidden">
+          <Tabs defaultValue="avaliacao" className="flex flex-col flex-1 min-h-0">
+            <TabsList className="mx-6 mt-3 grid grid-cols-5 w-auto shrink-0">
+              <TabsTrigger value="avaliacao">Avaliação</TabsTrigger>
+              <TabsTrigger value="procedimentos">Procedimentos</TabsTrigger>
+              <TabsTrigger value="prescricao">Prescrição</TabsTrigger>
+              <TabsTrigger value="exames">Exames</TabsTrigger>
+              <TabsTrigger value="encaminhamentos">Encaminhamentos</TabsTrigger>
+            </TabsList>
+          <TabsContent value="avaliacao" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden" forceMount>
+
           {activeAtendimento && (
             <AtendimentoTimer
               horaInicio={activeAtendimento.horaInicio}
@@ -2384,7 +2397,7 @@ const ProntuarioPage: React.FC = () => {
             </div>
           )}
 
-          <div className="space-y-4">
+          {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Paciente *</Label>
@@ -2861,6 +2874,9 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+          </TabsContent>
+
+          <TabsContent value="procedimentos" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Histórico de Procedimentos do Paciente */}
             {isProfBlocoVisible('procedimentos') && form.paciente_id && pacienteProcHistory.length > 0 && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
@@ -3230,6 +3246,9 @@ const ProntuarioPage: React.FC = () => {
             </div>
             )}
 
+          </TabsContent>
+
+          <TabsContent value="prescricao" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Prescrição de Medicamentos — ALL types */}
             {isProfBlocoVisible('prescricao') && (
             <PrescricaoMedicamentos
@@ -3248,6 +3267,9 @@ const ProntuarioPage: React.FC = () => {
             />
             )}
 
+          </TabsContent>
+
+          <TabsContent value="exames" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Solicitação de Exames — ALL types */}
             {isProfBlocoVisible('solicitacao_exames') && (
             <SolicitacaoExames
@@ -3285,6 +3307,9 @@ const ProntuarioPage: React.FC = () => {
               />
             </div>
 
+          </TabsContent>
+
+          <TabsContent value="encaminhamentos" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
               <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
@@ -3356,8 +3381,17 @@ const ProntuarioPage: React.FC = () => {
               );
             })()}
 
-          </div>{/* end space-y-4 form */}
-          </div>{/* end scrollable area */}
+          </TabsContent>
+          </Tabs>
+          </div>{/* end left column */}
+
+          {/* Painel direito fixo — Histórico do paciente */}
+          <HistoricoPacientePanel
+            paciente={pacientes.find(p => p.id === form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null)}
+            historico={patientHistory}
+            currentId={editId || undefined}
+          />
+          </div>{/* end grid split */}
 
             <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
               {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
