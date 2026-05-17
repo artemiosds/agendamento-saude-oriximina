@@ -3349,6 +3349,7 @@ const ProntuarioPage: React.FC = () => {
             paciente={pacientes.find(p => p.id === form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null)}
             historico={patientHistory}
             currentId={editId || undefined}
+            onView={(p) => setViewerProntuario(p)}
           />
           </div>{/* end grid split */}
 
