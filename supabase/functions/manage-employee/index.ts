@@ -112,6 +112,7 @@ serve(async (req) => {
           coren: coren || "",
           custom_data: {
             ...(cbo_codigo ? { cbo_codigo: String(cbo_codigo), cbo_descricao: String(cbo_descricao || '') } : {}),
+            ...(cns ? { cns: String(cns).replace(/\D/g, '').slice(0, 15) } : {}),
           },
         })
         .select()
