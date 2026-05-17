@@ -2028,6 +2028,16 @@ const ProntuarioPage: React.FC = () => {
       );
     });
   }, [prontuarios, queryPacienteId, deferredSearch, pacienteByIdMap]);
+
+  // Virtualized list — render only visible rows for instant scroll on huge lists
+  const listParentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 132,
+    overscan: 8,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 132,
+  });
   const queryPacienteNome = searchParams.get("pacienteNome");
 
   return (
