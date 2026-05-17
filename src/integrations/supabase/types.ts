@@ -1106,39 +1106,72 @@ export type Database = {
           apresentacao: string
           ativo: boolean
           classe_terapeutica: string
+          codigo_rename: string | null
+          concentracao: string
           created_at: string
           dosagem_padrao: string
+          estoque_controlado: boolean
+          estoque_localizacao: string
+          estoque_minimo: number
+          estoque_quantidade: number
+          estoque_unidade: string
+          forma_farmaceutica: string
           id: string
           is_global: boolean
           nome: string
+          nome_comercial: string
+          origem: string
           principio_ativo: string
           profissional_id: string | null
+          tipo: string
           via_padrao: string
         }
         Insert: {
           apresentacao?: string
           ativo?: boolean
           classe_terapeutica?: string
+          codigo_rename?: string | null
+          concentracao?: string
           created_at?: string
           dosagem_padrao?: string
+          estoque_controlado?: boolean
+          estoque_localizacao?: string
+          estoque_minimo?: number
+          estoque_quantidade?: number
+          estoque_unidade?: string
+          forma_farmaceutica?: string
           id?: string
           is_global?: boolean
           nome: string
+          nome_comercial?: string
+          origem?: string
           principio_ativo?: string
           profissional_id?: string | null
+          tipo?: string
           via_padrao?: string
         }
         Update: {
           apresentacao?: string
           ativo?: boolean
           classe_terapeutica?: string
+          codigo_rename?: string | null
+          concentracao?: string
           created_at?: string
           dosagem_padrao?: string
+          estoque_controlado?: boolean
+          estoque_localizacao?: string
+          estoque_minimo?: number
+          estoque_quantidade?: number
+          estoque_unidade?: string
+          forma_farmaceutica?: string
           id?: string
           is_global?: boolean
           nome?: string
+          nome_comercial?: string
+          origem?: string
           principio_ativo?: string
           profissional_id?: string | null
+          tipo?: string
           via_padrao?: string
         }
         Relationships: []
