@@ -196,7 +196,7 @@ const ProntuarioPage: React.FC = () => {
   const { pacientes, unidades, agendamentos, updateAgendamento, logAction, refreshAgendamentos, funcionarios, addAgendamento, getAvailableSlots, bloqueios } = useData();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [prontuarios, setProntuarios] = useState<ProntuarioDB[]>([]);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
