@@ -2363,29 +2363,10 @@ const ProntuarioPage: React.FC = () => {
           )}
 
           {patientHistory.length > 0 && (
-            <div className="bg-muted/50 rounded-lg p-3 border">
-              <div className="flex items-center gap-2 mb-2">
-                <History className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-semibold text-foreground">
-                  Histórico do Paciente ({patientHistory.length} anterior(es))
-                </span>
-              </div>
-              <div className="space-y-1 max-h-32 overflow-y-auto">
-                {patientHistory.slice(0, 5).map((ph) => (
-                  <div
-                    key={ph.id}
-                    className="flex items-center justify-between text-xs text-muted-foreground bg-background rounded px-2 py-1.5"
-                  >
-                    <span>
-                      {new Date(ph.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")} — {ph.profissional_nome}
-                    </span>
-                    <span className="truncate ml-2 max-w-[200px]">
-                      {ph.queixa_principal || "Sem queixa registrada"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <HistoricoCentralList
+              items={patientHistory}
+              onView={(p) => setViewerProntuario(p)}
+            />
           )}
 
           {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
