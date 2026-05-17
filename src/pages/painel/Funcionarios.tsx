@@ -761,79 +761,227 @@ const Funcionarios: React.FC = () => {
 
           {loading ? (
             <LoadingState label="Carregando funcionários..." size="lg" />
-          ) : filteredFuncionarios.length === 0 ? (
+          ) : filteredAtivos.length === 0 ? (
             <EmptyState
               icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
               title="Nenhum funcionário"
-              description='Clique em "Novo Funcionário" para começar.'
+              description={hasActiveFilters ? 'Nenhum resultado com os filtros aplicados.' : 'Clique em "Novo Funcionário" para começar.'}
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {filteredFuncionarios.map(f => {
-                const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
-                return (
-                  <Card key={f.id} className="shadow-card border-0">
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                        {f.nome.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground">{f.nome}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {f.cargo}{f.setor ? ` • ${f.setor}` : ''}
-                          {f.role === 'profissional' && f.tempo_atendimento ? ` • ${f.tempo_atendimento}min` : ''}
-                        </p>
-                        {f.tipo_conselho && f.numero_conselho && (
-                          <p className="text-xs text-muted-foreground">{f.tipo_conselho} {f.numero_conselho}{f.uf_conselho ? `/${f.uf_conselho}` : ''}</p>
-                        )}
-                        {(f.custom_data as any)?.cbo_codigo && (
-                          <p className="text-xs text-muted-foreground font-mono">CBO {(f.custom_data as any).cbo_codigo}</p>
-                        )}
-                        {unidadeNome && <p className="text-xs text-muted-foreground">{unidadeNome}</p>}
-                        {f.role === 'profissional' && f.pode_agendar_retorno && (
-                          <Badge variant="outline" className="text-xs mt-1 border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-1" />Retorno</Badge>
-                        )}
-                        {!f.ativo && <Badge variant="outline" className="text-xs mt-1">Inativo</Badge>}
-                      </div>
-                      <Badge className={roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}>
-                        {roleLabels[f.role as UserRole] || f.role}
-                      </Badge>
-                      {canManage && !(isUnitMaster && isProtectedGlobalMaster(f)) && (
-                        <div className="flex gap-1">
-                          {/* Unit masters cannot edit employees from other units */}
-                          {!(isUnitMaster && f.unidade_id && f.unidade_id !== user?.unidadeId) && (
-                            <Button size="icon" variant="ghost" onClick={() => openEdit(f)}><Pencil className="w-4 h-4" /></Button>
-                          )}
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
-                                <AlertDialogDescription>Tem certeza que deseja excluir {f.nome}? Esta ação não pode ser desfeita.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(f.id)}>Excluir</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+            <FuncionarioList
+              items={filteredAtivos}
+              unidades={unidades}
+              canManage={canManage}
+              isUnitMaster={isUnitMaster}
+              currentUserUnitId={user?.unidadeId}
+              isProtectedGlobalMaster={isProtectedGlobalMaster}
+              onView={setViewFuncionario}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
           )}
         </TabsContent>
 
         <TabsContent value="externos" className="mt-4">
           <ProfissionaisExternos />
         </TabsContent>
+
+        <TabsContent value="inativos" className="mt-4 space-y-4">
+          {loading ? (
+            <LoadingState label="Carregando..." size="lg" />
+          ) : filteredInativos.length === 0 ? (
+            <EmptyState
+              icon={<Users className="w-8 h-8 text-muted-foreground/50" />}
+              title="Nenhum funcionário inativo"
+              description="Funcionários desativados aparecerão aqui."
+            />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{filteredInativos.length} inativo(s) — clique em reativar para retornar ao quadro.</p>
+              <FuncionarioList
+                items={filteredInativos}
+                unidades={unidades}
+                canManage={canManage}
+                isUnitMaster={isUnitMaster}
+                currentUserUnitId={user?.unidadeId}
+                isProtectedGlobalMaster={isProtectedGlobalMaster}
+                onView={setViewFuncionario}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                inactive
+                onReactivate={handleToggleAtivo}
+              />
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
+
+      {/* Profile drawer */}
+      <Sheet open={!!viewFuncionario} onOpenChange={(o) => !o && setViewFuncionario(null)}>
+        <SheetContent side="right" className="p-0 flex flex-col" style={{ width: '95vw', maxWidth: 480 }}>
+          <SheetHeader className="p-4 pb-2 border-b">
+            <SheetTitle className="font-display text-lg break-words pr-8">{viewFuncionario?.nome}</SheetTitle>
+            <SheetDescription className="sr-only">Perfil do funcionário</SheetDescription>
+          </SheetHeader>
+          {viewFuncionario && (
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-5">
+                <ProfilePanel f={viewFuncionario} unidadeNome={unidades.find(u => u.id === viewFuncionario.unidade_id)?.nome || '—'} />
+              </div>
+            </ScrollArea>
+          )}
+          {viewFuncionario && canManage && !(isUnitMaster && isProtectedGlobalMaster(viewFuncionario)) && (
+            <div className="border-t p-3 flex flex-wrap gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => handlePrintFuncionario(viewFuncionario)}><Printer className="w-4 h-4 mr-1" />Imprimir</Button>
+              <Button variant="outline" size="sm" onClick={() => handleToggleAtivo(viewFuncionario)}>
+                {viewFuncionario.ativo ? <><Power className="w-4 h-4 mr-1" />Desativar</> : <><RotateCcw className="w-4 h-4 mr-1" />Reativar</>}
+              </Button>
+              <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => { const f = viewFuncionario; setViewFuncionario(null); openEdit(f); }}>
+                <Pencil className="w-4 h-4 mr-1" />Editar
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
+  );
+};
+
+// ------- Reusable list & profile components -------
+
+interface FuncionarioListProps {
+  items: FuncionarioDB[];
+  unidades: Array<{ id: string; nome: string }>;
+  canManage: boolean;
+  isUnitMaster: boolean;
+  currentUserUnitId?: string;
+  isProtectedGlobalMaster: (f: FuncionarioDB) => boolean;
+  onView: (f: FuncionarioDB) => void;
+  onEdit: (f: FuncionarioDB) => void;
+  onDelete: (id: string) => void;
+  inactive?: boolean;
+  onReactivate?: (f: FuncionarioDB) => void;
+}
+
+const FuncionarioList: React.FC<FuncionarioListProps> = ({ items, unidades, canManage, isUnitMaster, currentUserUnitId, isProtectedGlobalMaster, onView, onEdit, onDelete, inactive, onReactivate }) => (
+  <div className="space-y-2">
+    {items.map(f => {
+      const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '';
+      const cd = (f.custom_data as any) || {};
+      const canEditThis = !(isUnitMaster && f.unidade_id && f.unidade_id !== currentUserUnitId) && !(isUnitMaster && isProtectedGlobalMaster(f));
+      return (
+        <Card key={f.id} className="shadow-sm border hover:shadow-md transition-shadow">
+          <CardContent className="p-3 sm:p-4 flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
+              {f.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-x-3 gap-y-0.5 items-center">
+              <div className="md:col-span-4 min-w-0">
+                <p className="font-semibold text-foreground truncate">{f.nome}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {f.profissao || f.cargo || '—'}
+                  {f.tipo_conselho && f.numero_conselho ? ` • ${f.tipo_conselho} ${f.numero_conselho}${f.uf_conselho ? '/' + f.uf_conselho : ''}` : ''}
+                  {cd.cbo_codigo ? ` • CBO ${cd.cbo_codigo}` : ''}
+                </p>
+              </div>
+              <div className="md:col-span-3 min-w-0">
+                <p className="text-xs text-muted-foreground truncate">{unidadeNome || '—'}{f.setor ? ` / ${f.setor}` : ''}</p>
+              </div>
+              <div className="md:col-span-2 min-w-0">
+                <p className="text-xs text-muted-foreground truncate">
+                  {f.role === 'profissional' && f.tempo_atendimento ? `${f.tempo_atendimento} min` : '—'}
+                </p>
+              </div>
+              <div className="md:col-span-3 flex flex-wrap gap-1 items-center justify-start md:justify-end">
+                <Badge className={`text-[10px] ${roleColors[f.role as UserRole] || 'bg-muted text-muted-foreground'}`}>
+                  {roleLabels[f.role as UserRole] || f.role}
+                </Badge>
+                {f.role === 'profissional' && f.pode_agendar_retorno && (
+                  <Badge variant="outline" className="text-[10px] border-success/50 text-success"><CalendarCheck className="w-3 h-3 mr-0.5" />Retorno</Badge>
+                )}
+                {!f.ativo && <Badge variant="outline" className="text-[10px]">Inativo</Badge>}
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <Button size="icon" variant="ghost" title="Ver perfil" onClick={() => onView(f)}><Eye className="w-4 h-4" /></Button>
+              {canManage && canEditThis && !inactive && (
+                <Button size="icon" variant="ghost" title="Editar" onClick={() => onEdit(f)}><Pencil className="w-4 h-4" /></Button>
+              )}
+              {inactive && canManage && canEditThis && onReactivate && (
+                <Button size="sm" variant="outline" onClick={() => onReactivate(f)}><RotateCcw className="w-4 h-4 mr-1" />Reativar</Button>
+              )}
+              {canManage && canEditThis && !inactive && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="icon" variant="ghost" className="text-destructive" title="Excluir"><Trash2 className="w-4 h-4" /></Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir funcionário?</AlertDialogTitle>
+                      <AlertDialogDescription>Tem certeza que deseja excluir {f.nome}? Esta ação não pode ser desfeita.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => onDelete(f.id)}>Excluir</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    })}
+  </div>
+);
+
+const Row: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex justify-between gap-3 py-1 border-b border-border/50 last:border-0">
+    <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+    <span className="text-sm text-foreground text-right break-words">{value || '—'}</span>
+  </div>
+);
+
+const ProfilePanel: React.FC<{ f: FuncionarioDB; unidadeNome: string }> = ({ f, unidadeNome }) => {
+  const cd = (f.custom_data as any) || {};
+  const dataCadastro = f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—';
+  return (
+    <>
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Dados Pessoais</h3>
+        <Row label="Nome" value={f.nome} />
+        <Row label="CPF" value={f.cpf} />
+        <Row label="E-mail" value={f.email} />
+        <Row label="Usuário" value={f.usuario} />
+      </section>
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Dados Profissionais</h3>
+        <Row label="Profissão" value={f.profissao} />
+        <Row label="Cargo" value={f.cargo} />
+        <Row label="Perfil" value={roleLabels[f.role] || f.role} />
+        <Row label="Conselho" value={f.tipo_conselho ? `${f.tipo_conselho} ${f.numero_conselho || ''}${f.uf_conselho ? '/' + f.uf_conselho : ''}` : ''} />
+        <Row label="CBO" value={cd.cbo_codigo ? `${cd.cbo_codigo} — ${cd.cbo_descricao || ''}` : ''} />
+        <Row label="CNS" value={cd.cns ? formatCNS(cd.cns) : ''} />
+        <Row label="Unidade" value={unidadeNome} />
+        <Row label="Setor" value={f.setor} />
+        <Row label="Tempo de Atendimento" value={f.role === 'profissional' && f.tempo_atendimento ? `${f.tempo_atendimento} min` : ''} />
+      </section>
+      <section>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Configurações</h3>
+        <Row label="Status" value={<Badge variant="outline" className={f.ativo ? 'text-success border-success/50' : ''}>{f.ativo ? 'Ativo' : 'Inativo'}</Badge>} />
+        <Row label="Tipo de Vínculo" value={cd.tipo_vinculo} />
+        <Row label="Data de Admissão" value={cd.data_admissao ? new Date(cd.data_admissao + 'T12:00:00').toLocaleDateString('pt-BR') : ''} />
+        <Row label="Turno" value={cd.turno_trabalho} />
+        <Row label="Data de Cadastro" value={dataCadastro} />
+        <Row label="Permissão de Retorno" value={f.pode_agendar_retorno ? 'Sim' : 'Não'} />
+      </section>
+      {cd.observacoes_internas && (
+        <section>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground mb-1">Observações Internas</h3>
+          <p className="text-sm text-foreground whitespace-pre-wrap">{cd.observacoes_internas}</p>
+        </section>
+      )}
+    </>
   );
 };
 
