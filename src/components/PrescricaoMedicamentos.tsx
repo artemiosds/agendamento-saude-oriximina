@@ -17,14 +17,38 @@ import logoCerFallback from '@/assets/logo-cer-ii.png';
 interface MedicationType {
   id: string;
   nome: string;
+  nome_comercial?: string;
   principio_ativo: string;
   classe_terapeutica: string;
   apresentacao: string;
   dosagem_padrao: string;
   via_padrao: string;
+  forma_farmaceutica?: string;
+  concentracao?: string;
+  codigo_rename?: string | null;
+  tipo?: 'comum' | 'controlado' | 'psicotropico' | 'antibiotico';
+  origem?: 'rename' | 'reme' | 'manual';
+  estoque_controlado?: boolean;
+  estoque_quantidade?: number;
+  estoque_minimo?: number;
   is_global: boolean;
   profissional_id: string | null;
   ativo: boolean;
+}
+
+const TIPO_BADGE: Record<string, { label: string; cls: string; alert?: string }> = {
+  controlado: { label: 'CONTROLADO', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento controlado — exige receita especial.' },
+  psicotropico: { label: 'PSICOTRÓPICO', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento psicotrópico — exige receituário especial (notificação B).' },
+  antibiotico: { label: 'ANTIBIÓTICO', cls: 'bg-orange-500 text-white', alert: 'Antibiótico — exige receituário (RDC 20/2011).' },
+};
+
+function getStockStatus(m: MedicationType): { label: string; cls: string; alert?: string } | null {
+  if (!m.estoque_controlado) return null;
+  const qty = m.estoque_quantidade ?? 0;
+  const min = m.estoque_minimo ?? 0;
+  if (qty <= 0) return { label: 'Indisponível', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento sem estoque disponível na unidade.' };
+  if (qty <= min) return { label: 'Estoque baixo', cls: 'bg-yellow-500 text-white' };
+  return { label: 'Disponível', cls: 'bg-green-600 text-white' };
 }
 
 interface MedicamentoPrescrito {
@@ -100,9 +124,13 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
     const term = searchTerm.toLowerCase();
     return availableMeds.filter(m =>
       m.nome.toLowerCase().includes(term) ||
+      (m.nome_comercial || '').toLowerCase().includes(term) ||
       m.principio_ativo.toLowerCase().includes(term) ||
-      m.classe_terapeutica.toLowerCase().includes(term)
-    ).slice(0, 15);
+      m.classe_terapeutica.toLowerCase().includes(term) ||
+      (m.codigo_rename || '').toLowerCase().includes(term) ||
+      (m.forma_farmaceutica || '').toLowerCase().includes(term) ||
+      (m.tipo || '').toLowerCase().includes(term)
+    ).slice(0, 20);
   }, [searchTerm, availableMeds]);
 
   const byClasse = useMemo(() => {
@@ -116,6 +144,10 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
 
   const addMed = useCallback((med: MedicationType) => {
     if (value.some(v => v.id === med.id)) return;
+    const tipoInfo = med.tipo && TIPO_BADGE[med.tipo];
+    if (tipoInfo?.alert) toast.warning(tipoInfo.alert);
+    const stock = getStockStatus(med);
+    if (stock?.alert) toast.error(stock.alert);
     onChange([...value, {
       id: med.id, nome: med.nome, dosagem: med.dosagem_padrao,
       via: med.via_padrao, posologia: "", duracao: ""
@@ -280,26 +312,32 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome ou classe terapêutica..."
+                placeholder="Buscar por nome, comercial, princípio ativo, classe, tipo..."
                 value={searchTerm}
                 onChange={e => { setSearchTerm(e.target.value); setSearchOpen(true); }}
                 onFocus={() => setSearchOpen(true)}
                 className="pl-8 h-8 text-sm"
               />
               {searchOpen && searchResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                  {searchResults.map(med => (
-                    <button key={med.id} type="button"
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between ${isSelected(med.id) ? 'bg-primary/5' : ''}`}
-                      onClick={() => { addMed(med); setSearchTerm(""); setSearchOpen(false); }}
-                      disabled={isSelected(med.id)}>
-                      <div>
-                        <span className="font-medium">{med.nome}</span>
-                        <span className="text-xs text-muted-foreground ml-2">({med.apresentacao})</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{med.classe_terapeutica}</span>
-                    </button>
-                  ))}
+                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {searchResults.map(med => {
+                    const tipoInfo = med.tipo && TIPO_BADGE[med.tipo];
+                    const stock = getStockStatus(med);
+                    return (
+                      <button key={med.id} type="button"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-muted ${isSelected(med.id) ? 'bg-primary/5' : ''}`}
+                        onClick={() => { addMed(med); setSearchTerm(""); setSearchOpen(false); }}
+                        disabled={isSelected(med.id)}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium">{med.nome}</span>
+                          {med.nome_comercial && <span className="text-xs text-muted-foreground">({med.nome_comercial})</span>}
+                          {tipoInfo && <Badge className={`text-[9px] ${tipoInfo.cls}`}>{tipoInfo.label}</Badge>}
+                          {stock && <Badge className={`text-[9px] ${stock.cls}`}>{stock.label}</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">{med.classe_terapeutica} • {med.apresentacao}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {searchOpen && searchTerm.length >= 2 && searchResults.length === 0 && (
