@@ -2335,10 +2335,8 @@ const ProntuarioPage: React.FC = () => {
                 frequencia_cardiaca: triagem.frequencia_cardiaca,
                 classificacao_risco: (triagem as any).classificacao_risco,
               } : null}
-              funcionarios={funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true }))}
-              onPacienteUpdated={() => {
-                loadProntuarios();
-              }}
+              funcionarios={funcionariosLight}
+              onPacienteUpdated={loadProntuarios}
             />
           )}
 
