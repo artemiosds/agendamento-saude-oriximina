@@ -34,6 +34,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
+import HistoricoCentralList from "@/components/prontuario/HistoricoCentralList";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
