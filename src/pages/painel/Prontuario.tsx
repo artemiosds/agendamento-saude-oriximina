@@ -281,6 +281,85 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [loadCidsForProc]);
 
+  // ===== Unified Search (SIGTAP + CID-10) =====
+  const [unifiedQuery, setUnifiedQuery] = useState("");
+  const [unifiedResults, setUnifiedResults] = useState<{
+    procedimentos: { codigo: string; nome: string; especialidade: string | null }[];
+    cids: { codigo: string; descricao: string }[];
+  }>({ procedimentos: [], cids: [] });
+  const [unifiedLoading, setUnifiedLoading] = useState(false);
+  const [unifiedOpen, setUnifiedOpen] = useState(false);
+  const unifiedDebounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current);
+    const q = unifiedQuery.trim();
+    if (q.length < 2) {
+      setUnifiedResults({ procedimentos: [], cids: [] });
+      setUnifiedLoading(false);
+      return;
+    }
+    setUnifiedLoading(true);
+    unifiedDebounceRef.current = window.setTimeout(async () => {
+      const res = await procedureService.searchUnified(q, 10);
+      setUnifiedResults(res);
+      setUnifiedLoading(false);
+    }, 300);
+    return () => { if (unifiedDebounceRef.current) window.clearTimeout(unifiedDebounceRef.current); };
+  }, [unifiedQuery]);
+
+  const handlePickProcedimento = useCallback((codigo: string, nome: string) => {
+    setSelectedProcIds((prev) => prev.includes(codigo) ? prev : [...prev, codigo]);
+    setProcDetails((prev) => ({ ...prev, [codigo]: prev[codigo] || { quantidade: 1, observacao: "" } }));
+    loadCidsForProc(codigo);
+    setExpandedProcId(codigo);
+    setUnifiedQuery("");
+    setUnifiedOpen(false);
+    toast.success(`Procedimento adicionado: ${codigo} — ${nome}`);
+  }, [loadCidsForProc]);
+
+  const handlePickCid = useCallback(async (cid: { codigo: string; descricao: string }) => {
+    // 1) If there is an expanded/selected procedure, attach there
+    const targetProc = expandedProcId && selectedProcIds.includes(expandedProcId)
+      ? expandedProcId
+      : selectedProcIds[selectedProcIds.length - 1] || null;
+
+    if (targetProc) {
+      setCidsByProc((m) => {
+        const cur = m[targetProc] || [];
+        return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [targetProc]: [...cur, cid] };
+      });
+      setSelectedCidsByProc((m) => ({
+        ...m,
+        [targetProc]: Array.from(new Set([...(m[targetProc] || []), cid.codigo])),
+      }));
+      setUnifiedQuery("");
+      setUnifiedOpen(false);
+      toast.success(`CID ${cid.codigo} vinculado ao procedimento selecionado.`);
+      return;
+    }
+
+    // 2) Otherwise look up procedures linked to this CID
+    const linked = await procedureService.getProceduresForCid(cid.codigo, 5);
+    if (linked.length === 0) {
+      toast.error("Selecione um procedimento antes de adicionar o CID (não há procedimento vinculado a este CID).");
+      return;
+    }
+    const first = linked[0];
+    handlePickProcedimento(first.codigo, first.nome);
+    // Attach the CID to it
+    setCidsByProc((m) => {
+      const cur = m[first.codigo] || [];
+      return cur.some((x) => x.codigo === cid.codigo) ? m : { ...m, [first.codigo]: [...cur, cid] };
+    });
+    setSelectedCidsByProc((m) => ({
+      ...m,
+      [first.codigo]: Array.from(new Set([...(m[first.codigo] || []), cid.codigo])),
+    }));
+    toast.success(`Procedimento ${first.codigo} sugerido pelo CID ${cid.codigo} foi adicionado.`);
+  }, [expandedProcId, selectedProcIds, handlePickProcedimento]);
+
+
   const isProfissional = user?.role === "profissional";
   const canEdit = can('prontuario', 'can_edit');
   const canDelete = can('prontuario', 'can_delete');
