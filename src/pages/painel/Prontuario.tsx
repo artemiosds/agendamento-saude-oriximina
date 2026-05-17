@@ -2874,6 +2874,9 @@ const ProntuarioPage: React.FC = () => {
               </div>
             )}
 
+          </TabsContent>
+
+          <TabsContent value="procedimentos" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Histórico de Procedimentos do Paciente */}
             {isProfBlocoVisible('procedimentos') && form.paciente_id && pacienteProcHistory.length > 0 && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
