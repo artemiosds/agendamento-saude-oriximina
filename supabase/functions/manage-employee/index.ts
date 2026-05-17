@@ -111,6 +111,7 @@ serve(async (req) => {
           cpf: cpf || "",
           coren: coren || "",
           custom_data: {
+            ...(body.custom_data_extras && typeof body.custom_data_extras === 'object' ? body.custom_data_extras : {}),
             ...(cbo_codigo ? { cbo_codigo: String(cbo_codigo), cbo_descricao: String(cbo_descricao || '') } : {}),
             ...(cns ? { cns: String(cns).replace(/\D/g, '').slice(0, 15) } : {}),
           },
@@ -170,10 +171,11 @@ serve(async (req) => {
         }
       }
 
-      // Merge CBO and CNS into custom_data (preserve existing custom fields)
-      if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined || body.cns !== undefined) {
+      // Merge CBO, CNS and extra custom_data fields (preserve existing custom fields)
+      const hasExtras = body.custom_data_extras && typeof body.custom_data_extras === 'object';
+      if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined || body.cns !== undefined || hasExtras) {
         const existingCustom = (current.custom_data as Record<string, any>) || {};
-        const merged: Record<string, any> = { ...existingCustom };
+        const merged: Record<string, any> = { ...existingCustom, ...(hasExtras ? body.custom_data_extras : {}) };
         if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined) {
           merged.cbo_codigo = String(body.cbo_codigo || '');
           merged.cbo_descricao = String(body.cbo_descricao || '');
