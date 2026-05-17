@@ -136,7 +136,7 @@ const Funcionarios: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '' });
     setCbo(null);
     setShowCboError(false);
     setCustomData({});
