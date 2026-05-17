@@ -3514,10 +3514,10 @@ const ProntuarioPage: React.FC = () => {
 
           {/* Painel direito fixo — Histórico do paciente */}
           <HistoricoPacientePanel
-            paciente={pacientes.find(p => p.id === form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null)}
+            paciente={pacienteForPanel}
             historico={patientHistory}
             currentId={editId || undefined}
-            onView={(p) => setViewerProntuario(p)}
+            onView={handleViewProntuarioFromHistory}
           />
           </div>{/* end grid split */}
 
