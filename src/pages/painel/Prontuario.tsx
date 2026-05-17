@@ -2465,7 +2465,7 @@ const ProntuarioPage: React.FC = () => {
           {patientHistory.length > 0 && (
             <HistoricoCentralList
               items={patientHistory}
-              onView={(p) => setViewerProntuario(p)}
+              onView={handleViewProntuarioFromHistory}
             />
           )}
 
