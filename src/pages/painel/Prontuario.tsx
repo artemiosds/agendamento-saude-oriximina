@@ -2397,7 +2397,7 @@ const ProntuarioPage: React.FC = () => {
             </div>
           )}
 
-          <div className="contents">{/* form-content wrapper (was space-y-4) */}
+          {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Paciente *</Label>
