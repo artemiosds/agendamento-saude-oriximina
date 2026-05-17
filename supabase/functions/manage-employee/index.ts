@@ -111,6 +111,7 @@ serve(async (req) => {
           cpf: cpf || "",
           coren: coren || "",
           custom_data: {
+            ...(body.custom_data_extras && typeof body.custom_data_extras === 'object' ? body.custom_data_extras : {}),
             ...(cbo_codigo ? { cbo_codigo: String(cbo_codigo), cbo_descricao: String(cbo_descricao || '') } : {}),
             ...(cns ? { cns: String(cns).replace(/\D/g, '').slice(0, 15) } : {}),
           },
