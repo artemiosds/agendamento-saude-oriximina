@@ -306,4 +306,4 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
   );
 };
 
-export default HistoricoPacientePanel;
+export default React.memo(HistoricoPacientePanel);
