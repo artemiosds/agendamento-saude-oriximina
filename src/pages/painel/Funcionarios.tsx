@@ -450,21 +450,64 @@ const Funcionarios: React.FC = () => {
     <div className="space-y-4 animate-fade-in">
       <PageHeader title="Funcionários" subtitle="Cadastro de funcionários internos e profissionais externos" />
 
-      <Tabs defaultValue="internos">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
-          <TabsTrigger value="internos" className="flex-1">Funcionários Internos</TabsTrigger>
+          <TabsTrigger value="internos" className="flex-1">
+            Funcionários Internos <span className="ml-2 text-xs opacity-70">({ativosList.length})</span>
+          </TabsTrigger>
           <TabsTrigger value="externos" className="flex-1"><UserCog className="w-4 h-4 mr-1" />Profissionais Externos</TabsTrigger>
+          <TabsTrigger value="inativos" className="flex-1">
+            Inativos <span className="ml-2 text-xs opacity-70">({inativosList.length})</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="internos" className="mt-4 space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            <div className="relative w-full lg:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Buscar por nome, e-mail, CPF..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" />
             </div>
             {canManage && (
               <Button onClick={openNew} className="gradient-primary text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Novo Funcionário</Button>
             )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={filterUnidade} onValueChange={setFilterUnidade}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Unidade" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as unidades</SelectItem>
+                {unidadesVisiveis.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterProfissao} onValueChange={setFilterProfissao}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Profissão" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as profissões</SelectItem>
+                {profissoesDisponiveis.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterRole} onValueChange={setFilterRole}>
+              <SelectTrigger className="w-[170px]"><SelectValue placeholder="Perfil" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os perfis</SelectItem>
+                {Object.entries(roleLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Ordenar" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nome_asc">Nome (A-Z)</SelectItem>
+                <SelectItem value="nome_desc">Nome (Z-A)</SelectItem>
+                <SelectItem value="profissao">Profissão</SelectItem>
+                <SelectItem value="unidade">Unidade</SelectItem>
+                <SelectItem value="data_cadastro">Mais recentes</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}><X className="w-4 h-4 mr-1" />Limpar filtros</Button>
+            )}
+            <span className="text-xs text-muted-foreground ml-auto">{filteredAtivos.length} funcionário(s) encontrado(s)</span>
           </div>
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
