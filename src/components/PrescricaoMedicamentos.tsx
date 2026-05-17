@@ -17,14 +17,38 @@ import logoCerFallback from '@/assets/logo-cer-ii.png';
 interface MedicationType {
   id: string;
   nome: string;
+  nome_comercial?: string;
   principio_ativo: string;
   classe_terapeutica: string;
   apresentacao: string;
   dosagem_padrao: string;
   via_padrao: string;
+  forma_farmaceutica?: string;
+  concentracao?: string;
+  codigo_rename?: string | null;
+  tipo?: 'comum' | 'controlado' | 'psicotropico' | 'antibiotico';
+  origem?: 'rename' | 'reme' | 'manual';
+  estoque_controlado?: boolean;
+  estoque_quantidade?: number;
+  estoque_minimo?: number;
   is_global: boolean;
   profissional_id: string | null;
   ativo: boolean;
+}
+
+const TIPO_BADGE: Record<string, { label: string; cls: string; alert?: string }> = {
+  controlado: { label: 'CONTROLADO', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento controlado — exige receita especial.' },
+  psicotropico: { label: 'PSICOTRÓPICO', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento psicotrópico — exige receituário especial (notificação B).' },
+  antibiotico: { label: 'ANTIBIÓTICO', cls: 'bg-orange-500 text-white', alert: 'Antibiótico — exige receituário (RDC 20/2011).' },
+};
+
+function getStockStatus(m: MedicationType): { label: string; cls: string; alert?: string } | null {
+  if (!m.estoque_controlado) return null;
+  const qty = m.estoque_quantidade ?? 0;
+  const min = m.estoque_minimo ?? 0;
+  if (qty <= 0) return { label: 'Indisponível', cls: 'bg-destructive text-destructive-foreground', alert: 'Medicamento sem estoque disponível na unidade.' };
+  if (qty <= min) return { label: 'Estoque baixo', cls: 'bg-yellow-500 text-white' };
+  return { label: 'Disponível', cls: 'bg-green-600 text-white' };
 }
 
 interface MedicamentoPrescrito {
