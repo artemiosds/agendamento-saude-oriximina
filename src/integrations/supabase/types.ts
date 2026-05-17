@@ -3675,6 +3675,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_procedures_for_cid: {
+        Args: { lim?: number; p_cid: string }
+        Returns: Json
+      }
       get_treatment_cycles_paginated: {
         Args: {
           p_only_own_professional?: boolean
@@ -3708,6 +3712,10 @@ export type Database = {
           p_profissional_id?: string
           p_unidade_id?: string
         }
+        Returns: Json
+      }
+      search_sigtap_and_cid: {
+        Args: { lim?: number; q: string }
         Returns: Json
       }
       show_limit: { Args: never; Returns: number }
