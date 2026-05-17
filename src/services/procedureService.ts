@@ -242,8 +242,42 @@ export const procedureService = {
       .from('cid10_codigos')
       .select('codigo, descricao')
       .or(`codigo.ilike.%${q}%,descricao.ilike.%${q}%`)
-      .limit(100); // Aumentado de 20 para 100 para dar mais opções na busca
-    return (data || []).map((r: any) => ({ codigo: r.codigo, descricao: r.descricao }));
+      .limit(100);
+    // Dedupe by codigo (cid10_codigos may have multiple rows per codigo for different especialidades)
+    const seen = new Set<string>();
+    return (data || []).reduce((acc: { codigo: string; descricao: string }[], r: any) => {
+      if (seen.has(r.codigo)) return acc;
+      seen.add(r.codigo);
+      acc.push({ codigo: r.codigo, descricao: r.descricao });
+      return acc;
+    }, []);
+  },
+
+  /**
+   * Busca unificada (procedimentos SIGTAP + CIDs) usando RPC com índices GIN trigram.
+   * Retorna até `lim` resultados por seção, ordenados por similaridade.
+   */
+  async searchUnified(query: string, lim = 10): Promise<{
+    procedimentos: { codigo: string; nome: string; especialidade: string | null }[];
+    cids: { codigo: string; descricao: string }[];
+  }> {
+    const q = query.trim();
+    if (!q) return { procedimentos: [], cids: [] };
+    const { data, error } = await (supabase as any).rpc('search_sigtap_and_cid', { q, lim });
+    if (error || !data) return { procedimentos: [], cids: [] };
+    return {
+      procedimentos: (data.procedimentos || []) as any,
+      cids: (data.cids || []) as any,
+    };
+  },
+
+  /**
+   * Lista procedimentos vinculados a um CID (para sugestão automática).
+   */
+  async getProceduresForCid(cidCodigo: string, lim = 10): Promise<{ codigo: string; nome: string; especialidade: string | null }[]> {
+    const { data, error } = await (supabase as any).rpc('get_procedures_for_cid', { p_cid: cidCodigo, lim });
+    if (error || !data) return [];
+    return data as any;
   },
 
   async createCustom(input: {
