@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Skeleton } from "@/components/ui/skeleton";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
