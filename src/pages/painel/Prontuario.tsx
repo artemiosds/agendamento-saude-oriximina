@@ -3372,8 +3372,17 @@ const ProntuarioPage: React.FC = () => {
               );
             })()}
 
-          </div>{/* end space-y-4 form */}
-          </div>{/* end scrollable area */}
+          </TabsContent>
+          </Tabs>
+          </div>{/* end left column */}
+
+          {/* Painel direito fixo — Histórico do paciente */}
+          <HistoricoPacientePanel
+            paciente={pacientes.find(p => p.id === form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null)}
+            historico={patientHistory}
+            currentId={editId || undefined}
+          />
+          </div>{/* end grid split */}
 
             <div className="flex gap-2 flex-wrap shrink-0 border-t border-border pt-3 -mx-6 px-6 pb-1 bg-background">
               {/* Botão "Registrar Sessão" — só aparece no tipo sessão com sessão disponível */}
