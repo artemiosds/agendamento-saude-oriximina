@@ -172,6 +172,19 @@ const UnidadesSalas: React.FC = () => {
               <div><Label>Telefone</Label><Input value={unitForm.telefone} onChange={e => setUnitForm(p => ({ ...p, telefone: e.target.value }))} /></div>
               <div><Label>WhatsApp</Label><Input value={unitForm.whatsapp} onChange={e => setUnitForm(p => ({ ...p, whatsapp: e.target.value }))} /></div>
             </div>
+            <div>
+              <Label>CNES (Cadastro Nacional de Estabelecimentos de Saúde)</Label>
+              <Input
+                value={unitForm.cnes}
+                onChange={e => setUnitForm(p => ({ ...p, cnes: onlyDigits(e.target.value) }))}
+                placeholder="0000000"
+                maxLength={7}
+                inputMode="numeric"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                7 dígitos. Usado na produção do BPA-I (SIA/SUS) como CNES do estabelecimento.
+              </p>
+            </div>
             {customConfig.fields.length > 0 && (
               <CustomFieldsRenderer
                 fields={customConfig.fields}
