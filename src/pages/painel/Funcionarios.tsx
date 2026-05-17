@@ -644,6 +644,60 @@ const Funcionarios: React.FC = () => {
                     </div>
                   </div>
                 )}
+                <div className="border-t pt-3 mt-2">
+                  <p className="text-sm font-semibold text-foreground mb-2">Vínculo & Configurações Internas</p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold">Status</Label>
+                    <p className="text-xs text-muted-foreground">{form.ativo ? 'Ativo' : 'Inativo'}</p>
+                  </div>
+                  <Switch checked={form.ativo} onCheckedChange={v => setForm(p => ({ ...p, ativo: v }))} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Data de Admissão</Label>
+                    <Input type="date" value={form.data_admissao} onChange={e => setForm(p => ({ ...p, data_admissao: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label>Tipo de Vínculo</Label>
+                    <Select value={form.tipo_vinculo || '__none__'} onValueChange={v => setForm(p => ({ ...p, tipo_vinculo: v === '__none__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        <SelectItem value="CLT">CLT</SelectItem>
+                        <SelectItem value="Estatutário">Estatutário</SelectItem>
+                        <SelectItem value="Temporário">Temporário</SelectItem>
+                        <SelectItem value="Terceirizado">Terceirizado</SelectItem>
+                        <SelectItem value="Cooperado">Cooperado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Setor Principal</Label>
+                    <Input value={form.setor_principal} onChange={e => setForm(p => ({ ...p, setor_principal: e.target.value }))} placeholder="Ex.: Clínica, Triagem" />
+                  </div>
+                  <div>
+                    <Label>Turno de Trabalho</Label>
+                    <Select value={form.turno_trabalho || '__none__'} onValueChange={v => setForm(p => ({ ...p, turno_trabalho: v === '__none__' ? '' : v }))}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">—</SelectItem>
+                        <SelectItem value="Manhã">Manhã</SelectItem>
+                        <SelectItem value="Tarde">Tarde</SelectItem>
+                        <SelectItem value="Noite">Noite</SelectItem>
+                        <SelectItem value="Integral">Integral</SelectItem>
+                        <SelectItem value="Plantão 12x36">Plantão 12x36</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Observações Internas</Label>
+                  <Textarea value={form.observacoes_internas} onChange={e => setForm(p => ({ ...p, observacoes_internas: e.target.value }))} rows={2} placeholder="Notas administrativas (uso interno)" />
+                </div>
                 {customConfig.fields.length > 0 && (
                   <CustomFieldsRenderer
                     fields={customConfig.fields}
