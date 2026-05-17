@@ -1821,7 +1821,11 @@ const ProntuarioPage: React.FC = () => {
         detalhes: { paciente: p.paciente_nome, profissional: p.profissional_nome, data: p.data_atendimento },
         user,
       });
-      setProntuarios((prev) => prev.filter((pr) => pr.id !== p.id));
+      // Optimistic local update + cache invalidation to stay in sync with React Query
+      queryClient.setQueryData<ProntuarioDB[]>(prontuariosQueryKey, (prev) =>
+        (prev || []).filter((pr) => pr.id !== p.id),
+      );
+      queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
       toast.success("Prontuário excluído!");
     } catch (err) {
       console.error("Error deleting:", err);
