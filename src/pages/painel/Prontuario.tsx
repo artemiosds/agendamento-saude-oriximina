@@ -2007,19 +2007,27 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const queryPacienteId = searchParams.get("pacienteId");
-  const filtered = prontuarios.filter((p) => {
-    if (queryPacienteId) return p.paciente_id === queryPacienteId;
-    if (!search) return true;
-    const term = search.toLowerCase();
-    // Search by patient name, professional name, CPF or CNS
-    const pac = pacientes.find((px) => px.id === p.paciente_id);
-    return (
-      p.paciente_nome.toLowerCase().includes(term) ||
-      p.profissional_nome.toLowerCase().includes(term) ||
-      (pac?.cpf || "").replace(/[.\-/]/g, "").includes(term.replace(/[.\-/]/g, "")) ||
-      ((pac as any)?.cns || "").includes(term)
-    );
-  });
+  const deferredSearch = useDeferredValue(search);
+  const pacienteByIdMap = useMemo(() => {
+    const m = new Map<string, any>();
+    pacientes.forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [pacientes]);
+  const filtered = useMemo(() => {
+    return prontuarios.filter((p) => {
+      if (queryPacienteId) return p.paciente_id === queryPacienteId;
+      if (!deferredSearch) return true;
+      const term = deferredSearch.toLowerCase();
+      const termDigits = term.replace(/[.\-/]/g, "");
+      const pac = pacienteByIdMap.get(p.paciente_id);
+      return (
+        p.paciente_nome.toLowerCase().includes(term) ||
+        p.profissional_nome.toLowerCase().includes(term) ||
+        ((pac?.cpf || "").replace(/[.\-/]/g, "").includes(termDigits)) ||
+        ((pac?.cns || "").includes(termDigits))
+      );
+    });
+  }, [prontuarios, queryPacienteId, deferredSearch, pacienteByIdMap]);
   const queryPacienteNome = searchParams.get("pacienteNome");
 
   return (
