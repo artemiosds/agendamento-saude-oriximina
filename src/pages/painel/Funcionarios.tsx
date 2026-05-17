@@ -323,24 +323,128 @@ const Funcionarios: React.FC = () => {
   /** Check if a given employee is the global master (protected from unit masters) */
   const isProtectedGlobalMaster = (f: FuncionarioDB) => f.usuario === 'admin.sms';
 
-  const filteredFuncionarios = (() => {
+  /** Toggle ativo/inativo for an employee */
+  const handleToggleAtivo = async (f: FuncionarioDB) => {
+    if (isUnitMaster && isProtectedGlobalMaster(f)) {
+      toast.error('Você não tem permissão para alterar o administrador global.');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-employee', {
+        body: { action: 'update', id: f.id, ativo: !f.ativo },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || 'Erro ao atualizar status.');
+        return;
+      }
+      toast.success(!f.ativo ? 'Funcionário ativado!' : 'Funcionário desativado!');
+      await loadFuncionarios();
+      await refreshFuncionarios();
+      setViewFuncionario(prev => prev && prev.id === f.id ? { ...prev, ativo: !f.ativo } : prev);
+    } catch {
+      toast.error('Erro ao atualizar status.');
+    }
+  };
+
+  /** Print employee profile card */
+  const handlePrintFuncionario = (f: FuncionarioDB) => {
+    const unidadeNome = unidades.find(u => u.id === f.unidade_id)?.nome || '—';
+    const cd = (f.custom_data as any) || {};
+    const w = window.open('', '_blank', 'width=800,height=900');
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ficha — ${f.nome}</title>
+      <style>body{font-family:Georgia,serif;padding:32px;color:#1a1a1a;max-width:720px;margin:auto}
+      h1{font-size:20px;border-bottom:2px solid #2A6F97;padding-bottom:8px;color:#2A6F97}
+      h2{font-size:14px;margin-top:24px;color:#2A6F97;text-transform:uppercase;letter-spacing:1px}
+      table{width:100%;border-collapse:collapse;margin-top:8px} td{padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}
+      td:first-child{font-weight:600;width:35%;color:#555} .foot{margin-top:32px;font-size:11px;color:#888;text-align:center}</style></head><body>
+      <h1>Ficha do Funcionário</h1>
+      <h2>Dados Pessoais</h2><table>
+      <tr><td>Nome</td><td>${f.nome}</td></tr>
+      <tr><td>CPF</td><td>${f.cpf || '—'}</td></tr>
+      <tr><td>E-mail</td><td>${f.email || '—'}</td></tr>
+      <tr><td>Usuário</td><td>${f.usuario || '—'}</td></tr>
+      </table>
+      <h2>Dados Profissionais</h2><table>
+      <tr><td>Profissão</td><td>${f.profissao || '—'}</td></tr>
+      <tr><td>Cargo</td><td>${f.cargo || '—'}</td></tr>
+      <tr><td>Perfil</td><td>${roleLabels[f.role] || f.role}</td></tr>
+      <tr><td>Conselho</td><td>${f.tipo_conselho || ''} ${f.numero_conselho || ''} ${f.uf_conselho ? '/' + f.uf_conselho : ''}</td></tr>
+      <tr><td>CBO</td><td>${cd.cbo_codigo || '—'} ${cd.cbo_descricao || ''}</td></tr>
+      <tr><td>CNS</td><td>${cd.cns ? formatCNS(cd.cns) : '—'}</td></tr>
+      <tr><td>Unidade</td><td>${unidadeNome}</td></tr>
+      <tr><td>Setor</td><td>${f.setor || '—'}</td></tr>
+      <tr><td>Tempo de Atendimento</td><td>${f.tempo_atendimento || '—'} min</td></tr>
+      </table>
+      <h2>Vínculo</h2><table>
+      <tr><td>Status</td><td>${f.ativo ? 'Ativo' : 'Inativo'}</td></tr>
+      <tr><td>Tipo de Vínculo</td><td>${cd.tipo_vinculo || '—'}</td></tr>
+      <tr><td>Data de Admissão</td><td>${cd.data_admissao || '—'}</td></tr>
+      <tr><td>Turno</td><td>${cd.turno_trabalho || '—'}</td></tr>
+      <tr><td>Data de Cadastro</td><td>${f.criado_em ? new Date(f.criado_em).toLocaleDateString('pt-BR') : '—'}</td></tr>
+      </table>
+      <div class="foot">Documento emitido por GestorPlantão — SMS Oriximiná — ${new Date().toLocaleString('pt-BR')}</div>
+      <script>window.onload=()=>{window.print();}</script></body></html>`);
+    w.document.close();
+  };
+
+  /** Apply unit-scope and master protection (used by all tabs) */
+  const scopedFuncionarios = useMemo(() => {
     let list = funcionarios;
-    // Unit-scoped users (including unit masters) only see their unit's employees
     if (user?.usuario !== 'admin.sms' && user?.unidadeId) {
       list = list.filter(f => f.unidade_id === user.unidadeId || !f.unidade_id);
     }
-    // For unit masters, hide the global master from the list entirely
     if (isUnitMaster) {
       list = list.filter(f => !isProtectedGlobalMaster(f));
     }
+    return list;
+  }, [funcionarios, user, isUnitMaster]);
+
+  /** Distinct profession options for filter dropdown */
+  const profissoesDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    scopedFuncionarios.forEach(f => { if (f.profissao) set.add(f.profissao); });
+    return Array.from(set).sort();
+  }, [scopedFuncionarios]);
+
+  /** Apply text + dropdown filters + sort */
+  const applyFilters = (list: FuncionarioDB[]) => {
+    let out = list;
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      list = list.filter(f =>
-        f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || f.cpf.includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term)
+      out = out.filter(f =>
+        f.nome.toLowerCase().includes(term) || f.email.toLowerCase().includes(term) || (f.cpf || '').includes(term) || (f.profissao || '').toLowerCase().includes(term) || (f.cargo || '').toLowerCase().includes(term)
       );
     }
-    return list;
-  })();
+    if (filterUnidade !== 'all') out = out.filter(f => f.unidade_id === filterUnidade);
+    if (filterProfissao !== 'all') out = out.filter(f => f.profissao === filterProfissao);
+    if (filterRole !== 'all') out = out.filter(f => f.role === filterRole);
+    const sorted = [...out];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'nome_desc': return b.nome.localeCompare(a.nome);
+        case 'profissao': return (a.profissao || '').localeCompare(b.profissao || '');
+        case 'unidade': {
+          const un = (id: string) => unidades.find(u => u.id === id)?.nome || '';
+          return un(a.unidade_id).localeCompare(un(b.unidade_id));
+        }
+        case 'data_cadastro': return (b.criado_em || '').localeCompare(a.criado_em || '');
+        case 'nome_asc':
+        default: return a.nome.localeCompare(b.nome);
+      }
+    });
+    return sorted;
+  };
+
+  const ativosList = useMemo(() => scopedFuncionarios.filter(f => f.ativo !== false), [scopedFuncionarios]);
+  const inativosList = useMemo(() => scopedFuncionarios.filter(f => f.ativo === false), [scopedFuncionarios]);
+  const filteredAtivos = useMemo(() => applyFilters(ativosList), [ativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
+  const filteredInativos = useMemo(() => applyFilters(inativosList), [inativosList, searchTerm, filterUnidade, filterProfissao, filterRole, sortBy, unidades]);
+
+  const clearFilters = () => {
+    setSearchTerm(''); setFilterUnidade('all'); setFilterProfissao('all'); setFilterRole('all'); setSortBy('nome_asc');
+  };
+  const hasActiveFilters = !!searchTerm || filterUnidade !== 'all' || filterProfissao !== 'all' || filterRole !== 'all';
 
   return (
     <div className="space-y-4 animate-fade-in">
