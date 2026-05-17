@@ -430,9 +430,19 @@ const Funcionarios: React.FC = () => {
                         Obrigatório para geração do BPA-I (SIA/SUS).
                       </p>
                     </div>
-                    {(form.role === 'tecnico' || form.role === 'enfermagem') && (
-                      <div>
-                        <Label>COREN</Label>
+                    <div>
+                      <Label>CNS (Cartão Nacional de Saúde)</Label>
+                      <Input
+                        value={form.cns}
+                        onChange={e => setForm(p => ({ ...p, cns: formatCNS(e.target.value) }))}
+                        placeholder="000 0000 0000 0000"
+                        maxLength={18}
+                        inputMode="numeric"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        15 dígitos. Obrigatório no BPA-I para identificar o profissional executante.
+                      </p>
+                    </div>
                         <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
                       </div>
                     )}
