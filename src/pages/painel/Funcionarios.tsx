@@ -122,6 +122,7 @@ const Funcionarios: React.FC = () => {
 
   const openEdit = (f: FuncionarioDB) => {
     setEditId(f.id);
+    const cd = (f.custom_data as any) || {};
     setForm({
       nome: f.nome, usuario: f.usuario, email: f.email, cpf: f.cpf || '', senha: '',
       setor: f.setor || '', unidade_id: f.unidade_id || '', sala_id: f.sala_id || '',
@@ -130,9 +131,14 @@ const Funcionarios: React.FC = () => {
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
-      cns: formatCNS(((f.custom_data as any) || {}).cns || ''),
+      cns: formatCNS(cd.cns || ''),
+      ativo: f.ativo ?? true,
+      data_admissao: cd.data_admissao || '',
+      tipo_vinculo: cd.tipo_vinculo || '',
+      setor_principal: cd.setor_principal || '',
+      turno_trabalho: cd.turno_trabalho || '',
+      observacoes_internas: cd.observacoes_internas || '',
     });
-    const cd = (f.custom_data as any) || {};
     if (cd.cbo_codigo && cd.cbo_descricao) {
       setCbo({ codigo: cd.cbo_codigo, descricao: cd.cbo_descricao });
     } else {
@@ -146,7 +152,7 @@ const Funcionarios: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '' });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '', ativo: true, data_admissao: '', tipo_vinculo: '', setor_principal: '', turno_trabalho: '', observacoes_internas: '' });
     setCbo(null);
     setShowCboError(false);
     setCustomData({});
