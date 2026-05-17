@@ -269,6 +269,13 @@ const Funcionarios: React.FC = () => {
             cbo_descricao: cbo?.descricao || '',
             cns: unmaskCNS(form.cns),
             criado_por: user?.id || '',
+            custom_data_extras: {
+              data_admissao: form.data_admissao,
+              tipo_vinculo: form.tipo_vinculo,
+              setor_principal: form.setor_principal,
+              turno_trabalho: form.turno_trabalho,
+              observacoes_internas: form.observacoes_internas,
+            },
           },
         });
 
