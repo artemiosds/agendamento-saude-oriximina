@@ -443,6 +443,9 @@ const Funcionarios: React.FC = () => {
                         15 dígitos. Obrigatório no BPA-I para identificar o profissional executante.
                       </p>
                     </div>
+                    {(form.role === 'tecnico' || form.role === 'enfermagem') && (
+                      <div>
+                        <Label>COREN</Label>
                         <Input value={(form as any).coren || ''} onChange={e => setForm(p => ({ ...p, coren: e.target.value } as any))} placeholder="Nº do COREN" />
                       </div>
                     )}
