@@ -1582,6 +1582,11 @@ const ProntuarioPage: React.FC = () => {
     }
   }, [user, selectedProcIds, procDetails, selectedCidsByProc, procedimentos]);
 
+  // Keep latest performAutosave in a ref so the debounce effect doesn't re-run
+  // every time selectedProcIds/procDetails/selectedCidsByProc/procedimentos change.
+  const performAutosaveRef = useRef(performAutosave);
+  useEffect(() => { performAutosaveRef.current = performAutosave; }, [performAutosave]);
+
   // Debounced trigger watching form changes while dialog is open
   useEffect(() => {
     if (!dialogOpen) return;
@@ -1602,9 +1607,9 @@ const ProntuarioPage: React.FC = () => {
     if (hash === lastAutosaveHashRef.current) return;
     lastAutosaveHashRef.current = hash;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2500);
+    autosaveTimerRef.current = setTimeout(() => { void performAutosaveRef.current(); }, 2500);
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
-  }, [dialogOpen, form, performAutosave]);
+  }, [dialogOpen, form, selectedProcIds, procDetails, selectedCidsByProc]);
 
   // Flush on tab hide / before unload
   useEffect(() => {
