@@ -3301,6 +3301,9 @@ const ProntuarioPage: React.FC = () => {
               />
             </div>
 
+          </TabsContent>
+
+          <TabsContent value="encaminhamentos" forceMount className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden">
             {/* Decisão Clínica: PTS / Tratamento — only for avaliacao_inicial handled above, and retorno */}
             {!editId && form.paciente_id && form.tipo_registro === 'retorno' && (
               <div className="bg-muted/30 rounded-lg p-4 border space-y-3">
