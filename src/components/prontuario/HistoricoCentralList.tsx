@@ -98,4 +98,4 @@ const HistoricoCentralList: React.FC<Props> = ({ items, onView }) => {
   );
 };
 
-export default HistoricoCentralList;
+export default React.memo(HistoricoCentralList);
