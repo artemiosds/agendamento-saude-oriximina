@@ -568,42 +568,52 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = async () => {
     setLoading(true);
     try {
-      // All professionals can VIEW all prontuários — edit is restricted in the UI
-      // Recursive pagination to bypass Supabase's default 1000-row limit
-      const PAGE_SIZE = 1000;
-      const all: any[] = [];
-      let fromIdx = 0;
       const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // First fetch exact total count for visibility/debug
-      let countQuery = (supabase as any).from("prontuarios").select("id", { count: "exact", head: true });
-      if (restrictUnit) countQuery = countQuery.eq("unidade_id", user!.unidadeId);
-      const { count: totalCount, error: countErr } = await countQuery;
-      if (countErr) console.error("Error counting prontuarios:", countErr);
-      if (import.meta.env.DEV) console.debug("[Prontuarios] total no banco:", totalCount);
+      // Lighter projection for listing (avoid heavy text columns until detail)
+      const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
+      // Phase 1 — first 100 most recent for instant paint
+      let firstQuery = (supabase as any)
+        .from("prontuarios")
+        .select(LIST_COLS)
+        .order("data_atendimento", { ascending: false })
+        .order("criado_em", { ascending: false })
+        .range(0, 99);
+      if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
+      const { data: first, error: firstErr } = await firstQuery;
+      if (firstErr) {
+        console.error("Error loading prontuarios:", firstErr);
+        setLoading(false);
+        return;
+      }
+      setProntuarios((first as any) || []);
+      setLoading(false);
+
+      // Phase 2 — load remaining pages silently in background (does not block UI)
+      const PAGE_SIZE = 1000;
+      let fromIdx = 100;
+      const collected: any[] = [...((first as any) || [])];
       while (true) {
-        let query = (supabase as any)
+        let q = (supabase as any)
           .from("prontuarios")
-          .select("*")
+          .select(LIST_COLS)
           .order("data_atendimento", { ascending: false })
+          .order("criado_em", { ascending: false })
           .range(fromIdx, fromIdx + PAGE_SIZE - 1);
-        if (restrictUnit) query = query.eq("unidade_id", user!.unidadeId);
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error loading prontuarios:", error);
-          break;
-        }
+        if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
+        const { data, error } = await q;
+        if (error) { console.error("Background load error:", error); break; }
         if (!data || data.length === 0) break;
-        all.push(...data);
+        collected.push(...data);
+        setProntuarios([...collected]);
         if (data.length < PAGE_SIZE) break;
         fromIdx += PAGE_SIZE;
       }
-      if (import.meta.env.DEV) console.debug("[Prontuarios] carregados:", all.length);
-      setProntuarios(all);
+      if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
     } catch (err) {
       console.error("Error:", err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
