@@ -2185,8 +2185,8 @@ const ProntuarioPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="w-[95vw] max-w-5xl h-[95vh] max-h-[95vh] flex flex-col overflow-hidden" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
+        <DialogContent className="w-screen max-w-none h-screen sm:rounded-none p-0 flex flex-col overflow-hidden gap-0" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader className="px-6 py-3 border-b border-border shrink-0">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <DialogTitle className="font-display">{editId ? "Editar" : "Novo"} Prontuário</DialogTitle>
               <div className="text-xs flex items-center gap-1.5" aria-live="polite">
@@ -2209,7 +2209,18 @@ const ProntuarioPage: React.FC = () => {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-4">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-[65%_35%] min-h-0 overflow-hidden">
+          <div className="flex flex-col min-h-0 overflow-hidden">
+          <Tabs defaultValue="avaliacao" className="flex flex-col flex-1 min-h-0">
+            <TabsList className="mx-6 mt-3 grid grid-cols-5 w-auto shrink-0">
+              <TabsTrigger value="avaliacao">Avaliação</TabsTrigger>
+              <TabsTrigger value="procedimentos">Procedimentos</TabsTrigger>
+              <TabsTrigger value="prescricao">Prescrição</TabsTrigger>
+              <TabsTrigger value="exames">Exames</TabsTrigger>
+              <TabsTrigger value="encaminhamentos">Encaminhamentos</TabsTrigger>
+            </TabsList>
+          <TabsContent value="avaliacao" className="flex-1 overflow-y-auto px-6 py-4 space-y-4 mt-0 data-[state=inactive]:hidden" forceMount>
+
           {activeAtendimento && (
             <AtendimentoTimer
               horaInicio={activeAtendimento.horaInicio}
