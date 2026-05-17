@@ -2164,6 +2164,23 @@ const ProntuarioPage: React.FC = () => {
   });
   const queryPacienteNome = searchParams.get("pacienteNome");
 
+  // Stable derived data for the side history panel — prevents re-renders on every keystroke
+  const pacienteForPanel = useMemo(() => {
+    if (form.paciente_id) {
+      return pacienteByIdMap.get(form.paciente_id) || (form.paciente_nome ? { nome: form.paciente_nome } : null);
+    }
+    return form.paciente_nome ? { nome: form.paciente_nome } : null;
+  }, [form.paciente_id, form.paciente_nome, pacienteByIdMap]);
+
+  const funcionariosLight = useMemo(
+    () => funcionarios.map(f => ({ id: f.id, nome: f.nome, profissao: f.profissao || "", ativo: f.ativo ?? true })),
+    [funcionarios],
+  );
+
+  const handleViewProntuarioFromHistory = useCallback((p: any) => {
+    setViewerProntuario(p);
+  }, []);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
