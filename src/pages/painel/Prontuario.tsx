@@ -566,60 +566,76 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
 
-  const loadProntuarios = async () => {
-    setLoading(true);
-    try {
-      const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // Lighter projection for listing (avoid heavy text columns until detail)
-      const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
+  // Lighter projection for listing (avoid heavy text columns until detail)
+  const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
-      // Phase 1 — first 100 most recent for instant paint
-      let firstQuery = (supabase as any)
+  const prontuariosQueryKey = useMemo(
+    () => ['prontuarios', 'lista', user?.usuario === 'admin.sms' ? 'all' : (user?.unidadeId || 'none')] as const,
+    [user?.usuario, user?.unidadeId],
+  );
+
+  // Two-phase fetch: paint first 100 instantly via setQueryData, then page the rest in background.
+  const fetchProntuariosLeve = useCallback(async (): Promise<ProntuarioDB[]> => {
+    const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
+
+    // Phase 1 — first 100 most recent
+    let firstQuery = (supabase as any)
+      .from("prontuarios")
+      .select(LIST_COLS)
+      .order("data_atendimento", { ascending: false })
+      .order("criado_em", { ascending: false })
+      .range(0, 99);
+    if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
+    const { data: first, error: firstErr } = await firstQuery;
+    if (firstErr) {
+      console.error("Error loading prontuarios:", firstErr);
+      return [];
+    }
+
+    const firstPage: any[] = (first as any) || [];
+    // Paint immediately while remaining pages stream in
+    queryClient.setQueryData(prontuariosQueryKey, firstPage);
+
+    // Phase 2 — paginate remaining silently
+    const PAGE_SIZE = 1000;
+    let fromIdx = 100;
+    const collected: any[] = [...firstPage];
+    while (true) {
+      let q = (supabase as any)
         .from("prontuarios")
         .select(LIST_COLS)
         .order("data_atendimento", { ascending: false })
         .order("criado_em", { ascending: false })
-        .range(0, 99);
-      if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
-      const { data: first, error: firstErr } = await firstQuery;
-      if (firstErr) {
-        console.error("Error loading prontuarios:", firstErr);
-        setLoading(false);
-        return;
-      }
-      setProntuarios((first as any) || []);
-      setLoading(false);
-
-      // Phase 2 — load remaining pages silently in background (does not block UI)
-      const PAGE_SIZE = 1000;
-      let fromIdx = 100;
-      const collected: any[] = [...((first as any) || [])];
-      while (true) {
-        let q = (supabase as any)
-          .from("prontuarios")
-          .select(LIST_COLS)
-          .order("data_atendimento", { ascending: false })
-          .order("criado_em", { ascending: false })
-          .range(fromIdx, fromIdx + PAGE_SIZE - 1);
-        if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
-        const { data, error } = await q;
-        if (error) { console.error("Background load error:", error); break; }
-        if (!data || data.length === 0) break;
-        collected.push(...data);
-        setProntuarios([...collected]);
-        if (data.length < PAGE_SIZE) break;
-        fromIdx += PAGE_SIZE;
-      }
-      if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
-    } catch (err) {
-      console.error("Error:", err);
-      setLoading(false);
+        .range(fromIdx, fromIdx + PAGE_SIZE - 1);
+      if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
+      const { data, error } = await q;
+      if (error) { console.error("Background load error:", error); break; }
+      if (!data || data.length === 0) break;
+      collected.push(...data);
+      queryClient.setQueryData(prontuariosQueryKey, [...collected]);
+      if (data.length < PAGE_SIZE) break;
+      fromIdx += PAGE_SIZE;
     }
-  };
+    if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
+    return collected;
+  }, [user?.id, user?.usuario, user?.unidadeId, prontuariosQueryKey, queryClient]);
 
+  const { data: prontuarios = [], isLoading: prontuariosLoading, refetch: refetchProntuarios } = useQuery<ProntuarioDB[]>({
+    queryKey: prontuariosQueryKey,
+    queryFn: fetchProntuariosLeve,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Backwards-compat alias for legacy call sites that triggered a reload.
+  const loadProntuarios = useCallback(() => {
+    refetchProntuarios();
+  }, [refetchProntuarios]);
+
+  // Reflect query loading state into the existing `loading` flag (used by skeletons).
   useEffect(() => {
-    loadProntuarios();
-  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+    setLoading(prontuariosLoading && prontuarios.length === 0);
+  }, [prontuariosLoading, prontuarios.length]);
 
   const dialogOpenRef = useRef(false);
   useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
@@ -627,13 +643,30 @@ const ProntuarioPage: React.FC = () => {
   const silentRefreshProntuarios = useCallback(() => {
     // Don't refresh while user is editing — it resets form state (SOAP fields)
     if (dialogOpenRef.current) return;
-    loadProntuarios();
-  }, [user?.id, user?.role]); // eslint-disable-line react-hooks/exhaustive-deps
+    queryClient.invalidateQueries({ queryKey: prontuariosQueryKey });
+  }, [queryClient, prontuariosQueryKey]);
 
   useRealtimeSubscription({
     tables: ['prontuarios', 'treatment_cycles', 'treatment_sessions'],
     onchange: silentRefreshProntuarios,
   });
+
+  // Prefetch detail on hover — opening becomes instant when user clicks.
+  const handleProntuarioHover = useCallback((id: string) => {
+    queryClient.prefetchQuery({
+      queryKey: ['prontuario', id],
+      queryFn: async () => {
+        const { data, error } = await (supabase as any)
+          .from("prontuarios")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      },
+      staleTime: 2 * 60 * 1000,
+    });
+  }, [queryClient]);
 
   const loadTriagem = async (agendamentoId: string) => {
     try {
