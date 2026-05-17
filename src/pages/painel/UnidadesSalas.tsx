@@ -21,23 +21,53 @@ const UnidadesSalas: React.FC = () => {
   const [roomDialog, setRoomDialog] = useState(false);
   const [editUnitId, setEditUnitId] = useState<string | null>(null);
   const [editRoomId, setEditRoomId] = useState<string | null>(null);
-  const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '' });
+  const [unitForm, setUnitForm] = useState({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' });
   const [roomForm, setRoomForm] = useState({ nome: '', unidadeId: '' });
 
-  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '' }); setCustomData({}); setUnitDialog(true); };
-  const openEditUnit = (u: typeof unidades[0]) => { setEditUnitId(u.id); setUnitForm({ nome: u.nome, nomeExibicao: u.nomeExibicao || '', endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp }); setCustomData({}); setUnitDialog(true); };
+  const onlyDigits = (v: string) => (v || '').replace(/\D/g, '').slice(0, 7);
+
+  const openNewUnit = () => { setEditUnitId(null); setUnitForm({ nome: '', nomeExibicao: '', endereco: '', telefone: '', whatsapp: '', cnes: '' }); setCustomData({}); setUnitDialog(true); };
+  const openEditUnit = async (u: typeof unidades[0]) => {
+    setEditUnitId(u.id);
+    setUnitForm({ nome: u.nome, nomeExibicao: u.nomeExibicao || '', endereco: u.endereco, telefone: u.telefone, whatsapp: u.whatsapp, cnes: '' });
+    setCustomData({});
+    setUnitDialog(true);
+    // Load existing custom_data.cnes from DB
+    try {
+      const { data } = await supabase.from('unidades' as any).select('custom_data').eq('id', u.id).maybeSingle();
+      const cd = ((data as any)?.custom_data as any) || {};
+      if (cd.cnes) setUnitForm(p => ({ ...p, cnes: onlyDigits(String(cd.cnes)) }));
+      setCustomData(cd);
+    } catch (e) { /* ignore */ }
+  };
   const openNewRoom = () => { setEditRoomId(null); setRoomForm({ nome: '', unidadeId: '' }); setRoomDialog(true); };
   const openEditRoom = (s: typeof salas[0]) => { setEditRoomId(s.id); setRoomForm({ nome: s.nome, unidadeId: s.unidadeId }); setRoomDialog(true); };
 
-  const handleSaveUnit = () => {
+  const handleSaveUnit = async () => {
     if (!unitForm.nome) return;
-    if (editUnitId) {
-      updateUnidade(editUnitId, unitForm);
-      toast.success('Unidade atualizada!');
-    } else {
-      addUnidade({ id: `un${Date.now()}`, ...unitForm, ativo: true });
-      toast.success('Unidade criada!');
+    const { cnes, ...baseForm } = unitForm;
+    const cnesClean = onlyDigits(cnes);
+    if (cnesClean && cnesClean.length !== 7) {
+      toast.error('CNES deve conter 7 dígitos.');
+      return;
     }
+    let unitId = editUnitId;
+    if (editUnitId) {
+      updateUnidade(editUnitId, baseForm);
+    } else {
+      unitId = `un${Date.now()}`;
+      addUnidade({ id: unitId, ...baseForm, ativo: true });
+    }
+    // Persist CNES into custom_data (used by BPA-I generator)
+    try {
+      const existing = { ...(customData || {}) };
+      if (cnesClean) existing.cnes = cnesClean;
+      else delete existing.cnes;
+      await supabase.from('unidades' as any).update({ custom_data: existing }).eq('id', unitId as string);
+    } catch (e) {
+      console.error('Erro ao salvar CNES:', e);
+    }
+    toast.success(editUnitId ? 'Unidade atualizada!' : 'Unidade criada!');
     setUnitDialog(false);
   };
 
