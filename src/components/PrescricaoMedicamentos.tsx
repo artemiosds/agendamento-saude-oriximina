@@ -312,26 +312,32 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nome ou classe terapêutica..."
+                placeholder="Buscar por nome, comercial, princípio ativo, classe, tipo..."
                 value={searchTerm}
                 onChange={e => { setSearchTerm(e.target.value); setSearchOpen(true); }}
                 onFocus={() => setSearchOpen(true)}
                 className="pl-8 h-8 text-sm"
               />
               {searchOpen && searchResults.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                  {searchResults.map(med => (
-                    <button key={med.id} type="button"
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between ${isSelected(med.id) ? 'bg-primary/5' : ''}`}
-                      onClick={() => { addMed(med); setSearchTerm(""); setSearchOpen(false); }}
-                      disabled={isSelected(med.id)}>
-                      <div>
-                        <span className="font-medium">{med.nome}</span>
-                        <span className="text-xs text-muted-foreground ml-2">({med.apresentacao})</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{med.classe_terapeutica}</span>
-                    </button>
-                  ))}
+                <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  {searchResults.map(med => {
+                    const tipoInfo = med.tipo && TIPO_BADGE[med.tipo];
+                    const stock = getStockStatus(med);
+                    return (
+                      <button key={med.id} type="button"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-muted ${isSelected(med.id) ? 'bg-primary/5' : ''}`}
+                        onClick={() => { addMed(med); setSearchTerm(""); setSearchOpen(false); }}
+                        disabled={isSelected(med.id)}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium">{med.nome}</span>
+                          {med.nome_comercial && <span className="text-xs text-muted-foreground">({med.nome_comercial})</span>}
+                          {tipoInfo && <Badge className={`text-[9px] ${tipoInfo.cls}`}>{tipoInfo.label}</Badge>}
+                          {stock && <Badge className={`text-[9px] ${stock.cls}`}>{stock.label}</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">{med.classe_terapeutica} • {med.apresentacao}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {searchOpen && searchTerm.length >= 2 && searchResults.length === 0 && (
