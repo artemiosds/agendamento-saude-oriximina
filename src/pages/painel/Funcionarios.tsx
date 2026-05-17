@@ -120,6 +120,7 @@ const Funcionarios: React.FC = () => {
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
+      cns: formatCNS(((f.custom_data as any) || {}).cns || ''),
     });
     const cd = (f.custom_data as any) || {};
     if (cd.cbo_codigo && cd.cbo_descricao) {
