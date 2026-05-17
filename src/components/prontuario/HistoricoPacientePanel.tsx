@@ -1,8 +1,36 @@
 import React, { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronDown, History, User, Calendar, Stethoscope } from "lucide-react";
+import { ChevronDown, History, User, Calendar, Stethoscope, Eye, Printer, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { downloadProntuarioPdf } from "@/lib/prontuarioPdf";
+
+type ProntuarioHistEntry = {
+  id: string;
+  data_atendimento: string;
+  hora_atendimento?: string;
+  profissional_nome?: string;
+  queixa_principal?: string;
+  conduta?: string;
+  anamnese?: string;
+  evolucao?: string;
+  observacoes?: string;
+  hipotese?: string;
+  exame_fisico?: string;
+  prescricao?: string;
+  solicitacao_exames?: string;
+  procedimentos_texto?: string;
+  soap_subjetivo?: string;
+  soap_objetivo?: string;
+  soap_avaliacao?: string;
+  soap_plano?: string;
+  cid_codigo?: string;
+  cid_descricao?: string;
+  tipo_registro?: string;
+  paciente_nome?: string;
+  [k: string]: any;
+};
 
 export interface HistoricoPacientePanelProps {
   paciente: {
@@ -12,16 +40,9 @@ export interface HistoricoPacientePanelProps {
     cns?: string;
     sexo?: string;
   } | null;
-  historico: Array<{
-    id: string;
-    data_atendimento: string;
-    profissional_nome?: string;
-    queixa_principal?: string;
-    conduta?: string;
-    anamnese?: string;
-    tipo_registro?: string;
-  }>;
+  historico: ProntuarioHistEntry[];
   currentId?: string;
+  onView?: (entry: ProntuarioHistEntry) => void;
 }
 
 function calcIdade(dataNasc?: string): string {
@@ -46,7 +67,45 @@ function fmtDate(s?: string): string {
   }
 }
 
-const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ paciente, historico, currentId }) => {
+export function buildEvolucaoText(h: ProntuarioHistEntry): string {
+  const parts: string[] = [];
+  const add = (label: string, val?: string) => {
+    if (val && val.trim()) parts.push(`${label}:\n${val.trim()}`);
+  };
+  add("Queixa principal", h.queixa_principal);
+  add("S — Subjetivo", h.soap_subjetivo);
+  add("O — Objetivo", h.soap_objetivo);
+  add("A — Avaliação", h.soap_avaliacao);
+  add("P — Plano", h.soap_plano);
+  add("Anamnese", h.anamnese);
+  add("Exame físico", h.exame_fisico);
+  add("Hipótese diagnóstica", h.hipotese);
+  add("Conduta", h.conduta);
+  add("Evolução", h.evolucao);
+  add("Observações", h.observacoes);
+  return parts.join("\n\n");
+}
+
+export async function copyEvolucao(h: ProntuarioHistEntry) {
+  const text = buildEvolucaoText(h) || "(sem conteúdo de evolução)";
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Evolução copiada para a área de transferência");
+  } catch {
+    toast.error("Não foi possível copiar");
+  }
+}
+
+export function printProntuario(h: ProntuarioHistEntry) {
+  try {
+    downloadProntuarioPdf(h as any);
+    toast.success("PDF gerado");
+  } catch (e) {
+    toast.error("Falha ao gerar PDF");
+  }
+}
+
+const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ paciente, historico, currentId, onView }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const sorted = useMemo(
@@ -133,43 +192,109 @@ const HistoricoPacientePanel: React.FC<HistoricoPacientePanelProps> = ({ pacient
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                       <Calendar className="w-3 h-3" />
-                      <span>{fmtDate(h.data_atendimento)}</span>
+                      <span>
+                        {fmtDate(h.data_atendimento)}
+                        {h.hora_atendimento ? ` · ${h.hora_atendimento}` : ""}
+                      </span>
                     </div>
-                    <p className="text-[12px] text-foreground truncate mt-0.5">
+                    <p className="text-[12px] text-foreground mt-0.5 truncate">
                       <Stethoscope className="w-3 h-3 inline mr-1 text-muted-foreground" />
                       {h.profissional_nome || "—"}
                     </p>
-                    <p className="text-[12px] text-muted-foreground truncate mt-0.5">
+                    <p className="text-[12px] text-muted-foreground mt-0.5 line-clamp-2">
                       {queixa || <em className="opacity-60">Sem queixa registrada</em>}
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="text-[9px] shrink-0 mt-0.5"
-                  >
-                    Finalizado
-                  </Badge>
                 </button>
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-2 text-[12px]">
+                    {(h.cid_codigo || h.cid_descricao) && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">CID</p>
+                        <p className="text-foreground">
+                          {[h.cid_codigo, h.cid_descricao].filter(Boolean).join(" — ")}
+                        </p>
+                      </div>
+                    )}
                     {queixa && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Queixa</p>
                         <p className="text-foreground whitespace-pre-wrap">{queixa}</p>
                       </div>
                     )}
+                    {h.soap_subjetivo && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Subjetivo (S)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_subjetivo}</p>
+                      </div>
+                    )}
+                    {h.soap_objetivo && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Objetivo (O)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_objetivo}</p>
+                      </div>
+                    )}
+                    {h.soap_avaliacao && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Avaliação (A)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_avaliacao}</p>
+                      </div>
+                    )}
+                    {h.soap_plano && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Plano (P)</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.soap_plano}</p>
+                      </div>
+                    )}
                     {h.anamnese && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Anamnese</p>
-                        <p className="text-foreground whitespace-pre-wrap line-clamp-6">{h.anamnese}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.anamnese}</p>
                       </div>
                     )}
                     {h.conduta && (
                       <div>
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground">Conduta</p>
-                        <p className="text-foreground whitespace-pre-wrap line-clamp-6">{h.conduta}</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.conduta}</p>
                       </div>
                     )}
+                    {h.evolucao && (
+                      <div>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground">Evolução</p>
+                        <p className="text-foreground whitespace-pre-wrap">{h.evolucao}</p>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 pt-2 border-t border-border/40">
+                      {onView && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2"
+                          onClick={(e) => { e.stopPropagation(); onView(h); }}
+                        >
+                          <Eye className="w-3 h-3 mr-1" /> Ver completo
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2"
+                        onClick={(e) => { e.stopPropagation(); printProntuario(h); }}
+                      >
+                        <Printer className="w-3 h-3 mr-1" /> Imprimir
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[11px] px-2"
+                        onClick={(e) => { e.stopPropagation(); copyEvolucao(h); }}
+                      >
+                        <Copy className="w-3 h-3 mr-1" /> Copiar evolução
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
