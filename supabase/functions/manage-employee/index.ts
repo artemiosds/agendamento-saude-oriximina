@@ -170,14 +170,18 @@ serve(async (req) => {
         }
       }
 
-      // Merge CBO into custom_data (preserve existing custom fields)
-      if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined) {
+      // Merge CBO and CNS into custom_data (preserve existing custom fields)
+      if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined || body.cns !== undefined) {
         const existingCustom = (current.custom_data as Record<string, any>) || {};
-        dbFields.custom_data = {
-          ...existingCustom,
-          cbo_codigo: String(body.cbo_codigo || ''),
-          cbo_descricao: String(body.cbo_descricao || ''),
-        };
+        const merged: Record<string, any> = { ...existingCustom };
+        if (body.cbo_codigo !== undefined || body.cbo_descricao !== undefined) {
+          merged.cbo_codigo = String(body.cbo_codigo || '');
+          merged.cbo_descricao = String(body.cbo_descricao || '');
+        }
+        if (body.cns !== undefined) {
+          merged.cns = String(body.cns || '').replace(/\D/g, '').slice(0, 15);
+        }
+        dbFields.custom_data = merged;
       }
 
       // Normalize email
