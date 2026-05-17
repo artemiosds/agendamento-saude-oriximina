@@ -33,6 +33,8 @@ import { Loader2, Plus, FileText, Printer, Pencil, Search, CheckCircle, History,
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import HistoricoPacientePanel from "@/components/prontuario/HistoricoPacientePanel";
 import { NovoProcedimentoModal } from "@/components/NovoProcedimentoModal";
 import { procedureService } from "@/services/procedureService";
 import { toast } from "sonner";
