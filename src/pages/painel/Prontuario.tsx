@@ -3638,6 +3638,8 @@ const ProntuarioPage: React.FC = () => {
                     transform: `translateY(${virtualRow.start}px)`,
                     paddingBottom: 12,
                   }}
+                  onMouseEnter={() => handleProntuarioHover(p.id)}
+                  onFocus={() => handleProntuarioHover(p.id)}
                 >
                   <Card className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200">
                     <CardContent className="p-4">
