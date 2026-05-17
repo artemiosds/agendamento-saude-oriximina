@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Skeleton } from "@/components/ui/skeleton";
 import FichaPacienteCabecalho from "@/components/FichaPacienteCabecalho";
 import { useProntuarioStructure } from "@/hooks/useProntuarioStructure";
 import { useProntuarioConfig } from "@/hooks/useProntuarioConfig";
@@ -566,42 +568,52 @@ const ProntuarioPage: React.FC = () => {
   const loadProntuarios = async () => {
     setLoading(true);
     try {
-      // All professionals can VIEW all prontuários — edit is restricted in the UI
-      // Recursive pagination to bypass Supabase's default 1000-row limit
-      const PAGE_SIZE = 1000;
-      const all: any[] = [];
-      let fromIdx = 0;
       const restrictUnit = user?.unidadeId && user?.usuario !== 'admin.sms';
-      // First fetch exact total count for visibility/debug
-      let countQuery = (supabase as any).from("prontuarios").select("id", { count: "exact", head: true });
-      if (restrictUnit) countQuery = countQuery.eq("unidade_id", user!.unidadeId);
-      const { count: totalCount, error: countErr } = await countQuery;
-      if (countErr) console.error("Error counting prontuarios:", countErr);
-      if (import.meta.env.DEV) console.debug("[Prontuarios] total no banco:", totalCount);
+      // Lighter projection for listing (avoid heavy text columns until detail)
+      const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
+      // Phase 1 — first 100 most recent for instant paint
+      let firstQuery = (supabase as any)
+        .from("prontuarios")
+        .select(LIST_COLS)
+        .order("data_atendimento", { ascending: false })
+        .order("criado_em", { ascending: false })
+        .range(0, 99);
+      if (restrictUnit) firstQuery = firstQuery.eq("unidade_id", user!.unidadeId);
+      const { data: first, error: firstErr } = await firstQuery;
+      if (firstErr) {
+        console.error("Error loading prontuarios:", firstErr);
+        setLoading(false);
+        return;
+      }
+      setProntuarios((first as any) || []);
+      setLoading(false);
+
+      // Phase 2 — load remaining pages silently in background (does not block UI)
+      const PAGE_SIZE = 1000;
+      let fromIdx = 100;
+      const collected: any[] = [...((first as any) || [])];
       while (true) {
-        let query = (supabase as any)
+        let q = (supabase as any)
           .from("prontuarios")
-          .select("*")
+          .select(LIST_COLS)
           .order("data_atendimento", { ascending: false })
+          .order("criado_em", { ascending: false })
           .range(fromIdx, fromIdx + PAGE_SIZE - 1);
-        if (restrictUnit) query = query.eq("unidade_id", user!.unidadeId);
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error loading prontuarios:", error);
-          break;
-        }
+        if (restrictUnit) q = q.eq("unidade_id", user!.unidadeId);
+        const { data, error } = await q;
+        if (error) { console.error("Background load error:", error); break; }
         if (!data || data.length === 0) break;
-        all.push(...data);
+        collected.push(...data);
+        setProntuarios([...collected]);
         if (data.length < PAGE_SIZE) break;
         fromIdx += PAGE_SIZE;
       }
-      if (import.meta.env.DEV) console.debug("[Prontuarios] carregados:", all.length);
-      setProntuarios(all);
+      if (import.meta.env.DEV) console.debug("[Prontuarios] total carregado:", collected.length);
     } catch (err) {
       console.error("Error:", err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -1995,18 +2007,36 @@ const ProntuarioPage: React.FC = () => {
   };
 
   const queryPacienteId = searchParams.get("pacienteId");
-  const filtered = prontuarios.filter((p) => {
-    if (queryPacienteId) return p.paciente_id === queryPacienteId;
-    if (!search) return true;
-    const term = search.toLowerCase();
-    // Search by patient name, professional name, CPF or CNS
-    const pac = pacientes.find((px) => px.id === p.paciente_id);
-    return (
-      p.paciente_nome.toLowerCase().includes(term) ||
-      p.profissional_nome.toLowerCase().includes(term) ||
-      (pac?.cpf || "").replace(/[.\-/]/g, "").includes(term.replace(/[.\-/]/g, "")) ||
-      ((pac as any)?.cns || "").includes(term)
-    );
+  const deferredSearch = useDeferredValue(search);
+  const pacienteByIdMap = useMemo(() => {
+    const m = new Map<string, any>();
+    pacientes.forEach((p: any) => m.set(p.id, p));
+    return m;
+  }, [pacientes]);
+  const filtered = useMemo(() => {
+    return prontuarios.filter((p) => {
+      if (queryPacienteId) return p.paciente_id === queryPacienteId;
+      if (!deferredSearch) return true;
+      const term = deferredSearch.toLowerCase();
+      const termDigits = term.replace(/[.\-/]/g, "");
+      const pac = pacienteByIdMap.get(p.paciente_id);
+      return (
+        p.paciente_nome.toLowerCase().includes(term) ||
+        p.profissional_nome.toLowerCase().includes(term) ||
+        ((pac?.cpf || "").replace(/[.\-/]/g, "").includes(termDigits)) ||
+        ((pac?.cns || "").includes(termDigits))
+      );
+    });
+  }, [prontuarios, queryPacienteId, deferredSearch, pacienteByIdMap]);
+
+  // Virtualized list — render only visible rows for instant scroll on huge lists
+  const listParentRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 132,
+    overscan: 8,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 132,
   });
   const queryPacienteNome = searchParams.get("pacienteNome");
 
@@ -3510,8 +3540,28 @@ const ProntuarioPage: React.FC = () => {
       </Dialog>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="space-y-3" aria-label="Carregando prontuários">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={`pr-skel-${i}`} className="shadow-card border-0">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-4 w-24 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-2/5" />
+                    <Skeleton className="h-3 w-3/5" />
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {Array.from({ length: 5 }).map((__, j) => (
+                      <Skeleton key={j} className="h-8 w-8 rounded-md" />
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-0">
@@ -3521,172 +3571,197 @@ const ProntuarioPage: React.FC = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((p) => {
-            const isOwn = p.profissional_id === user?.id;
-            return (
-              <Card
-                key={p.id}
-                className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200"
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-foreground">{p.paciente_nome}</p>
-                        <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                          {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
-                        </span>
-                        {p.hora_atendimento && (
-                          <span className="text-xs text-muted-foreground">{p.hora_atendimento}</span>
-                        )}
-                        {p.indicacao_retorno &&
-                          p.indicacao_retorno !== "sem_retorno" &&
-                          p.indicacao_retorno !== "no_indication" && (
-                            <Badge variant="outline" className="text-xs text-primary border-primary/30">
-                              ↩{" "}
-                              {retornoOptions.find((o) => o.value === p.indicacao_retorno)?.label ||
-                                p.indicacao_retorno}
-                            </Badge>
+        <div
+          ref={listParentRef}
+          className="overflow-auto rounded-lg"
+          style={{ height: "calc(100vh - 280px)", minHeight: 420, contain: "strict" }}
+        >
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const p = filtered[virtualRow.index];
+              if (!p) return null;
+              const isOwn = p.profissional_id === user?.id;
+              return (
+                <div
+                  key={p.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                    paddingBottom: 12,
+                  }}
+                >
+                  <Card className="shadow-card border border-transparent hover:border-primary/30 hover:shadow-md transition-all duration-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-foreground">{p.paciente_nome}</p>
+                            <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                              {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                            </span>
+                            {p.hora_atendimento && (
+                              <span className="text-xs text-muted-foreground">{p.hora_atendimento}</span>
+                            )}
+                            {p.indicacao_retorno &&
+                              p.indicacao_retorno !== "sem_retorno" &&
+                              p.indicacao_retorno !== "no_indication" && (
+                                <Badge variant="outline" className="text-xs text-primary border-primary/30">
+                                  ↩{" "}
+                                  {retornoOptions.find((o) => o.value === p.indicacao_retorno)?.label ||
+                                    p.indicacao_retorno}
+                                </Badge>
+                              )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Prof. {p.profissional_nome}
+                            {p.setor ? ` • ${p.setor}` : ""}
+                          </p>
+                          {p.procedimentos_texto && (
+                            <p className="text-xs text-muted-foreground mt-1">📋 {p.procedimentos_texto}</p>
                           )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Prof. {p.profissional_nome}
-                        {p.setor ? ` • ${p.setor}` : ""}
-                      </p>
-                      {p.procedimentos_texto && (
-                        <p className="text-xs text-muted-foreground mt-1">📋 {p.procedimentos_texto}</p>
-                      )}
-                      {p.queixa_principal && (
-                        <p className="text-sm text-foreground mt-1 line-clamp-2">
-                          <strong>QP:</strong> {p.queixa_principal}
-                        </p>
-                      )}
-                      {!isOwn && isProfissional && (
-                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
-                          <Lock className="w-3 h-3" />
-                          <span className="font-medium">Prontuário de outro profissional (somente leitura)</span>
+                          {p.queixa_principal && (
+                            <p className="text-sm text-foreground mt-1 line-clamp-2">
+                              <strong>QP:</strong> {p.queixa_principal}
+                            </p>
+                          )}
+                          {!isOwn && isProfissional && (
+                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300">
+                              <Lock className="w-3 h-3" />
+                              <span className="font-medium">Prontuário de outro profissional (somente leitura)</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setViewerProntuario(p)}
-                        title="Visualizar prontuário"
-                        aria-label="Visualizar prontuário"
-                      >
-                        <Eye className="w-4 h-4 text-primary" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => {
-                          setHistoricoPacienteId({ id: p.paciente_id, nome: p.paciente_nome });
-                          setHistoricoCompletoOpen(true);
-                        }}
-                        title="Histórico do paciente"
-                        aria-label="Histórico do paciente"
-                      >
-                        <History className="w-4 h-4 text-primary" />
-                      </Button>
-                      {(isProfissional ? isOwn : true) ? (
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                      ) : (
-                        <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
-                          <Pencil className="w-4 h-4 opacity-40" />
-                        </Button>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
-                        title="Baixar PDF"
-                        aria-label="Baixar PDF"
-                      >
-                        <FileDown className="w-4 h-4 text-primary" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir">
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost" title="Mais ações" aria-label="Mais ações">
-                            <MoreVertical className="w-4 h-4" />
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setViewerProntuario(p)}
+                            title="Visualizar prontuário"
+                            aria-label="Visualizar prontuário"
+                          >
+                            <Eye className="w-4 h-4 text-primary" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem
+                          <Button
+                            size="icon"
+                            variant="ghost"
                             onClick={() => {
-                              const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = `prontuario_${p.id}.json`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                              toast.success("JSON exportado");
+                              setHistoricoPacienteId({ id: p.paciente_id, nome: p.paciente_nome });
+                              setHistoricoCompletoOpen(true);
                             }}
+                            title="Histórico do paciente"
+                            aria-label="Histórico do paciente"
                           >
-                            <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const link = `${window.location.origin}/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`;
-                              navigator.clipboard.writeText(link);
-                              toast.success("Link copiado");
-                            }}
-                          >
-                            <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() =>
-                              navigate(
-                                `/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`,
-                              )
-                            }
-                          >
-                            <FileText className="w-3.5 h-3.5 mr-2" /> Abrir histórico completo
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      {(canDelete || (isProfissional && isOwn)) && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="text-destructive">
-                              <Trash2 className="w-4 h-4" />
+                            <History className="w-4 h-4 text-primary" />
+                          </Button>
+                          {(isProfissional ? isOwn : true) ? (
+                            <Button size="icon" variant="ghost" onClick={() => openEdit(p)} title="Editar">
+                              <Pencil className="w-4 h-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Excluir o prontuário de {p.paciente_nome} (
-                                {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")})?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDelete(p)}
-                                className="bg-destructive text-destructive-foreground"
+                          ) : (
+                            <Button size="icon" variant="ghost" disabled title="Somente leitura — prontuário de outro profissional">
+                              <Pencil className="w-4 h-4 opacity-40" />
+                            </Button>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => { downloadProntuarioPdf(p); toast.success("PDF gerado"); }}
+                            title="Baixar PDF"
+                            aria-label="Baixar PDF"
+                          >
+                            <FileDown className="w-4 h-4 text-primary" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => handlePrint(p)} title="Imprimir">
+                            <Printer className="w-4 h-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost" title="Mais ações" aria-label="Mais ações">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url;
+                                  a.download = `prontuario_${p.id}.json`;
+                                  a.click();
+                                  URL.revokeObjectURL(url);
+                                  toast.success("JSON exportado");
+                                }}
                               >
-                                Excluir
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                                <Download className="w-3.5 h-3.5 mr-2" /> Exportar JSON
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  const link = `${window.location.origin}/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`;
+                                  navigator.clipboard.writeText(link);
+                                  toast.success("Link copiado");
+                                }}
+                              >
+                                <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  navigate(
+                                    `/painel/prontuario?pacienteId=${p.paciente_id}&pacienteNome=${encodeURIComponent(p.paciente_nome)}`,
+                                  )
+                                }
+                              >
+                                <FileText className="w-3.5 h-3.5 mr-2" /> Abrir histórico completo
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {(canDelete || (isProfissional && isOwn)) && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="icon" variant="ghost" className="text-destructive">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Excluir prontuário?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Excluir o prontuário de {p.paciente_nome} (
+                                    {new Date(p.data_atendimento + "T12:00:00").toLocaleDateString("pt-BR")})?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDelete(p)}
+                                    className="bg-destructive text-destructive-foreground"
+                                  >
+                                    Excluir
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
