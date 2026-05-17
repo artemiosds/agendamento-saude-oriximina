@@ -157,6 +157,12 @@ const Funcionarios: React.FC = () => {
       toast.error('CBO é obrigatório para profissionais clínicos. Selecione no autocomplete.');
       return;
     }
+    // CNS validation (optional, but if filled must be 15 digits)
+    const cnsValidation = validateCNS(form.cns);
+    if (!cnsValidation.valid) {
+      toast.error(cnsValidation.message || 'CNS inválido.');
+      return;
+    }
     // Unit master: force unit to their own and block editing global master
     if (isUnitMaster) {
       if (editId) {
