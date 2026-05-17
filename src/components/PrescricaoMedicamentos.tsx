@@ -124,9 +124,13 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
     const term = searchTerm.toLowerCase();
     return availableMeds.filter(m =>
       m.nome.toLowerCase().includes(term) ||
+      (m.nome_comercial || '').toLowerCase().includes(term) ||
       m.principio_ativo.toLowerCase().includes(term) ||
-      m.classe_terapeutica.toLowerCase().includes(term)
-    ).slice(0, 15);
+      m.classe_terapeutica.toLowerCase().includes(term) ||
+      (m.codigo_rename || '').toLowerCase().includes(term) ||
+      (m.forma_farmaceutica || '').toLowerCase().includes(term) ||
+      (m.tipo || '').toLowerCase().includes(term)
+    ).slice(0, 20);
   }, [searchTerm, availableMeds]);
 
   const byClasse = useMemo(() => {
@@ -140,6 +144,10 @@ const PrescricaoMedicamentos: React.FC<PrescricaoMedicamentosProps> = ({
 
   const addMed = useCallback((med: MedicationType) => {
     if (value.some(v => v.id === med.id)) return;
+    const tipoInfo = med.tipo && TIPO_BADGE[med.tipo];
+    if (tipoInfo?.alert) toast.warning(tipoInfo.alert);
+    const stock = getStockStatus(med);
+    if (stock?.alert) toast.error(stock.alert);
     onChange([...value, {
       id: med.id, nome: med.nome, dosagem: med.dosagem_padrao,
       via: med.via_padrao, posologia: "", duracao: ""
