@@ -25,6 +25,7 @@ import ProfissionaisExternos from './ProfissionaisExternos';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
 import CboAutocomplete, { CboValue } from '@/components/CboAutocomplete';
+import { formatCNS, unmaskCNS, validateCNS } from '@/lib/cnsUtils';
 const roleLabels: Record<string, string> = {
   master: 'MASTER', coordenador: 'Coordenador', recepcao: 'RECEPÇÃO', profissional: 'PROFISSIONAL', gestao: 'GESTÃO', tecnico: 'TRIAGEM', enfermagem: 'ENFERMAGEM',
 };
@@ -74,7 +75,7 @@ const Funcionarios: React.FC = () => {
   const [showSenha, setShowSenha] = useState(false);
   const [form, setForm] = useState({
     nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: '', sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30,
-    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '',
+    profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '',
   });
   const [cbo, setCbo] = useState<CboValue | null>(null);
   const [showCboError, setShowCboError] = useState(false);
@@ -119,6 +120,7 @@ const Funcionarios: React.FC = () => {
       numero_conselho: f.numero_conselho || '', uf_conselho: f.uf_conselho || '',
       pode_agendar_retorno: f.pode_agendar_retorno ?? false,
       coren: f.coren || '',
+      cns: formatCNS(((f.custom_data as any) || {}).cns || ''),
     });
     const cd = (f.custom_data as any) || {};
     if (cd.cbo_codigo && cd.cbo_descricao) {
@@ -134,7 +136,7 @@ const Funcionarios: React.FC = () => {
   const openNew = () => {
     setEditId(null);
     const defaultUnit = isUnitMaster ? (user?.unidadeId || '') : '';
-    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '' });
+    setForm({ nome: '', usuario: '', email: '', cpf: '', senha: '', setor: '', unidade_id: defaultUnit, sala_id: '', cargo: '', role: '' as UserRole, tempo_atendimento: 30, profissao: '', tipo_conselho: '', numero_conselho: '', uf_conselho: '', pode_agendar_retorno: false, coren: '', cns: '' });
     setCbo(null);
     setShowCboError(false);
     setCustomData({});
@@ -153,6 +155,12 @@ const Funcionarios: React.FC = () => {
     if (requiresCbo(form.role) && !cbo?.codigo) {
       setShowCboError(true);
       toast.error('CBO é obrigatório para profissionais clínicos. Selecione no autocomplete.');
+      return;
+    }
+    // CNS validation (optional, but if filled must be 15 digits)
+    const cnsValidation = validateCNS(form.cns);
+    if (!cnsValidation.valid) {
+      toast.error(cnsValidation.message || 'CNS inválido.');
       return;
     }
     // Unit master: force unit to their own and block editing global master
@@ -192,6 +200,7 @@ const Funcionarios: React.FC = () => {
           coren: form.coren,
           cbo_codigo: cbo?.codigo || '',
           cbo_descricao: cbo?.descricao || '',
+          cns: unmaskCNS(form.cns),
         };
         if (form.senha) updateData.senha = form.senha;
 
@@ -234,6 +243,7 @@ const Funcionarios: React.FC = () => {
             coren: form.coren,
             cbo_codigo: cbo?.codigo || '',
             cbo_descricao: cbo?.descricao || '',
+            cns: unmaskCNS(form.cns),
             criado_por: user?.id || '',
           },
         });
@@ -418,6 +428,19 @@ const Funcionarios: React.FC = () => {
                       />
                       <p className="text-[11px] text-muted-foreground mt-1">
                         Obrigatório para geração do BPA-I (SIA/SUS).
+                      </p>
+                    </div>
+                    <div>
+                      <Label>CNS (Cartão Nacional de Saúde)</Label>
+                      <Input
+                        value={form.cns}
+                        onChange={e => setForm(p => ({ ...p, cns: formatCNS(e.target.value) }))}
+                        placeholder="000 0000 0000 0000"
+                        maxLength={18}
+                        inputMode="numeric"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        15 dígitos. Obrigatório no BPA-I para identificar o profissional executante.
                       </p>
                     </div>
                     {(form.role === 'tecnico' || form.role === 'enfermagem') && (
