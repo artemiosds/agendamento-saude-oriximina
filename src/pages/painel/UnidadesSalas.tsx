@@ -11,6 +11,7 @@ import { Plus, Building2, DoorOpen, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import CustomFieldsRenderer from '@/components/CustomFieldsRenderer';
 import { useCustomFields } from '@/hooks/useCustomFields';
+import { supabase } from '@/integrations/supabase/client';
 
 const UnidadesSalas: React.FC = () => {
   const { unidades, salas, addUnidade, updateUnidade, deleteUnidade, addSala, updateSala, deleteSala } = useData();
