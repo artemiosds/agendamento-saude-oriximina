@@ -15,6 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument, printViaIframe } from '@/lib/printLayout';
 import { toast } from 'sonner';
 import { ActionButton } from '@/components/ui/action-button';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
