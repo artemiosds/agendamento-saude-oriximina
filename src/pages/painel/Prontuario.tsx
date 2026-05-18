@@ -2676,7 +2676,7 @@ const ProntuarioPage: React.FC = () => {
                     profissionalId={user.id}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
-                    onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
+                    onChange={handleEspecialidadeChange}
                   />
                 )}
 
@@ -2730,7 +2730,7 @@ const ProntuarioPage: React.FC = () => {
                     profissionalId={user.id}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
-                    onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
+                    onChange={handleEspecialidadeChange}
                   />
                 )}
               </div>
@@ -3434,14 +3434,14 @@ const ProntuarioPage: React.FC = () => {
               value={listaPrescricao}
               onChange={setListaPrescricao}
               pacienteNome={form.paciente_nome}
-              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
-              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
               dataAtendimento={form.data_atendimento}
               profissionalNome={user?.nome}
               profissionalConselho={user?.numeroConselho}
               profissionalTipoConselho={user?.tipoConselho}
               profissionalUfConselho={user?.ufConselho}
-              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+              unidadeNome={unidadeAtualNome}
             />
             )}
 
@@ -3452,14 +3452,14 @@ const ProntuarioPage: React.FC = () => {
               value={listaExames}
               onChange={setListaExames}
               pacienteNome={form.paciente_nome}
-              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
-              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
               dataAtendimento={form.data_atendimento}
               profissionalNome={user?.nome}
               profissionalConselho={user?.numeroConselho}
               profissionalTipoConselho={user?.tipoConselho}
               profissionalUfConselho={user?.ufConselho}
-              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+              unidadeNome={unidadeAtualNome}
             />
             )}
 
