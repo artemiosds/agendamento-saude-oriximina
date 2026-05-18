@@ -2,9 +2,8 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Button } from '@/components/ui/button';
 import { Printer, Loader2 } from 'lucide-react';
-import { loadDocumentConfig, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
-import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import { loadDocumentConfig, printViaIframe, buildDocumentShell, type DocumentConfig } from '@/lib/printLayout';
+
 
 interface FichaData {
   paciente: {
