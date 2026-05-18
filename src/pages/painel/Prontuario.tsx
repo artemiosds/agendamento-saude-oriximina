@@ -1421,13 +1421,14 @@ const ProntuarioPage: React.FC = () => {
 
       }
 
-      await Promise.all([
+      // Reload data in BACKGROUND — não bloquear UI (close dialog imediatamente)
+      void Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
           ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
-      ]);
+      ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
       setSessionRegistrationRequested(false);
       // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
