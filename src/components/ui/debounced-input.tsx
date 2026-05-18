@@ -20,7 +20,8 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
     onChangeRef.current = onChange;
-    const lastPropValue = React.useRef(value);
+    const lastPropValue = React.useRef(value ?? "");
+    const dirtyRef = React.useRef(false);
 
     const emitChange = React.useCallback((newValue: string, name?: string) => {
       const fakeEvent = {
@@ -31,21 +32,30 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
     }, []);
 
     React.useEffect(() => {
-      if (value !== lastPropValue.current) {
-        lastPropValue.current = value;
-        setLocalValue(value ?? "");
+      const nextValue = value ?? "";
+      if (dirtyRef.current) {
+        if (nextValue === localValue) {
+          dirtyRef.current = false;
+          lastPropValue.current = nextValue;
+        }
+        return;
       }
-    }, [value]);
+      if (nextValue !== lastPropValue.current) {
+        lastPropValue.current = nextValue;
+        setLocalValue(nextValue);
+      }
+    }, [value, localValue]);
 
     const handleChange = React.useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
         setLocalValue(newValue);
-        lastPropValue.current = newValue;
+        dirtyRef.current = true;
         if (timerRef.current) clearTimeout(timerRef.current);
         const fieldName = e.target.name;
         timerRef.current = setTimeout(() => {
-          emitChange(newValue, fieldName);
+          React.startTransition(() => emitChange(newValue, fieldName));
+          lastPropValue.current = newValue;
           timerRef.current = null;
         }, debounceMs);
       },
@@ -57,6 +67,7 @@ const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInput
         clearTimeout(timerRef.current);
         timerRef.current = null;
         emitChange(localValue, e.target.name);
+        lastPropValue.current = localValue;
       }
       onBlur?.(e);
     }, [emitChange, localValue, onBlur]);
