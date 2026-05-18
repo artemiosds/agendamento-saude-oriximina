@@ -1754,8 +1754,6 @@ const Agenda: React.FC = () => {
       return;
     }
 
-    await Promise.all([refreshAgendamentos(), refreshFila()]);
-
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     localStorage.setItem(
@@ -1768,41 +1766,7 @@ const Agenda: React.FC = () => {
       }),
     );
 
-    const pac = pacientes.find((p) => p.id === ag.pacienteId);
-
-    await addAtendimento({
-      id: `at${Date.now()}`,
-      agendamentoId: ag.id,
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      profissionalId: ag.profissionalId,
-      profissionalNome: ag.profissionalNome,
-      unidadeId: ag.unidadeId,
-      salaId: ag.salaId,
-      setor: user?.setor || "",
-      procedimento: ag.tipo,
-      observacoes: "",
-      data: ag.data,
-      horaInicio,
-      horaFim: "",
-      status: "em_atendimento",
-    });
-
-    await logAction({
-      acao: "atendimento_iniciado",
-      entidade: "atendimento",
-      entidadeId: ag.id,
-      modulo: "atendimento",
-      user,
-      detalhes: {
-        paciente_nome: ag.pacienteNome,
-        paciente_cpf: pac?.cpf || "",
-        hora_inicio: horaInicio,
-        unidade: ag.unidadeId,
-        sala: ag.salaId || "",
-      },
-    });
-
+    // Navigate immediately for instant feedback; side-effects fire in background.
     toast.success("Atendimento iniciado!");
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
@@ -1813,6 +1777,45 @@ const Agenda: React.FC = () => {
       tipo: ag.tipo || '',
     });
     navigate(`/painel/prontuario?${params.toString()}`);
+
+    void (async () => {
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      await Promise.allSettled([
+        refreshAgendamentos(),
+        refreshFila(),
+        addAtendimento({
+          id: `at${Date.now()}`,
+          agendamentoId: ag.id,
+          pacienteId: ag.pacienteId,
+          pacienteNome: ag.pacienteNome,
+          profissionalId: ag.profissionalId,
+          profissionalNome: ag.profissionalNome,
+          unidadeId: ag.unidadeId,
+          salaId: ag.salaId,
+          setor: user?.setor || "",
+          procedimento: ag.tipo,
+          observacoes: "",
+          data: ag.data,
+          horaInicio,
+          horaFim: "",
+          status: "em_atendimento",
+        }),
+        logAction({
+          acao: "atendimento_iniciado",
+          entidade: "atendimento",
+          entidadeId: ag.id,
+          modulo: "atendimento",
+          user,
+          detalhes: {
+            paciente_nome: ag.pacienteNome,
+            paciente_cpf: pac?.cpf || "",
+            hora_inicio: horaInicio,
+            unidade: ag.unidadeId,
+            sala: ag.salaId || "",
+          },
+        }),
+      ]);
+    })();
   };
 
   const handleAgendarRetorno = async () => {
