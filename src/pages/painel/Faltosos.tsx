@@ -143,7 +143,7 @@ const Faltosos: React.FC = () => {
 
   return (
     <div className="space-y-5 p-5">
-      <PageHeader title="Pacientes Faltosos / Bloqueados" description="Controle de faltas por unidade" />
+      <PageHeader title="Pacientes Faltosos / Bloqueados" subtitle="Controle de faltas por unidade" />
 
       <Card>
         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
