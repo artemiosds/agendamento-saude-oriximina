@@ -220,7 +220,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h3 className="font-semibold font-display text-foreground">3 Logos do Cabeçalho Oficial</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Esquerda · Central (acima do texto) · Direita. Imagens preservam proporção (object-fit: contain).</p>
+                  <p className="text-xs text-muted-foreground mt-1">Esquerda · Central · Direita. Distribuídas igualmente na linha superior; texto institucional centralizado abaixo. Imagens preservam proporção (object-fit: contain).</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handlePreview} className="gap-1.5">
                   <Eye className="w-4 h-4" /> Pré-visualizar A4
