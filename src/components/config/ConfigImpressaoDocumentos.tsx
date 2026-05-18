@@ -263,21 +263,25 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               </div>
               <div className="bg-muted/30 rounded-lg p-3 overflow-x-auto">
                 <div className="mx-auto bg-white shadow-md border" style={{ width: '210mm', minHeight: '120mm', padding: `${config.margens.superior}mm ${config.margens.direita}mm ${config.margens.inferior}mm ${config.margens.esquerda}mm`, fontFamily: config.tipografia.fonte, fontSize: `${config.tipografia.tamanhoBase}pt`, lineHeight: config.tipografia.espacamento, color: '#1a1a1a' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 110px', alignItems: 'center', gap: 12, paddingBottom: 12, borderBottom: config.mostrarLinhaDivisoria ? '2px solid #0369a1' : 'none' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <img src={previewLogoLeft} alt="esq" style={{ maxHeight: 70, maxWidth: 100, objectFit: 'contain' }} />
+                  <div style={{ paddingBottom: 12, borderBottom: config.mostrarLinhaDivisoria ? '2px solid #0369a1' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, width: '100%' }}>
+                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start' }}>
+                        {previewLogoLeft && <img src={previewLogoLeft} alt="esq" style={{ maxHeight: 70, maxWidth: 140, objectFit: 'contain' }} />}
+                      </div>
+                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'center' }}>
+                        {config.mostrarLogoCentral && config.logoCentral
+                          ? <img src={config.logoCentral} alt="central" style={{ maxHeight: 72, maxWidth: 180, objectFit: 'contain' }} />
+                          : null}
+                      </div>
+                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-end' }}>
+                        {previewLogoRight && <img src={previewLogoRight} alt="dir" style={{ maxHeight: 70, maxWidth: 140, objectFit: 'contain' }} />}
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                      {config.mostrarLogoCentral && config.logoCentral && (
-                        <img src={config.logoCentral} alt="central" style={{ maxHeight: 60, maxWidth: 180, objectFit: 'contain', marginBottom: 4 }} />
-                      )}
+                    <div style={{ textAlign: 'center', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                       <div style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0c4a6e', letterSpacing: 0.5, fontSize: `${Math.max(config.tipografia.tamanhoBase + 1, 12)}pt`, lineHeight: 1.25 }}>{config.linha1}</div>
                       {config.linha2 && <div style={{ color: '#334155', fontSize: `${config.tipografia.tamanhoBase}pt` }}>{config.linha2}</div>}
                       {config.linha3 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha3}</div>}
                       {config.linha4 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha4}</div>}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                      <img src={previewLogoRight} alt="dir" style={{ maxHeight: 70, maxWidth: 100, objectFit: 'contain' }} />
                     </div>
                   </div>
                   <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: `${config.tipografia.tamanhoTitulo}pt`, margin: '10px 0 14px', padding: '6px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
