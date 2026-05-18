@@ -515,6 +515,26 @@ const ControleFaltasCard: React.FC = () => {
             </label>
           </div>
         </div>
+
+        <div className="pt-2 border-t">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              const r = await reavaliar();
+              setSaving(false);
+              if (r) toast.success(`Reavaliados · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos / ${r.regulares ?? 0} regulares`);
+            }}
+          >
+            {saving ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : null}
+            Reavaliar todos os pacientes agora
+          </Button>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Recalcula o status (REGULAR/FALTOSO/BLOQUEADO) de todos os pacientes com base nos limites atuais.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
