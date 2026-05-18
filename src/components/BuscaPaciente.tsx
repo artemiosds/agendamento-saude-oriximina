@@ -30,7 +30,7 @@ const mapPaciente = (row: any): Paciente => ({
 const sanitizeSearchTerm = (value: string) => value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ');
 const escapeIlikeTerm = (value: string) => sanitizeSearchTerm(value).replace(/[%_]/g, '\\$&');
 
-export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps) {
+function BuscaPacienteComponent({ pacientes, value, onChange }: BuscaPacienteProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -213,3 +213,5 @@ export function BuscaPaciente({ pacientes, value, onChange }: BuscaPacienteProps
     </div>
   );
 }
+
+export const BuscaPaciente = React.memo(BuscaPacienteComponent);
