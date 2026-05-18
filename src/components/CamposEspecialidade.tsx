@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -314,8 +315,8 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       <div className="space-y-3">
         {(isFieldVisible('peso_kg') || isFieldVisible('altura_m')) && (
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>Peso (kg)</Label><Input type="number" step="0.1" value={v("peso_kg")} onChange={e => set("peso_kg", e.target.value)} className="h-8" /></div>
-            <div><Label>Altura (m)</Label><Input type="number" step="0.01" value={v("altura_m")} onChange={e => set("altura_m", e.target.value)} className="h-8" placeholder="1.70" /></div>
+            <div><Label>Peso (kg)</Label><DebouncedInput type="number" step="0.1" value={v("peso_kg")} onChange={e => set("peso_kg", e.target.value)} className="h-8" /></div>
+            <div><Label>Altura (m)</Label><DebouncedInput type="number" step="0.01" value={v("altura_m")} onChange={e => set("altura_m", e.target.value)} className="h-8" placeholder="1.70" /></div>
             <div>
               <Label>IMC</Label>
               <div className="flex items-center gap-2 h-8">
@@ -432,10 +433,10 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                 <DebouncedTextarea rows={2} value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
               )}
               {campo.tipo === 'text' && (
-                <Input value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
+                <DebouncedInput value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
               )}
               {campo.tipo === 'number' && (
-                <Input type="number" value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} className="h-8" />
+                <DebouncedInput type="number" value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} className="h-8" />
               )}
               {campo.tipo === 'select' && campo.opcoes && (
                 <Select value={v(fieldKey) || ''} onValueChange={val => set(fieldKey, val)}>
@@ -498,8 +499,8 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                     <Badge variant="outline" className="text-[9px] px-1 py-0">Master</Badge>
                   </Label>
                   {campo.tipo === 'textarea' && <DebouncedTextarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
-                  {campo.tipo === 'text' && <Input value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
-                  {campo.tipo === 'number' && <Input type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'text' && <DebouncedInput value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'number' && <DebouncedInput type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
                   {campo.tipo === 'date' && <Input type="date" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
                   {campo.tipo === 'checkbox' && (
                     <div className="flex items-center gap-2 mt-1">
@@ -532,4 +533,4 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
   );
 };
 
-export default CamposEspecialidade;
+export default React.memo(CamposEspecialidade);
