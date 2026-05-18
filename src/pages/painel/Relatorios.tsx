@@ -1314,13 +1314,10 @@ ${dataRows}
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const logoUrl = logoSmsFallback;
     const logoUrlRight = logoCerFallback;
 
-    printWindow.document.write(`<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
 <style>
   @page { size: A4 landscape; margin: 10mm; }
@@ -1356,10 +1353,16 @@ ${dataRows}
   </div>
   <div class="periodo">Período: ${periodo}</div>
   ${body}
-</body></html>`);
+</body></html>`;
 
-    printWindow.document.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+      printViaIframe(html);
+      if (loadingId !== undefined) toast.dismiss(loadingId);
+      toast.success('Documento pronto', { description: 'Use "Salvar como PDF" na janela de impressão.' });
+    } catch (err) {
+      console.error('[exportMapaPDF] erro:', err);
+      if (loadingId !== undefined) toast.dismiss(loadingId);
+      toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
+    }
   }, [mapaData, mapaDateFrom, mapaDateTo, user]);
 
   const exportMapaCSV = useCallback(() => {
