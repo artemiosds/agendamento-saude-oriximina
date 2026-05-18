@@ -1,22 +1,21 @@
 import * as React from "react";
-import { Textarea, type TextareaProps } from "./textarea";
+import { Input } from "./input";
 
-interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
+type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+
+interface DebouncedInputProps extends Omit<InputProps, "onChange"> {
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   debounceMs?: number;
 }
 
 /**
- * Textarea com estado local para feedback instantâneo de digitação.
- * Sincroniza com o pai via debounce (default 500ms).
- *
- * IMPORTANTE: memoizado com comparador customizado que ignora a identidade
- * de `onChange` (capturado por ref). Isso evita que re-renders do pai
- * disparados por qualquer outra mudança causem re-render deste componente.
+ * Input com estado local para digitação instantânea e flush via debounce.
+ * Memoizado: ignora identidade de onChange (capturado por ref) para evitar
+ * re-renders em cascata vindos do pai.
  */
-const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextareaProps>(
-  ({ value, onChange, debounceMs = 500, onBlur, ...props }, ref) => {
+const InternalDebouncedInput = React.forwardRef<HTMLInputElement, DebouncedInputProps>(
+  ({ value, onChange, debounceMs = 400, onBlur, ...props }, ref) => {
     const [localValue, setLocalValue] = React.useState(value ?? "");
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
@@ -27,11 +26,10 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
       const fakeEvent = {
         target: { value: newValue, name },
         currentTarget: { value: newValue, name },
-      } as React.ChangeEvent<HTMLTextAreaElement>;
+      } as React.ChangeEvent<HTMLInputElement>;
       onChangeRef.current(fakeEvent);
     }, []);
 
-    // Sincroniza apenas quando o valor do pai mudou externamente (ex.: reset, load)
     React.useEffect(() => {
       if (value !== lastPropValue.current) {
         lastPropValue.current = value;
@@ -40,11 +38,10 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     }, [value]);
 
     const handleChange = React.useCallback(
-      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
         setLocalValue(newValue);
         lastPropValue.current = newValue;
-
         if (timerRef.current) clearTimeout(timerRef.current);
         const fieldName = e.target.name;
         timerRef.current = setTimeout(() => {
@@ -55,7 +52,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
       [debounceMs, emitChange],
     );
 
-    const handleBlur = React.useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const handleBlur = React.useCallback((e: React.FocusEvent<HTMLInputElement>) => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -67,28 +64,25 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
     React.useEffect(() => {
       return () => {
         if (timerRef.current) {
-          // flush pendente ao desmontar
           emitChange(lastPropValue.current ?? "", undefined);
           clearTimeout(timerRef.current);
         }
       };
     }, [emitChange]);
 
-    return <Textarea ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
+    return <Input ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },
 );
 
-InternalDebouncedTextarea.displayName = "DebouncedTextarea";
+InternalDebouncedInput.displayName = "DebouncedInput";
 
-// Comparador customizado: ignora identidade de onChange (capturado via ref interna).
-// Re-renderiza apenas se o valor controlado, layout ou estado visual mudarem.
-const arePropsEqual = (prev: DebouncedTextareaProps, next: DebouncedTextareaProps) => {
+const arePropsEqual = (prev: DebouncedInputProps, next: DebouncedInputProps) => {
   return (
     prev.value === next.value &&
     prev.disabled === next.disabled &&
     prev.placeholder === next.placeholder &&
     prev.className === next.className &&
-    prev.rows === next.rows &&
+    prev.type === next.type &&
     prev.name === next.name &&
     prev.readOnly === next.readOnly &&
     prev.debounceMs === next.debounceMs &&
@@ -96,6 +90,6 @@ const arePropsEqual = (prev: DebouncedTextareaProps, next: DebouncedTextareaProp
   );
 };
 
-const DebouncedTextarea = React.memo(InternalDebouncedTextarea, arePropsEqual) as typeof InternalDebouncedTextarea;
+const DebouncedInput = React.memo(InternalDebouncedInput, arePropsEqual) as typeof InternalDebouncedInput;
 
-export { DebouncedTextarea };
+export { DebouncedInput };
