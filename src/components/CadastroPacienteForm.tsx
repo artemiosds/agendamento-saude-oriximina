@@ -295,10 +295,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
   // Validação visual por aba (badge se erro)
   const tabHasError = {
-    identificacao: !!(errors.nome || errors.cpf || errors.cns || errors.nomeResponsavel || errors.cpfResponsavel || errors.nomeMae),
-    endereco: !!(errors.cep || errors.municipio),
+    identificacao: !!(errors.nome || errors.cpf || errors.cns || errors.nomeMae || errors.dataNascimento || errors.naturalidade || errors.nomeResponsavel || errors.cpfResponsavel),
+    endereco: !!(errors.cep || errors.logradouro || errors.numero || errors.bairro || errors.municipio || errors.uf),
     contato: !!(errors.telefone || errors.email),
-    complementares: !!(errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
+    complementares: !!(errors.nacionalidade || errors.racaCor || errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
   };
 
   return (
@@ -350,7 +350,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("nomeMae") && (
                 <div className="md:col-span-2">
-                  <Label>{L("nomeMae", "Nome da Mãe")}</Label>
+                  <Label>{L("nomeMae", "Nome da Mãe")} *</Label>
                   <Input
                     value={form.nomeMae}
                     onChange={(e) => set("nomeMae", sanitizeUpper(e.target.value))}
@@ -362,8 +362,9 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("dataNascimento") && (
                 <div>
-                  <Label>{L("dataNascimento", "Data de Nascimento")}</Label>
+                  <Label>{L("dataNascimento", "Data de Nascimento")} *</Label>
                   <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+                  {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
                 </div>
               )}
 
@@ -395,7 +396,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("cns") && (
                 <div>
-                  <Label>{L("cns", "CNS")}</Label>
+                  <Label>{L("cns", "CNS")} *</Label>
                   <Input
                     value={maskCNS(form.cns)}
                     onChange={(e) => set("cns", maskCNS(e.target.value))}
@@ -409,13 +410,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("naturalidade") && (
                 <div className="md:col-span-2">
-                  <Label>{L("naturalidade", "Naturalidade")}</Label>
+                  <Label>{L("naturalidade", "Naturalidade")} *</Label>
                   <MunicipioCombobox
                     value={form.naturalidade}
                     uf={form.naturalidadeUf}
                     onChange={(cidade, uf) => onChange({ ...form, naturalidade: cidade, naturalidadeUf: uf })}
                     placeholder="Selecione o município de naturalidade"
                   />
+                  {errors.naturalidade && <p className="text-xs text-destructive mt-1">{errors.naturalidade}</p>}
                 </div>
               )}
 
@@ -463,7 +465,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
           <TabsContent value="endereco" className="space-y-4 mt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label>CEP</Label>
+                <Label>CEP *</Label>
                 <div className="relative">
                   <Input
                     value={cd.cep || ""}
@@ -476,6 +478,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   )}
                 </div>
+                {errors.cep && <p className="text-xs text-destructive mt-1">{errors.cep}</p>}
               </div>
 
               <div>
@@ -502,22 +505,24 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div className="md:col-span-2">
-                <Label>Logradouro</Label>
+                <Label>Logradouro *</Label>
                 <Input
                   value={cd.logradouro || ""}
                   onChange={(e) => setCustom("logradouro", sanitizeUpper(e.target.value))}
                   placeholder="NOME DA RUA / AVENIDA"
                 />
+                {errors.logradouro && <p className="text-xs text-destructive mt-1">{errors.logradouro}</p>}
               </div>
 
               <div>
-                <Label>Número</Label>
+                <Label>Número *</Label>
                 <Input
                   value={cd.numero || ""}
                   onChange={(e) => setCustom("numero", e.target.value.replace(/[^\dA-Za-z\/\-]/g, "").toUpperCase())}
                   placeholder="Nº"
                   inputMode="numeric"
                 />
+                {errors.numero && <p className="text-xs text-destructive mt-1">{errors.numero}</p>}
               </div>
 
               <div>
@@ -530,17 +535,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div>
-                <Label>Bairro</Label>
+                <Label>Bairro *</Label>
                 <Input
                   value={cd.bairro || ""}
                   onChange={(e) => setCustom("bairro", sanitizeUpper(e.target.value))}
                   placeholder="BAIRRO"
                 />
+                {errors.bairro && <p className="text-xs text-destructive mt-1">{errors.bairro}</p>}
               </div>
 
               {!H("municipio") && (
                 <div>
-                  <Label>{L("municipio", "Município")}</Label>
+                  <Label>{L("municipio", "Município")} *</Label>
                   <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -552,13 +558,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               )}
 
               <div>
-                <Label>UF</Label>
+                <Label>UF *</Label>
                 <Select value={cd.uf || ""} onValueChange={(v) => setCustom("uf", v)}>
                   <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                   <SelectContent>
                     {UFS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {errors.uf && <p className="text-xs text-destructive mt-1">{errors.uf}</p>}
               </div>
 
               {/* Mantém endereco legacy (oculto, sincroniza para retrocompat) */}
@@ -638,6 +645,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
                     </SelectContent>
                   </Select>
+                  {errors.nacionalidade && <p className="text-xs text-destructive mt-1">{errors.nacionalidade}</p>}
                 </div>
 
                 <div>
@@ -663,6 +671,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.racaCor && <p className="text-xs text-destructive mt-1">{errors.racaCor}</p>}
                 </div>
 
                 {/* Etnia: obrigatória apenas se Raça/Cor = Indígena */}
