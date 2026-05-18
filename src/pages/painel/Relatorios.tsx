@@ -1139,12 +1139,21 @@ ${dataRows}
         <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
       </div>`;
 
+    // Limite de linhas por documento para evitar "Out of Memory" no navegador.
+    // Acima disso, sugerimos exportar em Excel.
+    const ROW_LIMIT = 3000;
+    let truncated = false;
+    const cap = <T,>(arr: T[]): T[] => {
+      if (arr.length > ROW_LIMIT) { truncated = true; return arr.slice(0, ROW_LIMIT); }
+      return arr;
+    };
+
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      const rows = filtered.map(a => {
+      const rows = cap(filtered).map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
         return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
-      const prodRows = porProfissional.map(p =>
+      const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
       ).join('');
       body = `${summaryBlock}
@@ -1153,28 +1162,28 @@ ${dataRows}
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Tempo Médio</th><th>Taxa</th></tr></thead><tbody>${prodRows}</tbody></table>`;
     } else if (type === 'produtividade') {
-      const prodRows = porProfissional.map(p =>
+      const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.remarcados}</td><td>${p.retornos}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td><td>${p.taxaRetorno}%</td></tr>`
       ).join('');
       body = `${summaryBlock}
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelamentos</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}</tbody></table>`;
     } else if (type === 'faltas') {
-      const rows = faltasReport.map(f =>
+      const rows = cap(faltasReport).map(f =>
         `<tr><td>${f.nome}</td><td>${f.email}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.unidade}</td><td>${f.total}</td><td>${f.datas.join(', ')}</td></tr>`
       ).join('');
       body = `${summaryBlock}
         <h2>Relatório de Faltas</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Profissional</th><th>Unidade</th><th>Total</th><th>Datas</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'pacientes') {
-      const rows = pacientesReport.map(p =>
+      const rows = cap(pacientesReport).map(p =>
         `<tr><td>${p.nome}</td><td>${p.email}</td><td>${p.telefone}</td><td>${p.totalAgendamentos}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.retornos}</td><td>${p.ultimaConsulta}</td></tr>`
       ).join('');
       body = `${summaryBlock}
         <h2>Relatório de Pacientes</h2>
         <table><thead><tr><th>Paciente</th><th>E-mail</th><th>Telefone</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th><th>Retornos</th><th>Última Consulta</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else if (type === 'fila') {
-      const filaRows = filaReport.items.map(f => {
+      const filaRows = cap(filaReport.items).map(f => {
         const unName = unidades.find(u => u.id === f.unidade_id)?.nome || '';
         return `<tr><td>${f.posicao}</td><td>${f.paciente_nome}</td><td>${unName}</td><td>${f.setor}</td><td>${f.prioridade}</td><td>${f.status}</td><td>${f.hora_chegada}</td><td>${f.hora_chamada || '-'}</td></tr>`;
       }).join('');
@@ -1187,6 +1196,11 @@ ${dataRows}
         </div>
         <h2>Fila de Espera</h2>
         <table><thead><tr><th>Posição</th><th>Paciente</th><th>Unidade</th><th>Setor</th><th>Prioridade</th><th>Status</th><th>Chegada</th><th>Chamada</th></tr></thead><tbody>${filaRows}</tbody></table>`;
+    }
+
+    if (truncated) {
+      body += `<p style="margin-top:12px;font-size:9pt;color:#b45309;"><strong>Aviso:</strong> resultado limitado às primeiras ${ROW_LIMIT} linhas para impressão. Use a exportação em Excel para o conjunto completo.</p>`;
+      toast.warning(`Mostrando ${ROW_LIMIT} linhas no PDF`, { description: 'Para o conjunto completo, exporte em Excel.' });
     }
 
     const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
