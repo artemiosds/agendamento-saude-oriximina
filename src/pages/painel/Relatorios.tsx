@@ -15,6 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { openPrintDocument, printViaIframe } from '@/lib/printLayout';
 import { toast } from 'sonner';
 import { ActionButton } from '@/components/ui/action-button';
+import { jsPDF } from 'jspdf';
+import { autoTable } from 'jspdf-autotable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
@@ -1105,6 +1107,102 @@ ${dataRows}
     URL.revokeObjectURL(url);
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
+  // === DOWNLOAD PDF REAL ===
+  const downloadPDF = useCallback(async (type: string) => {
+    const isEmpty =
+      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+      type === 'produtividade' ? porProfissional.length === 0 :
+      type === 'faltas' ? faltasReport.length === 0 :
+      type === 'pacientes' ? pacientesReport.length === 0 :
+      type === 'fila' ? filaReport.items.length === 0 : false;
+    if (isEmpty) {
+      toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
+      return;
+    }
+
+    const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
+    try {
+      await new Promise(r => requestAnimationFrame(() => r(null)));
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const title = titleMap[type] || 'Relatório';
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
+      const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
+      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+      const generatedAt = new Date().toLocaleString('pt-BR');
+      const ROW_LIMIT = 3000;
+      let truncated = false;
+      const cap = <T,>(arr: T[]): T[] => {
+        if (arr.length > ROW_LIMIT) { truncated = true; return arr.slice(0, ROW_LIMIT); }
+        return arr;
+      };
+
+      doc.setProperties({ title, subject: 'Relatório SMS Oriximiná' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(title, 14, 14);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`Período: ${periodo}   Unidade: ${un || 'Todas'}   Profissional: ${prof || 'Todos'}`, 14, 20);
+      doc.text(`Emitido em: ${generatedAt}`, 14, 25);
+
+      const summaryRows = [
+        ['Total Agendamentos', String(stats.total), 'Atendimentos', String(tempoStats.totalAtendimentos), 'Concluídos', String(stats.concluidos), 'Faltas', String(stats.faltas)],
+        ['Cancelados', String(stats.cancelados), 'Remarcados', String(stats.remarcados), 'Tempo Médio', `${tempoStats.tempoMedio}min`, 'Comparecimento', `${stats.taxaComparecimento}%`],
+      ];
+      autoTable(doc, {
+        startY: 31,
+        body: summaryRows,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+      });
+
+      let y = ((doc as any).lastAutoTable?.finalY || 31) + 6;
+      const addTable = (subtitle: string, head: string[], bodyRows: (string | number)[][]) => {
+        if (!bodyRows.length) return;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text(subtitle, 14, y);
+        autoTable(doc, {
+          startY: y + 3,
+          head: [head],
+          body: bodyRows,
+          theme: 'grid',
+          styles: { fontSize: 7, cellPadding: 1.6, overflow: 'linebreak', valign: 'middle' },
+          headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 10, right: 10 },
+        });
+        y = ((doc as any).lastAutoTable?.finalY || y) + 7;
+      };
+
+      if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(filtered).map(a => [a.data || '', a.hora || '', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
+      } else if (type === 'produtividade') {
+        addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
+      } else if (type === 'faltas') {
+        addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
+      } else if (type === 'pacientes') {
+        addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
+      } else if (type === 'fila') {
+        addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidades.find(u => u.id === f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
+      }
+
+      if (truncated) {
+        toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use Excel.' });
+      }
+      doc.save(`relatorio_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF gerado com sucesso', { description: 'O download do arquivo foi iniciado.' });
+    } catch (err) {
+      console.error('[downloadPDF] erro:', err);
+      toast.error('Não foi possível gerar o PDF', { description: 'Verifique os filtros e tente novamente.' });
+    } finally {
+      toast.dismiss(loadingId);
+    }
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+
   // === EXPORT PDF ===
   const exportPDF = useCallback(async (type: string) => {
     try {
@@ -1296,86 +1394,60 @@ ${dataRows}
     return `${day}/${m}/${y}`;
   };
 
-  const exportMapaPDF = useCallback(() => {
+  const exportMapaPDF = useCallback(async () => {
     if (mapaData.length === 0) {
       toast.warning('Não há dados para exportar', { description: 'Gere o relatório primeiro.' });
       return;
     }
-    let loadingId: string | number | undefined;
+    const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando mapa de atendimentos para download.' });
     try {
-      loadingId = toast.loading('Gerando PDF...', { description: 'Preparando mapa de atendimentos.' });
-    const now = new Date().toLocaleString('pt-BR');
-    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
-    const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
+      await new Promise(r => requestAnimationFrame(() => r(null)));
+      const now = new Date().toLocaleString('pt-BR');
+      const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+      const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+      const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
+      const ROW_LIMIT = 3000;
+      const rows = mapaData.slice(0, ROW_LIMIT).map(r => {
+        const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+        return [String(r.num).padStart(2, '0'), r.paciente_nome || '', formatDateBR(r.data_nascimento), fmtCPF(r.cpf), r.endereco || '-', fmtCNS(r.cns), r.telefone || '-', r.profissional_nome || '', r.especialidade || '-', proc, r.cid || '-'];
+      });
 
-    const tableRows = mapaData.map((r, i) => {
-      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${fmtCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${fmtCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
-    }).join('');
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      doc.setProperties({ title: 'Mapa de Atendimentos', subject: 'Relatório SMS Oriximiná' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text('SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ', 14, 13);
+      doc.setFontSize(10);
+      doc.text('Mapa de Atendimentos Concluídos', 14, 19);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`Período: ${periodo}   Emitido em: ${now}`, 14, 25);
+      doc.text(`Gerado por: ${user?.nome || '-'}`, 14, 30);
 
-    const body = `
-      <h2>Mapa de Atendimentos Concluídos</h2>
-      <table>
-        <thead><tr>
-          <th style="width:30px;text-align:center">Nº</th>
-          <th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th>
-          <th>CNS</th><th>Telefone</th><th>Profissional</th>
-          <th>Especialidade</th><th>Proc. SIGTAP</th><th style="width:50px">CID</th>
-        </tr></thead>
-        <tbody>${tableRows}</tbody>
-        <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot>
-      </table>
-      <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
+      autoTable(doc, {
+        startY: 36,
+        head: [['Nº', 'Paciente', 'Dt Nasc', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID']],
+        body: rows,
+        theme: 'grid',
+        styles: { fontSize: 6.2, cellPadding: 1.2, overflow: 'linebreak', valign: 'middle' },
+        headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: 6, right: 6 },
+      });
 
-    const logoUrl = logoSmsFallback;
-    const logoUrlRight = logoCerFallback;
-
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
-<style>
-  @page { size: A4 landscape; margin: 10mm; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Segoe UI',Arial,sans-serif; padding:16px; color:#1e293b; font-size:10px; line-height:1.4; }
-  .doc-header { display:flex; align-items:center; gap:14px; padding:12px 16px; margin-bottom:12px;
-    background:linear-gradient(135deg,#0c4a6e,#0369a1); border-radius:6px; color:#fff;
-    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .doc-header img { width:48px; height:48px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,.3); }
-  .doc-header .header-text { flex:1; }
-  .doc-header h1 { font-size:13px; font-weight:700; }
-  .doc-header .subtitle { font-size:10px; opacity:.85; margin-top:1px; }
-  .doc-header .doc-title { font-size:11px; font-weight:700; margin-top:4px; text-transform:uppercase; }
-  .doc-header .emit-date { text-align:right; font-size:8px; opacity:.75; white-space:nowrap; }
-  .periodo { text-align:center; font-size:11px; color:#334155; margin-bottom:10px; font-weight:600; }
-  h2 { font-size:12px; color:#0369a1; margin:10px 0 6px; padding-bottom:3px; border-bottom:2px solid #e0f2fe; }
-  table { width:100%; border-collapse:collapse; margin-bottom:10px; }
-  th,td { border:1px solid #e2e8f0; padding:4px 6px; text-align:left; font-size:9px; }
-  th { background:#f1f5f9; font-weight:600; color:#334155; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  tr:nth-child(even) { background:#f9f9f9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  tfoot td { border-top:2px solid #0369a1; }
-  @media print { body { padding:6px; } .no-print { display:none !important; } }
-</style></head><body>
-  <div class="doc-header">
-    <img src="${logoUrl}" alt="Logo SMS" />
-    <div class="header-text">
-      <h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1>
-      <div class="subtitle">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div>
-      <div class="doc-title">Mapa de Atendimentos Concluídos</div>
-    </div>
-    <img src="${logoUrlRight}" alt="Logo CER II" style="max-height:48px;max-width:90px;object-fit:contain;" />
-    <div class="emit-date">Data de emissão:<br/>${now}</div>
-  </div>
-  <div class="periodo">Período: ${periodo}</div>
-  ${body}
-</body></html>`;
-
-      printViaIframe(html);
-      if (loadingId !== undefined) toast.dismiss(loadingId);
-      toast.success('Documento pronto', { description: 'Use "Salvar como PDF" na janela de impressão.' });
+      const finalY = ((doc as any).lastAutoTable?.finalY || 36) + 6;
+      doc.setFontSize(8);
+      doc.text(`Total: ${mapaData.length} atendimentos`, 14, Math.min(finalY, 200));
+      if (mapaData.length > ROW_LIMIT) {
+        toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use CSV.' });
+      }
+      doc.save(`mapa_atendimentos_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF gerado com sucesso', { description: 'O download do arquivo foi iniciado.' });
     } catch (err) {
       console.error('[exportMapaPDF] erro:', err);
-      if (loadingId !== undefined) toast.dismiss(loadingId);
       toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
+    } finally {
+      toast.dismiss(loadingId);
     }
   }, [mapaData, mapaDateFrom, mapaDateTo, user]);
 
@@ -1427,7 +1499,7 @@ ${dataRows}
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Gerando PDF...">
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => activeTab === 'mapa' ? exportMapaPDF() : downloadPDF(activeTab)} loadingText="Gerando PDF...">
             <FileText className="w-4 h-4 mr-1" />PDF
           </ActionButton>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
@@ -1752,7 +1824,7 @@ ${dataRows}
                     {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                   <ActionButton variant="ghost" size="sm" loadingText="Preparando..." onClick={() => {
                     if (porProfissional.length === 0) { toast.warning('Não há dados para exportar'); return; }
                     try {
@@ -1986,7 +2058,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Faltas por Paciente</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('faltas')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2054,7 +2126,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2238,7 +2310,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
