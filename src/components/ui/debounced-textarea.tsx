@@ -13,11 +13,19 @@ interface DebouncedTextareaProps extends Omit<TextareaProps, "onChange"> {
  * This prevents expensive parent re-renders on every keystroke.
  */
 const DebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextareaProps>(
-  ({ value, onChange, debounceMs = 150, ...props }, ref) => {
+  ({ value, onChange, debounceMs = 300, onBlur, ...props }, ref) => {
     const [localValue, setLocalValue] = React.useState(value);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const onChangeRef = React.useRef(onChange);
     onChangeRef.current = onChange;
+
+    const emitChange = React.useCallback((newValue: string, name?: string) => {
+      const fakeEvent = {
+        target: { value: newValue, name },
+        currentTarget: { value: newValue, name },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      onChangeRef.current(fakeEvent);
+    }, []);
 
     // Sync from parent when value changes externally (e.g. form reset)
     const lastPropValue = React.useRef(value);
@@ -35,18 +43,23 @@ const DebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextare
         lastPropValue.current = newValue;
 
         if (timerRef.current) clearTimeout(timerRef.current);
-        // Keep a reference to the synthetic event's target value
-        const syntheticTarget = e.target;
+        const fieldName = e.target.name;
         timerRef.current = setTimeout(() => {
-          // Create a minimal synthetic-like event for the parent
-          const fakeEvent = {
-            target: { value: newValue, name: syntheticTarget.name },
-          } as React.ChangeEvent<HTMLTextAreaElement>;
-          onChangeRef.current(fakeEvent);
+          emitChange(newValue, fieldName);
+          timerRef.current = null;
         }, debounceMs);
       },
-      [debounceMs],
+      [debounceMs, emitChange],
     );
+
+    const handleBlur = React.useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        emitChange(localValue, e.target.name);
+      }
+      onBlur?.(e);
+    }, [emitChange, localValue, onBlur]);
 
     // Flush on unmount
     React.useEffect(() => {
@@ -55,7 +68,7 @@ const DebouncedTextarea = React.forwardRef<HTMLTextAreaElement, DebouncedTextare
       };
     }, []);
 
-    return <Textarea ref={ref} {...props} value={localValue} onChange={handleChange} />;
+    return <Textarea ref={ref} {...props} value={localValue} onChange={handleChange} onBlur={handleBlur} />;
   },
 );
 
