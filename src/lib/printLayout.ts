@@ -343,30 +343,39 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
 export const institutionalCSS = buildInstitutionalCSS();
 
-/** Header HTML — 3 logos com central acima do texto institucional */
+/** Header HTML — até 3 logos distribuídos (esquerda | central | direita) + bloco institucional */
 export function docHeader(title: string, config: DocumentConfig, extraRight?: string): string {
+  const hasLeft = !!(config.logoEsquerda || logoSmsFallback);
+  const hasRight = !!(config.logoDireita || logoCerFallback);
+  const hasCentral = !!(config.mostrarLogoCentral && config.logoCentral);
+
   const logoLeft = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
   const logoRight = resolveLogoUrl(config.logoDireita, logoCerFallback);
-  const logoCentral = config.mostrarLogoCentral && config.logoCentral
-    ? `<div class="logo-central"><img src="${config.logoCentral}" alt="Logo central" /></div>` : '';
+
+  const leftSlot = hasLeft
+    ? `<div class="logo-slot left"><img src="${logoLeft}" alt="Logo esquerda" /></div>` : '';
+  const centerSlot = hasCentral
+    ? `<div class="logo-slot center"><img src="${config.logoCentral}" alt="Logo central" /></div>`
+    : (hasLeft && hasRight ? '' : '<div class="logo-slot center"></div>');
+  const rightSlot = hasRight
+    ? `<div class="logo-slot right"><img src="${logoRight}" alt="Logo direita" /></div>` : '';
+
   const linha3 = config.linha3 ? `<div class="extra-line">${config.linha3}</div>` : '';
   const linha4 = config.linha4 ? `<div class="extra-line">${config.linha4}</div>` : '';
   const now = new Date().toLocaleString('pt-BR');
 
   return `
     <div class="doc-header">
-      <div class="logo-left">
-        <img src="${logoLeft}" alt="Logo institucional esquerda" />
+      <div class="logos-row">
+        ${leftSlot}
+        ${centerSlot}
+        ${rightSlot}
       </div>
-      <div class="header-center">
-        ${logoCentral}
+      <div class="header-text">
         <h1>${config.linha1}</h1>
         ${config.linha2 ? `<div class="subtitle">${config.linha2}</div>` : ''}
         ${linha3}
         ${linha4}
-      </div>
-      <div class="logo-right">
-        <img src="${logoRight}" alt="Logo institucional direita" />
       </div>
     </div>
     ${title ? `<div class="doc-title-bar">${title}</div>` : ''}
