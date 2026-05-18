@@ -27,12 +27,24 @@ export interface DocumentMargins {
   direita: number;
 }
 
+export interface LogoSlotConfig {
+  altura: number;   // px (height): 30..140
+  redonda: boolean; // recorte circular (aspect 1:1 + object-fit: cover)
+  ativo: boolean;   // false = não renderiza no cabeçalho
+}
+
 export interface DocumentConfig {
   // 3 logos
   logoEsquerda: string;
   logoCentral: string;
   logoDireita: string;
-  mostrarLogoCentral: boolean;
+  mostrarLogoCentral: boolean; // legado — mantido para compat
+  // Configuração de tamanho/forma/ativação por slot
+  logosConfig: {
+    esquerda: LogoSlotConfig;
+    central: LogoSlotConfig;
+    direita: LogoSlotConfig;
+  };
   // Bloco institucional (até 4 linhas)
   linha1: string;
   linha2: string;
@@ -64,11 +76,18 @@ const DEFAULT_MARGINS: DocumentMargins = {
   direita: 20,
 };
 
+const defaultSlot = (altura: number, ativo = true): LogoSlotConfig => ({ altura, redonda: false, ativo });
+
 export const DEFAULT_CONFIG: DocumentConfig = {
   logoEsquerda: '',
   logoCentral: '',
   logoDireita: '',
   mostrarLogoCentral: false,
+  logosConfig: {
+    esquerda: defaultSlot(70, true),
+    central: defaultSlot(72, false),
+    direita: defaultSlot(70, true),
+  },
   linha1: 'SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ',
   linha2: 'CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II',
   linha3: '',
@@ -85,13 +104,33 @@ let _cachedConfig: DocumentConfig | null = null;
 let _cacheTimestamp = 0;
 const CACHE_TTL = 60_000;
 
+function clampAltura(n: any, fallback: number): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(30, Math.min(140, Math.round(v)));
+}
+function mergeSlot(raw: any, defaults: LogoSlotConfig): LogoSlotConfig {
+  return {
+    altura: clampAltura(raw?.altura, defaults.altura),
+    redonda: raw?.redonda === true,
+    ativo: raw?.ativo !== undefined ? raw.ativo === true : defaults.ativo,
+  };
+}
+
 function mergeConfig(raw: any): DocumentConfig {
-  if (!raw) return { ...DEFAULT_CONFIG };
+  if (!raw) return { ...DEFAULT_CONFIG, logosConfig: { ...DEFAULT_CONFIG.logosConfig } };
+  const lc = raw.logosConfig || {};
+  const centralLegado = raw.cabecalho?.mostrarLogoCentral ?? raw.mostrarLogoCentral ?? false;
   return {
     logoEsquerda: raw.cabecalho?.logoEsquerda || raw.cabecalho?.logoUrl || raw.logoEsquerda || '',
     logoCentral: raw.cabecalho?.logoCentral || raw.logoCentral || '',
     logoDireita: raw.cabecalho?.logoDireita || raw.logoDireita || '',
-    mostrarLogoCentral: raw.cabecalho?.mostrarLogoCentral ?? raw.mostrarLogoCentral ?? false,
+    mostrarLogoCentral: centralLegado,
+    logosConfig: {
+      esquerda: mergeSlot(lc.esquerda, DEFAULT_CONFIG.logosConfig.esquerda),
+      central: mergeSlot(lc.central, { ...DEFAULT_CONFIG.logosConfig.central, ativo: centralLegado }),
+      direita: mergeSlot(lc.direita, DEFAULT_CONFIG.logosConfig.direita),
+    },
     linha1: raw.cabecalho?.linha1 || raw.linha1 || DEFAULT_CONFIG.linha1,
     linha2: raw.cabecalho?.linha2 || raw.linha2 || DEFAULT_CONFIG.linha2,
     linha3: raw.cabecalho?.linha3 || raw.linha3 || '',
