@@ -533,4 +533,4 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
   );
 };
 
-export default CamposEspecialidade;
+export default React.memo(CamposEspecialidade);
