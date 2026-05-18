@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.concluir_atendimento_master(uuid, uuid, text, text, text, text, text, boolean);
