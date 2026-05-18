@@ -388,20 +388,33 @@ export const institutionalCSS = buildInstitutionalCSS();
 
 /** Header HTML — até 3 logos distribuídos (esquerda | central | direita) + bloco institucional */
 export function docHeader(title: string, config: DocumentConfig, extraRight?: string): string {
-  const hasLeft = !!(config.logoEsquerda || logoSmsFallback);
-  const hasRight = !!(config.logoDireita || logoCerFallback);
-  const hasCentral = !!(config.mostrarLogoCentral && config.logoCentral);
+  const slots = config.logosConfig;
+  const logoLeftUrl = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
+  const logoRightUrl = resolveLogoUrl(config.logoDireita, logoCerFallback);
+  const logoCenterUrl = config.logoCentral;
 
-  const logoLeft = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
-  const logoRight = resolveLogoUrl(config.logoDireita, logoCerFallback);
+  // Um slot só renderiza se estiver ativo E tiver imagem (URL ou fallback)
+  const showLeft = slots.esquerda.ativo && !!logoLeftUrl;
+  const showRight = slots.direita.ativo && !!logoRightUrl;
+  const showCenter = slots.central.ativo && !!logoCenterUrl;
 
-  const leftSlot = hasLeft
-    ? `<div class="logo-slot left"><img src="${logoLeft}" alt="Logo esquerda" /></div>` : '';
-  const centerSlot = hasCentral
-    ? `<div class="logo-slot center"><img src="${config.logoCentral}" alt="Logo central" /></div>`
-    : (hasLeft && hasRight ? '' : '<div class="logo-slot center"></div>');
-  const rightSlot = hasRight
-    ? `<div class="logo-slot right"><img src="${logoRight}" alt="Logo direita" /></div>` : '';
+  const renderImg = (url: string, alt: string, slot: LogoSlotConfig) => {
+    const h = slot.altura;
+    if (slot.redonda) {
+      return `<img class="round" src="${url}" alt="${alt}" style="height:${h}px;width:${h}px;" />`;
+    }
+    // limite de largura proporcional para não esticar (até 2,5× a altura)
+    return `<img src="${url}" alt="${alt}" style="height:${h}px;max-height:${h}px;max-width:${Math.round(h * 2.5)}px;" />`;
+  };
+
+  const parts: string[] = [];
+  if (showLeft) parts.push(`<div class="logo-slot left">${renderImg(logoLeftUrl, 'Logo esquerda', slots.esquerda)}</div>`);
+  if (showCenter) parts.push(`<div class="logo-slot center">${renderImg(logoCenterUrl, 'Logo central', slots.central)}</div>`);
+  if (showRight) parts.push(`<div class="logo-slot right">${renderImg(logoRightUrl, 'Logo direita', slots.direita)}</div>`);
+
+  const count = parts.length;
+  const rowClass = `logos-row cols-${count || 1}`;
+  const logosRow = count > 0 ? `<div class="${rowClass}">${parts.join('')}</div>` : '';
 
   const linha3 = config.linha3 ? `<div class="extra-line">${config.linha3}</div>` : '';
   const linha4 = config.linha4 ? `<div class="extra-line">${config.linha4}</div>` : '';
@@ -409,11 +422,7 @@ export function docHeader(title: string, config: DocumentConfig, extraRight?: st
 
   return `
     <div class="doc-header">
-      <div class="logos-row">
-        ${leftSlot}
-        ${centerSlot}
-        ${rightSlot}
-      </div>
+      ${logosRow}
       <div class="header-text">
         <h1>${config.linha1}</h1>
         ${config.linha2 ? `<div class="subtitle">${config.linha2}</div>` : ''}
