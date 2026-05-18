@@ -359,16 +359,18 @@ export function mergeAdminAndProfConfig(
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 export function useProntuarioConfig(profissionalId: string | undefined, tipoProntuario: string) {
-  const [config, setConfig] = useState<ProntuarioConfigData | null>(null);
-  const [adminConfig, setAdminConfig] = useState<AdminEspecialidadeConfig[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
-
   // Normalize tipo to known types
   const tipoNormalized = TIPOS_PRONTUARIO.some(t => t.value === tipoProntuario)
     ? tipoProntuario
     : 'sessao';
+
+  // Start with defaults synchronously so the form renders immediately,
+  // then overlay the persisted config when it arrives.
+  const [config, setConfig] = useState<ProntuarioConfigData | null>(() => getDefaultConfig(tipoNormalized));
+  const [adminConfig, setAdminConfig] = useState<AdminEspecialidadeConfig[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!profissionalId) { setLoading(false); return; }
