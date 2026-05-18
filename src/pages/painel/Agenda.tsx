@@ -2933,6 +2933,41 @@ const Agenda: React.FC = () => {
                             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                           </Button>
                         )}
+                        {/* Master/Coordenador: Concluir Atendimento manualmente */}
+                        {(isMaster || (coordenadorPodeConcluir && user?.role === "coordenador") || (user?.role === "profissional" && ag.profissionalId === user?.id)) &&
+                          ag.status !== "cancelado" && ag.status !== "concluido" && !ehPendenteOnline && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 text-xs border-info text-info"
+                            title="Concluir atendimento (registrar procedimento e CID)"
+                            onClick={() => setConcluirTarget({
+                              id: ag.id,
+                              pacienteNome: ag.pacienteNome,
+                              profissionalNome: ag.profissionalNome,
+                              profissionalId: ag.profissionalId,
+                              hora: ag.hora,
+                              iniciado_em: agendamentosRaw[ag.id]?.iniciado_em ?? null,
+                            })}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Concluir
+                          </Button>
+                        )}
+                        {/* Alerta de atendimento em aberto há muito tempo (Master) */}
+                        {isMaster && ag.status === "em_atendimento" && (() => {
+                          const ini = agendamentosRaw[ag.id]?.iniciado_em;
+                          if (!ini) return null;
+                          const mins = Math.floor((Date.now() - new Date(ini).getTime()) / 60000);
+                          if (mins < alertaMinutosEmAtendimento) return null;
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-destructive/10 text-destructive border border-destructive/30"
+                              title={`Em atendimento há ${mins} min sem finalização`}
+                            >
+                              🔴 {mins} min sem finalizar
+                            </span>
+                          );
+                        })()}
                         {ag.status !== "cancelado" &&
                           ag.status !== "concluido" &&
                           !ehPendenteOnline &&
