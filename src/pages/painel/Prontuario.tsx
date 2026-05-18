@@ -3359,7 +3359,7 @@ const ProntuarioPage: React.FC = () => {
                                                   ? (m[proc.id] || []).filter((x) => x !== c.codigo)
                                                   : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                               }));
-                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                          if (!isSel && !selectedProcIdSet.has(proc.id)) {
                                             setSelectedProcIds((prev) => [...prev, proc.id]);
                                             setProcDetails(prev => ({
                                               ...prev,
