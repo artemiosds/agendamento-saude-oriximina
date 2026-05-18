@@ -6,7 +6,7 @@ const CONFIG_KEY = 'estrutura_prontuario';
 
 export function useProntuarioStructure() {
   const [sections, setSections] = useState<ProntuarioSection[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
