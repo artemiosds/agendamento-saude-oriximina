@@ -1283,7 +1283,13 @@ ${dataRows}
   };
 
   const exportMapaPDF = useCallback(() => {
-    if (mapaData.length === 0) return;
+    if (mapaData.length === 0) {
+      toast.warning('Não há dados para exportar', { description: 'Gere o relatório primeiro.' });
+      return;
+    }
+    let loadingId: string | number | undefined;
+    try {
+      loadingId = toast.loading('Gerando PDF...', { description: 'Preparando mapa de atendimentos.' });
     const now = new Date().toLocaleString('pt-BR');
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
