@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,9 +58,9 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   onAddCustomOption,
   onDeleteCustomOption,
 }) => {
-  const options = getSoapOptions(profissao);
-  const isDropdownMode = hasDropdownSoap(profissao);
-  const isMedicoMode = isMedico(profissao);
+  const options = React.useMemo(() => getSoapOptions(profissao), [profissao]);
+  const isDropdownMode = React.useMemo(() => hasDropdownSoap(profissao), [profissao]);
+  const isMedicoMode = React.useMemo(() => isMedico(profissao), [profissao]);
 
   const [selectedOptions, setSelectedOptions] = useState<Record<string, Set<string>>>({
     soap_subjetivo: new Set(),
@@ -322,4 +321,4 @@ const SoapFieldsAdaptive: React.FC<SoapFieldsAdaptiveProps> = ({
   );
 };
 
-export default SoapFieldsAdaptive;
+export default React.memo(SoapFieldsAdaptive);

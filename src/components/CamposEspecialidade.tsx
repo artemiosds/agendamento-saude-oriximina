@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -231,10 +231,10 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
     return (
       <div className="space-y-3">
         {isFieldVisible('avaliacao_funcional') && (
-          <div><Label>Avaliação Funcional</Label><Textarea rows={2} value={v("avaliacao_funcional")} onChange={e => set("avaliacao_funcional", e.target.value)} placeholder="Descreva a funcionalidade do paciente..." /></div>
+          <div><Label>Avaliação Funcional</Label><DebouncedTextarea rows={2} value={v("avaliacao_funcional")} onChange={e => set("avaliacao_funcional", e.target.value)} placeholder="Descreva a funcionalidade do paciente..." /></div>
         )}
         {isFieldVisible('adm') && (
-          <div><Label>Amplitude de Movimento (ADM)</Label><Textarea rows={2} value={v("adm")} onChange={e => set("adm", e.target.value)} placeholder="ADM ativa/passiva das articulações avaliadas..." /></div>
+          <div><Label>Amplitude de Movimento (ADM)</Label><DebouncedTextarea rows={2} value={v("adm")} onChange={e => set("adm", e.target.value)} placeholder="ADM ativa/passiva das articulações avaliadas..." /></div>
         )}
         {isFieldVisible('forca_mrc') && (
           <div>
@@ -257,7 +257,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
           </div>
         )}
         {isFieldVisible('postura_marcha') && (
-          <div><Label>Postura e Marcha</Label><Textarea rows={2} value={v("postura_marcha")} onChange={e => set("postura_marcha", e.target.value)} placeholder="Observações sobre postura e padrão de marcha..." /></div>
+          <div><Label>Postura e Marcha</Label><DebouncedTextarea rows={2} value={v("postura_marcha")} onChange={e => set("postura_marcha", e.target.value)} placeholder="Observações sobre postura e padrão de marcha..." /></div>
         )}
       </div>
     );
@@ -266,13 +266,13 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
   const renderPsicologia = () => (
     <div className="space-y-3">
       {isFieldVisible('estado_emocional') && (
-        <div><Label>Estado Emocional</Label><Textarea rows={2} value={v("estado_emocional")} onChange={e => set("estado_emocional", e.target.value)} placeholder="Humor, afeto, ansiedade..." /></div>
+        <div><Label>Estado Emocional</Label><DebouncedTextarea rows={2} value={v("estado_emocional")} onChange={e => set("estado_emocional", e.target.value)} placeholder="Humor, afeto, ansiedade..." /></div>
       )}
       {isFieldVisible('comportamento_obs') && (
-        <div><Label>Comportamento Observado</Label><Textarea rows={2} value={v("comportamento_obs")} onChange={e => set("comportamento_obs", e.target.value)} placeholder="Postura, colaboração, interação..." /></div>
+        <div><Label>Comportamento Observado</Label><DebouncedTextarea rows={2} value={v("comportamento_obs")} onChange={e => set("comportamento_obs", e.target.value)} placeholder="Postura, colaboração, interação..." /></div>
       )}
       {isFieldVisible('relato_subjetivo') && (
-        <div><Label>Relato Subjetivo</Label><Textarea rows={2} value={v("relato_subjetivo")} onChange={e => set("relato_subjetivo", e.target.value)} placeholder="O que o paciente relata..." /></div>
+        <div><Label>Relato Subjetivo</Label><DebouncedTextarea rows={2} value={v("relato_subjetivo")} onChange={e => set("relato_subjetivo", e.target.value)} placeholder="O que o paciente relata..." /></div>
       )}
       {isFieldVisible('risco_agressao') && (
         <div>
@@ -298,10 +298,10 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
 
   const renderFonoaudiologia = () => (
     <div className="space-y-3">
-      {isFieldVisible('comunicacao') && <div><Label>Avaliação da Comunicação</Label><Textarea rows={2} value={v("comunicacao")} onChange={e => set("comunicacao", e.target.value)} /></div>}
-      {isFieldVisible('linguagem') && <div><Label>Linguagem</Label><Textarea rows={2} value={v("linguagem")} onChange={e => set("linguagem", e.target.value)} /></div>}
-      {isFieldVisible('degluticao') && <div><Label>Deglutição</Label><Textarea rows={2} value={v("degluticao")} onChange={e => set("degluticao", e.target.value)} /></div>}
-      {isFieldVisible('voz') && <div><Label>Voz</Label><Textarea rows={2} value={v("voz")} onChange={e => set("voz", e.target.value)} /></div>}
+      {isFieldVisible('comunicacao') && <div><Label>Avaliação da Comunicação</Label><DebouncedTextarea rows={2} value={v("comunicacao")} onChange={e => set("comunicacao", e.target.value)} /></div>}
+      {isFieldVisible('linguagem') && <div><Label>Linguagem</Label><DebouncedTextarea rows={2} value={v("linguagem")} onChange={e => set("linguagem", e.target.value)} /></div>}
+      {isFieldVisible('degluticao') && <div><Label>Deglutição</Label><DebouncedTextarea rows={2} value={v("degluticao")} onChange={e => set("degluticao", e.target.value)} /></div>}
+      {isFieldVisible('voz') && <div><Label>Voz</Label><DebouncedTextarea rows={2} value={v("voz")} onChange={e => set("voz", e.target.value)} /></div>}
     </div>
   );
 
@@ -324,9 +324,9 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
             </div>
           </div>
         )}
-        {isFieldVisible('avaliacao_nutricional') && <div><Label>Avaliação Nutricional</Label><Textarea rows={2} value={v("avaliacao_nutricional")} onChange={e => set("avaliacao_nutricional", e.target.value)} /></div>}
-        {isFieldVisible('habitos_alimentares') && <div><Label>Hábitos Alimentares</Label><Textarea rows={2} value={v("habitos_alimentares")} onChange={e => set("habitos_alimentares", e.target.value)} /></div>}
-        {isFieldVisible('plano_alimentar') && <div><Label>Plano Alimentar</Label><Textarea rows={2} value={v("plano_alimentar")} onChange={e => set("plano_alimentar", e.target.value)} /></div>}
+        {isFieldVisible('avaliacao_nutricional') && <div><Label>Avaliação Nutricional</Label><DebouncedTextarea rows={2} value={v("avaliacao_nutricional")} onChange={e => set("avaliacao_nutricional", e.target.value)} /></div>}
+        {isFieldVisible('habitos_alimentares') && <div><Label>Hábitos Alimentares</Label><DebouncedTextarea rows={2} value={v("habitos_alimentares")} onChange={e => set("habitos_alimentares", e.target.value)} /></div>}
+        {isFieldVisible('plano_alimentar') && <div><Label>Plano Alimentar</Label><DebouncedTextarea rows={2} value={v("plano_alimentar")} onChange={e => set("plano_alimentar", e.target.value)} /></div>}
       </div>
     );
   };
@@ -342,42 +342,42 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
             <div className="flex justify-between text-[10px] text-muted-foreground mt-1"><span>18 (Dependência total)</span><span>126 (Independência)</span></div>
           </div>
         )}
-        {isFieldVisible('avd') && <div><Label>Atividades de Vida Diária (AVD)</Label><Textarea rows={2} value={v("avd")} onChange={e => set("avd", e.target.value)} /></div>}
-        {isFieldVisible('aivd') && <div><Label>Atividades Instrumentais (AIVD)</Label><Textarea rows={2} value={v("aivd")} onChange={e => set("aivd", e.target.value)} /></div>}
-        {isFieldVisible('contexto_ambiental') && <div><Label>Contexto Ambiental e Social</Label><Textarea rows={2} value={v("contexto_ambiental")} onChange={e => set("contexto_ambiental", e.target.value)} /></div>}
+        {isFieldVisible('avd') && <div><Label>Atividades de Vida Diária (AVD)</Label><DebouncedTextarea rows={2} value={v("avd")} onChange={e => set("avd", e.target.value)} /></div>}
+        {isFieldVisible('aivd') && <div><Label>Atividades Instrumentais (AIVD)</Label><DebouncedTextarea rows={2} value={v("aivd")} onChange={e => set("aivd", e.target.value)} /></div>}
+        {isFieldVisible('contexto_ambiental') && <div><Label>Contexto Ambiental e Social</Label><DebouncedTextarea rows={2} value={v("contexto_ambiental")} onChange={e => set("contexto_ambiental", e.target.value)} /></div>}
       </div>
     );
   };
 
   const renderMedicina = () => (
     <div className="space-y-3">
-      {isFieldVisible('exame_fisico_geral') && <div><Label>Exame Físico Geral</Label><Textarea rows={3} value={v("exame_fisico_geral")} onChange={e => set("exame_fisico_geral", e.target.value)} /></div>}
-      {isFieldVisible('sistemas_avaliados') && <div><Label>Sistemas Avaliados</Label><Textarea rows={2} value={v("sistemas_avaliados")} onChange={e => set("sistemas_avaliados", e.target.value)} placeholder="Cardiovascular, respiratório, neurológico..." /></div>}
-      {isFieldVisible('hipotese_cid') && <div><Label>Hipótese Diagnóstica com CID</Label><Textarea rows={2} value={v("hipotese_cid")} onChange={e => set("hipotese_cid", e.target.value)} placeholder="CID + descrição..." /></div>}
-      {isFieldVisible('prescricao_sol') && <div><Label>Prescrição e Solicitações</Label><Textarea rows={2} value={v("prescricao_sol")} onChange={e => set("prescricao_sol", e.target.value)} /></div>}
+      {isFieldVisible('exame_fisico_geral') && <div><Label>Exame Físico Geral</Label><DebouncedTextarea rows={3} value={v("exame_fisico_geral")} onChange={e => set("exame_fisico_geral", e.target.value)} /></div>}
+      {isFieldVisible('sistemas_avaliados') && <div><Label>Sistemas Avaliados</Label><DebouncedTextarea rows={2} value={v("sistemas_avaliados")} onChange={e => set("sistemas_avaliados", e.target.value)} placeholder="Cardiovascular, respiratório, neurológico..." /></div>}
+      {isFieldVisible('hipotese_cid') && <div><Label>Hipótese Diagnóstica com CID</Label><DebouncedTextarea rows={2} value={v("hipotese_cid")} onChange={e => set("hipotese_cid", e.target.value)} placeholder="CID + descrição..." /></div>}
+      {isFieldVisible('prescricao_sol') && <div><Label>Prescrição e Solicitações</Label><DebouncedTextarea rows={2} value={v("prescricao_sol")} onChange={e => set("prescricao_sol", e.target.value)} /></div>}
     </div>
   );
 
   const renderOdontologia = () => (
     <div className="space-y-3">
-      {isFieldVisible('exame_intrabucal') && <div><Label>Exame Intrabucal</Label><Textarea rows={2} value={v("exame_intrabucal")} onChange={e => set("exame_intrabucal", e.target.value)} /></div>}
-      {isFieldVisible('queixa_odonto') && <div><Label>Queixa Odontológica</Label><Textarea rows={2} value={v("queixa_odonto")} onChange={e => set("queixa_odonto", e.target.value)} /></div>}
-      {isFieldVisible('plano_tratamento_odonto') && <div><Label>Plano de Tratamento</Label><Textarea rows={2} value={v("plano_tratamento_odonto")} onChange={e => set("plano_tratamento_odonto", e.target.value)} /></div>}
+      {isFieldVisible('exame_intrabucal') && <div><Label>Exame Intrabucal</Label><DebouncedTextarea rows={2} value={v("exame_intrabucal")} onChange={e => set("exame_intrabucal", e.target.value)} /></div>}
+      {isFieldVisible('queixa_odonto') && <div><Label>Queixa Odontológica</Label><DebouncedTextarea rows={2} value={v("queixa_odonto")} onChange={e => set("queixa_odonto", e.target.value)} /></div>}
+      {isFieldVisible('plano_tratamento_odonto') && <div><Label>Plano de Tratamento</Label><DebouncedTextarea rows={2} value={v("plano_tratamento_odonto")} onChange={e => set("plano_tratamento_odonto", e.target.value)} /></div>}
     </div>
   );
 
   const renderEnfermagem = () => (
     <div className="space-y-3">
-      {isFieldVisible('avaliacao_enf') && <div><Label>Avaliação de Enfermagem</Label><Textarea rows={2} value={v("avaliacao_enf")} onChange={e => set("avaliacao_enf", e.target.value)} /></div>}
-      {isFieldVisible('cuidados_realizados') && <div><Label>Cuidados Realizados</Label><Textarea rows={2} value={v("cuidados_realizados")} onChange={e => set("cuidados_realizados", e.target.value)} /></div>}
-      {isFieldVisible('intercorrencias_enf') && <div><Label>Intercorrências</Label><Textarea rows={2} value={v("intercorrencias_enf")} onChange={e => set("intercorrencias_enf", e.target.value)} /></div>}
+      {isFieldVisible('avaliacao_enf') && <div><Label>Avaliação de Enfermagem</Label><DebouncedTextarea rows={2} value={v("avaliacao_enf")} onChange={e => set("avaliacao_enf", e.target.value)} /></div>}
+      {isFieldVisible('cuidados_realizados') && <div><Label>Cuidados Realizados</Label><DebouncedTextarea rows={2} value={v("cuidados_realizados")} onChange={e => set("cuidados_realizados", e.target.value)} /></div>}
+      {isFieldVisible('intercorrencias_enf') && <div><Label>Intercorrências</Label><DebouncedTextarea rows={2} value={v("intercorrencias_enf")} onChange={e => set("intercorrencias_enf", e.target.value)} /></div>}
     </div>
   );
 
   const renderServicoSocial = () => (
     <div className="space-y-3">
-      {isFieldVisible('situacao_socioeconomica') && <div><Label>Situação Socioeconômica</Label><Textarea rows={2} value={v("situacao_socioeconomica")} onChange={e => set("situacao_socioeconomica", e.target.value)} placeholder="Renda, moradia, composição familiar..." /></div>}
-      {isFieldVisible('rede_apoio') && <div><Label>Rede de Apoio</Label><Textarea rows={2} value={v("rede_apoio")} onChange={e => set("rede_apoio", e.target.value)} placeholder="Família, comunidade, serviços..." /></div>}
+      {isFieldVisible('situacao_socioeconomica') && <div><Label>Situação Socioeconômica</Label><DebouncedTextarea rows={2} value={v("situacao_socioeconomica")} onChange={e => set("situacao_socioeconomica", e.target.value)} placeholder="Renda, moradia, composição familiar..." /></div>}
+      {isFieldVisible('rede_apoio') && <div><Label>Rede de Apoio</Label><DebouncedTextarea rows={2} value={v("rede_apoio")} onChange={e => set("rede_apoio", e.target.value)} placeholder="Família, comunidade, serviços..." /></div>}
       {isFieldVisible('vulnerabilidade') && (
         <div><Label>Vulnerabilidade Social</Label>
           <Select value={v("vulnerabilidade") || "baixa"} onValueChange={val => set("vulnerabilidade", val)}>
@@ -391,26 +391,26 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
           </Select>
         </div>
       )}
-      {isFieldVisible('encaminhamentos_sociais') && <div><Label>Encaminhamentos Sociais</Label><Textarea rows={2} value={v("encaminhamentos_sociais")} onChange={e => set("encaminhamentos_sociais", e.target.value)} placeholder="CRAS, CREAS, benefícios..." /></div>}
-      {isFieldVisible('parecer_social') && <div><Label>Parecer Social</Label><Textarea rows={2} value={v("parecer_social")} onChange={e => set("parecer_social", e.target.value)} /></div>}
+      {isFieldVisible('encaminhamentos_sociais') && <div><Label>Encaminhamentos Sociais</Label><DebouncedTextarea rows={2} value={v("encaminhamentos_sociais")} onChange={e => set("encaminhamentos_sociais", e.target.value)} placeholder="CRAS, CREAS, benefícios..." /></div>}
+      {isFieldVisible('parecer_social') && <div><Label>Parecer Social</Label><DebouncedTextarea rows={2} value={v("parecer_social")} onChange={e => set("parecer_social", e.target.value)} /></div>}
     </div>
   );
 
   const renderCirurgiaGeral = () => (
     <div className="space-y-3">
-      {isFieldVisible('indicacao_cirurgica') && <div><Label>Indicação Cirúrgica</Label><Textarea rows={2} value={v("indicacao_cirurgica")} onChange={e => set("indicacao_cirurgica", e.target.value)} placeholder="Motivo e tipo de cirurgia indicada..." /></div>}
-      {isFieldVisible('avaliacao_preop') && <div><Label>Avaliação Pré-operatória</Label><Textarea rows={2} value={v("avaliacao_preop")} onChange={e => set("avaliacao_preop", e.target.value)} placeholder="Exames, risco cirúrgico..." /></div>}
-      {isFieldVisible('descricao_procedimento') && <div><Label>Descrição do Procedimento</Label><Textarea rows={2} value={v("descricao_procedimento")} onChange={e => set("descricao_procedimento", e.target.value)} /></div>}
-      {isFieldVisible('orientacoes_posop') && <div><Label>Orientações Pós-operatórias</Label><Textarea rows={2} value={v("orientacoes_posop")} onChange={e => set("orientacoes_posop", e.target.value)} /></div>}
+      {isFieldVisible('indicacao_cirurgica') && <div><Label>Indicação Cirúrgica</Label><DebouncedTextarea rows={2} value={v("indicacao_cirurgica")} onChange={e => set("indicacao_cirurgica", e.target.value)} placeholder="Motivo e tipo de cirurgia indicada..." /></div>}
+      {isFieldVisible('avaliacao_preop') && <div><Label>Avaliação Pré-operatória</Label><DebouncedTextarea rows={2} value={v("avaliacao_preop")} onChange={e => set("avaliacao_preop", e.target.value)} placeholder="Exames, risco cirúrgico..." /></div>}
+      {isFieldVisible('descricao_procedimento') && <div><Label>Descrição do Procedimento</Label><DebouncedTextarea rows={2} value={v("descricao_procedimento")} onChange={e => set("descricao_procedimento", e.target.value)} /></div>}
+      {isFieldVisible('orientacoes_posop') && <div><Label>Orientações Pós-operatórias</Label><DebouncedTextarea rows={2} value={v("orientacoes_posop")} onChange={e => set("orientacoes_posop", e.target.value)} /></div>}
     </div>
   );
 
   const renderInfectologia = () => (
     <div className="space-y-3">
-      {isFieldVisible('agente_infeccioso') && <div><Label>Agente Infeccioso / Suspeita</Label><Textarea rows={2} value={v("agente_infeccioso")} onChange={e => set("agente_infeccioso", e.target.value)} placeholder="Agente etiológico ou suspeita clínica..." /></div>}
-      {isFieldVisible('exames_lab') && <div><Label>Exames Laboratoriais</Label><Textarea rows={2} value={v("exames_lab")} onChange={e => set("exames_lab", e.target.value)} placeholder="Resultados de sorologias, culturas..." /></div>}
-      {isFieldVisible('esquema_terapeutico') && <div><Label>Esquema Terapêutico</Label><Textarea rows={2} value={v("esquema_terapeutico")} onChange={e => set("esquema_terapeutico", e.target.value)} placeholder="Antibióticos, antivirais, duração..." /></div>}
-      {isFieldVisible('medidas_controle') && <div><Label>Medidas de Controle</Label><Textarea rows={2} value={v("medidas_controle")} onChange={e => set("medidas_controle", e.target.value)} placeholder="Isolamento, notificação, profilaxia..." /></div>}
+      {isFieldVisible('agente_infeccioso') && <div><Label>Agente Infeccioso / Suspeita</Label><DebouncedTextarea rows={2} value={v("agente_infeccioso")} onChange={e => set("agente_infeccioso", e.target.value)} placeholder="Agente etiológico ou suspeita clínica..." /></div>}
+      {isFieldVisible('exames_lab') && <div><Label>Exames Laboratoriais</Label><DebouncedTextarea rows={2} value={v("exames_lab")} onChange={e => set("exames_lab", e.target.value)} placeholder="Resultados de sorologias, culturas..." /></div>}
+      {isFieldVisible('esquema_terapeutico') && <div><Label>Esquema Terapêutico</Label><DebouncedTextarea rows={2} value={v("esquema_terapeutico")} onChange={e => set("esquema_terapeutico", e.target.value)} placeholder="Antibióticos, antivirais, duração..." /></div>}
+      {isFieldVisible('medidas_controle') && <div><Label>Medidas de Controle</Label><DebouncedTextarea rows={2} value={v("medidas_controle")} onChange={e => set("medidas_controle", e.target.value)} placeholder="Isolamento, notificação, profilaxia..." /></div>}
     </div>
   );
 
@@ -429,7 +429,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                 <Badge variant="outline" className="text-[9px] px-1 py-0 text-blue-400 border-blue-500/30">Personalizado</Badge>
               </Label>
               {campo.tipo === 'textarea' && (
-                <Textarea rows={2} value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
+                <DebouncedTextarea rows={2} value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
               )}
               {campo.tipo === 'text' && (
                 <Input value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
@@ -497,7 +497,7 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                     {campo.obrigatorio && <span className="text-destructive">*</span>}
                     <Badge variant="outline" className="text-[9px] px-1 py-0">Master</Badge>
                   </Label>
-                  {campo.tipo === 'textarea' && <Textarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'textarea' && <DebouncedTextarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
                   {campo.tipo === 'text' && <Input value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
                   {campo.tipo === 'number' && <Input type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
                   {campo.tipo === 'date' && <Input type="date" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}

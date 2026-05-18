@@ -1612,7 +1612,31 @@ const ProntuarioPage: React.FC = () => {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => { void performAutosaveRef.current(); }, 2500);
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
-  }, [dialogOpen, form, selectedProcIds, procDetails, selectedCidsByProc]);
+  }, [
+    dialogOpen,
+    form.paciente_id,
+    form.paciente_nome,
+    form.queixa_principal,
+    form.anamnese,
+    form.sinais_sintomas,
+    form.exame_fisico,
+    form.hipotese,
+    form.conduta,
+    form.prescricao,
+    form.solicitacao_exames,
+    form.evolucao,
+    form.observacoes,
+    form.indicacao_retorno,
+    form.outro_procedimento,
+    form.procedimentos_texto,
+    form.episodio_id,
+    form.tipo_registro,
+    form.data_atendimento,
+    form.hora_atendimento,
+    selectedProcIds,
+    procDetails,
+    selectedCidsByProc,
+  ]);
 
   // Flush on tab hide / before unload
   useEffect(() => {
@@ -2192,6 +2216,34 @@ const ProntuarioPage: React.FC = () => {
     setViewerProntuario(p);
   }, []);
 
+  const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
+  const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
+  const unidadeAtualNome = useMemo(() => unidades.find(u => u.id === user?.unidadeId)?.nome, [unidades, user?.unidadeId]);
+  const soapValues = useMemo(() => ({
+    soap_subjetivo: form.soap_subjetivo,
+    soap_objetivo: form.soap_objetivo,
+    soap_avaliacao: form.soap_avaliacao,
+    soap_plano: form.soap_plano,
+  }), [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo]);
+  const triagemHeaderData = useMemo(() => triagem ? {
+    pressao_arterial: triagem.pressao_arterial,
+    temperatura: triagem.temperatura,
+    saturacao_oxigenio: triagem.saturacao_oxigenio,
+    frequencia_cardiaca: triagem.frequencia_cardiaca,
+    classificacao_risco: (triagem as any).classificacao_risco,
+  } : null, [triagem]);
+  const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
+    setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
+  }, []);
+  const handleClearSoapErrors = useCallback(() => setSoapErrors(false), []);
+  const handleEspecialidadeChange = useCallback((key: string, val: string) => {
+    setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
+  }, []);
+  const handlePacienteChange = useCallback((id: string, nome: string) => {
+    setForm((prev) => prev.paciente_id === id && prev.paciente_nome === nome ? prev : { ...prev, paciente_id: id, paciente_nome: nome });
+    if (id) loadEpisodios(id);
+  }, []);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -2339,13 +2391,7 @@ const ProntuarioPage: React.FC = () => {
               profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
               profissionalId={searchParams.get("profissionalId") || user?.id || ""}
               agendamentoId={form.agendamento_id || undefined}
-              triagem={triagem ? {
-                pressao_arterial: triagem.pressao_arterial,
-                temperatura: triagem.temperatura,
-                saturacao_oxigenio: triagem.saturacao_oxigenio,
-                frequencia_cardiaca: triagem.frequencia_cardiaca,
-                classificacao_risco: (triagem as any).classificacao_risco,
-              } : null}
+              triagem={triagemHeaderData}
               funcionarios={funcionariosLight}
               onPacienteUpdated={loadProntuarios}
             />
@@ -2482,10 +2528,7 @@ const ProntuarioPage: React.FC = () => {
                 <BuscaPaciente
                   pacientes={pacientes}
                   value={form.paciente_id}
-                  onChange={(id, nome) => {
-                    setForm((prev) => ({ ...prev, paciente_id: id, paciente_nome: nome }));
-                    if (id) loadEpisodios(id);
-                  }}
+                  onChange={handlePacienteChange}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -2595,15 +2638,10 @@ const ProntuarioPage: React.FC = () => {
             {/* SOAP Evolution — ALL 5 types */}
             <SoapFieldsAdaptive
               profissao={user?.profissao}
-              values={{
-                soap_subjetivo: form.soap_subjetivo,
-                soap_objetivo: form.soap_objetivo,
-                soap_avaliacao: form.soap_avaliacao,
-                soap_plano: form.soap_plano,
-              }}
-              onChange={(field, value) => setForm(p => ({ ...p, [field]: value }))}
+              values={soapValues}
+              onChange={handleSoapChange}
               soapErrors={soapErrors}
-              onClearErrors={() => setSoapErrors(false)}
+              onClearErrors={handleClearSoapErrors}
               soapEnabled={soapEnabled}
               onToggleSoap={setSoapEnabled}
               highlightSOAP={sessaoHighlightSOAP}
@@ -2638,7 +2676,7 @@ const ProntuarioPage: React.FC = () => {
                     profissionalId={user.id}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
-                    onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
+                    onChange={handleEspecialidadeChange}
                   />
                 )}
 
@@ -2692,7 +2730,7 @@ const ProntuarioPage: React.FC = () => {
                     profissionalId={user.id}
                     tipoProntuario={form.tipo_registro as any}
                     values={especialidadeFields}
-                    onChange={(key, val) => setEspecialidadeFields(prev => ({ ...prev, [key]: val }))}
+                    onChange={handleEspecialidadeChange}
                   />
                 )}
               </div>
@@ -3396,14 +3434,14 @@ const ProntuarioPage: React.FC = () => {
               value={listaPrescricao}
               onChange={setListaPrescricao}
               pacienteNome={form.paciente_nome}
-              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
-              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
               dataAtendimento={form.data_atendimento}
               profissionalNome={user?.nome}
               profissionalConselho={user?.numeroConselho}
               profissionalTipoConselho={user?.tipoConselho}
               profissionalUfConselho={user?.ufConselho}
-              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+              unidadeNome={unidadeAtualNome}
             />
             )}
 
@@ -3414,14 +3452,14 @@ const ProntuarioPage: React.FC = () => {
               value={listaExames}
               onChange={setListaExames}
               pacienteNome={form.paciente_nome}
-              pacienteCpf={pacientes.find(p => p.id === form.paciente_id)?.cpf}
-              pacienteCns={pacientes.find(p => p.id === form.paciente_id)?.cns}
+              pacienteCpf={selectedPacienteCpf}
+              pacienteCns={selectedPacienteCns}
               dataAtendimento={form.data_atendimento}
               profissionalNome={user?.nome}
               profissionalConselho={user?.numeroConselho}
               profissionalTipoConselho={user?.tipoConselho}
               profissionalUfConselho={user?.ufConselho}
-              unidadeNome={unidades.find(u => u.id === user?.unidadeId)?.nome}
+              unidadeNome={unidadeAtualNome}
             />
             )}
 
