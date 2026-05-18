@@ -2192,6 +2192,27 @@ const ProntuarioPage: React.FC = () => {
     setViewerProntuario(p);
   }, []);
 
+  const selectedPacienteCpf = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cpf, [pacientes, form.paciente_id]);
+  const selectedPacienteCns = useMemo(() => pacientes.find(p => p.id === form.paciente_id)?.cns, [pacientes, form.paciente_id]);
+  const unidadeAtualNome = useMemo(() => unidades.find(u => u.id === user?.unidadeId)?.nome, [unidades, user?.unidadeId]);
+  const soapValues = useMemo(() => ({
+    soap_subjetivo: form.soap_subjetivo,
+    soap_objetivo: form.soap_objetivo,
+    soap_avaliacao: form.soap_avaliacao,
+    soap_plano: form.soap_plano,
+  }), [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo]);
+  const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
+    setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
+  }, []);
+  const handleClearSoapErrors = useCallback(() => setSoapErrors(false), []);
+  const handleEspecialidadeChange = useCallback((key: string, val: string) => {
+    setEspecialidadeFields(prev => (prev[key] === val ? prev : { ...prev, [key]: val }));
+  }, []);
+  const handlePacienteChange = useCallback((id: string, nome: string) => {
+    setForm((prev) => prev.paciente_id === id && prev.paciente_nome === nome ? prev : { ...prev, paciente_id: id, paciente_nome: nome });
+    if (id) loadEpisodios(id);
+  }, []);
+
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
