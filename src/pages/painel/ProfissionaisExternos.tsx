@@ -474,10 +474,12 @@ const ProfissionaisExternos: React.FC = () => {
     return e.nome.toLowerCase().includes(term) || e.email.toLowerCase().includes(term);
   });
 
-  // For quota dialog: filter out professionals that already have a quota for this external
-  const availableForQuota = profissionaisInternos.filter((f: any) =>
-    !quotas.some(q => q.profissional_externo_id === selectedExternoId && q.profissional_interno_id === f.id)
+  const quotaConfiguredProfIds = new Set(
+    quotas
+      .filter(q => q.profissional_externo_id === selectedExternoId)
+      .map(q => q.profissional_interno_id)
   );
+  const availableForQuota = profissionaisInternos;
 
   return (
     <div className="space-y-4 animate-fade-in">
