@@ -1,6 +1,9 @@
-import { loadDocumentConfig, docHeader, docFooter, buildInstitutionalCSS } from './printLayout';
-import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+/**
+ * Ficha Cadastral do Paciente — usa o padrão institucional global
+ * (cabeçalho com 3 logos + bloco institucional + rodapé) configurado em
+ * Configurações → Impressão de Documentos. Fiel ao preview e ao PDF.
+ */
+import { loadDocumentConfig, buildDocumentShell, printViaIframe } from './printLayout';
 
 interface FichaPacienteData {
   paciente: {
@@ -16,6 +19,26 @@ interface FichaPacienteData {
     descricaoClinica: string;
     cid: string;
     criadoEm: string;
+    // campos opcionais expandidos (SUS / complementares)
+    sexo?: string;
+    nacionalidade?: string;
+    raca?: string;
+    naturalidade?: string;
+    // endereço detalhado opcional
+    cep?: string;
+    logradouro?: string;
+    numero?: string;
+    complemento?: string;
+    bairro?: string;
+    municipio?: string;
+    uf?: string;
+    // contato secundário
+    telefoneSecundario?: string;
+    // SUS
+    especialidadeDestino?: string;
+    origemCadastro?: string;
+    origemEncaminhamento?: string;
+    observacoes?: string;
   };
   unidadeAtual?: string;
   dataAtendimento?: string;
@@ -34,10 +57,16 @@ interface FichaPacienteData {
     observacao: string;
     tipo: string;
   }>;
+  anexos?: Array<{ nome: string; tipo?: string }>;
 }
 
+const fmt = (v: any): string => {
+  const s = (v ?? '').toString().trim();
+  return s ? s : 'Não informado';
+};
+
 const formatarData = (data: string): string => {
-  if (!data) return '—';
+  if (!data) return 'Não informado';
   try {
     const d = new Date(data.length <= 10 ? data + 'T12:00:00' : data);
     if (isNaN(d.getTime())) return data;
@@ -48,10 +77,10 @@ const formatarData = (data: string): string => {
 };
 
 const calcularIdade = (dataNascimento: string): string => {
-  if (!dataNascimento) return '—';
+  if (!dataNascimento) return 'Não informado';
   const parts = dataNascimento.includes('/') ? dataNascimento.split('/').reverse().join('-') : dataNascimento;
   const birth = new Date(parts + 'T12:00:00');
-  if (isNaN(birth.getTime())) return '—';
+  if (isNaN(birth.getTime())) return 'Não informado';
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
@@ -59,382 +88,115 @@ const calcularIdade = (dataNascimento: string): string => {
   return `${age} anos`;
 };
 
+function field(label: string, value: any): string {
+  return `
+    <div class="field">
+      <div class="field-label">${label}</div>
+      <div class="field-value">${fmt(value)}</div>
+    </div>`;
+}
+
+function section(title: string, inner: string): string {
+  return `
+    <div class="section doc-section">
+      <div class="section-title">${title}</div>
+      <div class="section-content">${inner}</div>
+    </div>`;
+}
+
 export async function printFichaPaciente(data: FichaPacienteData): Promise<void> {
   const config = await loadDocumentConfig();
-  const logoLeft = config.logoEsquerda || logoSmsFallback;
-  const logoRight = config.logoDireita || logoCerFallback;
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
+  const p = data.paciente;
 
-  const now = new Date();
-  const dataAtual = now.toLocaleDateString('pt-BR');
-  const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  // Endereço completo (usa detalhado quando disponível, senão cai no campo livre)
+  const enderecoMontado = [
+    [p.logradouro, p.numero].filter(Boolean).join(', '),
+    p.complemento,
+    p.bairro,
+    [p.municipio, p.uf].filter(Boolean).join(' / '),
+    p.cep,
+  ].filter((x) => x && String(x).trim()).join(' — ') || p.endereco;
 
-  const historicoRows = (data.historicoAtendimentos || [])
-    .slice(0, 10)
-    .map(
-      (h) => `
-      <tr>
-        <td>${formatarData(h.data)}</td>
-        <td>${h.tipo || '—'}</td>
-        <td>${h.profissional || '—'}</td>
-        <td>${h.observacao || '—'}</td>
-      </tr>`,
-    )
-    .join('');
+  const identificacao = `
+    <div class="info-grid">
+      ${field('Nome Completo', p.nome)}
+      ${field('Nome da Mãe', p.nomeMae)}
+      ${field('Data de Nascimento', formatarData(p.dataNascimento))}
+      ${field('Idade', calcularIdade(p.dataNascimento))}
+      ${field('Sexo', p.sexo)}
+      ${field('CPF', p.cpf)}
+      ${field('CNS', p.cns)}
+      ${field('Naturalidade', p.naturalidade)}
+      ${field('Nacionalidade', p.nacionalidade)}
+      ${field('Raça / Cor', p.raca)}
+    </div>`;
 
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Ficha do Paciente — ${data.paciente.nome}</title>
-  <style>
-    @page { size: A4 portrait; margin: 10mm 12mm 14mm 12mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      color: #1a1a1a;
-      font-size: 11px;
-      line-height: 1.45;
-    }
-
-    /* ===== HEADER ===== */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding-bottom: 8px;
-      margin-bottom: 6px;
-      border-bottom: 3px solid #0c4a6e;
-    }
-    .header img {
-      width: 54px;
-      height: 54px;
-      border-radius: 6px;
-      object-fit: cover;
-    }
-    .header-center {
-      flex: 1;
-      text-align: center;
-    }
-    .header-center h1 {
-      font-size: 13px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: #0c4a6e;
-    }
-    .header-center h2 {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #334155;
-      margin-top: 2px;
-    }
-    .header-center .tipo {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      color: #64748b;
-      letter-spacing: 0.5px;
-      margin-top: 2px;
-    }
-    .header-right {
-      text-align: right;
-      font-size: 10px;
-      color: #475569;
-      line-height: 1.7;
-      min-width: 130px;
-    }
-    .header-right b { color: #1e293b; }
-
-    /* ===== SECTIONS ===== */
-    .bloco {
-      margin-top: 7px;
-      border: 1px solid #94a3b8;
-      border-radius: 4px;
-      overflow: hidden;
-      page-break-inside: avoid;
-    }
-    .bloco-titulo {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      background: linear-gradient(135deg, #0c4a6e, #0369a1);
-      color: #fff;
-      padding: 5px 12px;
-    }
-    .bloco-body { padding: 8px 12px; }
-
-    /* ===== GRIDS ===== */
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 18px; }
-    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px 14px; }
-    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 10px; }
-
-    .campo { margin-bottom: 2px; font-size: 11px; }
-    .campo b {
-      font-size: 8.5px;
-      text-transform: uppercase;
-      color: #475569;
-      font-weight: 700;
-      margin-right: 4px;
-    }
-    .campo span { color: #0f172a; font-weight: 500; }
-    .campo-full { grid-column: 1 / -1; }
-
-    /* ===== VITALS ===== */
-    .vitais-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 4px;
-    }
-    .vitais-table td {
-      border: 1px solid #cbd5e1;
-      padding: 6px 10px;
-      font-size: 11px;
-      text-align: center;
-      background: #f8fafc;
-    }
-    .vitais-table td b {
-      display: block;
-      font-size: 8px;
-      text-transform: uppercase;
-      color: #64748b;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-    .vitais-table td span {
-      font-weight: 600;
-      color: #0f172a;
-      font-size: 12px;
-    }
-
-    /* ===== DESCRIPTION ===== */
-    .desc-box {
-      margin-top: 4px;
-      padding: 6px 8px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 3px;
-      font-size: 10px;
-      line-height: 1.5;
-    }
-
-    /* ===== HISTORY TABLE ===== */
-    .hist-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 4px;
-    }
-    .hist-table th {
-      background: #f1f5f9;
-      font-size: 8.5px;
-      font-weight: 700;
-      color: #475569;
-      text-transform: uppercase;
-      padding: 5px 8px;
-      border: 1px solid #cbd5e1;
-      text-align: left;
-    }
-    .hist-table td {
-      padding: 5px 8px;
-      border: 1px solid #cbd5e1;
-      font-size: 10px;
-      vertical-align: top;
-    }
-    .hist-table tr:nth-child(even) td { background: #fafbfc; }
-
-    /* ===== EMPTY LINES ===== */
-    .write-line {
-      border-bottom: 1px solid #cbd5e1;
-      height: 26px;
-    }
-    .write-line:nth-child(odd) { background: #fafbfc; }
-
-    /* ===== SIGNATURE ===== */
-    .assinatura-area {
-      margin-top: 28px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      page-break-inside: avoid;
-    }
-    .assinatura-bloco {
-      text-align: center;
-      width: 240px;
-    }
-    .assinatura-traco {
-      border-top: 1px solid #1e293b;
-      padding-top: 24px;
-    }
-    .assinatura-label {
-      font-size: 9px;
-      color: #64748b;
-    }
-    .assinatura-data {
-      font-size: 10px;
-      color: #475569;
-    }
-
-    /* ===== FOOTER ===== */
-    .rodape {
-      margin-top: 14px;
-      padding-top: 5px;
-      border-top: 1px solid #cbd5e1;
-      text-align: center;
-      font-size: 8px;
-      color: #94a3b8;
-      letter-spacing: 0.3px;
-    }
-
-    @media print {
-      .bloco { break-inside: avoid; }
-      .assinatura-area { break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- HEADER -->
-  <div class="header" style="${config.mostrarLinhaDivisoria ? 'border-bottom: 3px solid #0c4a6e;' : 'border-bottom: none;'}">
-    <img src="${logoLeft}" alt="Logo" />
-    <div class="header-center">
-      <h1 style="font-family: ${config.tipografia.fonte}">${config.linha1}</h1>
-      <h2 style="font-family: ${config.tipografia.fonte}">${config.linha2}</h2>
-      <div class="tipo">Ficha de Atendimento do Paciente</div>
-    </div>
-    <img src="${logoRight}" alt="Logo" style="max-height:54px;max-width:100px;object-fit:contain;" />
-    <div class="header-right">
-      <div><b>Prontuário:</b> ${data.paciente.id}</div>
-      <div><b>Emissão:</b> ${dataAtual} — ${horaAtual}</div>
-    </div>
-  </div>
-
-  <!-- IDENTIFICAÇÃO -->
-  <div class="bloco">
-    <div class="bloco-titulo">Identificação do Paciente</div>
-    <div class="bloco-body">
-      <div class="campo campo-full" style="margin-bottom:4px"><b>Nome Completo:</b> <span style="font-size:12px;font-weight:700">${data.paciente.nome}</span></div>
-      <div class="grid-3">
-        <div class="campo"><b>CPF:</b> <span>${data.paciente.cpf || '—'}</span></div>
-        <div class="campo"><b>CNS:</b> <span>${data.paciente.cns || '—'}</span></div>
-        <div class="campo"><b>Data Nasc.:</b> <span>${formatarData(data.paciente.dataNascimento)}</span></div>
+  const endereco = `
+    <div class="info-grid">
+      ${field('CEP', p.cep)}
+      ${field('Logradouro', p.logradouro)}
+      ${field('Número', p.numero)}
+      ${field('Complemento', p.complemento)}
+      ${field('Bairro', p.bairro)}
+      ${field('Município / UF', [p.municipio, p.uf].filter(Boolean).join(' / '))}
+      <div class="field" style="grid-column: 1 / -1">
+        <div class="field-label">Endereço Completo</div>
+        <div class="field-value">${fmt(enderecoMontado)}</div>
       </div>
-      <div class="grid-3">
-        <div class="campo"><b>Idade:</b> <span>${calcularIdade(data.paciente.dataNascimento)}</span></div>
-        <div class="campo"><b>Telefone:</b> <span>${data.paciente.telefone || '—'}</span></div>
-        <div class="campo"><b>E-mail:</b> <span>${data.paciente.email || '—'}</span></div>
+    </div>`;
+
+  const contato = `
+    <div class="info-grid">
+      ${field('Telefone Principal', p.telefone)}
+      ${field('Telefone Secundário', p.telefoneSecundario)}
+      ${field('E-mail', p.email)}
+    </div>`;
+
+  const complementares = `
+    <div class="info-grid">
+      ${field('Unidade Vinculada', data.unidadeAtual || data.unidadeOrigem)}
+      ${field('Especialidade Destino', p.especialidadeDestino)}
+      ${field('Origem do Cadastro', p.origemCadastro)}
+      ${field('Origem do Encaminhamento', p.origemEncaminhamento)}
+      ${field('CID / Diagnóstico Complementar', p.cid)}
+      ${field('Cadastrado em', formatarData(p.criadoEm))}
+      <div class="field" style="grid-column: 1 / -1">
+        <div class="field-label">Descrição Clínica</div>
+        <div class="field-value">${fmt(p.descricaoClinica)}</div>
       </div>
-      <div class="grid-2">
-        <div class="campo"><b>Nome da Mãe:</b> <span>${data.paciente.nomeMae || '—'}</span></div>
-        <div class="campo"><b>Endereço:</b> <span>${data.paciente.endereco || '—'}</span></div>
+      <div class="field" style="grid-column: 1 / -1">
+        <div class="field-label">Observações</div>
+        <div class="field-value">${fmt(p.observacoes)}</div>
       </div>
-    </div>
-  </div>
+    </div>`;
 
-  <!-- INFORMAÇÕES CLÍNICAS -->
-  <div class="bloco">
-    <div class="bloco-titulo">Informações Clínicas</div>
-    <div class="bloco-body">
-      <div class="grid-4">
-        <div class="campo"><b>CID:</b> <span>${data.paciente.cid || '—'}</span></div>
-        <div class="campo"><b>Tipo:</b> <span>${data.tipoAtendimento || '—'}</span></div>
-        <div class="campo"><b>Unidade Origem:</b> <span>${data.unidadeOrigem || '—'}</span></div>
-        <div class="campo"><b>Data Atend.:</b> <span>${data.dataAtendimento ? formatarData(data.dataAtendimento) : '—'}</span></div>
+  const anexosList = (data.anexos || []).filter((a) => a?.nome);
+  const anexos = anexosList.length
+    ? `<ul style="margin: 4px 0 0 18px;">${anexosList
+        .map((a) => `<li>${a.nome}${a.tipo ? ` <span style="color:#64748b">(${a.tipo})</span>` : ''}</li>`)
+        .join('')}</ul>`
+    : `<div style="color:#94a3b8;font-style:italic">Nenhum documento anexado.</div>`;
+
+  const body = `
+    ${section('1. Identificação do Paciente', identificacao)}
+    ${section('2. Endereço', endereco)}
+    ${section('3. Contato', contato)}
+    ${section('4. Complementares / SUS', complementares)}
+    ${section('5. Documentos / Anexos', anexos)}
+
+    <div class="signature" style="margin-top: 40px;">
+      <div style="margin-bottom: 30px; color:#475569; font-size:10pt;">
+        Oriximiná — PA, ____ / ____ / ________
       </div>
-      ${data.paciente.descricaoClinica ? `
-      <div style="margin-top:6px">
-        <div class="campo"><b>Descrição Clínica:</b></div>
-        <div class="desc-box">${data.paciente.descricaoClinica}</div>
-      </div>` : ''}
-    </div>
-  </div>
+      <div class="signature-line"></div>
+      <div class="name">Assinatura do Responsável</div>
+      <div class="role">Paciente / Responsável Legal</div>
+    </div>`;
 
-  <!-- SINAIS VITAIS -->
-  <div class="bloco">
-    <div class="bloco-titulo">Sinais Vitais</div>
-    <div class="bloco-body">
-      <table class="vitais-table">
-        <tbody>
-          <tr>
-            <td><b>PA</b><span></span></td>
-            <td><b>FC</b><span></span></td>
-            <td><b>FR</b><span></span></td>
-            <td><b>Temp</b><span></span></td>
-            <td><b>SpO₂</b><span></span></td>
-            <td><b>Peso</b><span></span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+  const html = buildDocumentShell('Ficha Cadastral do Paciente', body, config, {
+    Prontuário: p.id || '—',
+    Paciente: p.nome || '—',
+  });
 
-  ${data.ultimoAtendimento ? `
-  <!-- ÚLTIMO ATENDIMENTO -->
-  <div class="bloco">
-    <div class="bloco-titulo">Último Atendimento</div>
-    <div class="bloco-body">
-      <div class="grid-4">
-        <div class="campo"><b>Data:</b> <span>${formatarData(data.ultimoAtendimento.data)}</span></div>
-        <div class="campo"><b>Tipo:</b> <span>${data.ultimoAtendimento.tipo || '—'}</span></div>
-        <div class="campo"><b>Profissional:</b> <span>${data.ultimoAtendimento.profissional || '—'}</span></div>
-        <div class="campo"><b>Procedimentos:</b> <span>${data.ultimoAtendimento.procedimentos || '—'}</span></div>
-      </div>
-      ${data.ultimoAtendimento.queixa ? `<div class="campo" style="margin-top:4px"><b>Queixa:</b> <span>${data.ultimoAtendimento.queixa}</span></div>` : ''}
-    </div>
-  </div>` : ''}
-
-  <!-- EVOLUÇÃO CLÍNICA -->
-  <div class="bloco">
-    <div class="bloco-titulo">Evolução Clínica / Histórico</div>
-    <div class="bloco-body">
-      ${historicoRows ? `
-      <table class="hist-table">
-        <thead>
-          <tr>
-            <th style="width:75px">Data</th>
-            <th style="width:80px">Tipo</th>
-            <th style="width:120px">Profissional</th>
-            <th>Observação</th>
-          </tr>
-        </thead>
-        <tbody>${historicoRows}</tbody>
-      </table>` : `
-      <div style="color:#94a3b8;font-size:9px;font-style:italic;margin-bottom:6px">
-        Nenhum registro de evolução clínica encontrado.
-      </div>`}
-      <div style="margin-top:8px">
-        ${Array.from({ length: 6 }, () => '<div class="write-line"></div>').join('')}
-      </div>
-    </div>
-  </div>
-
-  <!-- ASSINATURA -->
-  <div class="assinatura-area">
-    <div class="assinatura-data">Oriximiná &mdash; PA, ____/____/________</div>
-    <div class="assinatura-bloco">
-      <div class="assinatura-traco"></div>
-      <div style="font-size:10px;font-weight:600">Profissional Responsável</div>
-      <div class="assinatura-label">CRM / COREN / Registro</div>
-    </div>
-  </div>
-
-  <!-- RODAPÉ -->
-  <div class="rodape">
-    ${config.linha1}${config.linha2 ? ' &mdash; ' + config.linha2 : ''}
-    ${config.rodapeTexto ? ' &mdash; ' + config.rodapeTexto : ''}
-    <br/>
-    Documento impresso em ${dataAtual} às ${horaAtual} &mdash; Via do Prontuário
-  </div>
-
-</body>
-</html>`;
-
-  printWindow.document.write(html);
-  printWindow.document.close();
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 400);
+  printViaIframe(html);
 }
