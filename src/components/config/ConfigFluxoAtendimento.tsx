@@ -540,3 +540,77 @@ const ControleFaltasCard: React.FC = () => {
     </Card>
   );
 };
+
+// ─── Cartão: Controle de Atendimentos (Master) ────────────────────────────────
+const ATEND_KEY = 'config_fluxo_atendimento';
+const ControleAtendimentosCard: React.FC = () => {
+  const [cfg, setCfg] = useState({ alerta_minutos_em_atendimento: 60, coordenador_pode_concluir: false });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const stored = (data?.configuracoes as any)?.[ATEND_KEY];
+      if (stored) setCfg((p) => ({ ...p, ...stored }));
+      setLoading(false);
+    })();
+  }, []);
+
+  const save = async (next: typeof cfg) => {
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const existingConfig = (existing?.configuracoes as any) || {};
+      const { error } = await supabase.from('system_config').upsert({
+        id: 'default',
+        configuracoes: { ...existingConfig, [ATEND_KEY]: next },
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      setCfg(next);
+      toast.success('Configuração de atendimentos salva');
+    } catch (e: any) {
+      toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card className="shadow-card border-0">
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold font-display text-foreground">Controle de Atendimentos</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Define o alerta de atendimentos em aberto e quem pode concluir atendimentos de outros profissionais.
+            O Master sempre pode concluir; a produção e o BPA permanecem em nome do profissional executor.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs">Tempo máximo sem finalização (minutos)</Label>
+            <Input
+              type="number" min={5} max={600}
+              value={cfg.alerta_minutos_em_atendimento}
+              onChange={(e) => setCfg((p) => ({ ...p, alerta_minutos_em_atendimento: Math.max(5, Number(e.target.value) || 60) }))}
+              onBlur={() => save(cfg)}
+              disabled={saving}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">Padrão: 60 minutos.</p>
+          </div>
+          <div className="flex items-center gap-3 pt-5">
+            <Switch
+              checked={cfg.coordenador_pode_concluir}
+              onCheckedChange={(v) => save({ ...cfg, coordenador_pode_concluir: v })}
+            />
+            <Label className="text-xs cursor-pointer">Permitir Coordenador concluir atendimentos</Label>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
