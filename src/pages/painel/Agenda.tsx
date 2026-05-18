@@ -3536,14 +3536,15 @@ const Agenda: React.FC = () => {
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
+                          <ActionButton
+                            size="sm"
+                            variant="ghost"
                             className="h-8 w-8 p-0 text-success hover:bg-success/10"
                             onClick={() => handleIniciarAtendimento(ag)}
+                            hideSpinner
                           >
                             <Play className="w-4 h-4" />
-                          </Button>
+                          </ActionButton>
                         </TooltipTrigger>
                         <TooltipContent>Iniciar Atendimento</TooltipContent>
                       </Tooltip>
