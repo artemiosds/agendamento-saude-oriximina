@@ -645,6 +645,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       <SelectItem value="estrangeiro">Estrangeiro(a)</SelectItem>
                     </SelectContent>
                   </Select>
+                  {errors.nacionalidade && <p className="text-xs text-destructive mt-1">{errors.nacionalidade}</p>}
                 </div>
 
                 <div>
@@ -670,6 +671,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.racaCor && <p className="text-xs text-destructive mt-1">{errors.racaCor}</p>}
                 </div>
 
                 {/* Etnia: obrigatória apenas se Raça/Cor = Indígena */}
