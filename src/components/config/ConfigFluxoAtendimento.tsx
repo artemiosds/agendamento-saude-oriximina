@@ -413,3 +413,96 @@ const ConfigFluxoAtendimento: React.FC = () => {
 };
 
 export default ConfigFluxoAtendimento;
+
+// ─── Cartão: Controle de Faltas ───────────────────────────────────────────────
+const FALTAS_KEY = 'config_fluxo_faltas';
+
+const ControleFaltasCard: React.FC = () => {
+  const [cfg, setCfg] = useState({ limite_alerta: 2, limite_bloqueio: 4, canal_sistema: true, canal_whatsapp: false });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const stored = (data?.configuracoes as any)?.[FALTAS_KEY];
+      if (stored) setCfg((p) => ({ ...p, ...stored }));
+      setLoading(false);
+    })();
+  }, []);
+
+  const save = async (next: typeof cfg) => {
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const existingConfig = (existing?.configuracoes as any) || {};
+      await supabase.from('system_config').upsert({
+        id: 'default',
+        configuracoes: { ...existingConfig, [FALTAS_KEY]: next },
+        updated_at: new Date().toISOString(),
+      });
+      setCfg(next);
+      toast.success('Configuração de faltas salva');
+    } catch (e: any) {
+      toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <Card className="shadow-card border-0">
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold font-display text-foreground">Controle de Faltas</h3>
+          <p className="text-xs text-muted-foreground mt-1">Define quando um paciente é marcado como FALTOSO ou BLOQUEADO da agenda.</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label className="text-xs">Faltas para alerta FALTOSO</Label>
+            <Input
+              type="number" min={1} max={20}
+              value={cfg.limite_alerta}
+              onChange={(e) => setCfg((p) => ({ ...p, limite_alerta: Math.max(1, Number(e.target.value) || 1) }))}
+              onBlur={() => save(cfg)}
+              disabled={saving}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Faltas para BLOQUEIO</Label>
+            <Input
+              type="number" min={1} max={20}
+              value={cfg.limite_bloqueio}
+              onChange={(e) => setCfg((p) => ({ ...p, limite_bloqueio: Math.max(1, Number(e.target.value) || 1) }))}
+              onBlur={() => save(cfg)}
+              disabled={saving}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs">Canais de notificação</Label>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Switch
+                checked={cfg.canal_sistema}
+                onCheckedChange={(v) => save({ ...cfg, canal_sistema: v })}
+              />
+              Sistema
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Switch
+                checked={cfg.canal_whatsapp}
+                onCheckedChange={(v) => save({ ...cfg, canal_whatsapp: v })}
+              />
+              WhatsApp
+            </label>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
