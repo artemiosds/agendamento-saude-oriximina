@@ -135,7 +135,7 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
           </div>
 
           <div>
-            <Label className="text-xs">Procedimento SIGTAP *</Label>
+            <Label className="text-xs">Procedimento SIGTAP (opcional)</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
