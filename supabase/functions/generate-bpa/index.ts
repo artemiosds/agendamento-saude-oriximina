@@ -380,6 +380,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Carrega entidades extras introduzidas por agendamentos concluídos diretamente
+    const missingPacIds = Array.from(pacIds).filter((id) => !patientMap.has(id));
+    const missingProfIds = Array.from(profIds).filter((id) => !employeeMap.has(id));
+    const missingUniIds = Array.from(uniIds).filter((id) => !unitMap.has(id));
+    if (missingPacIds.length || missingProfIds.length || missingUniIds.length) {
+      const [{ data: pacs2 }, { data: profs2 }, { data: unis2 }] = await Promise.all([
+        missingPacIds.length ? supabase.from('pacientes').select('*').in('id', missingPacIds).limit(5000) : Promise.resolve({ data: [] }),
+        missingProfIds.length ? supabase.from('funcionarios').select('*').in('id', missingProfIds).limit(1000) : Promise.resolve({ data: [] }),
+        missingUniIds.length ? supabase.from('unidades').select('*').in('id', missingUniIds).limit(100) : Promise.resolve({ data: [] }),
+      ]);
+      (pacs2 || []).forEach((p: any) => patientMap.set(p.id, p));
+      (profs2 || []).forEach((f: any) => employeeMap.set(f.id, f));
+      (unis2 || []).forEach((u: any) => unitMap.set(u.id, u));
+    }
+
     items.sort((a, b) => a.data.localeCompare(b.data));
 
     for (const item of items) {
