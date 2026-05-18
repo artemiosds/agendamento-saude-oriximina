@@ -13,10 +13,11 @@ import { Loader2, Upload, ImageIcon, Trash2, Eye, FileText } from 'lucide-react'
 import ModelosDocumentos from '@/components/ModelosDocumentos';
 import CarimboConfig from '@/components/CarimboConfig';
 import { toast } from 'sonner';
+import { Slider } from '@/components/ui/slider';
 import {
   invalidateDocumentConfigCache, loadDocumentConfig,
   docHeader, docFooter, buildInstitutionalCSS, docMeta,
-  DEFAULT_CONFIG, type DocumentConfig,
+  DEFAULT_CONFIG, type DocumentConfig, type LogoSlotConfig,
 } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
