@@ -228,7 +228,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <LogoSlot label="Logo Esquerda" value={config.logoEsquerda} slot="esquerda" inputRef={refLeft} />
-                <LogoSlot label="Logo Central (acima do texto)" value={config.logoCentral} slot="central" inputRef={refCenter} />
+                <LogoSlot label="Logo Central" value={config.logoCentral} slot="central" inputRef={refCenter} />
                 <LogoSlot label="Logo Direita" value={config.logoDireita} slot="direita" inputRef={refRight} />
               </div>
               <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-lg">
