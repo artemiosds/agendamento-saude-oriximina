@@ -474,10 +474,12 @@ const ProfissionaisExternos: React.FC = () => {
     return e.nome.toLowerCase().includes(term) || e.email.toLowerCase().includes(term);
   });
 
-  // For quota dialog: filter out professionals that already have a quota for this external
-  const availableForQuota = profissionaisInternos.filter((f: any) =>
-    !quotas.some(q => q.profissional_externo_id === selectedExternoId && q.profissional_interno_id === f.id)
+  const quotaConfiguredProfIds = new Set(
+    quotas
+      .filter(q => q.profissional_externo_id === selectedExternoId)
+      .map(q => q.profissional_interno_id)
   );
+  const availableForQuota = profissionaisInternos;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -682,23 +684,28 @@ const ProfissionaisExternos: React.FC = () => {
 
             {availableForQuota.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                Todos os profissionais já possuem quota configurada para este externo.
+                Nenhum profissional com disponibilidade cadastrada foi encontrado.
               </p>
             ) : (
               <div className="space-y-2">
                 {availableForQuota.map((f: any) => {
                   const isSelected = selectedProfIds.includes(f.id);
+                  const alreadyConfigured = quotaConfiguredProfIds.has(f.id);
                   return (
                     <div key={f.id} className={`rounded-lg border p-3 transition-colors ${isSelected ? "border-primary bg-primary/5" : "border-border"}`}>
                       <div className="flex items-center gap-3">
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleProfSelection(f.id)}
+                          disabled={alreadyConfigured}
+                          onCheckedChange={() => !alreadyConfigured && toggleProfSelection(f.id)}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm text-foreground">{f.nome}</p>
                           <p className="text-xs text-muted-foreground">{f.profissao || f.cargo || ""}</p>
                         </div>
+                        {alreadyConfigured && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0">Quota já cadastrada</Badge>
+                        )}
                         {isSelected && (
                           <div className="flex flex-col gap-2 mt-2 pt-2 border-t w-full">
                             <div className="flex items-center gap-2">
