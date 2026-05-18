@@ -2225,6 +2225,13 @@ const ProntuarioPage: React.FC = () => {
     soap_avaliacao: form.soap_avaliacao,
     soap_plano: form.soap_plano,
   }), [form.soap_avaliacao, form.soap_objetivo, form.soap_plano, form.soap_subjetivo]);
+  const triagemHeaderData = useMemo(() => triagem ? {
+    pressao_arterial: triagem.pressao_arterial,
+    temperatura: triagem.temperatura,
+    saturacao_oxigenio: triagem.saturacao_oxigenio,
+    frequencia_cardiaca: triagem.frequencia_cardiaca,
+    classificacao_risco: (triagem as any).classificacao_risco,
+  } : null, [triagem]);
   const handleSoapChange = useCallback((field: keyof typeof soapValues, value: string) => {
     setForm(p => ((p as any)[field] === value ? p : { ...p, [field]: value }));
   }, []);
