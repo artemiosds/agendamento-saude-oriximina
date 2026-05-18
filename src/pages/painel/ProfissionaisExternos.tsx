@@ -456,13 +456,9 @@ const ProfissionaisExternos: React.FC = () => {
     }
   };
 
-  // Mostra TODOS os profissionais internos ativos das unidades visíveis (sem exigir disponibilidade cadastrada)
-  const unidadesVisiveisIds = unidadesVisiveis.map(u => u.id);
-  const profissionaisInternos = funcionarios.filter((f: any) =>
-    f.role === "profissional" &&
-    f.ativo &&
-    (unidadesVisiveisIds.length === 0 || !f.unidadeId || unidadesVisiveisIds.includes(f.unidadeId))
-  );
+  // Sincronizado com Disponibilidade: só aparecem profissionais que possuem disponibilidade cadastrada
+  // nas unidades visíveis ao usuário atual
+  const profissionaisInternos = profissionaisVisiveis.filter((f: any) => f.ativo);
 
   const filteredExternos = externos.filter(e => {
     if (!searchTerm.trim()) return true;
