@@ -1107,6 +1107,102 @@ ${dataRows}
     URL.revokeObjectURL(url);
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
+  // === DOWNLOAD PDF REAL ===
+  const downloadPDF = useCallback(async (type: string) => {
+    const isEmpty =
+      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+      type === 'produtividade' ? porProfissional.length === 0 :
+      type === 'faltas' ? faltasReport.length === 0 :
+      type === 'pacientes' ? pacientesReport.length === 0 :
+      type === 'fila' ? filaReport.items.length === 0 : false;
+    if (isEmpty) {
+      toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
+      return;
+    }
+
+    const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
+    try {
+      await new Promise(r => requestAnimationFrame(() => r(null)));
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const title = titleMap[type] || 'Relatório';
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
+      const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
+      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+      const generatedAt = new Date().toLocaleString('pt-BR');
+      const ROW_LIMIT = 3000;
+      let truncated = false;
+      const cap = <T,>(arr: T[]): T[] => {
+        if (arr.length > ROW_LIMIT) { truncated = true; return arr.slice(0, ROW_LIMIT); }
+        return arr;
+      };
+
+      doc.setProperties({ title, subject: 'Relatório SMS Oriximiná' });
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(title, 14, 14);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`Período: ${periodo}   Unidade: ${un || 'Todas'}   Profissional: ${prof || 'Todos'}`, 14, 20);
+      doc.text(`Emitido em: ${generatedAt}`, 14, 25);
+
+      const summaryRows = [
+        ['Total Agendamentos', String(stats.total), 'Atendimentos', String(tempoStats.totalAtendimentos), 'Concluídos', String(stats.concluidos), 'Faltas', String(stats.faltas)],
+        ['Cancelados', String(stats.cancelados), 'Remarcados', String(stats.remarcados), 'Tempo Médio', `${tempoStats.tempoMedio}min`, 'Comparecimento', `${stats.taxaComparecimento}%`],
+      ];
+      autoTable(doc, {
+        startY: 31,
+        body: summaryRows,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+      });
+
+      let y = ((doc as any).lastAutoTable?.finalY || 31) + 6;
+      const addTable = (subtitle: string, head: string[], bodyRows: (string | number)[][]) => {
+        if (!bodyRows.length) return;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text(subtitle, 14, y);
+        autoTable(doc, {
+          startY: y + 3,
+          head: [head],
+          body: bodyRows,
+          theme: 'grid',
+          styles: { fontSize: 7, cellPadding: 1.6, overflow: 'linebreak', valign: 'middle' },
+          headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          margin: { left: 10, right: 10 },
+        });
+        y = ((doc as any).lastAutoTable?.finalY || y) + 7;
+      };
+
+      if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(filtered).map(a => [a.data || '', a.hora || '', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
+      } else if (type === 'produtividade') {
+        addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
+      } else if (type === 'faltas') {
+        addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
+      } else if (type === 'pacientes') {
+        addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
+      } else if (type === 'fila') {
+        addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidades.find(u => u.id === f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
+      }
+
+      if (truncated) {
+        toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use Excel.' });
+      }
+      doc.save(`relatorio_${type}_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success('PDF gerado com sucesso', { description: 'O download do arquivo foi iniciado.' });
+    } catch (err) {
+      console.error('[downloadPDF] erro:', err);
+      toast.error('Não foi possível gerar o PDF', { description: 'Verifique os filtros e tente novamente.' });
+    } finally {
+      toast.dismiss(loadingId);
+    }
+  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
+
   // === EXPORT PDF ===
   const exportPDF = useCallback(async (type: string) => {
     try {
