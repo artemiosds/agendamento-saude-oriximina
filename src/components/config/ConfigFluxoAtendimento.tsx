@@ -431,18 +431,31 @@ const ControleFaltasCard: React.FC = () => {
     })();
   }, []);
 
+  const reavaliar = async () => {
+    const { data, error } = await (supabase as any).rpc('reavaliar_todos_status_falta');
+    if (error) { toast.error('Erro ao reavaliar: ' + error.message); return null; }
+    return data;
+  };
+
   const save = async (next: typeof cfg) => {
     setSaving(true);
     try {
-      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const { data: existing, error: selErr } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      if (selErr) throw selErr;
       const existingConfig = (existing?.configuracoes as any) || {};
-      await supabase.from('system_config').upsert({
+      const { error: upErr } = await supabase.from('system_config').upsert({
         id: 'default',
         configuracoes: { ...existingConfig, [FALTAS_KEY]: next },
         updated_at: new Date().toISOString(),
       });
+      if (upErr) throw upErr;
       setCfg(next);
-      toast.success('Configuração de faltas salva');
+      const r = await reavaliar();
+      if (r) {
+        toast.success(`Salvo · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos`);
+      } else {
+        toast.success('Configuração de faltas salva');
+      }
     } catch (e: any) {
       toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
     } finally {
