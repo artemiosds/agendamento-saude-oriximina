@@ -2391,13 +2391,7 @@ const ProntuarioPage: React.FC = () => {
               profissionalNome={form.paciente_id ? (funcionarios.find(f => f.id === (searchParams.get("profissionalId") || user?.id))?.nome || user?.nome || "") : ""}
               profissionalId={searchParams.get("profissionalId") || user?.id || ""}
               agendamentoId={form.agendamento_id || undefined}
-              triagem={triagem ? {
-                pressao_arterial: triagem.pressao_arterial,
-                temperatura: triagem.temperatura,
-                saturacao_oxigenio: triagem.saturacao_oxigenio,
-                frequencia_cardiaca: triagem.frequencia_cardiaca,
-                classificacao_risco: (triagem as any).classificacao_risco,
-              } : null}
+              triagem={triagemHeaderData}
               funcionarios={funcionariosLight}
               onPacienteUpdated={loadProntuarios}
             />
@@ -2534,10 +2528,7 @@ const ProntuarioPage: React.FC = () => {
                 <BuscaPaciente
                   pacientes={pacientes}
                   value={form.paciente_id}
-                  onChange={(id, nome) => {
-                    setForm((prev) => ({ ...prev, paciente_id: id, paciente_nome: nome }));
-                    if (id) loadEpisodios(id);
-                  }}
+                  onChange={handlePacienteChange}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -2647,15 +2638,10 @@ const ProntuarioPage: React.FC = () => {
             {/* SOAP Evolution — ALL 5 types */}
             <SoapFieldsAdaptive
               profissao={user?.profissao}
-              values={{
-                soap_subjetivo: form.soap_subjetivo,
-                soap_objetivo: form.soap_objetivo,
-                soap_avaliacao: form.soap_avaliacao,
-                soap_plano: form.soap_plano,
-              }}
-              onChange={(field, value) => setForm(p => ({ ...p, [field]: value }))}
+              values={soapValues}
+              onChange={handleSoapChange}
               soapErrors={soapErrors}
-              onClearErrors={() => setSoapErrors(false)}
+              onClearErrors={handleClearSoapErrors}
               soapEnabled={soapEnabled}
               onToggleSoap={setSoapEnabled}
               highlightSOAP={sessaoHighlightSOAP}
