@@ -1106,7 +1106,21 @@ ${dataRows}
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
   // === EXPORT PDF ===
-  const exportPDF = useCallback((type: string) => {
+  const exportPDF = useCallback(async (type: string) => {
+    try {
+      // Empty-data guard per tab
+      const isEmpty =
+        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+        type === 'produtividade' ? porProfissional.length === 0 :
+        type === 'faltas' ? faltasReport.length === 0 :
+        type === 'pacientes' ? pacientesReport.length === 0 :
+        type === 'fila' ? filaReport.items.length === 0 : false;
+      if (isEmpty) {
+        toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
+        return;
+      }
+      const loadingId = toast.loading('Gerando PDF...', { description: 'Preparando documento para impressão / salvar como PDF.' });
+      await new Promise(r => requestAnimationFrame(() => r(null))); // yield UI
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
     const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
     const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
