@@ -295,10 +295,10 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
   // Validação visual por aba (badge se erro)
   const tabHasError = {
-    identificacao: !!(errors.nome || errors.cpf || errors.cns || errors.nomeResponsavel || errors.cpfResponsavel || errors.nomeMae),
-    endereco: !!(errors.cep || errors.municipio),
+    identificacao: !!(errors.nome || errors.cpf || errors.cns || errors.nomeMae || errors.dataNascimento || errors.naturalidade || errors.nomeResponsavel || errors.cpfResponsavel),
+    endereco: !!(errors.cep || errors.logradouro || errors.numero || errors.bairro || errors.municipio || errors.uf),
     contato: !!(errors.telefone || errors.email),
-    complementares: !!(errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
+    complementares: !!(errors.nacionalidade || errors.racaCor || errors.especialidadeDestino || errors.ubsOrigem || errors.cid || errors.justificativa),
   };
 
   return (
