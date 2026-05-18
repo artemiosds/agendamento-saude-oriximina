@@ -158,37 +158,42 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     line-height: ${t.espacamento};
   }
 
-  /* HEADER — 3 logos (esq | central acima do texto | dir) */
+  /* HEADER — até 3 logos (esquerda | central | direita) + bloco institucional abaixo */
   .doc-header {
-    display: grid;
-    grid-template-columns: 110px 1fr 110px;
-    align-items: center;
-    gap: 12px;
     padding: 10px 0 12px;
     margin-bottom: 12px;
     ${config?.mostrarLinhaDivisoria !== false ? 'border-bottom: 2px solid #0369a1;' : ''}
   }
-  .doc-header .logo-left,
-  .doc-header .logo-right {
-    display: flex; align-items: center; justify-content: center;
+  .doc-header .logos-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
   }
-  .doc-header .logo-left img,
-  .doc-header .logo-right img {
+  .doc-header .logo-slot {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+  }
+  .doc-header .logo-slot.left   { justify-content: flex-start; }
+  .doc-header .logo-slot.center { justify-content: center; }
+  .doc-header .logo-slot.right  { justify-content: flex-end; }
+  .doc-header .logo-slot img {
     max-height: 70px;
-    max-width: 100px;
+    max-width: 140px;
     object-fit: contain;
     image-rendering: -webkit-optimize-contrast;
   }
-  .doc-header .header-center {
-    text-align: center;
-    padding: 0 8px;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .doc-header .header-center .logo-central img {
-    max-height: 60px;
+  .doc-header .logo-slot.center img {
+    max-height: 72px;
     max-width: 180px;
-    object-fit: contain;
-    margin-bottom: 4px;
+  }
+  .doc-header .header-text {
+    text-align: center;
+    margin-top: 10px;
+    padding: 0 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
   }
   .doc-header h1 {
     font-size: ${Math.max(t.tamanhoBase + 1, 12)}pt;
@@ -338,30 +343,39 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
 
 export const institutionalCSS = buildInstitutionalCSS();
 
-/** Header HTML — 3 logos com central acima do texto institucional */
+/** Header HTML — até 3 logos distribuídos (esquerda | central | direita) + bloco institucional */
 export function docHeader(title: string, config: DocumentConfig, extraRight?: string): string {
+  const hasLeft = !!(config.logoEsquerda || logoSmsFallback);
+  const hasRight = !!(config.logoDireita || logoCerFallback);
+  const hasCentral = !!(config.mostrarLogoCentral && config.logoCentral);
+
   const logoLeft = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
   const logoRight = resolveLogoUrl(config.logoDireita, logoCerFallback);
-  const logoCentral = config.mostrarLogoCentral && config.logoCentral
-    ? `<div class="logo-central"><img src="${config.logoCentral}" alt="Logo central" /></div>` : '';
+
+  const leftSlot = hasLeft
+    ? `<div class="logo-slot left"><img src="${logoLeft}" alt="Logo esquerda" /></div>` : '';
+  const centerSlot = hasCentral
+    ? `<div class="logo-slot center"><img src="${config.logoCentral}" alt="Logo central" /></div>`
+    : (hasLeft && hasRight ? '' : '<div class="logo-slot center"></div>');
+  const rightSlot = hasRight
+    ? `<div class="logo-slot right"><img src="${logoRight}" alt="Logo direita" /></div>` : '';
+
   const linha3 = config.linha3 ? `<div class="extra-line">${config.linha3}</div>` : '';
   const linha4 = config.linha4 ? `<div class="extra-line">${config.linha4}</div>` : '';
   const now = new Date().toLocaleString('pt-BR');
 
   return `
     <div class="doc-header">
-      <div class="logo-left">
-        <img src="${logoLeft}" alt="Logo institucional esquerda" />
+      <div class="logos-row">
+        ${leftSlot}
+        ${centerSlot}
+        ${rightSlot}
       </div>
-      <div class="header-center">
-        ${logoCentral}
+      <div class="header-text">
         <h1>${config.linha1}</h1>
         ${config.linha2 ? `<div class="subtitle">${config.linha2}</div>` : ''}
         ${linha3}
         ${linha4}
-      </div>
-      <div class="logo-right">
-        <img src="${logoRight}" alt="Logo institucional direita" />
       </div>
     </div>
     ${title ? `<div class="doc-title-bar">${title}</div>` : ''}
