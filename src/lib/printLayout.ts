@@ -27,12 +27,24 @@ export interface DocumentMargins {
   direita: number;
 }
 
+export interface LogoSlotConfig {
+  altura: number;   // px (height): 30..140
+  redonda: boolean; // recorte circular (aspect 1:1 + object-fit: cover)
+  ativo: boolean;   // false = não renderiza no cabeçalho
+}
+
 export interface DocumentConfig {
   // 3 logos
   logoEsquerda: string;
   logoCentral: string;
   logoDireita: string;
-  mostrarLogoCentral: boolean;
+  mostrarLogoCentral: boolean; // legado — mantido para compat
+  // Configuração de tamanho/forma/ativação por slot
+  logosConfig: {
+    esquerda: LogoSlotConfig;
+    central: LogoSlotConfig;
+    direita: LogoSlotConfig;
+  };
   // Bloco institucional (até 4 linhas)
   linha1: string;
   linha2: string;
@@ -64,11 +76,18 @@ const DEFAULT_MARGINS: DocumentMargins = {
   direita: 20,
 };
 
+const defaultSlot = (altura: number, ativo = true): LogoSlotConfig => ({ altura, redonda: false, ativo });
+
 export const DEFAULT_CONFIG: DocumentConfig = {
   logoEsquerda: '',
   logoCentral: '',
   logoDireita: '',
   mostrarLogoCentral: false,
+  logosConfig: {
+    esquerda: defaultSlot(70, true),
+    central: defaultSlot(72, false),
+    direita: defaultSlot(70, true),
+  },
   linha1: 'SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ',
   linha2: 'CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II',
   linha3: '',
@@ -85,13 +104,33 @@ let _cachedConfig: DocumentConfig | null = null;
 let _cacheTimestamp = 0;
 const CACHE_TTL = 60_000;
 
+function clampAltura(n: any, fallback: number): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.max(30, Math.min(140, Math.round(v)));
+}
+function mergeSlot(raw: any, defaults: LogoSlotConfig): LogoSlotConfig {
+  return {
+    altura: clampAltura(raw?.altura, defaults.altura),
+    redonda: raw?.redonda === true,
+    ativo: raw?.ativo !== undefined ? raw.ativo === true : defaults.ativo,
+  };
+}
+
 function mergeConfig(raw: any): DocumentConfig {
-  if (!raw) return { ...DEFAULT_CONFIG };
+  if (!raw) return { ...DEFAULT_CONFIG, logosConfig: { ...DEFAULT_CONFIG.logosConfig } };
+  const lc = raw.logosConfig || {};
+  const centralLegado = raw.cabecalho?.mostrarLogoCentral ?? raw.mostrarLogoCentral ?? false;
   return {
     logoEsquerda: raw.cabecalho?.logoEsquerda || raw.cabecalho?.logoUrl || raw.logoEsquerda || '',
     logoCentral: raw.cabecalho?.logoCentral || raw.logoCentral || '',
     logoDireita: raw.cabecalho?.logoDireita || raw.logoDireita || '',
-    mostrarLogoCentral: raw.cabecalho?.mostrarLogoCentral ?? raw.mostrarLogoCentral ?? false,
+    mostrarLogoCentral: centralLegado,
+    logosConfig: {
+      esquerda: mergeSlot(lc.esquerda, DEFAULT_CONFIG.logosConfig.esquerda),
+      central: mergeSlot(lc.central, { ...DEFAULT_CONFIG.logosConfig.central, ativo: centralLegado }),
+      direita: mergeSlot(lc.direita, DEFAULT_CONFIG.logosConfig.direita),
+    },
     linha1: raw.cabecalho?.linha1 || raw.linha1 || DEFAULT_CONFIG.linha1,
     linha2: raw.cabecalho?.linha2 || raw.linha2 || DEFAULT_CONFIG.linha2,
     linha3: raw.cabecalho?.linha3 || raw.linha3 || '',
@@ -167,29 +206,33 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-header .logos-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
     width: 100%;
   }
+  .doc-header .logos-row.cols-1 { justify-content: center; }
+  .doc-header .logos-row.cols-2 { justify-content: space-between; }
+  .doc-header .logos-row.cols-3 { justify-content: space-between; }
   .doc-header .logo-slot {
-    flex: 1 1 0;
     display: flex;
     align-items: center;
   }
+  .doc-header .logos-row.cols-3 .logo-slot { flex: 1 1 0; }
+  .doc-header .logos-row.cols-2 .logo-slot { flex: 0 0 auto; }
+  .doc-header .logos-row.cols-1 .logo-slot { flex: 0 0 auto; }
   .doc-header .logo-slot.left   { justify-content: flex-start; }
   .doc-header .logo-slot.center { justify-content: center; }
   .doc-header .logo-slot.right  { justify-content: flex-end; }
   .doc-header .logo-slot img {
-    max-height: 70px;
-    max-width: 140px;
     object-fit: contain;
     image-rendering: -webkit-optimize-contrast;
   }
-  .doc-header .logo-slot.center img {
-    max-height: 72px;
-    max-width: 180px;
+  .doc-header .logo-slot img.round {
+    object-fit: cover;
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
   }
   .doc-header .header-text {
+
     text-align: center;
     margin-top: 10px;
     padding: 0 8px;
@@ -345,20 +388,33 @@ export const institutionalCSS = buildInstitutionalCSS();
 
 /** Header HTML — até 3 logos distribuídos (esquerda | central | direita) + bloco institucional */
 export function docHeader(title: string, config: DocumentConfig, extraRight?: string): string {
-  const hasLeft = !!(config.logoEsquerda || logoSmsFallback);
-  const hasRight = !!(config.logoDireita || logoCerFallback);
-  const hasCentral = !!(config.mostrarLogoCentral && config.logoCentral);
+  const slots = config.logosConfig;
+  const logoLeftUrl = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
+  const logoRightUrl = resolveLogoUrl(config.logoDireita, logoCerFallback);
+  const logoCenterUrl = config.logoCentral;
 
-  const logoLeft = resolveLogoUrl(config.logoEsquerda, logoSmsFallback);
-  const logoRight = resolveLogoUrl(config.logoDireita, logoCerFallback);
+  // Um slot só renderiza se estiver ativo E tiver imagem (URL ou fallback)
+  const showLeft = slots.esquerda.ativo && !!logoLeftUrl;
+  const showRight = slots.direita.ativo && !!logoRightUrl;
+  const showCenter = slots.central.ativo && !!logoCenterUrl;
 
-  const leftSlot = hasLeft
-    ? `<div class="logo-slot left"><img src="${logoLeft}" alt="Logo esquerda" /></div>` : '';
-  const centerSlot = hasCentral
-    ? `<div class="logo-slot center"><img src="${config.logoCentral}" alt="Logo central" /></div>`
-    : (hasLeft && hasRight ? '' : '<div class="logo-slot center"></div>');
-  const rightSlot = hasRight
-    ? `<div class="logo-slot right"><img src="${logoRight}" alt="Logo direita" /></div>` : '';
+  const renderImg = (url: string, alt: string, slot: LogoSlotConfig) => {
+    const h = slot.altura;
+    if (slot.redonda) {
+      return `<img class="round" src="${url}" alt="${alt}" style="height:${h}px;width:${h}px;" />`;
+    }
+    // limite de largura proporcional para não esticar (até 2,5× a altura)
+    return `<img src="${url}" alt="${alt}" style="height:${h}px;max-height:${h}px;max-width:${Math.round(h * 2.5)}px;" />`;
+  };
+
+  const parts: string[] = [];
+  if (showLeft) parts.push(`<div class="logo-slot left">${renderImg(logoLeftUrl, 'Logo esquerda', slots.esquerda)}</div>`);
+  if (showCenter) parts.push(`<div class="logo-slot center">${renderImg(logoCenterUrl, 'Logo central', slots.central)}</div>`);
+  if (showRight) parts.push(`<div class="logo-slot right">${renderImg(logoRightUrl, 'Logo direita', slots.direita)}</div>`);
+
+  const count = parts.length;
+  const rowClass = `logos-row cols-${count || 1}`;
+  const logosRow = count > 0 ? `<div class="${rowClass}">${parts.join('')}</div>` : '';
 
   const linha3 = config.linha3 ? `<div class="extra-line">${config.linha3}</div>` : '';
   const linha4 = config.linha4 ? `<div class="extra-line">${config.linha4}</div>` : '';
@@ -366,11 +422,7 @@ export function docHeader(title: string, config: DocumentConfig, extraRight?: st
 
   return `
     <div class="doc-header">
-      <div class="logos-row">
-        ${leftSlot}
-        ${centerSlot}
-        ${rightSlot}
-      </div>
+      ${logosRow}
       <div class="header-text">
         <h1>${config.linha1}</h1>
         ${config.linha2 ? `<div class="subtitle">${config.linha2}</div>` : ''}

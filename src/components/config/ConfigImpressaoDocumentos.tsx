@@ -13,10 +13,11 @@ import { Loader2, Upload, ImageIcon, Trash2, Eye, FileText } from 'lucide-react'
 import ModelosDocumentos from '@/components/ModelosDocumentos';
 import CarimboConfig from '@/components/CarimboConfig';
 import { toast } from 'sonner';
+import { Slider } from '@/components/ui/slider';
 import {
   invalidateDocumentConfigCache, loadDocumentConfig,
   docHeader, docFooter, buildInstitutionalCSS, docMeta,
-  DEFAULT_CONFIG, type DocumentConfig,
+  DEFAULT_CONFIG, type DocumentConfig, type LogoSlotConfig,
 } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
@@ -51,15 +52,21 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
     const cfg = (data?.configuracoes as any)?.[CONFIG_KEY];
     if (cfg) {
-      // Backward compat: cabecalho.* antigo
       const headerOld = cfg.cabecalho || {};
+      const centralLegado = cfg.mostrarLogoCentral ?? headerOld.mostrarLogoCentral ?? false;
+      const lc = cfg.logosConfig || {};
       setConfig({
         ...DEFAULT,
         ...cfg,
         logoEsquerda: cfg.logoEsquerda ?? headerOld.logoEsquerda ?? headerOld.logoUrl ?? '',
         logoCentral: cfg.logoCentral ?? headerOld.logoCentral ?? '',
         logoDireita: cfg.logoDireita ?? headerOld.logoDireita ?? '',
-        mostrarLogoCentral: cfg.mostrarLogoCentral ?? headerOld.mostrarLogoCentral ?? false,
+        mostrarLogoCentral: centralLegado,
+        logosConfig: {
+          esquerda: { ...DEFAULT.logosConfig.esquerda, ...(lc.esquerda || {}) },
+          central: { ...DEFAULT.logosConfig.central, ativo: centralLegado, ...(lc.central || {}) },
+          direita: { ...DEFAULT.logosConfig.direita, ...(lc.direita || {}) },
+        },
         linha1: cfg.linha1 ?? headerOld.linha1 ?? DEFAULT.linha1,
         linha2: cfg.linha2 ?? headerOld.linha2 ?? DEFAULT.linha2,
         linha3: cfg.linha3 ?? headerOld.linha3 ?? '',
@@ -127,7 +134,15 @@ const ConfigImpressaoDocumentos: React.FC = () => {
       const { data: urlData } = supabase.storage.from('document-logos').getPublicUrl(path);
       const url = urlData.publicUrl;
       const key = slot === 'esquerda' ? 'logoEsquerda' : slot === 'central' ? 'logoCentral' : 'logoDireita';
-      const updated = { ...config, [key]: url, ...(slot === 'central' ? { mostrarLogoCentral: true } : {}) } as ImpressaoConfig;
+      const updated = {
+        ...config,
+        [key]: url,
+        ...(slot === 'central' ? { mostrarLogoCentral: true } : {}),
+        logosConfig: {
+          ...config.logosConfig,
+          [slot]: { ...config.logosConfig[slot], ativo: true },
+        },
+      } as ImpressaoConfig;
       await save(updated);
       toast.success(`Logo ${slot} atualizada`);
     } catch (e: any) {
@@ -171,35 +186,87 @@ const ConfigImpressaoDocumentos: React.FC = () => {
   const previewLogoLeft = config.logoEsquerda || (logoSmsFallback as string);
   const previewLogoRight = config.logoDireita || (logoCerFallback as string);
 
+  const updateSlot = (slot: 'esquerda' | 'central' | 'direita', patch: Partial<LogoSlotConfig>) => {
+    const updated: ImpressaoConfig = {
+      ...config,
+      logosConfig: {
+        ...config.logosConfig,
+        [slot]: { ...config.logosConfig[slot], ...patch },
+      },
+      // mantém compat com mostrarLogoCentral antigo
+      ...(slot === 'central' && patch.ativo !== undefined ? { mostrarLogoCentral: patch.ativo } : {}),
+    };
+    save(updated);
+  };
+
   const LogoSlot = ({
     label, value, slot, inputRef,
-  }: { label: string; value: string; slot: 'esquerda' | 'central' | 'direita'; inputRef: React.RefObject<HTMLInputElement> }) => (
-    <div className="space-y-2">
-      <Label className="text-[13px] font-bold">{label}</Label>
-      <div className="border rounded-lg p-4 bg-muted/30 flex flex-col items-center gap-3 min-h-[160px] justify-center">
-        {value ? (
-          <img src={value} alt={`Logo ${slot}`} className="max-h-20 max-w-[160px] object-contain" />
-        ) : (
-          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
-            <ImageIcon className="w-6 h-6 text-muted-foreground" />
+  }: { label: string; value: string; slot: 'esquerda' | 'central' | 'direita'; inputRef: React.RefObject<HTMLInputElement> }) => {
+    const slotCfg = config.logosConfig[slot];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[13px] font-bold">{label}</Label>
+          <div className="flex items-center gap-1.5">
+            <Switch checked={slotCfg.ativo} onCheckedChange={v => updateSlot(slot, { ativo: v })} />
+            <span className="text-[11px] text-muted-foreground">{slotCfg.ativo ? 'Ativa' : 'Oculta'}</span>
           </div>
-        )}
-        <div className="flex flex-wrap gap-2 justify-center">
-          <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
-            onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0], slot); }} />
-          <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading === slot} className="gap-1.5">
-            {uploading === slot ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-            {value ? 'Substituir' : 'Upload'}
-          </Button>
-          {value && (
-            <Button variant="ghost" size="sm" onClick={() => removeLogo(slot)} className="text-destructive gap-1.5">
-              <Trash2 className="w-3 h-3" /> Remover
-            </Button>
+        </div>
+        <div className={`border rounded-lg p-4 bg-muted/30 flex flex-col items-center gap-3 min-h-[200px] justify-center ${!slotCfg.ativo ? 'opacity-50' : ''}`}>
+          {value ? (
+            <img
+              src={value}
+              alt={`Logo ${slot}`}
+              style={{
+                height: `${Math.min(slotCfg.altura, 80)}px`,
+                width: slotCfg.redonda ? `${Math.min(slotCfg.altura, 80)}px` : 'auto',
+                maxWidth: '160px',
+                objectFit: slotCfg.redonda ? 'cover' : 'contain',
+                borderRadius: slotCfg.redonda ? '50%' : 0,
+                aspectRatio: slotCfg.redonda ? '1 / 1' : 'auto',
+              }}
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
+              <ImageIcon className="w-6 h-6 text-muted-foreground" />
+            </div>
           )}
+          <div className="flex flex-wrap gap-2 justify-center">
+            <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+              onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0], slot); }} />
+            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading === slot} className="gap-1.5">
+              {uploading === slot ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+              {value ? 'Substituir' : 'Upload'}
+            </Button>
+            {value && (
+              <Button variant="ghost" size="sm" onClick={() => removeLogo(slot)} className="text-destructive gap-1.5">
+                <Trash2 className="w-3 h-3" /> Remover
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="space-y-2 px-1">
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px] text-muted-foreground">Tamanho</Label>
+            <span className="text-[11px] font-medium tabular-nums">{slotCfg.altura}px</span>
+          </div>
+          <Slider
+            min={30} max={140} step={2}
+            value={[slotCfg.altura]}
+            onValueChange={([v]) => setConfig(prev => ({
+              ...prev,
+              logosConfig: { ...prev.logosConfig, [slot]: { ...prev.logosConfig[slot], altura: v } },
+            }))}
+            onValueCommit={([v]) => updateSlot(slot, { altura: v })}
+          />
+          <div className="flex items-center gap-2 pt-1">
+            <Switch checked={slotCfg.redonda} onCheckedChange={v => updateSlot(slot, { redonda: v })} />
+            <Label className="text-[11px]">Logo redonda (recorte circular)</Label>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -220,7 +287,9 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h3 className="font-semibold font-display text-foreground">3 Logos do Cabeçalho Oficial</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Esquerda · Central · Direita. Distribuídas igualmente na linha superior; texto institucional centralizado abaixo. Imagens preservam proporção (object-fit: contain).</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cada logo tem ativação, tamanho independente (30–140px) e opção de recorte redondo. Quando há 1 logo, ela é centralizada; com 2 ou 3, são distribuídas igualmente. Este padrão é aplicado a todos os documentos do sistema (atestado, receituário, exames, prontuário, encaminhamento, relatórios, etc).
+                  </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handlePreview} className="gap-1.5">
                   <Eye className="w-4 h-4" /> Pré-visualizar A4
@@ -231,12 +300,9 @@ const ConfigImpressaoDocumentos: React.FC = () => {
                 <LogoSlot label="Logo Central" value={config.logoCentral} slot="central" inputRef={refCenter} />
                 <LogoSlot label="Logo Direita" value={config.logoDireita} slot="direita" inputRef={refRight} />
               </div>
-              <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-lg">
-                <Switch checked={config.mostrarLogoCentral} onCheckedChange={v => save({ ...config, mostrarLogoCentral: v })} />
-                <Label className="text-sm">Exibir logo central no cabeçalho</Label>
-              </div>
             </CardContent>
           </Card>
+
 
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-3">
@@ -263,27 +329,47 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               </div>
               <div className="bg-muted/30 rounded-lg p-3 overflow-x-auto">
                 <div className="mx-auto bg-white shadow-md border" style={{ width: '210mm', minHeight: '120mm', padding: `${config.margens.superior}mm ${config.margens.direita}mm ${config.margens.inferior}mm ${config.margens.esquerda}mm`, fontFamily: config.tipografia.fonte, fontSize: `${config.tipografia.tamanhoBase}pt`, lineHeight: config.tipografia.espacamento, color: '#1a1a1a' }}>
-                  <div style={{ paddingBottom: 12, borderBottom: config.mostrarLinhaDivisoria ? '2px solid #0369a1' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, width: '100%' }}>
-                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-start' }}>
-                        {previewLogoLeft && <img src={previewLogoLeft} alt="esq" style={{ maxHeight: 70, maxWidth: 140, objectFit: 'contain' }} />}
+                  {(() => {
+                    const slots = config.logosConfig;
+                    const items: { key: string; url: string; cfg: LogoSlotConfig; align: 'flex-start' | 'center' | 'flex-end' }[] = [];
+                    if (slots.esquerda.ativo && previewLogoLeft)
+                      items.push({ key: 'L', url: previewLogoLeft, cfg: slots.esquerda, align: 'flex-start' });
+                    if (slots.central.ativo && config.logoCentral)
+                      items.push({ key: 'C', url: config.logoCentral, cfg: slots.central, align: 'center' });
+                    if (slots.direita.ativo && previewLogoRight)
+                      items.push({ key: 'R', url: previewLogoRight, cfg: slots.direita, align: 'flex-end' });
+                    const justify = items.length === 1 ? 'center' : 'space-between';
+                    return (
+                      <div style={{ paddingBottom: 12, borderBottom: config.mostrarLinhaDivisoria ? '2px solid #0369a1' : 'none' }}>
+                        {items.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: justify, gap: 16, width: '100%' }}>
+                            {items.map(it => (
+                              <div key={it.key} style={{ flex: items.length === 3 ? '1 1 0' : '0 0 auto', display: 'flex', justifyContent: it.align }}>
+                                <img
+                                  src={it.url}
+                                  alt={it.key}
+                                  style={{
+                                    height: `${it.cfg.altura}px`,
+                                    width: it.cfg.redonda ? `${it.cfg.altura}px` : 'auto',
+                                    maxWidth: it.cfg.redonda ? `${it.cfg.altura}px` : `${Math.round(it.cfg.altura * 2.5)}px`,
+                                    objectFit: it.cfg.redonda ? 'cover' : 'contain',
+                                    borderRadius: it.cfg.redonda ? '50%' : 0,
+                                    aspectRatio: it.cfg.redonda ? '1 / 1' : 'auto',
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ textAlign: 'center', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                          <div style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0c4a6e', letterSpacing: 0.5, fontSize: `${Math.max(config.tipografia.tamanhoBase + 1, 12)}pt`, lineHeight: 1.25 }}>{config.linha1}</div>
+                          {config.linha2 && <div style={{ color: '#334155', fontSize: `${config.tipografia.tamanhoBase}pt` }}>{config.linha2}</div>}
+                          {config.linha3 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha3}</div>}
+                          {config.linha4 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha4}</div>}
+                        </div>
                       </div>
-                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'center' }}>
-                        {config.mostrarLogoCentral && config.logoCentral
-                          ? <img src={config.logoCentral} alt="central" style={{ maxHeight: 72, maxWidth: 180, objectFit: 'contain' }} />
-                          : null}
-                      </div>
-                      <div style={{ flex: '1 1 0', display: 'flex', justifyContent: 'flex-end' }}>
-                        {previewLogoRight && <img src={previewLogoRight} alt="dir" style={{ maxHeight: 70, maxWidth: 140, objectFit: 'contain' }} />}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'center', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                      <div style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0c4a6e', letterSpacing: 0.5, fontSize: `${Math.max(config.tipografia.tamanhoBase + 1, 12)}pt`, lineHeight: 1.25 }}>{config.linha1}</div>
-                      {config.linha2 && <div style={{ color: '#334155', fontSize: `${config.tipografia.tamanhoBase}pt` }}>{config.linha2}</div>}
-                      {config.linha3 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha3}</div>}
-                      {config.linha4 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha4}</div>}
-                    </div>
-                  </div>
+                    );
+                  })()}
                   <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: `${config.tipografia.tamanhoTitulo}pt`, margin: '10px 0 14px', padding: '6px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
                     TÍTULO DO DOCUMENTO
                   </div>
