@@ -11,6 +11,7 @@ import { useData } from "@/contexts/DataContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DebouncedInput } from "@/components/ui/debounced-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DebouncedTextarea } from "@/components/ui/debounced-textarea";
@@ -3396,7 +3397,7 @@ const ProntuarioPage: React.FC = () => {
 
             <div>
               <Label>Outro Procedimento</Label>
-              <Input value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
+              <DebouncedInput value={form.outro_procedimento} onChange={(e) => setForm((p) => ({ ...p, outro_procedimento: e.target.value }))} placeholder="Descreva outro procedimento..." />
             </div>
 
             <NovoProcedimentoModal
@@ -3502,7 +3503,7 @@ const ProntuarioPage: React.FC = () => {
             {editId && (
               <div>
                 <Label className="text-muted-foreground">Motivo da Alteração <span className="text-xs">(opcional)</span></Label>
-                <Textarea
+                <DebouncedTextarea
                   rows={2}
                   value={form.motivo_alteracao}
                   onChange={(e) => setForm((p) => ({ ...p, motivo_alteracao: e.target.value }))}
