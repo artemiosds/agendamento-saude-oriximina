@@ -3161,8 +3161,8 @@ const ProntuarioPage: React.FC = () => {
 
                 {filteredProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
-                    {filteredProcedimentos.filter(p => !selectedProcIds.includes(p.id)).map((proc) => {
-                      const checked = selectedProcIds.includes(proc.id);
+                    {listedProcedimentos.map((proc) => {
+                      const checked = selectedProcIdSet.has(proc.id);
                       const cids = cidsByProc[proc.id] || [];
                       const selCids = selectedCidsByProc[proc.id] || [];
                       const isCustom = proc.origem === 'PERSONALIZADO';
@@ -3300,7 +3300,7 @@ const ProntuarioPage: React.FC = () => {
                                               : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                           }));
                                           // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
-                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                                if (!isSel && !selectedProcIdSet.has(proc.id)) {
                                                 setSelectedProcIds((prev) => [...prev, proc.id]);
                                                 setProcDetails(prev => ({
                                                   ...prev,
