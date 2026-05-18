@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
-import SystemStatusBanner from '@/components/SystemStatusBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
 type MenuItem = {
@@ -317,7 +316,6 @@ const PainelLayout: React.FC = () => {
           </span>
         </header>
 
-        <SystemStatusBanner />
         <WhatsappPausedBanner />
 
         <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto safe-bottom">

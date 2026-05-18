@@ -3,10 +3,6 @@ import App from "./App.tsx";
 import "./index.css";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { runPhoneNormalizationMigration } from "@/lib/phoneNormalizationMigration";
-import { bootstrapLiteMode } from "@/hooks/useLiteMode";
-
-// Apply lite-mode class on <html> BEFORE React mounts (no visual flash).
-bootstrapLiteMode();
 
 // Run one-time phone normalization on startup (idempotent)
 runPhoneNormalizationMigration();

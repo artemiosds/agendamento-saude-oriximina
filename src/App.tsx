@@ -94,26 +94,19 @@ const NotFound                    = lazyRetry(() => import("./pages/NotFound"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // PERF: 5min default staleTime — covers most semi-static lists
-      // (pacientes, funcionários, configs). Volatile queries (agenda,
-      // fila) override via { staleTime: 30_000 } at the call site, and
-      // static catalogs (CID, SIGTAP, medicamentos) override with 60min.
-      // Mutations explicitly invalidate via useInvalidation, so
-      // freshness is preserved regardless of staleTime.
-      staleTime: 1000 * 60 * 5,
-      gcTime: 1000 * 60 * 15,
+      // PERF: 2min staleTime — many lists (pacientes, funcionários, configs) are stable.
+      // Mutations explicitly invalidate via useInvalidation, so freshness is preserved.
+      staleTime: 1000 * 60 * 2,
+      gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,
+      // After network drop, refetch when reconnecting to avoid stale data
       refetchOnReconnect: true,
-      // 1 retry with backoff — kind to flaky connections.
       retry: 1,
-      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
-      // Keep previous data visible while refetching → no loading flicker.
+      // Keep previous data visible while refetching to avoid loading flicker on mobile
       placeholderData: (previousData: unknown) => previousData,
-      networkMode: "offlineFirst",
     },
     mutations: {
       retry: 0,
-      networkMode: "online",
     },
   },
 });
