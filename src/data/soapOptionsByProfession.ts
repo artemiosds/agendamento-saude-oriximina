@@ -1,6 +1,6 @@
 // SOAP dropdown options per profession
-// Professions with dropdowns: Fisioterapeuta, Enfermeiro, Odontólogo, Psicólogo, Fonoaudiólogo
-// Médico uses free text only
+// Todas as profissões da saúde têm chips de seleção rápida.
+// Médico mantém os chips como sugestões livres (campos não obrigatórios).
 
 export interface SoapFieldOptions {
   subjetivo: string[];
