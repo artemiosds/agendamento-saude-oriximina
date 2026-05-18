@@ -186,35 +186,87 @@ const ConfigImpressaoDocumentos: React.FC = () => {
   const previewLogoLeft = config.logoEsquerda || (logoSmsFallback as string);
   const previewLogoRight = config.logoDireita || (logoCerFallback as string);
 
+  const updateSlot = (slot: 'esquerda' | 'central' | 'direita', patch: Partial<LogoSlotConfig>) => {
+    const updated: ImpressaoConfig = {
+      ...config,
+      logosConfig: {
+        ...config.logosConfig,
+        [slot]: { ...config.logosConfig[slot], ...patch },
+      },
+      // mantém compat com mostrarLogoCentral antigo
+      ...(slot === 'central' && patch.ativo !== undefined ? { mostrarLogoCentral: patch.ativo } : {}),
+    };
+    save(updated);
+  };
+
   const LogoSlot = ({
     label, value, slot, inputRef,
-  }: { label: string; value: string; slot: 'esquerda' | 'central' | 'direita'; inputRef: React.RefObject<HTMLInputElement> }) => (
-    <div className="space-y-2">
-      <Label className="text-[13px] font-bold">{label}</Label>
-      <div className="border rounded-lg p-4 bg-muted/30 flex flex-col items-center gap-3 min-h-[160px] justify-center">
-        {value ? (
-          <img src={value} alt={`Logo ${slot}`} className="max-h-20 max-w-[160px] object-contain" />
-        ) : (
-          <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
-            <ImageIcon className="w-6 h-6 text-muted-foreground" />
+  }: { label: string; value: string; slot: 'esquerda' | 'central' | 'direita'; inputRef: React.RefObject<HTMLInputElement> }) => {
+    const slotCfg = config.logosConfig[slot];
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-[13px] font-bold">{label}</Label>
+          <div className="flex items-center gap-1.5">
+            <Switch checked={slotCfg.ativo} onCheckedChange={v => updateSlot(slot, { ativo: v })} />
+            <span className="text-[11px] text-muted-foreground">{slotCfg.ativo ? 'Ativa' : 'Oculta'}</span>
           </div>
-        )}
-        <div className="flex flex-wrap gap-2 justify-center">
-          <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
-            onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0], slot); }} />
-          <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading === slot} className="gap-1.5">
-            {uploading === slot ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-            {value ? 'Substituir' : 'Upload'}
-          </Button>
-          {value && (
-            <Button variant="ghost" size="sm" onClick={() => removeLogo(slot)} className="text-destructive gap-1.5">
-              <Trash2 className="w-3 h-3" /> Remover
-            </Button>
+        </div>
+        <div className={`border rounded-lg p-4 bg-muted/30 flex flex-col items-center gap-3 min-h-[200px] justify-center ${!slotCfg.ativo ? 'opacity-50' : ''}`}>
+          {value ? (
+            <img
+              src={value}
+              alt={`Logo ${slot}`}
+              style={{
+                height: `${Math.min(slotCfg.altura, 80)}px`,
+                width: slotCfg.redonda ? `${Math.min(slotCfg.altura, 80)}px` : 'auto',
+                maxWidth: '160px',
+                objectFit: slotCfg.redonda ? 'cover' : 'contain',
+                borderRadius: slotCfg.redonda ? '50%' : 0,
+                aspectRatio: slotCfg.redonda ? '1 / 1' : 'auto',
+              }}
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center">
+              <ImageIcon className="w-6 h-6 text-muted-foreground" />
+            </div>
           )}
+          <div className="flex flex-wrap gap-2 justify-center">
+            <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+              onChange={e => { if (e.target.files?.[0]) uploadLogo(e.target.files[0], slot); }} />
+            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading === slot} className="gap-1.5">
+              {uploading === slot ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+              {value ? 'Substituir' : 'Upload'}
+            </Button>
+            {value && (
+              <Button variant="ghost" size="sm" onClick={() => removeLogo(slot)} className="text-destructive gap-1.5">
+                <Trash2 className="w-3 h-3" /> Remover
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="space-y-2 px-1">
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px] text-muted-foreground">Tamanho</Label>
+            <span className="text-[11px] font-medium tabular-nums">{slotCfg.altura}px</span>
+          </div>
+          <Slider
+            min={30} max={140} step={2}
+            value={[slotCfg.altura]}
+            onValueChange={([v]) => setConfig(prev => ({
+              ...prev,
+              logosConfig: { ...prev.logosConfig, [slot]: { ...prev.logosConfig[slot], altura: v } },
+            }))}
+            onValueCommit={([v]) => updateSlot(slot, { altura: v })}
+          />
+          <div className="flex items-center gap-2 pt-1">
+            <Switch checked={slotCfg.redonda} onCheckedChange={v => updateSlot(slot, { redonda: v })} />
+            <Label className="text-[11px]">Logo redonda (recorte circular)</Label>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
