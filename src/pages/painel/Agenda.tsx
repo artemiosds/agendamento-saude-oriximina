@@ -1633,6 +1633,11 @@ const Agenda: React.FC = () => {
       user,
     );
 
+    // Atualiza status FALTOSO/BLOQUEADO do paciente
+    try {
+      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: ag.pacienteId });
+    } catch (err) { console.error('atualizar_status_falta:', err); }
+
     await Promise.all([refreshAgendamentos(), refreshFila()]);
     toast.success(`Falta registrada para ${ag.pacienteNome}.`);
     setFaltaTarget(null);
