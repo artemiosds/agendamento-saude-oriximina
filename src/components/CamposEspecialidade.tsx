@@ -315,8 +315,8 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
       <div className="space-y-3">
         {(isFieldVisible('peso_kg') || isFieldVisible('altura_m')) && (
           <div className="grid grid-cols-3 gap-2">
-            <div><Label>Peso (kg)</Label><Input type="number" step="0.1" value={v("peso_kg")} onChange={e => set("peso_kg", e.target.value)} className="h-8" /></div>
-            <div><Label>Altura (m)</Label><Input type="number" step="0.01" value={v("altura_m")} onChange={e => set("altura_m", e.target.value)} className="h-8" placeholder="1.70" /></div>
+            <div><Label>Peso (kg)</Label><DebouncedInput type="number" step="0.1" value={v("peso_kg")} onChange={e => set("peso_kg", e.target.value)} className="h-8" /></div>
+            <div><Label>Altura (m)</Label><DebouncedInput type="number" step="0.01" value={v("altura_m")} onChange={e => set("altura_m", e.target.value)} className="h-8" placeholder="1.70" /></div>
             <div>
               <Label>IMC</Label>
               <div className="flex items-center gap-2 h-8">
