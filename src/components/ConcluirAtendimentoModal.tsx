@@ -82,8 +82,6 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
 
   const submit = async () => {
     if (!ag) return;
-    if (!proc) { toast.error("Selecione o procedimento SIGTAP."); return; }
-    if (!cid) { toast.error("Selecione o CID-10."); return; }
     if (!horaTermino) { toast.error("Informe o horário de término."); return; }
     setBusy(true);
     try {
