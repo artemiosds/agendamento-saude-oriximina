@@ -2856,13 +2856,14 @@ const Agenda: React.FC = () => {
                               </Tooltip>
                             )}
                             {canStart && (
-                              <Button
+                              <ActionButton
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"
                                 onClick={() => handleIniciarAtendimento(ag)}
+                                loadingText="Iniciando..."
                               >
                                 <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
-                              </Button>
+                              </ActionButton>
                             )}
                             {isEmAtendimento && (
                               <Button
