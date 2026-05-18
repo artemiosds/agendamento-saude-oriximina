@@ -456,7 +456,8 @@ const ProfissionaisExternos: React.FC = () => {
     }
   };
 
-  const profissionaisInternos = funcionarios.filter((f: any) => f.role === "profissional" && f.ativo);
+  // Inclui profissionais com disponibilidade na(s) unidade(s) visível(is), mesmo que estejam vinculados a outra unidade
+  const profissionaisInternos = profissionaisVisiveis.filter((f: any) => f.ativo);
 
   const filteredExternos = externos.filter(e => {
     if (!searchTerm.trim()) return true;
