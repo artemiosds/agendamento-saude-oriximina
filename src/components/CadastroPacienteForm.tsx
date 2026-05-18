@@ -465,7 +465,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
           <TabsContent value="endereco" className="space-y-4 mt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label>CEP</Label>
+                <Label>CEP *</Label>
                 <div className="relative">
                   <Input
                     value={cd.cep || ""}
@@ -478,6 +478,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
                     <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   )}
                 </div>
+                {errors.cep && <p className="text-xs text-destructive mt-1">{errors.cep}</p>}
               </div>
 
               <div>
@@ -504,22 +505,24 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div className="md:col-span-2">
-                <Label>Logradouro</Label>
+                <Label>Logradouro *</Label>
                 <Input
                   value={cd.logradouro || ""}
                   onChange={(e) => setCustom("logradouro", sanitizeUpper(e.target.value))}
                   placeholder="NOME DA RUA / AVENIDA"
                 />
+                {errors.logradouro && <p className="text-xs text-destructive mt-1">{errors.logradouro}</p>}
               </div>
 
               <div>
-                <Label>Número</Label>
+                <Label>Número *</Label>
                 <Input
                   value={cd.numero || ""}
                   onChange={(e) => setCustom("numero", e.target.value.replace(/[^\dA-Za-z\/\-]/g, "").toUpperCase())}
                   placeholder="Nº"
                   inputMode="numeric"
                 />
+                {errors.numero && <p className="text-xs text-destructive mt-1">{errors.numero}</p>}
               </div>
 
               <div>
@@ -532,17 +535,18 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
 
               <div>
-                <Label>Bairro</Label>
+                <Label>Bairro *</Label>
                 <Input
                   value={cd.bairro || ""}
                   onChange={(e) => setCustom("bairro", sanitizeUpper(e.target.value))}
                   placeholder="BAIRRO"
                 />
+                {errors.bairro && <p className="text-xs text-destructive mt-1">{errors.bairro}</p>}
               </div>
 
               {!H("municipio") && (
                 <div>
-                  <Label>{L("municipio", "Município")}</Label>
+                  <Label>{L("municipio", "Município")} *</Label>
                   <Select value={form.municipio || ""} onValueChange={(v) => set("municipio", v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                     <SelectContent>
@@ -554,13 +558,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               )}
 
               <div>
-                <Label>UF</Label>
+                <Label>UF *</Label>
                 <Select value={cd.uf || ""} onValueChange={(v) => setCustom("uf", v)}>
                   <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
                   <SelectContent>
                     {UFS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {errors.uf && <p className="text-xs text-destructive mt-1">{errors.uf}</p>}
               </div>
 
               {/* Mantém endereco legacy (oculto, sincroniza para retrocompat) */}
