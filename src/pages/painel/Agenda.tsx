@@ -3426,13 +3426,14 @@ const Agenda: React.FC = () => {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => { setCancelTarget(null); setCancelMotivo(''); }}>Voltar</Button>
-                <Button
+                <ActionButton
                   className="flex-1 bg-destructive text-destructive-foreground"
-                  disabled={!cancelMotivo || cancelLoading}
+                  disabled={!cancelMotivo}
                   onClick={handleCancelarAgendamento}
+                  loadingText="Cancelando..."
                 >
-                  {cancelLoading ? "Cancelando..." : "Confirmar Cancelamento"}
-                </Button>
+                  Confirmar Cancelamento
+                </ActionButton>
               </div>
             </div>
           )}
