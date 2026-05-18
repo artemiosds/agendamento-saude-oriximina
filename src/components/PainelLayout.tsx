@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import logoSms from '@/assets/logo-sms.jpeg';
 import WhatsappPausedBanner from '@/components/WhatsappPausedBanner';
+import SystemStatusBanner from '@/components/SystemStatusBanner';
 
 // Mapeamento: cada item do menu exige um módulo + ação do PermissionsContext
 type MenuItem = {
