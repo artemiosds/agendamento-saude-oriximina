@@ -52,15 +52,21 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     const { data } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
     const cfg = (data?.configuracoes as any)?.[CONFIG_KEY];
     if (cfg) {
-      // Backward compat: cabecalho.* antigo
       const headerOld = cfg.cabecalho || {};
+      const centralLegado = cfg.mostrarLogoCentral ?? headerOld.mostrarLogoCentral ?? false;
+      const lc = cfg.logosConfig || {};
       setConfig({
         ...DEFAULT,
         ...cfg,
         logoEsquerda: cfg.logoEsquerda ?? headerOld.logoEsquerda ?? headerOld.logoUrl ?? '',
         logoCentral: cfg.logoCentral ?? headerOld.logoCentral ?? '',
         logoDireita: cfg.logoDireita ?? headerOld.logoDireita ?? '',
-        mostrarLogoCentral: cfg.mostrarLogoCentral ?? headerOld.mostrarLogoCentral ?? false,
+        mostrarLogoCentral: centralLegado,
+        logosConfig: {
+          esquerda: { ...DEFAULT.logosConfig.esquerda, ...(lc.esquerda || {}) },
+          central: { ...DEFAULT.logosConfig.central, ativo: centralLegado, ...(lc.central || {}) },
+          direita: { ...DEFAULT.logosConfig.direita, ...(lc.direita || {}) },
+        },
         linha1: cfg.linha1 ?? headerOld.linha1 ?? DEFAULT.linha1,
         linha2: cfg.linha2 ?? headerOld.linha2 ?? DEFAULT.linha2,
         linha3: cfg.linha3 ?? headerOld.linha3 ?? '',
