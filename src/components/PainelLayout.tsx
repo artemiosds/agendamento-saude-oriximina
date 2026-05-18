@@ -47,6 +47,7 @@ const menuGroups: MenuGroup[] = [
       { to: '/painel/agenda',       label: 'Agenda',          icon: Calendar,      modulo: 'agenda' },
       { to: '/painel/fila',         label: 'Fila de Espera',  icon: ListOrdered,   modulo: 'fila' },
       { to: '/painel/pacientes',    label: 'Pacientes',       icon: Users,         modulo: 'pacientes' },
+      { to: '/painel/faltosos',     label: 'Faltosos',        icon: Users,         modulo: 'pacientes' },
       { to: '/painel/atendimentos', label: 'Atendimentos',    icon: ClipboardList, modulo: 'atendimento' },
     ],
   },
