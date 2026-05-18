@@ -134,7 +134,15 @@ const ConfigImpressaoDocumentos: React.FC = () => {
       const { data: urlData } = supabase.storage.from('document-logos').getPublicUrl(path);
       const url = urlData.publicUrl;
       const key = slot === 'esquerda' ? 'logoEsquerda' : slot === 'central' ? 'logoCentral' : 'logoDireita';
-      const updated = { ...config, [key]: url, ...(slot === 'central' ? { mostrarLogoCentral: true } : {}) } as ImpressaoConfig;
+      const updated = {
+        ...config,
+        [key]: url,
+        ...(slot === 'central' ? { mostrarLogoCentral: true } : {}),
+        logosConfig: {
+          ...config.logosConfig,
+          [slot]: { ...config.logosConfig[slot], ativo: true },
+        },
+      } as ImpressaoConfig;
       await save(updated);
       toast.success(`Logo ${slot} atualizada`);
     } catch (e: any) {
