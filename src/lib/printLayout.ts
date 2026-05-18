@@ -506,8 +506,30 @@ export async function openPrintDocument(title: string, body: string, meta?: Reco
 /** Reliable print using a hidden iframe (no popup blocker issues). Exported for reuse. */
 export function printViaIframe(html: string): void {
   try {
+    // Remove qualquer iframe de impressão anterior que tenha ficado órfão
+    document.querySelectorAll('iframe[data-print-iframe="1"]').forEach(el => {
+      try { el.parentNode?.removeChild(el); } catch {}
+    });
+
+    // Proteção contra estouro de memória: documentos absurdamente grandes
+    // travam a aba (erro "Out of Memory"). Limite ~8MB de HTML.
+    const MAX_BYTES = 8 * 1024 * 1024;
+    if (html.length > MAX_BYTES) {
+      console.warn('[printViaIframe] documento muito grande:', html.length, 'bytes');
+      try {
+        // Tenta toast informativo se o sonner estiver disponível
+        import('sonner').then(({ toast }) => {
+          toast.error('Documento muito grande para imprimir', {
+            description: 'Reduza o período ou exporte em Excel/CSV.',
+          });
+        }).catch(() => {});
+      } catch {}
+      return;
+    }
+
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
+    iframe.setAttribute('data-print-iframe', '1');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';
     iframe.style.bottom = '0';
@@ -515,54 +537,59 @@ export function printViaIframe(html: string): void {
     iframe.style.height = '0';
     iframe.style.border = '0';
     iframe.style.opacity = '0';
+    // srcdoc é mais leve que document.write e libera memória ao remover o iframe
+    iframe.srcdoc = html;
     document.body.appendChild(iframe);
 
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(iframe);
-      return;
-    }
-    doc.open();
-    doc.write(html);
-    doc.close();
-
+    let printed = false;
     const cleanup = () => {
+      try {
+        // Limpa src para liberar memória da subjanela antes de remover
+        iframe.srcdoc = '';
+        iframe.src = 'about:blank';
+      } catch {}
       try { document.body.removeChild(iframe); } catch {}
     };
 
-    // Wait for images/fonts to load before printing
     const triggerPrint = () => {
+      if (printed) return;
+      printed = true;
       try {
         const win = iframe.contentWindow;
         if (!win) { cleanup(); return; }
         win.focus();
         win.print();
-        // Cleanup after print dialog closes (afterprint may not fire on all browsers)
-        const afterprint = () => { cleanup(); win.removeEventListener('afterprint', afterprint); };
-        win.addEventListener('afterprint', afterprint);
-        setTimeout(cleanup, 60_000);
+        const afterprint = () => { cleanup(); try { win.removeEventListener('afterprint', afterprint); } catch {} };
+        try { win.addEventListener('afterprint', afterprint); } catch {}
+        // Fallback de limpeza (algumas plataformas não disparam afterprint)
+        setTimeout(cleanup, 30_000);
       } catch {
         cleanup();
       }
     };
 
-    const win = iframe.contentWindow;
-    const imgs = Array.from(doc.images || []);
-    if (imgs.length === 0) {
-      setTimeout(triggerPrint, 300);
-      return;
-    }
-    let pending = imgs.length;
-    const done = () => { if (--pending <= 0) setTimeout(triggerPrint, 150); };
-    imgs.forEach(img => {
-      if ((img as HTMLImageElement).complete) { done(); }
-      else {
-        img.addEventListener('load', done, { once: true });
-        img.addEventListener('error', done, { once: true });
+    iframe.addEventListener('load', () => {
+      const doc = iframe.contentDocument;
+      const imgs = doc ? Array.from(doc.images || []) : [];
+      if (imgs.length === 0) {
+        setTimeout(triggerPrint, 200);
+        return;
       }
-    });
-    // Safety fallback if some image hangs
-    setTimeout(triggerPrint, 4000);
+      let pending = imgs.length;
+      const done = () => { if (--pending <= 0) setTimeout(triggerPrint, 120); };
+      imgs.forEach(img => {
+        if ((img as HTMLImageElement).complete) { done(); }
+        else {
+          img.addEventListener('load', done, { once: true });
+          img.addEventListener('error', done, { once: true });
+        }
+      });
+      // Safety fallback
+      setTimeout(triggerPrint, 4000);
+    }, { once: true });
+
+    // Safety global
+    setTimeout(triggerPrint, 6000);
   } catch (err) {
     console.error('[printViaIframe] erro:', err);
   }
