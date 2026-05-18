@@ -1739,20 +1739,20 @@ ${dataRows}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    const now = new Date().toLocaleString('pt-BR');
-                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
-                    const prodRows = porProfissional.map(p => {
-                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
-                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
-                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
-                    }).join('');
-                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) return;
-                    const logoUrl = logoSmsFallback;
-                    const logoUrlRight = logoCerFallback;
-                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
+                  <ActionButton variant="ghost" size="sm" loadingText="Preparando..." onClick={() => {
+                    if (porProfissional.length === 0) { toast.warning('Não há dados para exportar'); return; }
+                    try {
+                      const now = new Date().toLocaleString('pt-BR');
+                      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+                      const prodRows = porProfissional.map(p => {
+                        const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+                        const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
+                        return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
+                      }).join('');
+                      const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
+                      const logoUrl = logoSmsFallback;
+                      const logoUrlRight = logoCerFallback;
+                      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
 <style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
 .header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
 .header img{max-height:48px;max-width:90px;object-fit:contain;}
@@ -1765,10 +1765,14 @@ th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
 <table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
-</body></html>`);
-                    printWindow.document.close();
-                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
-                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
+</body></html>`;
+                      printViaIframe(html);
+                      toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
+                    } catch (err) {
+                      console.error(err);
+                      toast.error('Não foi possível iniciar a impressão');
+                    }
+                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</ActionButton>
                 </div>
               </div>
 
