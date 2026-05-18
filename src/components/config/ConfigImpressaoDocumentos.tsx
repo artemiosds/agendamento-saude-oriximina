@@ -287,7 +287,9 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <h3 className="font-semibold font-display text-foreground">3 Logos do Cabeçalho Oficial</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Esquerda · Central · Direita. Distribuídas igualmente na linha superior; texto institucional centralizado abaixo. Imagens preservam proporção (object-fit: contain).</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Cada logo tem ativação, tamanho independente (30–140px) e opção de recorte redondo. Quando há 1 logo, ela é centralizada; com 2 ou 3, são distribuídas igualmente. Este padrão é aplicado a todos os documentos do sistema (atestado, receituário, exames, prontuário, encaminhamento, relatórios, etc).
+                  </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handlePreview} className="gap-1.5">
                   <Eye className="w-4 h-4" /> Pré-visualizar A4
@@ -298,12 +300,9 @@ const ConfigImpressaoDocumentos: React.FC = () => {
                 <LogoSlot label="Logo Central" value={config.logoCentral} slot="central" inputRef={refCenter} />
                 <LogoSlot label="Logo Direita" value={config.logoDireita} slot="direita" inputRef={refRight} />
               </div>
-              <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-lg">
-                <Switch checked={config.mostrarLogoCentral} onCheckedChange={v => save({ ...config, mostrarLogoCentral: v })} />
-                <Label className="text-sm">Exibir logo central no cabeçalho</Label>
-              </div>
             </CardContent>
           </Card>
+
 
           <Card className="shadow-card border-0">
             <CardContent className="p-5 space-y-3">
