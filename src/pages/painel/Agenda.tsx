@@ -873,6 +873,16 @@ const Agenda: React.FC = () => {
       } as typeof pac;
     }
 
+    // Bloqueio por excesso de faltas
+    try {
+      const { data: pacStatus } = await (supabase as any)
+        .from('pacientes').select('status_falta, total_faltas').eq('id', newAg.pacienteId).maybeSingle();
+      if (pacStatus?.status_falta === 'BLOQUEADO') {
+        toast.error(`Paciente bloqueado por excesso de faltas (${pacStatus.total_faltas}). Está na lista de espera.`);
+        return;
+      }
+    } catch {}
+
     if (!pac || !prof || !newAg.hora) return;
     if (selectedDate < todayLocalStr()) {
       if (!isMaster) {
