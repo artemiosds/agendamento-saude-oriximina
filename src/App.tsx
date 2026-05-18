@@ -85,6 +85,7 @@ const MonitoramentoSistema        = lazyRetry(() => import("./pages/painel/Monit
 const MeuProntuario               = lazyRetry(() => import("./pages/painel/MeuProntuario"));
 const BpaProducao                 = lazyRetry(() => import("./pages/painel/BpaProducao"));
 const AtualizacaoCadastral         = lazyRetry(() => import("./pages/painel/AtualizacaoCadastral"));
+const Faltosos                    = lazyRetry(() => import("./pages/painel/Faltosos"));
 
 const LoginExterno                = lazyRetry(() => import("./pages/LoginExterno"));
 const AgendamentoExterno          = lazyRetry(() => import("./pages/AgendamentoExterno"));
@@ -229,6 +230,7 @@ const App = () => (
                     <Route path="encaminhamentos" element={<ModuleRoute modulo="encaminhamento"><Encaminhamentos /></ModuleRoute>} />
                     <Route path="meu-prontuario" element={<ModuleRoute modulo="prontuario"><MeuProntuario /></ModuleRoute>} />
                     <Route path="bpa-producao" element={<ModuleRoute modulo="relatorios"><BpaProducao /></ModuleRoute>} />
+                    <Route path="faltosos" element={<ModuleRoute modulo="pacientes"><Faltosos /></ModuleRoute>} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />

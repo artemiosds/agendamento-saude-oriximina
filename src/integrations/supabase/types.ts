@@ -1349,6 +1349,7 @@ export type Database = {
           endereco: string
           equipamentos: string[]
           especialidade_destino: string
+          faltas_consecutivas: number
           id: string
           is_autista: boolean
           is_gestante: boolean
@@ -1372,12 +1373,14 @@ export type Database = {
           raca_cor: string | null
           sexo: string | null
           situacao_rua: boolean | null
+          status_falta: string
           telefone: string
           telefone_secundario: string | null
           tipo_condicao: string
           tipo_dispositivo: string
           tipo_encaminhamento: string
           tipo_logradouro: string | null
+          total_faltas: number
           transporte: string
           turno_preferido: string
           ubs_origem: string
@@ -1408,6 +1411,7 @@ export type Database = {
           endereco?: string
           equipamentos?: string[]
           especialidade_destino?: string
+          faltas_consecutivas?: number
           id: string
           is_autista?: boolean
           is_gestante?: boolean
@@ -1431,12 +1435,14 @@ export type Database = {
           raca_cor?: string | null
           sexo?: string | null
           situacao_rua?: boolean | null
+          status_falta?: string
           telefone?: string
           telefone_secundario?: string | null
           tipo_condicao?: string
           tipo_dispositivo?: string
           tipo_encaminhamento?: string
           tipo_logradouro?: string | null
+          total_faltas?: number
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
@@ -1467,6 +1473,7 @@ export type Database = {
           endereco?: string
           equipamentos?: string[]
           especialidade_destino?: string
+          faltas_consecutivas?: number
           id?: string
           is_autista?: boolean
           is_gestante?: boolean
@@ -1490,12 +1497,14 @@ export type Database = {
           raca_cor?: string | null
           sexo?: string | null
           situacao_rua?: boolean | null
+          status_falta?: string
           telefone?: string
           telefone_secundario?: string | null
           tipo_condicao?: string
           tipo_dispositivo?: string
           tipo_encaminhamento?: string
           tipo_logradouro?: string | null
+          total_faltas?: number
           transporte?: string
           turno_preferido?: string
           ubs_origem?: string
@@ -3699,6 +3708,7 @@ export type Database = {
       }
     }
     Functions: {
+      atualizar_status_falta: { Args: { p_paciente_id: string }; Returns: Json }
       check_slot_availability: {
         Args: {
           p_data: string
@@ -3707,6 +3717,14 @@ export type Database = {
           p_unidade_id: string
         }
         Returns: Json
+      }
+      desbloquear_paciente_faltas: {
+        Args: {
+          p_paciente_id: string
+          p_user_id?: string
+          p_user_nome?: string
+        }
+        Returns: undefined
       }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }
@@ -3739,6 +3757,10 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      resetar_faltas_paciente: {
+        Args: { p_paciente_id: string }
+        Returns: undefined
+      }
       resolve_form_template: {
         Args: {
           p_form_slug: string

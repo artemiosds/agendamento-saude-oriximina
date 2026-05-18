@@ -1,55 +1,64 @@
-## Objetivo
+# Plano — Controle de Faltas (FALTOSO / BLOQUEADO)
 
-Refinar a ordenação visual da Agenda do Profissional em `src/pages/painel/Agenda.tsx` para seguir EXATAMENTE as regras pedidas, sem mexer em banco de dados, agendamento, cancelamento ou confirmação.
+Antes de implementar preciso alinhar pontos que conflitam com o esquema atual e com as regras do projeto:
 
-## Regras de ordenação (final)
+## Conflitos / decisões necessárias
 
-Dois blocos de turno: **Manhã** (< 12:00) e **Tarde** (≥ 12:00, considerando o início real configurado no dia, com fallback 13:30; noite entra junto da tarde).
+1. **Memória do projeto proíbe novas tabelas.** O prompt pede `config_fluxo_faltas`. Proposta: salvar limites em `system_config.configuracoes.config_fluxo_faltas` (JSON por unidade), preservando a regra de "não criar tabelas novas".
+2. **IDs do paciente são `text`, não `uuid`.** Vou usar `text` em todas as funções.
+3. **`fila_espera` não tem coluna `origem` nem `atendido_em`.** Tem `origem_cadastro` e `status`. Vou usar `origem_cadastro = 'BLOQUEIO_FALTA'` e marcar saída via `status = 'atendido'` + `hora_chamada`.
+4. **Não existe sistema interno de notificações in-app.** Vou registrar evento em `notification_logs` (já existente) com `canal='sistema'` e `evento='paciente_faltoso'/'paciente_bloqueado'`. WhatsApp usa a integração já existente.
+5. **`treatment_sessions.status` usa valores tipo `paciente_faltou`** (conforme função existente), não `falta`. Vou contar ambos: `status IN ('falta','paciente_faltou')`.
 
-Ordem dos blocos:
-- **Antes do início da tarde:** Manhã → Tarde
-- **A partir do início da tarde:** Tarde → Manhã (manhã desce inteira para baixo, como "pendentes da manhã")
+## [1] Banco de dados (migration)
 
-Dentro de cada bloco, ordenação ÚNICA e nesta sequência exata:
-1. **Não-concluído** vem antes de **Concluído** (concluído sempre desce ao final do próprio grupo).
-2. **Classificação de risco Manchester**: vermelho → laranja → amarelo → verde → azul → sem classificação.
-3. **Hora de chegada** (ascendente): usa `arrivalMap[id] || horaChegada`; se não houver chegada registrada, usa a hora agendada como fallback.
+- `ALTER TABLE pacientes` adicionar `total_faltas int default 0`, `faltas_consecutivas int default 0`, `status_falta text default 'REGULAR'`.
+- Funções SECURITY DEFINER:
+  - `atualizar_status_falta(p_paciente_id text)` — lê limites em `system_config`, conta faltas em `agendamentos` + `treatment_sessions`, atualiza `pacientes`, insere em `fila_espera` se BLOQUEADO, grava notificação.
+  - `resetar_faltas_paciente(p_paciente_id text)` — zera contadores, marca registro da fila como atendido.
+  - `desbloquear_paciente_faltas(p_paciente_id text, p_user_id uuid)` — mesmo reset + log em `notification_logs`.
+- Backfill: rodar `atualizar_status_falta` para todos os pacientes.
 
-Status `confirmado`, `cancelado`, `apto_atendimento`, `em_atendimento`, `chamado` etc. NÃO afetam a ordem — só `concluido/finalizado/atendido/...` desce. Cancelado/falta seguem a mesma regra (não descem por status, apenas pela hora de chegada/agendada dentro do grupo, conforme pedido: "apenas concluído desce para o final do grupo").
+## [2] Agenda
 
-## Mudanças no código
+- `ModalAgendarSessao` / fluxos de agendamento: bloquear botão "Agendar" quando `status_falta='BLOQUEADO'` com tooltip.
+- Hook que registra falta (`appointmentService`) chama `atualizar_status_falta`.
+- Confirmar chegada / concluir → `resetar_faltas_paciente`.
+- Badge FALTOSO/BLOQUEADO no card do paciente.
 
-Arquivo único: `src/pages/painel/Agenda.tsx`, dentro do `useMemo` `filtered` (linhas ~437–634). Nenhuma outra parte do arquivo é tocada.
+## [3] Perfil do paciente
 
-1. **Simplificar `getTurnoSortGroup`** para retornar apenas 2 buckets de turno (manhã/tarde), respeitando o turno atual quando `isToday`:
-   - Calcula `turno` do agendamento: `min < 12*60 ? 'manha' : 'tarde'`.
-   - Se hora atual ≥ `TARDE_INICIO_MIN` e for hoje → tarde = 0, manhã = 1.
-   - Caso contrário → manhã = 0, tarde = 1.
-   - Mantém `TARDE_INICIO_MIN` dinâmico já existente (menor horário ≥12:00 do dia, fallback 13:30).
+- `FichaPacienteCabecalho`: badge + "X falta(s) registrada(s)" conforme status.
 
-2. **Substituir o comparador `.sort(...)`** por exatamente três critérios, na ordem:
-   ```
-   a) bloco de turno (manhã/tarde conforme regra acima)
-   b) concluído desce: CONCLUIDO_STATUSES → 1, demais → 0
-   c) peso Manchester (1..6)
-   d) hora de chegada asc (arrivalMap[id] || horaChegada || hora agendada)
-   ```
-   Remover os critérios atuais de "ativo no topo", "prontidão", "checked-in", "prioridade legal/idade" do comparador (eles violam a especificação que pede só risco + chegada). Risco vermelho continuará no topo automaticamente; gestante/PNE/autista deixam de subir por idade — conforme pedido explícito do usuário ("apenas classificação de risco e hora de chegada"). Manter `getPesoClassificacaoRisco`, remover funções não usadas (`getProntidaoPeso`, `getPrioridadeIdade`, `calcAge`) para manter o arquivo limpo.
+## [4] Prontuário
 
-3. **Label "Pendentes da manhã"** na renderização (linha ~2255):
-   - Antes do `.map`, derivar `idxPrimeiroPendenteManha` quando `isToday && nowMinutes >= TARDE_INICIO_MIN` — o primeiro item cujo turno é manhã e que não está concluído.
-   - No render, ao alcançar esse índice, inserir um separador visual (div com label "Pendentes da manhã") imediatamente acima do card. Pequeno componente inline, sem novos arquivos.
+- Ao salvar prontuário (handler central) → `resetar_faltas_paciente`.
 
-4. **Realtime** — já está ativo via assinaturas existentes (`agendamentos`, `fila_espera`, etc.) que disparam refetch + re-render. O `useMemo` depende de `agendamentos`, `arrivalMap`, `triageMap`, `nowMinutes` (atualizado a cada 60s) — a transição manhã→tarde e o "concluído desce" acontecem automaticamente. Nada a alterar aqui.
+## [5] Configurações → Fluxo de Atendimento
 
-## O que NÃO muda
+- Adicionar cartão "Controle de Faltas" em `ConfigFluxoAtendimento.tsx` com: `limite_alerta` (padrão 2), `limite_bloqueio` (padrão 4), `canal_sistema`, `canal_whatsapp`. Persistido em `system_config.configuracoes.config_fluxo_faltas`.
 
-- Schema do banco, RLS, Edge Functions.
-- Filtros por unidade/profissional, busca, isolamento `useUnidadeFilter`/`admin.sms`.
-- Cards, ações (iniciar atendimento, cancelar, confirmar chegada, etc.).
-- Lógica de triagem, fila, prontuário, tratamento.
-- Outros `useMemo` da página.
+## [6] Rota `/faltosos`
 
-## Arquivos editados
+- Nova página + rota em `App.tsx` + item no menu (visível para roles master/gestor/coordenador/recepção).
+- Tabela com filtros (status, período, busca), botão "Remover bloqueio" só para master/gestor → chama `desbloquear_paciente_faltas`.
+- Isolamento via `useUnidadeFilter`.
 
-- `src/pages/painel/Agenda.tsx` — apenas dentro do `useMemo` `filtered` e um separador visual no `.map` da lista.
+## [7] Ordem na fila
+
+- Ajustar `waitingListService.getAll` e renderização da fila para ordenar:
+  1. `origem_cadastro` regular
+  2. FALTOSO (pacientes com `status_falta='FALTOSO'`)
+  3. `origem_cadastro='BLOQUEIO_FALTA'`
+
+## [8] Notificações
+
+- Em `atualizar_status_falta`: insert em `notification_logs` para profissional responsável (FALTOSO) e profissional+gestor (BLOQUEADO). Se `canal_whatsapp=true`, dispara via integração existente.
+
+## Confirmar antes de prosseguir
+
+- OK usar `system_config` em vez de criar tabela `config_fluxo_faltas`?
+- OK contar faltas considerando `treatment_sessions.status IN ('falta','paciente_faltou')`?
+- OK usar `fila_espera.origem_cadastro='BLOQUEIO_FALTA'` (no lugar de campo `origem`)?
+
+Se confirmar os 3 pontos, executo migration + código numa única passada.

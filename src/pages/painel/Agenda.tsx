@@ -873,6 +873,16 @@ const Agenda: React.FC = () => {
       } as typeof pac;
     }
 
+    // Bloqueio por excesso de faltas
+    try {
+      const { data: pacStatus } = await (supabase as any)
+        .from('pacientes').select('status_falta, total_faltas').eq('id', newAg.pacienteId).maybeSingle();
+      if (pacStatus?.status_falta === 'BLOQUEADO') {
+        toast.error(`Paciente bloqueado por excesso de faltas (${pacStatus.total_faltas}). Está na lista de espera.`);
+        return;
+      }
+    } catch {}
+
     if (!pac || !prof || !newAg.hora) return;
     if (selectedDate < todayLocalStr()) {
       if (!isMaster) {
@@ -1246,6 +1256,7 @@ const Agenda: React.FC = () => {
         if (triagemHabilitada) {
           // Normal flow: go to triage
           await updateAgendamento(agId, { status: "confirmado_chegada" as any });
+          try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: ag.pacienteId }); } catch {}
 
           const filaExistente = fila.find(
             (item) => item.id === agId,
@@ -1622,6 +1633,11 @@ const Agenda: React.FC = () => {
       "falta",
       user,
     );
+
+    // Atualiza status FALTOSO/BLOQUEADO do paciente
+    try {
+      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: ag.pacienteId });
+    } catch (err) { console.error('atualizar_status_falta:', err); }
 
     await Promise.all([refreshAgendamentos(), refreshFila()]);
     toast.success(`Falta registrada para ${ag.pacienteNome}.`);

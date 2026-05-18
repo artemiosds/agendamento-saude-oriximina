@@ -332,6 +332,18 @@ const FichaPacienteCabecalho: React.FC<FichaPacienteCabecalhoProps> = ({
                 <p className="text-base font-semibold text-foreground leading-tight truncate">
                   {paciente.nome}
                 </p>
+                {paciente.status_falta === 'FALTOSO' && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge className="bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-100">FALTOSO</Badge>
+                    <span className="text-xs text-amber-700">{paciente.total_faltas || 0} falta(s) registrada(s)</span>
+                  </div>
+                )}
+                {paciente.status_falta === 'BLOQUEADO' && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge className="bg-red-100 text-red-800 border border-red-300 hover:bg-red-100">BLOQUEADO</Badge>
+                    <span className="text-xs text-red-700">{paciente.total_faltas || 0} falta(s) registrada(s)</span>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {paciente.data_nascimento
                     ? `${new Date(paciente.data_nascimento + "T12:00:00").toLocaleDateString("pt-BR")} · ${idade}`
