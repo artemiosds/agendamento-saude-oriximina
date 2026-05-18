@@ -408,6 +408,7 @@ const ConfigFluxoAtendimento: React.FC = () => {
       </Card>
 
       <ControleFaltasCard />
+      <ControleAtendimentosCard />
     </div>
   );
 };
