@@ -233,7 +233,7 @@ const ConfigImpressaoDocumentos: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-lg">
                 <Switch checked={config.mostrarLogoCentral} onCheckedChange={v => save({ ...config, mostrarLogoCentral: v })} />
-                <Label className="text-sm">Exibir logo central acima do texto institucional</Label>
+                <Label className="text-sm">Exibir logo central no cabeçalho</Label>
               </div>
             </CardContent>
           </Card>
