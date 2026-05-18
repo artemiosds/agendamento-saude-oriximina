@@ -1738,7 +1738,7 @@ ${dataRows}
                     {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                   <ActionButton variant="ghost" size="sm" loadingText="Preparando..." onClick={() => {
                     if (porProfissional.length === 0) { toast.warning('Não há dados para exportar'); return; }
                     try {
@@ -1972,7 +1972,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Faltas por Paciente</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('faltas')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2040,7 +2040,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2224,7 +2224,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
