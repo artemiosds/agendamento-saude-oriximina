@@ -158,37 +158,42 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
     line-height: ${t.espacamento};
   }
 
-  /* HEADER — 3 logos (esq | central acima do texto | dir) */
+  /* HEADER — até 3 logos (esquerda | central | direita) + bloco institucional abaixo */
   .doc-header {
-    display: grid;
-    grid-template-columns: 110px 1fr 110px;
-    align-items: center;
-    gap: 12px;
     padding: 10px 0 12px;
     margin-bottom: 12px;
     ${config?.mostrarLinhaDivisoria !== false ? 'border-bottom: 2px solid #0369a1;' : ''}
   }
-  .doc-header .logo-left,
-  .doc-header .logo-right {
-    display: flex; align-items: center; justify-content: center;
+  .doc-header .logos-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
   }
-  .doc-header .logo-left img,
-  .doc-header .logo-right img {
+  .doc-header .logo-slot {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+  }
+  .doc-header .logo-slot.left   { justify-content: flex-start; }
+  .doc-header .logo-slot.center { justify-content: center; }
+  .doc-header .logo-slot.right  { justify-content: flex-end; }
+  .doc-header .logo-slot img {
     max-height: 70px;
-    max-width: 100px;
+    max-width: 140px;
     object-fit: contain;
     image-rendering: -webkit-optimize-contrast;
   }
-  .doc-header .header-center {
-    text-align: center;
-    padding: 0 8px;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .doc-header .header-center .logo-central img {
-    max-height: 60px;
+  .doc-header .logo-slot.center img {
+    max-height: 72px;
     max-width: 180px;
-    object-fit: contain;
-    margin-bottom: 4px;
+  }
+  .doc-header .header-text {
+    text-align: center;
+    margin-top: 10px;
+    padding: 0 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
   }
   .doc-header h1 {
     font-size: ${Math.max(t.tamanhoBase + 1, 12)}pt;
