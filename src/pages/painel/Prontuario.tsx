@@ -648,6 +648,12 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
 
+  const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
+  const listedProcedimentos = useMemo(() => {
+    const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
+    return available.slice(0, procSearch.trim() ? 300 : 120);
+  }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
+
   // Lighter projection for listing (avoid heavy text columns until detail)
   const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
@@ -3155,8 +3161,8 @@ const ProntuarioPage: React.FC = () => {
 
                 {filteredProcedimentos.length > 0 ? (
                   <div className="flex flex-col gap-1.5 bg-muted/20 rounded-lg p-2 border max-h-72 overflow-y-auto">
-                    {filteredProcedimentos.filter(p => !selectedProcIds.includes(p.id)).map((proc) => {
-                      const checked = selectedProcIds.includes(proc.id);
+                    {listedProcedimentos.map((proc) => {
+                      const checked = selectedProcIdSet.has(proc.id);
                       const cids = cidsByProc[proc.id] || [];
                       const selCids = selectedCidsByProc[proc.id] || [];
                       const isCustom = proc.origem === 'PERSONALIZADO';
@@ -3294,7 +3300,7 @@ const ProntuarioPage: React.FC = () => {
                                               : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                           }));
                                           // Auto-mark procedure when selecting a CID (rule: no CID without procedure)
-                                              if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                                if (!isSel && !selectedProcIdSet.has(proc.id)) {
                                                 setSelectedProcIds((prev) => [...prev, proc.id]);
                                                 setProcDetails(prev => ({
                                                   ...prev,
@@ -3353,7 +3359,7 @@ const ProntuarioPage: React.FC = () => {
                                                   ? (m[proc.id] || []).filter((x) => x !== c.codigo)
                                                   : Array.from(new Set([...(m[proc.id] || []), c.codigo])),
                                               }));
-                                          if (!isSel && !selectedProcIds.includes(proc.id)) {
+                                          if (!isSel && !selectedProcIdSet.has(proc.id)) {
                                             setSelectedProcIds((prev) => [...prev, proc.id]);
                                             setProcDetails(prev => ({
                                               ...prev,
