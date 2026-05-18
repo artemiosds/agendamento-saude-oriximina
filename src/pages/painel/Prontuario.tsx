@@ -1421,13 +1421,14 @@ const ProntuarioPage: React.FC = () => {
 
       }
 
-      await Promise.all([
+      // Reload data in BACKGROUND — não bloquear UI (close dialog imediatamente)
+      void Promise.all([
         loadProntuarios(),
         refreshAgendamentos(),
         form.tipo_registro === 'sessao' && form.paciente_id
           ? loadSessaoData(form.paciente_id)
           : Promise.resolve(),
-      ]);
+      ]).catch(err => console.error('[Prontuario] background reload failed:', err));
 
       setSessionRegistrationRequested(false);
       // Only close dialog if NOT a session registration flow — keep prontuário open after session registration
@@ -1663,54 +1664,62 @@ const ProntuarioPage: React.FC = () => {
       duracaoMinutos = hf * 60 + mf - (hi * 60 + mi);
     }
     const pac = pacientes.find((px) => px.id === form.paciente_id);
-    try {
-      await (supabase as any)
-        .from("atendimentos")
-        .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
-        .eq("agendamento_id", agendamentoId);
-    } catch (err) {
-      console.error("Error finalizing atendimento:", err);
-    }
 
-    // Auto-discharge: if cycle completed, register discharge
-    if (sessaoCycle && form.tipo_registro === 'sessao') {
-      const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
-      if (completedCount >= sessaoCycle.total_sessions) {
-        try {
-          await (supabase as any).from('treatment_cycles').update({
-            status: 'finalizado_alta',
-            updated_at: new Date().toISOString(),
-          }).eq('id', sessaoCycle.id);
-          await (supabase as any).from('patient_discharges').insert({
-            cycle_id: sessaoCycle.id,
-            patient_id: form.paciente_id,
-            professional_id: user?.id || '',
-            reason: 'Alta automática — ciclo concluído',
-            final_notes: 'Tratamento finalizado com todas as sessões realizadas.',
-          });
-          toast.success("🎉 Paciente recebeu alta automática — tratamento concluído!");
-        } catch (err) {
-          console.error("Erro ao registrar alta automática:", err);
+    // Fire-and-forget: side-effects rodam em background, navegação é instantânea
+    void (async () => {
+      try {
+        const tasks: Promise<any>[] = [
+          (supabase as any)
+            .from("atendimentos")
+            .update({ hora_fim: horaFim, duracao_minutos: Math.max(0, duracaoMinutos), status: "finalizado" })
+            .eq("agendamento_id", agendamentoId),
+          logAction({
+            acao: "atendimento_finalizado",
+            entidade: "atendimento",
+            entidadeId: agendamentoId,
+            modulo: "atendimento",
+            user,
+            detalhes: {
+              paciente_nome: form.paciente_nome,
+              paciente_cpf: pac?.cpf || "",
+              hora_inicio: activeAtendimento?.horaInicio || "",
+              hora_fim: horaFim,
+              duracao_minutos: Math.max(0, duracaoMinutos),
+              unidade: user?.unidadeId || "",
+              sala: user?.salaId || "",
+            },
+          }),
+        ];
+
+        // Auto-discharge: if cycle completed, register discharge
+        if (sessaoCycle && form.tipo_registro === 'sessao') {
+          const completedCount = sessaoCycleSessions.filter(s => s.status === 'realizada').length;
+          if (completedCount >= sessaoCycle.total_sessions) {
+            tasks.push(
+              (async () => {
+                await (supabase as any).from('treatment_cycles').update({
+                  status: 'finalizado_alta',
+                  updated_at: new Date().toISOString(),
+                }).eq('id', sessaoCycle.id);
+                await (supabase as any).from('patient_discharges').insert({
+                  cycle_id: sessaoCycle.id,
+                  patient_id: form.paciente_id,
+                  professional_id: user?.id || '',
+                  reason: 'Alta automática — ciclo concluído',
+                  final_notes: 'Tratamento finalizado com todas as sessões realizadas.',
+                });
+                toast.success("🎉 Paciente recebeu alta automática — tratamento concluído!");
+              })()
+            );
+          }
         }
-      }
-    }
 
-    await logAction({
-      acao: "atendimento_finalizado",
-      entidade: "atendimento",
-      entidadeId: agendamentoId,
-      modulo: "atendimento",
-      user,
-      detalhes: {
-        paciente_nome: form.paciente_nome,
-        paciente_cpf: pac?.cpf || "",
-        hora_inicio: activeAtendimento?.horaInicio || "",
-        hora_fim: horaFim,
-        duracao_minutos: Math.max(0, duracaoMinutos),
-        unidade: user?.unidadeId || "",
-        sala: user?.salaId || "",
-      },
-    });
+        await Promise.allSettled(tasks);
+      } catch (err) {
+        console.error("[Prontuario] background finalizar tasks failed:", err);
+      }
+    })();
+
     localStorage.removeItem(`timer_${agendamentoId}`);
     updateAgendamento(agendamentoId, { status: "concluido" });
     setActiveAtendimento(null);
