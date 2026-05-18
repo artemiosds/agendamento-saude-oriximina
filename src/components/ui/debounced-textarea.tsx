@@ -59,7 +59,7 @@ const InternalDebouncedTextarea = React.forwardRef<HTMLTextAreaElement, Debounce
         if (timerRef.current) clearTimeout(timerRef.current);
         const fieldName = e.target.name;
         timerRef.current = setTimeout(() => {
-          emitChange(newValue, fieldName);
+          React.startTransition(() => emitChange(newValue, fieldName));
           lastPropValue.current = newValue;
           timerRef.current = null;
         }, debounceMs);
