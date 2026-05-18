@@ -1256,6 +1256,7 @@ const Agenda: React.FC = () => {
         if (triagemHabilitada) {
           // Normal flow: go to triage
           await updateAgendamento(agId, { status: "confirmado_chegada" as any });
+          try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: ag.pacienteId }); } catch {}
 
           const filaExistente = fila.find(
             (item) => item.id === agId,
