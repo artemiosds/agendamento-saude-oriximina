@@ -3742,19 +3742,33 @@ export type Database = {
         }
         Returns: Json
       }
-      concluir_atendimento_master: {
-        Args: {
-          p_agendamento_id: string
-          p_cid: string
-          p_hora_termino: string
-          p_is_master?: boolean
-          p_obs?: string
-          p_procedimento: string
-          p_user_id: string
-          p_user_nome: string
-        }
-        Returns: Json
-      }
+      concluir_atendimento_master:
+        | {
+            Args: {
+              p_agendamento_id: string
+              p_cid: string
+              p_hora_termino: string
+              p_is_master?: boolean
+              p_obs?: string
+              p_procedimento: string
+              p_user_id: string
+              p_user_nome: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_agendamento_id: string
+              p_cid: string
+              p_hora_termino: string
+              p_is_master: boolean
+              p_obs: string
+              p_procedimento: string
+              p_user_id: string
+              p_user_nome: string
+            }
+            Returns: undefined
+          }
       desbloquear_paciente_faltas: {
         Args: {
           p_paciente_id: string
