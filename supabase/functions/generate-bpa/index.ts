@@ -339,6 +339,47 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Agendamentos concluídos com procedimento_concluido (conclusão direta na agenda)
+    let agQuery = supabase
+      .from('agendamentos')
+      .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, unidade_id, procedimento_concluido, cid_concluido')
+      .gte('data', dataInicio)
+      .lte('data', dataFim)
+      .eq('status', 'concluido')
+      .not('procedimento_concluido', 'is', null)
+      .neq('procedimento_concluido', '')
+      .limit(5000);
+    if (unidadeId) agQuery = agQuery.eq('unidade_id', unidadeId);
+    const { data: agsConcluidos } = await agQuery;
+    for (const ag of (agsConcluidos || []) as any[]) {
+      // Evita duplicar se já existe prontuário no mesmo dia/paciente/profissional
+      const dup = prots.some((p: any) =>
+        p.paciente_id === ag.paciente_id &&
+        p.profissional_id === ag.profissional_id &&
+        p.data_atendimento === ag.data
+      );
+      if (dup) continue;
+      if (ag.paciente_id) pacIds.add(ag.paciente_id);
+      if (ag.profissional_id) profIds.add(ag.profissional_id);
+      if (ag.unidade_id) uniIds.add(ag.unidade_id);
+      items.push({
+        id: ag.id,
+        paciente_id: ag.paciente_id,
+        paciente_nome: ag.paciente_nome,
+        profissional_id: ag.profissional_id,
+        profissional_nome: ag.profissional_nome,
+        data: ag.data,
+        unidade_id: ag.unidade_id,
+        proc: {
+          codigo_sigtap: ag.procedimento_concluido || '',
+          nome: 'Atendimento (agenda)',
+          cid: ag.cid_concluido || '',
+          quantidade: 1,
+        },
+        origem: 'prontuario',
+      });
+    }
+
     items.sort((a, b) => a.data.localeCompare(b.data));
 
     for (const item of items) {
