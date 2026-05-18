@@ -141,6 +141,11 @@ export type Database = {
         Row: {
           agendado_por_externo: string | null
           atualizado_em: string
+          cid_concluido: string | null
+          concluido_em: string | null
+          concluido_por_id: string | null
+          concluido_por_master: boolean
+          concluido_por_nome: string | null
           criado_em: string | null
           criado_por: string
           custom_data: Json
@@ -148,14 +153,17 @@ export type Database = {
           google_event_id: string | null
           hora: string
           id: string
+          iniciado_em: string | null
           lembrete_24h_enviado_em: string | null
           lembrete_proximo_enviado_em: string | null
           nome_procedimento: string | null
+          obs_conclusao: string | null
           observacoes: string
           origem: string
           paciente_id: string
           paciente_nome: string
           prioridade_perfil: string
+          procedimento_concluido: string | null
           procedimento_sigtap: string | null
           profissional_id: string
           profissional_nome: string
@@ -170,6 +178,11 @@ export type Database = {
         Insert: {
           agendado_por_externo?: string | null
           atualizado_em?: string
+          cid_concluido?: string | null
+          concluido_em?: string | null
+          concluido_por_id?: string | null
+          concluido_por_master?: boolean
+          concluido_por_nome?: string | null
           criado_em?: string | null
           criado_por?: string
           custom_data?: Json
@@ -177,14 +190,17 @@ export type Database = {
           google_event_id?: string | null
           hora?: string
           id: string
+          iniciado_em?: string | null
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
           nome_procedimento?: string | null
+          obs_conclusao?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_concluido?: string | null
           procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
@@ -199,6 +215,11 @@ export type Database = {
         Update: {
           agendado_por_externo?: string | null
           atualizado_em?: string
+          cid_concluido?: string | null
+          concluido_em?: string | null
+          concluido_por_id?: string | null
+          concluido_por_master?: boolean
+          concluido_por_nome?: string | null
           criado_em?: string | null
           criado_por?: string
           custom_data?: Json
@@ -206,14 +227,17 @@ export type Database = {
           google_event_id?: string | null
           hora?: string
           id?: string
+          iniciado_em?: string | null
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
           nome_procedimento?: string | null
+          obs_conclusao?: string | null
           observacoes?: string
           origem?: string
           paciente_id?: string
           paciente_nome?: string
           prioridade_perfil?: string
+          procedimento_concluido?: string | null
           procedimento_sigtap?: string | null
           profissional_id?: string
           profissional_nome?: string
@@ -3718,6 +3742,19 @@ export type Database = {
         }
         Returns: Json
       }
+      concluir_atendimento_master: {
+        Args: {
+          p_agendamento_id: string
+          p_cid: string
+          p_hora_termino: string
+          p_is_master?: boolean
+          p_obs?: string
+          p_procedimento: string
+          p_user_id: string
+          p_user_nome: string
+        }
+        Returns: Json
+      }
       desbloquear_paciente_faltas: {
         Args: {
           p_paciente_id: string
@@ -3725,6 +3762,21 @@ export type Database = {
           p_user_nome?: string
         }
         Returns: undefined
+      }
+      get_atendimentos_pendentes_master: {
+        Args: { p_minutos?: number; p_unidade_id?: string }
+        Returns: {
+          data: string
+          hora: string
+          id: string
+          iniciado_em: string
+          minutos_aberto: number
+          paciente_id: string
+          paciente_nome: string
+          profissional_id: string
+          profissional_nome: string
+          unidade_id: string
+        }[]
       }
       get_procedures_for_cid: {
         Args: { lim?: number; p_cid: string }

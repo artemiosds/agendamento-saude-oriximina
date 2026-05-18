@@ -286,7 +286,61 @@ const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {(user?.role === 'master') && <AtendimentosPendentesMaster userUnidadeId={userUnidadeId} isGlobalAdmin={isGlobalAdmin} />}
     </div>
+  );
+};
+
+const AtendimentosPendentesMaster: React.FC<{ userUnidadeId: string; isGlobalAdmin: boolean }> = ({ userUnidadeId, isGlobalAdmin }) => {
+  const navigate = useNavigate();
+  const [pendentes, setPendentes] = useState<any[]>([]);
+  const [minutos, setMinutos] = useState(60);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: cfgRow } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+        const m = (cfgRow?.configuracoes as any)?.config_fluxo_atendimento?.alerta_minutos_em_atendimento;
+        const mins = typeof m === 'number' ? m : 60;
+        setMinutos(mins);
+        const { data } = await (supabase as any).rpc('get_atendimentos_pendentes_master', {
+          p_unidade_id: isGlobalAdmin ? null : (userUnidadeId || null),
+          p_minutos: mins,
+        });
+        setPendentes(data || []);
+      } catch {}
+    })();
+  }, [userUnidadeId, isGlobalAdmin]);
+
+  if (pendentes.length === 0) return null;
+
+  return (
+    <Card className="shadow-card border-0 ring-1 ring-destructive/40">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className="w-5 h-5 text-destructive" />
+          <h3 className="font-semibold font-display text-foreground">
+            Atendimentos em aberto há mais de {minutos} min ({pendentes.length})
+          </h3>
+        </div>
+        <div className="space-y-2">
+          {pendentes.slice(0, 10).map((p: any) => (
+            <button
+              key={p.id}
+              onClick={() => navigate('/painel/agenda')}
+              className="w-full text-left flex items-center justify-between gap-3 p-3 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{p.paciente_nome}</p>
+                <p className="text-xs text-muted-foreground truncate">com {p.profissional_nome} · {p.data} {p.hora}</p>
+              </div>
+              <span className="text-xs font-semibold text-destructive shrink-0">{p.minutos_aberto} min</span>
+            </button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

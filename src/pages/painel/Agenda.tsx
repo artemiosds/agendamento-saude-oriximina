@@ -69,6 +69,7 @@ import { whatsappService } from "@/services/whatsappService";
 import { AgendaNotificacaoIndividual, AgendaNotificacoesMassa } from "@/components/AgendaNotificacoes";
 import { RegistrarFaltaModal } from "@/components/RegistrarFaltaModal";
 import { ConferirDadosPacienteModal } from "@/components/ConferirDadosPacienteModal";
+import { ConcluirAtendimentoModal, type ConcluirAtendimentoAg } from "@/components/ConcluirAtendimentoModal";
 
 const statusActions = [
   { key: "confirmado_chegada", label: "Confirmar Chegada", icon: LogIn, color: "bg-success text-success-foreground" },
@@ -237,6 +238,12 @@ const Agenda: React.FC = () => {
 
   // FALTA com justificativa
   const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
+
+  // Concluir Atendimento (Master)
+  const [concluirTarget, setConcluirTarget] = useState<ConcluirAtendimentoAg | null>(null);
+  const [alertaMinutosEmAtendimento, setAlertaMinutosEmAtendimento] = useState<number>(60);
+  const [coordenadorPodeConcluir, setCoordenadorPodeConcluir] = useState<boolean>(false);
+  const [agendamentosRaw, setAgendamentosRaw] = useState<Record<string, { iniciado_em: string | null; concluido_em: string | null }>>({});
   const [cancelConfig, setCancelConfig] = useState<{
     prazo_minimo_horas: number;
     limite_cancelamentos_mes: number;
@@ -268,6 +275,43 @@ const Agenda: React.FC = () => {
       } catch {}
     })();
   }, []);
+
+  // Load fluxo de atendimento config (alert minutes / coordinator)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('system_config')
+          .select('configuracoes')
+          .eq('id', 'default')
+          .maybeSingle();
+        const cfg = (data?.configuracoes as any)?.config_fluxo_atendimento;
+        if (cfg) {
+          if (typeof cfg.alerta_minutos_em_atendimento === 'number') setAlertaMinutosEmAtendimento(cfg.alerta_minutos_em_atendimento);
+          if (typeof cfg.coordenador_pode_concluir === 'boolean') setCoordenadorPodeConcluir(cfg.coordenador_pode_concluir);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Load raw iniciado_em for em_atendimento agendamentos to compute alerts
+  React.useEffect(() => {
+    const ids = agendamentos.filter(a => a.status === 'em_atendimento' || a.status === 'concluido').map(a => a.id);
+    if (ids.length === 0) { setAgendamentosRaw({}); return; }
+    (async () => {
+      const map: Record<string, { iniciado_em: string | null; concluido_em: string | null }> = {};
+      const chunk = 500;
+      for (let i = 0; i < ids.length; i += chunk) {
+        const slice = ids.slice(i, i + chunk);
+        const { data } = await supabase
+          .from('agendamentos')
+          .select('id, iniciado_em, concluido_em')
+          .in('id', slice);
+        (data || []).forEach((r: any) => { map[r.id] = { iniciado_em: r.iniciado_em, concluido_em: r.concluido_em }; });
+      }
+      setAgendamentosRaw(map);
+    })();
+  }, [agendamentos]);
 
   // ── Triage records + arrival times for priority sorting ──
   const [triageMap, setTriageMap] = useState<Record<string, { risco: string }>>({});
@@ -2889,6 +2933,41 @@ const Agenda: React.FC = () => {
                             <RotateCcw className="w-3.5 h-3.5 mr-1" /> Retorno
                           </Button>
                         )}
+                        {/* Master/Coordenador: Concluir Atendimento manualmente */}
+                        {(isMaster || (coordenadorPodeConcluir && user?.role === "coordenador") || (user?.role === "profissional" && ag.profissionalId === user?.id)) &&
+                          ag.status !== "cancelado" && ag.status !== "concluido" && !ehPendenteOnline && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 text-xs border-info text-info"
+                            title="Concluir atendimento (registrar procedimento e CID)"
+                            onClick={() => setConcluirTarget({
+                              id: ag.id,
+                              pacienteNome: ag.pacienteNome,
+                              profissionalNome: ag.profissionalNome,
+                              profissionalId: ag.profissionalId,
+                              hora: ag.hora,
+                              iniciado_em: agendamentosRaw[ag.id]?.iniciado_em ?? null,
+                            })}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Concluir
+                          </Button>
+                        )}
+                        {/* Alerta de atendimento em aberto há muito tempo (Master) */}
+                        {isMaster && ag.status === "em_atendimento" && (() => {
+                          const ini = agendamentosRaw[ag.id]?.iniciado_em;
+                          if (!ini) return null;
+                          const mins = Math.floor((Date.now() - new Date(ini).getTime()) / 60000);
+                          if (mins < alertaMinutosEmAtendimento) return null;
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-destructive/10 text-destructive border border-destructive/30"
+                              title={`Em atendimento há ${mins} min sem finalização`}
+                            >
+                              🔴 {mins} min sem finalizar
+                            </span>
+                          );
+                        })()}
                         {ag.status !== "cancelado" &&
                           ag.status !== "concluido" &&
                           !ehPendenteOnline &&
@@ -3376,6 +3455,13 @@ const Agenda: React.FC = () => {
         modo={conferenciaModal.modo}
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}
+      />
+      <ConcluirAtendimentoModal
+        ag={concluirTarget}
+        open={!!concluirTarget}
+        isMaster={!!isMaster || (coordenadorPodeConcluir && user?.role === "coordenador")}
+        onClose={() => setConcluirTarget(null)}
+        onConcluded={async () => { await refreshAgendamentos(); }}
       />
       {/* Modal de Pendências de Revisão (Req 9 & 10) */}
       <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
