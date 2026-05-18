@@ -238,6 +238,12 @@ const Agenda: React.FC = () => {
 
   // FALTA com justificativa
   const [faltaTarget, setFaltaTarget] = useState<(typeof agendamentos)[0] | null>(null);
+
+  // Concluir Atendimento (Master)
+  const [concluirTarget, setConcluirTarget] = useState<ConcluirAtendimentoAg | null>(null);
+  const [alertaMinutosEmAtendimento, setAlertaMinutosEmAtendimento] = useState<number>(60);
+  const [coordenadorPodeConcluir, setCoordenadorPodeConcluir] = useState<boolean>(false);
+  const [agendamentosRaw, setAgendamentosRaw] = useState<Record<string, { iniciado_em: string | null; concluido_em: string | null }>>({});
   const [cancelConfig, setCancelConfig] = useState<{
     prazo_minimo_horas: number;
     limite_cancelamentos_mes: number;
