@@ -2,6 +2,7 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { DebouncedTextarea } from '@/components/ui/debounced-textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CustomFieldDef } from '@/hooks/useCustomFields';
@@ -52,7 +53,7 @@ const CustomFieldsRenderer: React.FC<CustomFieldsRendererProps> = ({ fields, val
                     {field.rotulo}
                     {field.obrigatorio && <span className="text-destructive ml-1">*</span>}
                   </Label>
-                  <Textarea
+                  <DebouncedTextarea
                     value={val}
                     onChange={e => onChange(field.nome, e.target.value)}
                     disabled={disabled}
