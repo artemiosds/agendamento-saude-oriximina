@@ -3456,6 +3456,13 @@ const Agenda: React.FC = () => {
         agendamento={conferenciaModal.agendamentoInfo}
         onConfirm={conferenciaModal.onConfirm}
       />
+      <ConcluirAtendimentoModal
+        ag={concluirTarget}
+        open={!!concluirTarget}
+        isMaster={!!isMaster || (coordenadorPodeConcluir && user?.role === "coordenador")}
+        onClose={() => setConcluirTarget(null)}
+        onConcluded={async () => { await refreshAgendamentos(); }}
+      />
       {/* Modal de Pendências de Revisão (Req 9 & 10) */}
       <Dialog open={pendenciasDialogOpen} onOpenChange={setPendenciasDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
