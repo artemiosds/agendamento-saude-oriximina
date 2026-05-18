@@ -5,6 +5,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -196,10 +197,9 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>Cancelar</Button>
-          <Button onClick={submit} disabled={busy}>
-            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          <ActionButton onClick={submit} loadingText="Concluindo...">
             Confirmar
-          </Button>
+          </ActionButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

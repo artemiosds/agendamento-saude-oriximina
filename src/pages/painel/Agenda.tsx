@@ -11,6 +11,7 @@ import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useWebhookNotify } from "@/hooks/useWebhookNotify";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -1498,65 +1499,68 @@ const Agenda: React.FC = () => {
       const novaObs = `${obsAnterior}\n[CANCELAMENTO] Motivo: ${cancelMotivo} | Por: ${user?.nome || 'Sistema'} | Em: ${new Date().toLocaleString('pt-BR')}`.trim();
 
       await updateAgendamento(ag.id, { status: 'cancelado' as any });
-      await (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id);
 
-      await logAction({
-        acao: 'cancelar_agendamento',
-        entidade: 'agendamento',
-        entidadeId: ag.id,
-        modulo: 'agenda',
-        user,
-        pacienteId: ag.pacienteId,
-        pacienteNome: ag.pacienteNome,
-        profissionalId: ag.profissionalId,
-        profissionalNome: ag.profissionalNome,
-        agendamentoId: ag.id,
-        detalhes: { motivo: cancelMotivo },
-        status: 'sucesso'
-      });
-
-
-      // Notify
-      if (cancelConfig.notificar_profissional) {
-        const unidade = unidades.find(u => u.id === ag.unidadeId);
-        await notify({
-          evento: 'cancelamento' as any,
-          paciente_nome: ag.pacienteNome,
-          telefone: paciente?.telefone || '',
-          email: paciente?.email || '',
-          data_consulta: ag.data,
-          hora_consulta: ag.hora,
-          unidade: unidade?.nome || '',
-          profissional: ag.profissionalNome,
-          tipo_atendimento: ag.tipo,
-          status_agendamento: 'cancelado',
-          id_agendamento: ag.id,
-          observacoes: `Motivo: ${cancelMotivo}`,
-        });
-      }
-      // WhatsApp: cancelamento
-      whatsappService.sendByAgendamento(ag.id, "cancelamento").catch(() => {});
-
-      if (cancelConfig.liberar_vaga_automaticamente) {
-        await handleVagaLiberada(
-          { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
-          'cancelamento',
-          user,
-        );
-      }
-
-      // Google Calendar
-      if (ag.googleEventId && configuracoes.googleCalendar.removerCancelar) {
-        try {
-          await gcal.deleteEvent(ag.googleEventId);
-          await updateAgendamento(ag.id, { syncStatus: 'ok' });
-        } catch {}
-      }
-
-      await Promise.all([refreshAgendamentos(), refreshFila()]);
+      // Close dialog immediately for instant feedback
       toast.success('Agendamento cancelado com sucesso.');
       setCancelTarget(null);
       setCancelMotivo('');
+
+      // Side-effects fire-and-forget in background
+      void (async () => {
+        await Promise.allSettled([
+          (supabase as any).from('agendamentos').update({ observacoes: novaObs }).eq('id', ag.id),
+          logAction({
+            acao: 'cancelar_agendamento',
+            entidade: 'agendamento',
+            entidadeId: ag.id,
+            modulo: 'agenda',
+            user,
+            pacienteId: ag.pacienteId,
+            pacienteNome: ag.pacienteNome,
+            profissionalId: ag.profissionalId,
+            profissionalNome: ag.profissionalNome,
+            agendamentoId: ag.id,
+            detalhes: { motivo: cancelMotivo },
+            status: 'sucesso'
+          }),
+          cancelConfig.notificar_profissional
+            ? (async () => {
+                const unidade = unidades.find(u => u.id === ag.unidadeId);
+                await notify({
+                  evento: 'cancelamento' as any,
+                  paciente_nome: ag.pacienteNome,
+                  telefone: paciente?.telefone || '',
+                  email: paciente?.email || '',
+                  data_consulta: ag.data,
+                  hora_consulta: ag.hora,
+                  unidade: unidade?.nome || '',
+                  profissional: ag.profissionalNome,
+                  tipo_atendimento: ag.tipo,
+                  status_agendamento: 'cancelado',
+                  id_agendamento: ag.id,
+                  observacoes: `Motivo: ${cancelMotivo}`,
+                });
+              })()
+            : Promise.resolve(),
+          whatsappService.sendByAgendamento(ag.id, "cancelamento").catch(() => {}),
+          cancelConfig.liberar_vaga_automaticamente
+            ? handleVagaLiberada(
+                { id: ag.id, data: ag.data, hora: ag.hora, profissionalId: ag.profissionalId, profissionalNome: ag.profissionalNome, unidadeId: ag.unidadeId, salaId: ag.salaId, tipo: ag.tipo },
+                'cancelamento',
+                user,
+              )
+            : Promise.resolve(),
+          ag.googleEventId && configuracoes.googleCalendar.removerCancelar
+            ? (async () => {
+                try {
+                  await gcal.deleteEvent(ag.googleEventId);
+                  await updateAgendamento(ag.id, { syncStatus: 'ok' });
+                } catch {}
+              })()
+            : Promise.resolve(),
+        ]);
+        await Promise.allSettled([refreshAgendamentos(), refreshFila()]);
+      })();
     } catch (err: any) {
       console.error(err);
       toast.error(`Erro ao cancelar: ${err.message}`);
@@ -1754,8 +1758,6 @@ const Agenda: React.FC = () => {
       return;
     }
 
-    await Promise.all([refreshAgendamentos(), refreshFila()]);
-
     const now = new Date();
     const horaInicio = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     localStorage.setItem(
@@ -1768,41 +1770,7 @@ const Agenda: React.FC = () => {
       }),
     );
 
-    const pac = pacientes.find((p) => p.id === ag.pacienteId);
-
-    await addAtendimento({
-      id: `at${Date.now()}`,
-      agendamentoId: ag.id,
-      pacienteId: ag.pacienteId,
-      pacienteNome: ag.pacienteNome,
-      profissionalId: ag.profissionalId,
-      profissionalNome: ag.profissionalNome,
-      unidadeId: ag.unidadeId,
-      salaId: ag.salaId,
-      setor: user?.setor || "",
-      procedimento: ag.tipo,
-      observacoes: "",
-      data: ag.data,
-      horaInicio,
-      horaFim: "",
-      status: "em_atendimento",
-    });
-
-    await logAction({
-      acao: "atendimento_iniciado",
-      entidade: "atendimento",
-      entidadeId: ag.id,
-      modulo: "atendimento",
-      user,
-      detalhes: {
-        paciente_nome: ag.pacienteNome,
-        paciente_cpf: pac?.cpf || "",
-        hora_inicio: horaInicio,
-        unidade: ag.unidadeId,
-        sala: ag.salaId || "",
-      },
-    });
-
+    // Navigate immediately for instant feedback; side-effects fire in background.
     toast.success("Atendimento iniciado!");
     const params = new URLSearchParams({
       pacienteId: ag.pacienteId,
@@ -1813,6 +1781,45 @@ const Agenda: React.FC = () => {
       tipo: ag.tipo || '',
     });
     navigate(`/painel/prontuario?${params.toString()}`);
+
+    void (async () => {
+      const pac = pacientes.find((p) => p.id === ag.pacienteId);
+      await Promise.allSettled([
+        refreshAgendamentos(),
+        refreshFila(),
+        addAtendimento({
+          id: `at${Date.now()}`,
+          agendamentoId: ag.id,
+          pacienteId: ag.pacienteId,
+          pacienteNome: ag.pacienteNome,
+          profissionalId: ag.profissionalId,
+          profissionalNome: ag.profissionalNome,
+          unidadeId: ag.unidadeId,
+          salaId: ag.salaId,
+          setor: user?.setor || "",
+          procedimento: ag.tipo,
+          observacoes: "",
+          data: ag.data,
+          horaInicio,
+          horaFim: "",
+          status: "em_atendimento",
+        }),
+        logAction({
+          acao: "atendimento_iniciado",
+          entidade: "atendimento",
+          entidadeId: ag.id,
+          modulo: "atendimento",
+          user,
+          detalhes: {
+            paciente_nome: ag.pacienteNome,
+            paciente_cpf: pac?.cpf || "",
+            hora_inicio: horaInicio,
+            unidade: ag.unidadeId,
+            sala: ag.salaId || "",
+          },
+        }),
+      ]);
+    })();
   };
 
   const handleAgendarRetorno = async () => {
@@ -2849,13 +2856,14 @@ const Agenda: React.FC = () => {
                               </Tooltip>
                             )}
                             {canStart && (
-                              <Button
+                              <ActionButton
                                 size="sm"
                                 className="h-8 px-3 text-xs bg-success text-success-foreground hover:bg-success/90"
                                 onClick={() => handleIniciarAtendimento(ag)}
+                                loadingText="Iniciando..."
                               >
                                 <Play className="w-3.5 h-3.5 mr-1" /> Iniciar atendimento
-                              </Button>
+                              </ActionButton>
                             )}
                             {isEmAtendimento && (
                               <Button
@@ -3418,13 +3426,14 @@ const Agenda: React.FC = () => {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => { setCancelTarget(null); setCancelMotivo(''); }}>Voltar</Button>
-                <Button
+                <ActionButton
                   className="flex-1 bg-destructive text-destructive-foreground"
-                  disabled={!cancelMotivo || cancelLoading}
+                  disabled={!cancelMotivo}
                   onClick={handleCancelarAgendamento}
+                  loadingText="Cancelando..."
                 >
-                  {cancelLoading ? "Cancelando..." : "Confirmar Cancelamento"}
-                </Button>
+                  Confirmar Cancelamento
+                </ActionButton>
               </div>
             </div>
           )}
@@ -3528,14 +3537,15 @@ const Agenda: React.FC = () => {
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
+                          <ActionButton
+                            size="sm"
+                            variant="ghost"
                             className="h-8 w-8 p-0 text-success hover:bg-success/10"
                             onClick={() => handleIniciarAtendimento(ag)}
+                            hideSpinner
                           >
                             <Play className="w-4 h-4" />
-                          </Button>
+                          </ActionButton>
                         </TooltipTrigger>
                         <TooltipContent>Iniciar Atendimento</TooltipContent>
                       </Tooltip>
