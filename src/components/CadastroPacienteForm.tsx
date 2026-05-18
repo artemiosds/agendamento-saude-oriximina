@@ -168,6 +168,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
     onChange({ ...form, customData: { ...(form.customData || {}), [key]: value } });
   const cd = form.customData || {};
 
+  // Persiste valor default de Nacionalidade exibido no Select (evita erro de validação quando o usuário não interage)
+  useEffect(() => {
+    if (!cd.nacionalidade) {
+      onChange({ ...form, customData: { ...(form.customData || {}), nacionalidade: "brasileiro" } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [uploading, setUploading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("identificacao");
