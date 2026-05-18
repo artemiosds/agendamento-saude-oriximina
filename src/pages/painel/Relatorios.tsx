@@ -2707,9 +2707,9 @@ th{background:#f1f5f9;font-weight:600;}
                 <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                <ActionButton variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Gerando PDF...">
                   <FileText className="w-4 h-4 mr-1" />PDF
-                </Button>
+                </ActionButton>
                 <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
                   <Download className="w-4 h-4 mr-1" />CSV
                 </Button>
