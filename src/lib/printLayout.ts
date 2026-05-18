@@ -206,29 +206,33 @@ export function buildInstitutionalCSS(config?: DocumentConfig): string {
   .doc-header .logos-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 16px;
     width: 100%;
   }
+  .doc-header .logos-row.cols-1 { justify-content: center; }
+  .doc-header .logos-row.cols-2 { justify-content: space-between; }
+  .doc-header .logos-row.cols-3 { justify-content: space-between; }
   .doc-header .logo-slot {
-    flex: 1 1 0;
     display: flex;
     align-items: center;
   }
+  .doc-header .logos-row.cols-3 .logo-slot { flex: 1 1 0; }
+  .doc-header .logos-row.cols-2 .logo-slot { flex: 0 0 auto; }
+  .doc-header .logos-row.cols-1 .logo-slot { flex: 0 0 auto; }
   .doc-header .logo-slot.left   { justify-content: flex-start; }
   .doc-header .logo-slot.center { justify-content: center; }
   .doc-header .logo-slot.right  { justify-content: flex-end; }
   .doc-header .logo-slot img {
-    max-height: 70px;
-    max-width: 140px;
     object-fit: contain;
     image-rendering: -webkit-optimize-contrast;
   }
-  .doc-header .logo-slot.center img {
-    max-height: 72px;
-    max-width: 180px;
+  .doc-header .logo-slot img.round {
+    object-fit: cover;
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
   }
   .doc-header .header-text {
+
     text-align: center;
     margin-top: 10px;
     padding: 0 8px;
