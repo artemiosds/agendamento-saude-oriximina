@@ -406,6 +406,8 @@ const ConfigFluxoAtendimento: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      <ControleFaltasCard />
     </div>
   );
 };
