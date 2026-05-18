@@ -70,7 +70,7 @@ interface ExternalAppointment {
 
 const ProfissionaisExternos: React.FC = () => {
   const { user } = useAuth();
-  const { unidades, funcionarios } = useData();
+  const { unidades, funcionarios, disponibilidades } = useData();
   const { unidadesVisiveis, profissionaisVisiveis } = useUnidadeFilter();
   const { can } = usePermissions();
   const canManage = can("usuarios", "can_edit");
@@ -456,12 +456,16 @@ const ProfissionaisExternos: React.FC = () => {
     }
   };
 
-  // Mostra TODOS os profissionais internos ativos das unidades visíveis (sem exigir disponibilidade cadastrada)
-  const unidadesVisiveisIds = unidadesVisiveis.map(u => u.id);
+  // Sincronizado com Disponibilidade: só aparecem profissionais que possuem disponibilidade
+  // cadastrada nas unidades visíveis ao usuário atual.
+  const unidadesVisiveisIds = new Set(unidadesVisiveis.map(u => u.id));
+  const profIdsComDisponibilidade = new Set(
+    disponibilidades
+      .filter((d: any) => unidadesVisiveisIds.size === 0 || unidadesVisiveisIds.has(d.unidadeId))
+      .map((d: any) => d.profissionalId)
+  );
   const profissionaisInternos = funcionarios.filter((f: any) =>
-    f.role === "profissional" &&
-    f.ativo &&
-    (unidadesVisiveisIds.length === 0 || !f.unidadeId || unidadesVisiveisIds.includes(f.unidadeId))
+    f.role === "profissional" && f.ativo && profIdsComDisponibilidade.has(f.id)
   );
 
   const filteredExternos = externos.filter(e => {
