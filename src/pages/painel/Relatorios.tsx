@@ -1191,11 +1191,17 @@ ${dataRows}
 
     const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
 
-    openPrintDocument(
-      titleMap[type] || 'Relatório',
-      body,
-      { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
-    );
+      await openPrintDocument(
+        titleMap[type] || 'Relatório',
+        body,
+        { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
+      );
+      toast.dismiss(loadingId);
+      toast.success('Documento pronto', { description: 'A janela de impressão foi aberta. Use "Salvar como PDF" para baixar.' });
+    } catch (err) {
+      console.error('[exportPDF] erro:', err);
+      toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
+    }
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   // === MAPA DE ATENDIMENTO ===
