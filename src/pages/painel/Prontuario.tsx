@@ -1612,7 +1612,31 @@ const ProntuarioPage: React.FC = () => {
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => { void performAutosaveRef.current(); }, 2500);
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
-  }, [dialogOpen, form, selectedProcIds, procDetails, selectedCidsByProc]);
+  }, [
+    dialogOpen,
+    form.paciente_id,
+    form.paciente_nome,
+    form.queixa_principal,
+    form.anamnese,
+    form.sinais_sintomas,
+    form.exame_fisico,
+    form.hipotese,
+    form.conduta,
+    form.prescricao,
+    form.solicitacao_exames,
+    form.evolucao,
+    form.observacoes,
+    form.indicacao_retorno,
+    form.outro_procedimento,
+    form.procedimentos_texto,
+    form.episodio_id,
+    form.tipo_registro,
+    form.data_atendimento,
+    form.hora_atendimento,
+    selectedProcIds,
+    procDetails,
+    selectedCidsByProc,
+  ]);
 
   // Flush on tab hide / before unload
   useEffect(() => {
