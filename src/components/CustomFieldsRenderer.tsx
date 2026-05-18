@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input } from '@/components/ui/input';
+import { DebouncedInput } from '@/components/ui/debounced-input';
 import { Label } from '@/components/ui/label';
 import { DebouncedTextarea } from '@/components/ui/debounced-textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -35,9 +35,9 @@ const CustomFieldsRenderer: React.FC<CustomFieldsRendererProps> = ({ fields, val
                     {field.rotulo}
                     {field.obrigatorio && <span className="text-destructive ml-1">*</span>}
                   </Label>
-                  <Input
+                  <DebouncedInput
                     type={field.tipo === 'number' ? 'number' : field.tipo === 'date' ? 'date' : 'text'}
-                    value={val}
+                    value={String(val ?? '')}
                     onChange={e => onChange(field.nome, field.tipo === 'number' ? Number(e.target.value) : e.target.value)}
                     disabled={disabled}
                     required={field.obrigatorio}
@@ -105,4 +105,4 @@ const CustomFieldsRenderer: React.FC<CustomFieldsRendererProps> = ({ fields, val
   );
 };
 
-export default CustomFieldsRenderer;
+export default React.memo(CustomFieldsRenderer);
