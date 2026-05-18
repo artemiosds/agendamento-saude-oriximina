@@ -433,10 +433,10 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                 <DebouncedTextarea rows={2} value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
               )}
               {campo.tipo === 'text' && (
-                <Input value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
+                <DebouncedInput value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} />
               )}
               {campo.tipo === 'number' && (
-                <Input type="number" value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} className="h-8" />
+                <DebouncedInput type="number" value={v(fieldKey)} onChange={e => set(fieldKey, e.target.value)} className="h-8" />
               )}
               {campo.tipo === 'select' && campo.opcoes && (
                 <Select value={v(fieldKey) || ''} onValueChange={val => set(fieldKey, val)}>
@@ -499,8 +499,8 @@ const CamposEspecialidade: React.FC<CamposEspecialidadeProps> = ({ profissao, va
                     <Badge variant="outline" className="text-[9px] px-1 py-0">Master</Badge>
                   </Label>
                   {campo.tipo === 'textarea' && <DebouncedTextarea rows={2} value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
-                  {campo.tipo === 'text' && <Input value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
-                  {campo.tipo === 'number' && <Input type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
+                  {campo.tipo === 'text' && <DebouncedInput value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} />}
+                  {campo.tipo === 'number' && <DebouncedInput type="number" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
                   {campo.tipo === 'date' && <Input type="date" value={v(fieldKey) || campo.valor_padrao || ''} onChange={e => set(fieldKey, e.target.value)} className="h-8" />}
                   {campo.tipo === 'checkbox' && (
                     <div className="flex items-center gap-2 mt-1">
