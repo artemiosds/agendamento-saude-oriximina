@@ -1525,7 +1525,7 @@ ${dataRows}
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Gerando PDF...">
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => activeTab === 'mapa' ? exportMapaPDF() : downloadPDF(activeTab)} loadingText="Gerando PDF...">
             <FileText className="w-4 h-4 mr-1" />PDF
           </ActionButton>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
