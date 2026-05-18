@@ -350,7 +350,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("nomeMae") && (
                 <div className="md:col-span-2">
-                  <Label>{L("nomeMae", "Nome da Mãe")}</Label>
+                  <Label>{L("nomeMae", "Nome da Mãe")} *</Label>
                   <Input
                     value={form.nomeMae}
                     onChange={(e) => set("nomeMae", sanitizeUpper(e.target.value))}
@@ -362,8 +362,9 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("dataNascimento") && (
                 <div>
-                  <Label>{L("dataNascimento", "Data de Nascimento")}</Label>
+                  <Label>{L("dataNascimento", "Data de Nascimento")} *</Label>
                   <Input type="date" value={form.dataNascimento} onChange={(e) => set("dataNascimento", e.target.value)} />
+                  {errors.dataNascimento && <p className="text-xs text-destructive mt-1">{errors.dataNascimento}</p>}
                 </div>
               )}
 
@@ -395,7 +396,7 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("cns") && (
                 <div>
-                  <Label>{L("cns", "CNS")}</Label>
+                  <Label>{L("cns", "CNS")} *</Label>
                   <Input
                     value={maskCNS(form.cns)}
                     onChange={(e) => set("cns", maskCNS(e.target.value))}
@@ -409,13 +410,14 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
 
               {!H("naturalidade") && (
                 <div className="md:col-span-2">
-                  <Label>{L("naturalidade", "Naturalidade")}</Label>
+                  <Label>{L("naturalidade", "Naturalidade")} *</Label>
                   <MunicipioCombobox
                     value={form.naturalidade}
                     uf={form.naturalidadeUf}
                     onChange={(cidade, uf) => onChange({ ...form, naturalidade: cidade, naturalidadeUf: uf })}
                     placeholder="Selecione o município de naturalidade"
                   />
+                  {errors.naturalidade && <p className="text-xs text-destructive mt-1">{errors.naturalidade}</p>}
                 </div>
               )}
 
