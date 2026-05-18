@@ -3757,6 +3757,7 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      reavaliar_todos_status_falta: { Args: never; Returns: Json }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
         Returns: undefined

@@ -431,18 +431,31 @@ const ControleFaltasCard: React.FC = () => {
     })();
   }, []);
 
+  const reavaliar = async () => {
+    const { data, error } = await (supabase as any).rpc('reavaliar_todos_status_falta');
+    if (error) { toast.error('Erro ao reavaliar: ' + error.message); return null; }
+    return data;
+  };
+
   const save = async (next: typeof cfg) => {
     setSaving(true);
     try {
-      const { data: existing } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      const { data: existing, error: selErr } = await supabase.from('system_config').select('configuracoes').eq('id', 'default').maybeSingle();
+      if (selErr) throw selErr;
       const existingConfig = (existing?.configuracoes as any) || {};
-      await supabase.from('system_config').upsert({
+      const { error: upErr } = await supabase.from('system_config').upsert({
         id: 'default',
         configuracoes: { ...existingConfig, [FALTAS_KEY]: next },
         updated_at: new Date().toISOString(),
       });
+      if (upErr) throw upErr;
       setCfg(next);
-      toast.success('Configuração de faltas salva');
+      const r = await reavaliar();
+      if (r) {
+        toast.success(`Salvo · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos`);
+      } else {
+        toast.success('Configuração de faltas salva');
+      }
     } catch (e: any) {
       toast.error('Erro ao salvar: ' + (e?.message || 'desconhecido'));
     } finally {
@@ -501,6 +514,26 @@ const ControleFaltasCard: React.FC = () => {
               WhatsApp
             </label>
           </div>
+        </div>
+
+        <div className="pt-2 border-t">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              const r = await reavaliar();
+              setSaving(false);
+              if (r) toast.success(`Reavaliados · ${r.bloqueados ?? 0} bloqueados / ${r.faltosos ?? 0} faltosos / ${r.regulares ?? 0} regulares`);
+            }}
+          >
+            {saving ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : null}
+            Reavaliar todos os pacientes agora
+          </Button>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Recalcula o status (REGULAR/FALTOSO/BLOQUEADO) de todos os pacientes com base nos limites atuais.
+          </p>
         </div>
       </CardContent>
     </Card>
