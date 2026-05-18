@@ -82,8 +82,6 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
 
   const submit = async () => {
     if (!ag) return;
-    if (!proc) { toast.error("Selecione o procedimento SIGTAP."); return; }
-    if (!cid) { toast.error("Selecione o CID-10."); return; }
     if (!horaTermino) { toast.error("Informe o horário de término."); return; }
     setBusy(true);
     try {
@@ -92,8 +90,8 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
         p_user_id: user?.id || "",
         p_user_nome: user?.nome || user?.usuario || "",
         p_hora_termino: horaTermino,
-        p_procedimento: proc.codigo,
-        p_cid: cid.codigo,
+        p_procedimento: proc?.codigo || "",
+        p_cid: cid?.codigo || "",
         p_obs: obs || null,
         p_is_master: !!isMaster,
       });
@@ -137,7 +135,7 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
           </div>
 
           <div>
-            <Label className="text-xs">Procedimento SIGTAP *</Label>
+            <Label className="text-xs">Procedimento SIGTAP (opcional)</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -163,7 +161,7 @@ export const ConcluirAtendimentoModal: React.FC<Props> = ({ ag, open, isMaster, 
           </div>
 
           <div>
-            <Label className="text-xs">CID-10 *</Label>
+            <Label className="text-xs">CID-10 (opcional)</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
