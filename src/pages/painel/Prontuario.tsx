@@ -2464,12 +2464,7 @@ const ProntuarioPage: React.FC = () => {
             </div>
           )}
 
-          {patientHistory.length > 0 && (
-            <HistoricoCentralList
-              items={patientHistory}
-              onView={handleViewProntuarioFromHistory}
-            />
-          )}
+          {/* Histórico central removido — exibido apenas no painel lateral direito */}
 
           {/* form-content (was space-y-4 wrapper, removed for Tabs layout) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
