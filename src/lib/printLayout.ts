@@ -543,13 +543,20 @@ export async function docCarimboFor(profissionalId: string, fallback?: { nome?: 
   return docCarimbo(c, fallback);
 }
 
-/** Open a print window with full institutional layout (uses hidden iframe to avoid popup blockers) */
-export async function openPrintDocument(title: string, body: string, meta?: Record<string, string>): Promise<void> {
-  const config = await loadDocumentConfig();
+/**
+ * Build the complete institutional HTML shell for a document.
+ * This is the SINGLE source of truth for the A4 wrapper, headers and footers
+ * used across preview, print and PDF export. Use this for any new document.
+ */
+export function buildDocumentShell(
+  title: string,
+  bodyHtml: string,
+  config: DocumentConfig,
+  meta?: Record<string, string>,
+): string {
   const metaHtml = meta ? docMeta(meta) : '';
   const css = buildInstitutionalCSS(config);
-
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -560,13 +567,17 @@ export async function openPrintDocument(title: string, body: string, meta?: Reco
   ${docHeader(title, config)}
   ${metaHtml}
   <div class="doc-content">
-    ${body}
+    ${bodyHtml}
   </div>
   ${docFooter(config)}
 </body>
 </html>`;
+}
 
-  printViaIframe(html);
+/** Open a print window with full institutional layout (uses hidden iframe to avoid popup blockers) */
+export async function openPrintDocument(title: string, body: string, meta?: Record<string, string>): Promise<void> {
+  const config = await loadDocumentConfig();
+  printViaIframe(buildDocumentShell(title, body, config, meta));
 }
 
 /** Reliable print using a hidden iframe (no popup blocker issues). Exported for reuse. */

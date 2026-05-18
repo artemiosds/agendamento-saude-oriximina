@@ -1,65 +1,87 @@
-## Controle de Atendimentos pelo Gestor Master
+# Padrão Institucional Global para Documentos
 
-### Resumo
-Permitir que o **Master** (perfil `admin.sms` ou `role='master'`) visualize todos os atendimentos na Agenda, identifique atendimentos travados em "Em atendimento" há muito tempo, e finalize-os silenciosamente — sempre preservando o profissional original como executor na produção e BPA.
+## Objetivo
+Garantir que TODOS os documentos do sistema (Prontuário, Ficha do Paciente, Atestado, Receituário, Exames, Encaminhamento, Relatório de Alta, etc.) usem o mesmo cabeçalho + rodapé institucional configurado em **Configurações → Impressão de Documentos**, com logos esquerda/centro/direita, tamanho independente, formato redondo, e fiel entre Preview, Impressão e PDF.
 
----
+## Arquitetura
 
-### 1. Banco de dados (migration)
+### 1. Fonte única de verdade (já existente, será reforçada)
+- `src/lib/printLayout.ts` já contém `DocumentConfig` com `logosConfig` (left/center/right) + `altura` + `redonda` + `ativo`, e a função `docHeader()` que gera o HTML do cabeçalho com distribuição inteligente (1/2/3 logos).
+- Vou adicionar `docFooter()` no mesmo arquivo (rodapé institucional global com endereço, telefone, CNES, data/hora, "página X").
+- Vou adicionar `buildDocumentShell(title, bodyHtml, config)` que monta documento A4 completo com CSS `@page`, `@media print`, cabeçalho global e rodapé global. Esse será o **DocumentShell** central.
 
-Adicionar à tabela `agendamentos`:
-- `iniciado_em` timestamptz
-- `concluido_em` timestamptz
-- `concluido_por_id` text (id do usuário que clicou "concluir")
-- `concluido_por_nome` text
-- `concluido_por_master` boolean default false
-- `procedimento_concluido` text (código SIGTAP)
-- `cid_concluido` text
-- `obs_conclusao` text
+### 2. Refatorar geradores existentes para usar `buildDocumentShell`
+Trocar templates ad-hoc por chamadas ao shell único:
 
-Funções SECURITY DEFINER:
-- `concluir_atendimento_master(p_agendamento_id, p_user_id, p_user_nome, p_hora_termino, p_procedimento, p_cid, p_obs, p_is_master)` — valida (Master conclui qualquer um; profissional só os próprios), grava status `concluido`, preenche campos acima e registra em `notification_logs` (`canal='sistema'`, `evento='atendimento_concluido_master'`) para log/auditoria — **profissional NÃO é notificado** (só fica no log de auditoria).
-- `get_atendimentos_pendentes_master(p_unidade_id, p_minutos)` — retorna agendamentos `status='em_atendimento'` com `iniciado_em < now() - interval`.
+| Arquivo | Documento | Ação |
+|---|---|---|
+| `src/lib/printFichaPaciente.ts` | Ficha Cadastral do Paciente | Reescrever para usar `buildDocumentShell` + blocos: Identificação, Endereço, Contato, Complementares/SUS, Anexos |
+| `src/lib/prontuarioPdf.ts` | Prontuário Clínico | Substituir cabeçalho/rodapé pelo shell global |
+| `src/lib/referralPrinter.ts` | Encaminhamento | Substituir cabeçalho pelo shell global |
+| `src/components/SolicitacaoExames.tsx` (impressão A5) | Solicitação de Exames | Manter A5 mas adotar cabeçalho compacto da config |
+| `src/components/PrescricaoMedicamentos.tsx` | Receituário | Idem |
+| `src/components/GerarDocumentoModal.tsx` | Atestado/Declaração/Termo | Usar shell global |
+| `src/pages/painel/RelatorioAlta.tsx` | Relatório de Alta | Usar shell global com título correto |
+| `src/components/FichaImpressao.tsx` | Impressão alternativa de ficha | Usar shell global |
 
-Config default em `system_config.configuracoes->'config_fluxo_atendimento'`:
-- `alerta_minutos_em_atendimento` (default 60)
-- `coordenador_pode_concluir` (default false)
+### 3. Página de Configuração (`src/components/config/ConfigImpressaoDocumentos.tsx`)
+- Já existe com 3 slots de logos, sliders de altura e switch de redonda.
+- Adicionar: **seção Rodapé** (endereço, telefone, e-mail, CNES, switches "mostrar página X/Y" e "mostrar data/hora").
+- Adicionar: **margens A4** (top/right/bottom/left em mm).
+- Preview renderiza usando o **mesmo `buildDocumentShell`** (não HTML manual) para garantir fidelidade.
+- Toasts de loading/sucesso/erro já existem via `useConfiguracao` (manter).
 
-### 2. Agenda (`src/pages/painel/Agenda.tsx`)
+### 4. Storage
+- Bucket `document-logos` já existe e é público. Usar para as 3 logos.
 
-- Quando `isGlobalAdmin` ou `isUnitMaster` → não filtrar por `profissional_id`, mostrar todos. Adicionar filtro por profissional + status + período + setor.
-- Em cada card: badge de status com ícone (⏳ 🔵 ✅ ❌ 🔄). Se `em_atendimento` há mais que `alerta_minutos_em_atendimento` → badge vermelho 🔴 + tooltip "X min sem finalização".
-- Botão **"Em atendimento"** (Master): chama RPC `iniciar_atendimento` e grava `iniciado_em`.
-- Botão **"Concluir Atendimento"** (Master): abre modal com horário término (default agora), procedimento SIGTAP (BuscaSigtap), CID-10 (BuscaCid), observação. Submete `concluir_atendimento_master`. Toast silencioso, sem disparar notificação ao profissional.
+### 5. Ficha Cadastral do Paciente (foco crítico)
+Reescrita do template em `printFichaPaciente.ts`:
+- Cabeçalho global (`docHeader`)
+- Título: **FICHA CADASTRAL DO PACIENTE**
+- Bloco 1 — Identificação (nome, mãe, nascimento, idade, sexo, CPF, CNS, naturalidade, nacionalidade, raça/cor)
+- Bloco 2 — Endereço (CEP, logradouro, número, complemento, bairro, município/UF)
+- Bloco 3 — Contato (telefones, e-mail)
+- Bloco 4 — Complementares/SUS (unidade, especialidade destino, origem, CID complementar, observações, dados BPA)
+- Bloco 5 — Anexos (apenas lista de nomes)
+- Rodapé global (`docFooter`)
+- Campos vazios renderizam como "Não informado"
+- Botão de impressão na página Pacientes invoca essa função única
 
-### 3. Dashboard
+### 6. CSS A4 unificado
+Embutido em `buildDocumentShell`:
+```
+@page { size: A4; margin: <config>mm; }
+@media print { .no-print { display:none!important } .doc-section { break-inside: avoid } }
+.document-page { width: 210mm; min-height: 297mm; }
+```
 
-Acrescentar card "Atendimentos pendentes de finalização" (somente Master) usando `get_atendimentos_pendentes_master`, com link para Agenda.
+## Escopo de arquivos
 
-### 4. Configurações (`ConfigFluxoAtendimento.tsx`)
+**Editar:**
+- `src/lib/printLayout.ts` — adicionar `docFooter()`, `buildDocumentShell()`, tipos de rodapé
+- `src/components/config/ConfigImpressaoDocumentos.tsx` — seção rodapé + margens, preview via shell
+- `src/lib/printFichaPaciente.ts` — reescrever usando shell
+- `src/lib/prontuarioPdf.ts` — usar shell
+- `src/lib/referralPrinter.ts` — usar shell
+- `src/components/GerarDocumentoModal.tsx` — usar shell
+- `src/components/SolicitacaoExames.tsx` — adotar cabeçalho da config
+- `src/components/PrescricaoMedicamentos.tsx` — adotar cabeçalho da config
+- `src/pages/painel/RelatorioAlta.tsx` — usar shell, título correto
+- `src/components/FichaImpressao.tsx` — usar shell
 
-Novo card "Controle de Atendimentos":
-- Tempo máximo sem finalização (input minutos)
-- Coordenador pode concluir (switch)
-Persistido em `system_config.configuracoes.config_fluxo_atendimento`.
+**Não tocar:** lógica clínica, BPA, agenda, cadastro de paciente, RLS, dados.
 
-### 5. BPA / Produção
+## Fora de escopo (preparado para futuro, não implementado agora)
+- Overrides por unidade/tipo de documento/profissional — arquitetura permite mas usaremos sempre global.
+- Auditoria de impressão/PDF — apontamento para futuro.
 
-Sem alterações de lógica: a edge function `generate-bpa` e relatórios já leem `profissional_id` do agendamento (executor), que continua intocado. Apenas garantir que `procedimento_concluido` / `cid_concluido` sejam considerados quando preenchidos pelo Master (fallback para procedimento já existente). Ajustar `generate-bpa/index.ts` para usar `procedimento_concluido` quando presente.
+## Riscos
+- Documentos A5 (receita/exames) hoje têm layout próprio; vou preservar tamanho A5 mas trocar o cabeçalho pelo gerado da config (versão compacta).
+- Alguns geradores chamam `window.print` direto em iframes — vou manter o fluxo mas trocar o conteúdo HTML.
 
-### 6. Regras
-
-- Master conclui silenciosamente — não toca em `prontuario` e profissional pode editar depois.
-- Produção sempre no nome do profissional da agenda — campos `profissional_id`/`profissional_nome` nunca alterados.
-- `concluido_por_master=true` é apenas para log/auditoria.
-
----
-
-### Arquivos a alterar
-
-- **Nova migration**: colunas + funções
-- `src/pages/painel/Agenda.tsx` — bypass de filtro Master, botões e modal
-- `src/pages/painel/Dashboard.tsx` — card pendentes
-- `src/components/config/ConfigFluxoAtendimento.tsx` — novo card
-- `supabase/functions/generate-bpa/index.ts` — usar `procedimento_concluido` quando presente
-- `src/integrations/supabase/types.ts` — auto após migration
+## Entrega
+1. Shell único + rodapé global no `printLayout.ts`
+2. Config UI com rodapé/margens e preview fiel
+3. Ficha do Paciente reescrita
+4. Prontuário, Relatório de Alta, Encaminhamento, Atestado/Receita/Exames migrados
+5. Smoke test visual em cada documento

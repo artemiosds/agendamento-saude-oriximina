@@ -2,9 +2,8 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { formatCNS, maskCNS } from '@/lib/cnsUtils';
 import { Button } from '@/components/ui/button';
 import { Printer, Loader2 } from 'lucide-react';
-import { loadDocumentConfig, printViaIframe, type DocumentConfig } from '@/lib/printLayout';
-import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
-import logoCerFallback from '@/assets/logo-cer-ii.png';
+import { loadDocumentConfig, printViaIframe, buildDocumentShell, type DocumentConfig } from '@/lib/printLayout';
+
 
 interface FichaData {
   paciente: {
@@ -107,216 +106,8 @@ interface FichaImpressaoProps {
   onPrintComplete?: () => void;
 }
 
-const resolveLogoUrl = (src: string): string => {
-  if (src.startsWith('http') || src.startsWith('/')) return src;
-  return src;
-};
 
-const PRINT_CSS = `
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  @page { size: A4 portrait; margin: 8mm 10mm 10mm 10mm; }
-  body {
-    font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 10.5px;
-    color: #1a1a1a;
-    line-height: 1.4;
-    padding: 0;
-    width: 100%;
-    background: #fff;
-  }
 
-  /* ===== HEADER ===== */
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding-bottom: 6px;
-    margin-bottom: 8px;
-    border-bottom: 2px solid #0c4a6e;
-  }
-  .header-logo img {
-    width: 50px;
-    height: 50px;
-    object-fit: cover;
-    border-radius: 4px;
-  }
-  .header-center {
-    flex: 1;
-    text-align: center;
-  }
-  .header-center h1 {
-    font-size: 12px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: #0c4a6e;
-    margin: 0;
-  }
-  .header-center h2 {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: #334155;
-    margin: 1px 0 0;
-  }
-  .header-center .ficha-tipo {
-    font-size: 11px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: #0c4a6e;
-    margin-top: 3px;
-    letter-spacing: 0.5px;
-  }
-  .header-right {
-    text-align: right;
-    font-size: 9.5px;
-    color: #475569;
-    line-height: 1.6;
-    min-width: 120px;
-  }
-  .header-right b { color: #1e293b; }
-
-  /* ===== SECTIONS ===== */
-  .bloco {
-    margin-top: 6px;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    overflow: hidden;
-    page-break-inside: avoid;
-  }
-  .bloco-titulo {
-    font-size: 9px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: #f1f5f9;
-    color: #0c4a6e;
-    padding: 4px 10px;
-    border-bottom: 1px solid #cbd5e1;
-    margin: 0;
-  }
-  .bloco-body {
-    padding: 6px 10px;
-  }
-
-  /* ===== FIELD GRIDS ===== */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 12px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
-  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px 6px; }
-
-  .campo { margin-bottom: 1px; display: flex; align-items: baseline; gap: 4px; overflow: hidden; }
-  .campo b {
-    font-size: 8px;
-    text-transform: uppercase;
-    color: #64748b;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-  .campo span { color: #0f172a; font-weight: 600; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .campo-full { grid-column: 1 / -1; }
-
-  /* ===== CLINICAL AREAS ===== */
-  .manual-area {
-    margin-top: 4px;
-  }
-  .manual-label {
-    font-size: 8.5px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 2px;
-  }
-  .manual-lines {
-    border-bottom: 1px solid #e2e8f0;
-    min-height: 20px;
-    margin-bottom: 6px;
-  }
-  .manual-lines-lg {
-    min-height: 60px;
-    background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
-    background-size: 100% 20px;
-    margin-bottom: 8px;
-  }
-
-  /* ===== VITALS TABLE ===== */
-  .vitais-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-    margin-top: 2px;
-  }
-  .vital-item {
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
-    padding: 4px 8px;
-    text-align: center;
-    background: #f8fafc;
-  }
-  .vital-item b {
-    display: block;
-    font-size: 7.5px;
-    text-transform: uppercase;
-    color: #64748b;
-    margin-bottom: 1px;
-  }
-  .vital-item span {
-    font-weight: 700;
-    font-size: 11px;
-    color: #0f172a;
-  }
-
-  /* ===== EVOLUTION ITEMS ===== */
-  .evo-item {
-    border-bottom: 1px solid #f1f5f9;
-    padding: 4px 0;
-  }
-  .evo-item:last-child { border-bottom: none; }
-  .evo-meta { font-size: 8.5px; color: #64748b; font-weight: 700; margin-bottom: 1px; }
-  .evo-text { font-size: 9.5px; color: #1e293b; line-height: 1.3; }
-
-  /* ===== SIGNATURE ===== */
-  .assinatura-area {
-    margin-top: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    page-break-inside: avoid;
-  }
-  .assinatura-bloco {
-    text-align: center;
-    width: 200px;
-  }
-  .assinatura-traco {
-    border-top: 1px solid #1e293b;
-    padding-top: 18px;
-  }
-  .assinatura-label {
-    font-size: 8.5px;
-    color: #64748b;
-    margin-top: 2px;
-  }
-  .assinatura-nome {
-    font-size: 9.5px;
-    font-weight: 700;
-    color: #1e293b;
-  }
-
-  /* ===== FOOTER ===== */
-  .rodape {
-    margin-top: 10px;
-    padding-top: 4px;
-    border-top: 1px solid #e2e8f0;
-    text-align: center;
-    font-size: 8px;
-    color: #94a3b8;
-  }
-
-  @media print {
-    body { padding: 0; }
-    .bloco { break-inside: avoid; }
-    .assinatura-area { break-inside: avoid; }
-  }
-`;
 
 export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'completa', onPrintComplete }) => {
   const [config, setConfig] = useState<DocumentConfig | null>(null);
@@ -329,55 +120,17 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
 
   const buildHTML = useCallback(() => {
     if (!config) return '';
-    
-    const logoLeft = config.logoEsquerda || (logoSmsFallback as string);
-    const logoRight = config.logoDireita || (logoCerFallback as string);
-    const logoCentral = config.mostrarLogoCentral && config.logoCentral 
-      ? `<img src="${config.logoCentral}" alt="Logo Central" style="max-height:50px;max-width:150px;object-fit:contain;margin-bottom:4px;" />` 
-      : '';
-    
+
     const now = new Date();
     const dataAtual = formatarData(now.toISOString());
     const horaAtual = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const idade = calcIdade(data.paciente.data_nascimento);
     const p = data.paciente;
 
-    const evolucaoHTML = '';
-
     const formatBool = (val?: boolean) => val ? 'SIM' : 'NÃO';
 
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Ficha CER II - ${v(p.nome)}</title>
-  <style>${PRINT_CSS}</style>
-</head>
-<body>
-
-  <!-- CABEÇALHO -->
-  <div class="header" style="${config.mostrarLinhaDivisoria ? 'border-bottom: 2px solid #0c4a6e;' : 'border-bottom: none;'}">
-    <div class="header-logo">
-      <img src="${logoLeft}" alt="Logo Esquerda" />
-    </div>
-    <div class="header-center">
-      ${logoCentral}
-      <h1 style="font-family: ${config.tipografia.fonte}">${config.linha1}</h1>
-      <h2 style="font-family: ${config.tipografia.fonte}">${config.linha2}</h2>
-      ${config.linha3 ? `<div style="font-size: 9px; color: #475569; text-transform: uppercase; font-weight: 600;">${config.linha3}</div>` : ''}
-      ${config.linha4 ? `<div style="font-size: 8.5px; color: #64748b;">${config.linha4}</div>` : ''}
-      <div class="ficha-tipo">${somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO CLÍNICO'}</div>
-    </div>
-    <div class="header-logo">
-      <img src="${logoRight}" alt="Logo Direita" style="max-height:50px;max-width:90px;object-fit:contain;" />
-    </div>
-    <div class="header-right">
-      <div><b>Data:</b> ${dataAtual}</div>
-      <div><b>Hora:</b> ${horaAtual}</div>
-      <div><b>Prontuário:</b> ________________</div>
-    </div>
-  </div>
-
+    // Apenas o conteúdo (sem cabeçalho/rodapé) — o shell global cuida disso
+    const bodyContent = `
   <!-- IDENTIFICAÇÃO -->
   <div class="bloco">
     <div class="bloco-titulo">1. Identificação do Paciente</div>
@@ -480,7 +233,7 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
         <div class="vital-item"><b>FC</b><span>${v(data.sinaisVitais.frequencia_cardiaca) || '___'}</span></div>
         <div class="vital-item"><b>FR</b><span>${v(data.sinaisVitais.frequencia_respiratoria) || '___'}</span></div>
         <div class="vital-item"><b>Temp</b><span>${v(data.sinaisVitais.temperatura) || '___'}</span></div>
-        <div class="vital-item"><b>SpO₂</b><span>${v(data.sinaisVitais.saturacao) || '___'}</span></div>
+        <div class="vital-item"><b>SpO2</b><span>${v(data.sinaisVitais.saturacao) || '___'}</span></div>
         <div class="vital-item"><b>Peso</b><span>${v(data.sinaisVitais.peso) || '___'}</span></div>
         <div class="vital-item"><b>Altura</b><span>${v(data.sinaisVitais.altura) || '___'}</span></div>
         <div class="vital-item"><b>Glicemia</b><span>${v(data.sinaisVitais.glicemia) || '___'}</span></div>
@@ -498,7 +251,6 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
       </div>
       <div class="manual-area">
         <div class="manual-label">Evolução Clínica:</div>
-        ${evolucaoHTML ? `<div style="margin-bottom:8px">${evolucaoHTML}</div>` : ''}
         <div class="manual-lines-lg"></div>
       </div>
     </div>
@@ -530,25 +282,49 @@ export const FichaImpressao: React.FC<FichaImpressaoProps> = ({ data, mode = 'co
   ` : ''}
 
   <!-- ASSINATURA -->
-  <div class="assinatura-area">
-    <div style="font-size: 10px; color: #475569;">
+  <div class="signature" style="margin-top: 30px;">
+    <div style="font-size: 10pt; color: #475569; margin-bottom: 20px;">
       Oriximiná &mdash; PA, ____/____/________
     </div>
-    <div class="assinatura-bloco">
-      <div class="assinatura-traco"></div>
-      <div class="assinatura-nome">${!somentePessoais ? 'Profissional Responsável' : 'Responsável pelo Cadastro'}</div>
-      <p class="assinatura-label">${!somentePessoais ? 'Registro Profissional' : 'Assinatura'}</p>
-    </div>
-  </div>
+    <div class="signature-line"></div>
+    <div class="name">${!somentePessoais ? 'Profissional Responsável' : 'Responsável pelo Cadastro'}</div>
+    <div class="role">${!somentePessoais ? 'Registro Profissional' : 'Assinatura'}</div>
+  </div>`;
 
-  <!-- RODAPÉ -->
-  <div class="rodape">
-    SMS Oriximiná &mdash; CER II &mdash; Documento gerado em ${dataAtual} às ${horaAtual} &mdash; ${somentePessoais ? 'Ficha Cadastral' : 'Ficha Completa / Prontuário'}
-  </div>
+    // Estilos auxiliares específicos dos blocos da ficha (cabeçalho/rodapé vêm do shell global)
+    const localStyles = `
+    <style>
+      .bloco { margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; }
+      .bloco-titulo { font-size: 9pt; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+        background: #f1f5f9; color: #0c4a6e; padding: 4px 10px; border-bottom: 1px solid #cbd5e1; }
+      .bloco-body { padding: 6px 10px; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+      .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 12px; }
+      .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 8px; }
+      .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px 6px; }
+      .campo { margin-bottom: 1px; display: flex; align-items: baseline; gap: 4px; overflow: hidden; }
+      .campo b { font-size: 8pt; text-transform: uppercase; color: #64748b; font-weight: 700; white-space: nowrap; }
+      .campo span { color: #0f172a; font-weight: 600; font-size: 10pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .campo-full { grid-column: 1 / -1; }
+      .manual-area { margin-top: 4px; }
+      .manual-label { font-size: 8.5pt; font-weight: 800; text-transform: uppercase; color: #475569; margin-bottom: 2px; }
+      .manual-lines { border-bottom: 1px solid #e2e8f0; min-height: 20px; margin-bottom: 6px; }
+      .manual-lines-lg { min-height: 60px; background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
+        background-size: 100% 20px; margin-bottom: 8px; }
+      .vitais-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 2px; }
+      .vital-item { border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; text-align: center; background: #f8fafc; }
+      .vital-item b { display: block; font-size: 7.5pt; text-transform: uppercase; color: #64748b; margin-bottom: 1px; }
+      .vital-item span { font-weight: 700; font-size: 11pt; color: #0f172a; }
+    </style>`;
 
-</body>
-</html>`;
-  }, [data, somentePessoais]);
+    const title = somentePessoais ? 'FICHA CADASTRAL DO PACIENTE' : 'FICHA DE ATENDIMENTO CLÍNICO';
+    const shell = buildDocumentShell(title, localStyles + bodyContent, config, {
+      Emissão: `${dataAtual} ${horaAtual}`,
+      Paciente: p.nome || '—',
+    });
+    return shell;
+  }, [data, somentePessoais, config]);
+
 
   const handlePrint = useCallback(() => {
     try {
