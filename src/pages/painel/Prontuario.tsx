@@ -1543,6 +1543,8 @@ const ProntuarioPage: React.FC = () => {
           prontId = inserted.id;
           setEditId(prontId);
           editIdRef.current = prontId;
+          // Reset status de faltas ao registrar novo atendimento
+          try { await (supabase as any).rpc('resetar_faltas_paciente', { p_paciente_id: record.paciente_id }); } catch {}
         }
       }
 
