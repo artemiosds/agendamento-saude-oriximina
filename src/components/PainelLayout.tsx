@@ -316,6 +316,7 @@ const PainelLayout: React.FC = () => {
           </span>
         </header>
 
+        <SystemStatusBanner />
         <WhatsappPausedBanner />
 
         <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto safe-bottom">
