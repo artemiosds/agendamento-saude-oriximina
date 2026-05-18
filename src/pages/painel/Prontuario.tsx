@@ -648,6 +648,12 @@ const ProntuarioPage: React.FC = () => {
     });
   }, [procedimentos, user, procSearch, sigtapDisponibilizarTodos]);
 
+  const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
+  const listedProcedimentos = useMemo(() => {
+    const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
+    return available.slice(0, procSearch.trim() ? 300 : 120);
+  }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
+
   // Lighter projection for listing (avoid heavy text columns until detail)
   const LIST_COLS = "id,paciente_id,paciente_nome,profissional_id,profissional_nome,unidade_id,sala_id,setor,agendamento_id,data_atendimento,hora_atendimento,queixa_principal,indicacao_retorno,procedimentos_texto,tipo_registro,criado_em,atualizado_em";
 
