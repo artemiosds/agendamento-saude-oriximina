@@ -12,7 +12,9 @@ import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
 import { Download, FileText, Filter, Clock, Users, CalendarDays, TrendingUp, AlertTriangle, UserCheck, ListOrdered, Printer, BarChart3, HeartPulse, MapPin, Search, RefreshCw, Stethoscope, Brain, Ear, Dumbbell, Hand, Apple, Heart, Users2, Activity, Info, ChevronRight, ClipboardList, type LucideIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { openPrintDocument } from '@/lib/printLayout';
+import { openPrintDocument, printViaIframe } from '@/lib/printLayout';
+import { toast } from 'sonner';
+import { ActionButton } from '@/components/ui/action-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
 import logoCerFallback from '@/assets/logo-cer-ii.png';
@@ -1104,7 +1106,21 @@ ${dataRows}
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
 
   // === EXPORT PDF ===
-  const exportPDF = useCallback((type: string) => {
+  const exportPDF = useCallback(async (type: string) => {
+    try {
+      // Empty-data guard per tab
+      const isEmpty =
+        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+        type === 'produtividade' ? porProfissional.length === 0 :
+        type === 'faltas' ? faltasReport.length === 0 :
+        type === 'pacientes' ? pacientesReport.length === 0 :
+        type === 'fila' ? filaReport.items.length === 0 : false;
+      if (isEmpty) {
+        toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
+        return;
+      }
+      const loadingId = toast.loading('Gerando PDF...', { description: 'Preparando documento para impressão / salvar como PDF.' });
+      await new Promise(r => requestAnimationFrame(() => r(null))); // yield UI
     const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
     const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos';
     const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
@@ -1175,11 +1191,17 @@ ${dataRows}
 
     const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
 
-    openPrintDocument(
-      titleMap[type] || 'Relatório',
-      body,
-      { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
-    );
+      await openPrintDocument(
+        titleMap[type] || 'Relatório',
+        body,
+        { 'Período': periodo, 'Unidade': un || 'Todas', 'Profissional': prof || 'Todos' }
+      );
+      toast.dismiss(loadingId);
+      toast.success('Documento pronto', { description: 'A janela de impressão foi aberta. Use "Salvar como PDF" para baixar.' });
+    } catch (err) {
+      console.error('[exportPDF] erro:', err);
+      toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
+    }
   }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, stats, tempoStats, unidades, filterUnit, filterProf, dateFrom, dateTo, profissionais]);
 
   // === MAPA DE ATENDIMENTO ===
@@ -1261,7 +1283,13 @@ ${dataRows}
   };
 
   const exportMapaPDF = useCallback(() => {
-    if (mapaData.length === 0) return;
+    if (mapaData.length === 0) {
+      toast.warning('Não há dados para exportar', { description: 'Gere o relatório primeiro.' });
+      return;
+    }
+    let loadingId: string | number | undefined;
+    try {
+      loadingId = toast.loading('Gerando PDF...', { description: 'Preparando mapa de atendimentos.' });
     const now = new Date().toLocaleString('pt-BR');
     const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
@@ -1286,13 +1314,10 @@ ${dataRows}
       </table>
       <div style="margin-top:20px;font-size:9px;color:#64748b;">Gerado por: ${user?.nome || ''} — ${now}</div>`;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const logoUrl = logoSmsFallback;
     const logoUrlRight = logoCerFallback;
 
-    printWindow.document.write(`<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos — SMS Oriximiná</title>
 <style>
   @page { size: A4 landscape; margin: 10mm; }
@@ -1328,10 +1353,16 @@ ${dataRows}
   </div>
   <div class="periodo">Período: ${periodo}</div>
   ${body}
-</body></html>`);
+</body></html>`;
 
-    printWindow.document.close();
-    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+      printViaIframe(html);
+      if (loadingId !== undefined) toast.dismiss(loadingId);
+      toast.success('Documento pronto', { description: 'Use "Salvar como PDF" na janela de impressão.' });
+    } catch (err) {
+      console.error('[exportMapaPDF] erro:', err);
+      if (loadingId !== undefined) toast.dismiss(loadingId);
+      toast.error('Não foi possível gerar o PDF', { description: 'Tente novamente em instantes.' });
+    }
   }, [mapaData, mapaDateFrom, mapaDateTo, user]);
 
   const exportMapaCSV = useCallback(() => {
@@ -1382,15 +1413,15 @@ ${dataRows}
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportCSV(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />CSV
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Gerando PDF...">
             <FileText className="w-4 h-4 mr-1" />PDF
-          </Button>
+          </ActionButton>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
           </Button>
-          <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)}>
+          <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Preparando impressão...">
             <Printer className="w-4 h-4 mr-1" />Imprimir
-          </Button>
+          </ActionButton>
         </div>
       </div>
 
@@ -1707,21 +1738,21 @@ ${dataRows}
                     {prodViewMode === 'tabela' ? <><BarChart3 className="w-3 h-3 mr-1" />Ver gráfico</> : <><ListOrdered className="w-3 h-3 mr-1" />Ver tabela</>}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('produtividade')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    const now = new Date().toLocaleString('pt-BR');
-                    const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
-                    const prodRows = porProfissional.map(p => {
-                      const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
-                      const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
-                      return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
-                    }).join('');
-                    const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) return;
-                    const logoUrl = logoSmsFallback;
-                    const logoUrlRight = logoCerFallback;
-                    printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('produtividade')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
+                  <ActionButton variant="ghost" size="sm" loadingText="Preparando..." onClick={() => {
+                    if (porProfissional.length === 0) { toast.warning('Não há dados para exportar'); return; }
+                    try {
+                      const now = new Date().toLocaleString('pt-BR');
+                      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+                      const prodRows = porProfissional.map(p => {
+                        const roleLabel = p.role === 'master' ? 'Master' : p.role === 'coordenador' ? 'Coordenador' : 'Profissional';
+                        const taxaBadge = p.taxaConclusao >= 70 ? '🟢' : p.taxaConclusao >= 40 ? '🟡' : '🔴';
+                        return `<tr><td>${p.nome}</td><td>${roleLabel}</td><td>${p.unidade}</td><td style="text-align:center">${p.total}</td><td style="text-align:center">${p.concluidos}</td><td style="text-align:center">${p.faltas}</td><td style="text-align:center">${p.cancelados}</td><td style="text-align:center">${p.remarcados}</td><td style="text-align:center">${p.retornos}</td><td style="text-align:center">${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td style="text-align:center">${taxaBadge} ${p.taxaConclusao}%</td><td style="text-align:center">${p.taxaRetorno}%</td></tr>`;
+                      }).join('');
+                      const totalRow = `<tr style="font-weight:700;background:#f1f5f9;"><td colspan="3">TOTAL</td><td style="text-align:center">${prodTotals.total}</td><td style="text-align:center">${prodTotals.concluidos}</td><td style="text-align:center">${prodTotals.faltas}</td><td style="text-align:center">${prodTotals.cancelados}</td><td style="text-align:center">${prodTotals.remarcados}</td><td style="text-align:center">${prodTotals.retornos}</td><td></td><td></td><td></td></tr>`;
+                      const logoUrl = logoSmsFallback;
+                      const logoUrlRight = logoCerFallback;
+                      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório de Produtividade</title>
 <style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
 .header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
 .header img{max-height:48px;max-width:90px;object-fit:contain;}
@@ -1734,10 +1765,14 @@ th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Relatório de Produtividade por Profissional</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
 <table><thead><tr><th>Profissional</th><th>Perfil</th><th>Unidade</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}${totalRow}</tbody></table>
-</body></html>`);
-                    printWindow.document.close();
-                    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
-                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</Button>
+</body></html>`;
+                      printViaIframe(html);
+                      toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
+                    } catch (err) {
+                      console.error(err);
+                      toast.error('Não foi possível iniciar a impressão');
+                    }
+                  }}><Printer className="w-3 h-3 mr-1" />Imprimir</ActionButton>
                 </div>
               </div>
 
@@ -1937,7 +1972,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" /> Faltas por Paciente</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('faltas')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('faltas')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2005,7 +2040,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><Users className="w-5 h-5 text-primary" /> Pacientes</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('pacientes')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('pacientes')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2189,7 +2224,7 @@ th{background:#f1f5f9;font-weight:600;}
                 <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
-                  <Button variant="ghost" size="sm" onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</Button>
+                  <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => exportPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
                 </div>
               </div>
               <div className="overflow-x-auto">
@@ -2672,26 +2707,26 @@ th{background:#f1f5f9;font-weight:600;}
                 <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
+                <ActionButton variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Gerando PDF...">
                   <FileText className="w-4 h-4 mr-1" />PDF
-                </Button>
+                </ActionButton>
                 <Button variant="outline" size="sm" onClick={exportMapaCSV} disabled={!mapaGenerated || mapaData.length === 0} className="h-9">
                   <Download className="w-4 h-4 mr-1" />CSV
                 </Button>
-                <Button variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" onClick={() => {
-                  const now = new Date().toLocaleString('pt-BR');
-                  const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
-                  const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                  const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
-                  const tableRows = mapaData.map((r, i) => {
-                    const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-                    return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
-                  }).join('');
-                  const printWindow = window.open('', '_blank');
-                  if (!printWindow) return;
-                  const logoUrl = logoSmsFallback;
-                  const logoUrlRight = logoCerFallback;
-                  printWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
+                <ActionButton variant="outline" size="sm" disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Preparando..." onClick={() => {
+                  if (mapaData.length === 0) { toast.warning('Não há dados para exportar'); return; }
+                  try {
+                    const now = new Date().toLocaleString('pt-BR');
+                    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                    const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
+                    const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
+                    const tableRows = mapaData.map((r, i) => {
+                      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
+                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                    }).join('');
+                    const logoUrl = logoSmsFallback;
+                    const logoUrlRight = logoCerFallback;
+                    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
 <style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
 .header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
 .header img{max-height:48px;max-width:90px;object-fit:contain;}
@@ -2705,12 +2740,16 @@ th{background:#f1f5f9;font-weight:600;}
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
 <table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
 <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
-</body></html>`);
-                  printWindow.document.close();
-                  setTimeout(() => { printWindow.focus(); printWindow.print(); }, 400);
+</body></html>`;
+                    printViaIframe(html);
+                    toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
+                  } catch (err) {
+                    console.error(err);
+                    toast.error('Não foi possível iniciar a impressão');
+                  }
                 }}>
                   <Printer className="w-4 h-4 mr-1" />Imprimir
-                </Button>
+                </ActionButton>
               </div>
 
               {mapaGenerated && mapaData.length === 0 && (
