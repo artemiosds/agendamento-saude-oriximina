@@ -158,6 +158,16 @@ export const patientService = {
       endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
       observacoes: getValue('observacoes', oldPaciente.observacoes),
       cid: getValue('cid', oldPaciente.cid),
+      // Exceção administrativa de bloqueio (TFD / Ordem Judicial)
+      is_tfd: (inputCustomData.is_tfd === true) || (oldPaciente.is_tfd === true && inputCustomData.is_tfd === undefined),
+      possui_ordem_judicial: (inputCustomData.possui_ordem_judicial === true) || (oldPaciente.possui_ordem_judicial === true && inputCustomData.possui_ordem_judicial === undefined),
+      motivo_excecao_bloqueio: (inputCustomData.is_tfd === true || inputCustomData.possui_ordem_judicial === true)
+        ? (inputCustomData.motivo_excecao_bloqueio || oldPaciente.motivo_excecao_bloqueio || null)
+        : null,
+      observacao_tfd_ordem_judicial: inputCustomData.observacao_tfd_ordem_judicial ?? oldPaciente.observacao_tfd_ordem_judicial ?? null,
+      data_marcacao_excecao: (inputCustomData.is_tfd === true || inputCustomData.possui_ordem_judicial === true)
+        ? (oldPaciente.data_marcacao_excecao || new Date().toISOString())
+        : null,
       custom_data: updatedCustomData,
     };
 
