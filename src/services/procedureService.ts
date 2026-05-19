@@ -257,8 +257,15 @@ export const procedureService = {
    * Busca unificada (procedimentos SIGTAP + CIDs) usando RPC com índices GIN trigram.
    * Retorna até `lim` resultados por seção, ordenados por similaridade.
    */
-  async searchUnified(query: string, lim = 10): Promise<{
-    procedimentos: { codigo: string; nome: string; especialidade: string | null }[];
+  async searchUnified(query: string, lim = 50): Promise<{
+    procedimentos: {
+      codigo: string;
+      nome: string;
+      especialidade: string | null;
+      matched_by?: 'codigo' | 'nome' | 'cid';
+      cid_codigo?: string | null;
+      cid_descricao?: string | null;
+    }[];
     cids: { codigo: string; descricao: string }[];
   }> {
     const q = query.trim();
@@ -274,7 +281,7 @@ export const procedureService = {
   /**
    * Lista procedimentos vinculados a um CID (para sugestão automática).
    */
-  async getProceduresForCid(cidCodigo: string, lim = 10): Promise<{ codigo: string; nome: string; especialidade: string | null }[]> {
+  async getProceduresForCid(cidCodigo: string, lim = 50): Promise<{ codigo: string; nome: string; especialidade: string | null }[]> {
     const { data, error } = await (supabase as any).rpc('get_procedures_for_cid', { p_cid: cidCodigo, lim });
     if (error || !data) return [];
     return data as any;
