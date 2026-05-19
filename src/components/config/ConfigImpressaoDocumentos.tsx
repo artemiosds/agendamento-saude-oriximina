@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { Slider } from '@/components/ui/slider';
 import {
   invalidateDocumentConfigCache, loadDocumentConfig,
-  docHeader, docFooter, buildInstitutionalCSS, docMeta,
+  buildDocumentShell,
   DEFAULT_CONFIG, type DocumentConfig, type LogoSlotConfig,
 } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
@@ -158,25 +158,33 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     toast.success('Logo removida');
   };
 
-  const handlePreview = async () => {
-    const cfg = await loadDocumentConfig();
-    const previewWindow = window.open('', '_blank');
-    if (!previewWindow) return;
-    const css = buildInstitutionalCSS(cfg);
-    const meta = docMeta({ Paciente: 'João da Silva (exemplo)', CPF: '123.456.789-00', Data: new Date().toLocaleDateString('pt-BR') });
+  // Monta o HTML do documento de amostra usando o MESMO shell
+  // que todos os documentos do sistema usam — preview, impressão e PDF
+  // saem idênticos.
+  const buildSampleHtml = (cfg: DocumentConfig): string => {
     const body = `
       <div class="doc-content">
         <p>Atesto para os devidos fins que o(a) paciente <strong>João da Silva</strong>, portador(a) do CPF <strong>123.456.789-00</strong>, compareceu nesta unidade de saúde na data de hoje para consulta clínica, necessitando de <strong>3 (três)</strong> dias de afastamento de suas atividades laborais.</p>
-        <p>Este documento é uma pré-visualização do layout institucional padrão.</p>
+        <p>Este documento é uma pré-visualização do layout institucional padrão e reflete exatamente como ficará a impressão e o PDF.</p>
       </div>
       <div class="signature" style="margin-top:60px;">
         <div class="signature-line"></div>
         <div class="name">DRA. MARIA SANTOS</div>
         <div class="role">Fisioterapia</div>
         <div class="conselho">CREFITO 12345/PA</div>
-      </div>
-    `;
-    previewWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Pré-visualização</title>${css}</head><body>${docHeader('ATESTADO MÉDICO', cfg)}${meta}${body}${docFooter(cfg)}</body></html>`);
+      </div>`;
+    return buildDocumentShell('ATESTADO MÉDICO (EXEMPLO)', body, cfg, {
+      Paciente: 'João da Silva (exemplo)',
+      CPF: '123.456.789-00',
+      Data: new Date().toLocaleDateString('pt-BR'),
+    });
+  };
+
+  const handlePreview = async () => {
+    const cfg = await loadDocumentConfig();
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) return;
+    previewWindow.document.write(buildSampleHtml(cfg));
     previewWindow.document.close();
   };
 
@@ -320,67 +328,24 @@ const ConfigImpressaoDocumentos: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Preview A4 ao vivo */}
+          {/* Preview A4 ao vivo — usa o MESMO shell de impressão para fidelidade total */}
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><FileText className="w-4 h-4" /> Preview do Cabeçalho (A4)</h3>
-                <span className="text-[11px] text-muted-foreground">Visualização aproximada</span>
+                <h3 className="font-semibold font-display text-foreground flex items-center gap-2"><FileText className="w-4 h-4" /> Preview do Documento (A4)</h3>
+                <span className="text-[11px] text-muted-foreground">Fiel ao PDF e à impressão</span>
               </div>
-              <div className="bg-muted/30 rounded-lg p-3 overflow-x-auto">
-                <div className="mx-auto bg-white shadow-md border" style={{ width: '210mm', minHeight: '120mm', padding: `${config.margens.superior}mm ${config.margens.direita}mm ${config.margens.inferior}mm ${config.margens.esquerda}mm`, fontFamily: config.tipografia.fonte, fontSize: `${config.tipografia.tamanhoBase}pt`, lineHeight: config.tipografia.espacamento, color: '#1a1a1a' }}>
-                  {(() => {
-                    const slots = config.logosConfig;
-                    const items: { key: string; url: string; cfg: LogoSlotConfig; align: 'flex-start' | 'center' | 'flex-end' }[] = [];
-                    if (slots.esquerda.ativo && previewLogoLeft)
-                      items.push({ key: 'L', url: previewLogoLeft, cfg: slots.esquerda, align: 'flex-start' });
-                    if (slots.central.ativo && config.logoCentral)
-                      items.push({ key: 'C', url: config.logoCentral, cfg: slots.central, align: 'center' });
-                    if (slots.direita.ativo && previewLogoRight)
-                      items.push({ key: 'R', url: previewLogoRight, cfg: slots.direita, align: 'flex-end' });
-                    const justify = items.length === 1 ? 'center' : 'space-between';
-                    return (
-                      <div style={{ paddingBottom: 12, borderBottom: config.mostrarLinhaDivisoria ? '2px solid #0369a1' : 'none' }}>
-                        {items.length > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: justify, gap: 16, width: '100%' }}>
-                            {items.map(it => (
-                              <div key={it.key} style={{ flex: items.length === 3 ? '1 1 0' : '0 0 auto', display: 'flex', justifyContent: it.align }}>
-                                <img
-                                  src={it.url}
-                                  alt={it.key}
-                                  style={{
-                                    height: `${it.cfg.altura}px`,
-                                    width: it.cfg.redonda ? `${it.cfg.altura}px` : 'auto',
-                                    maxWidth: it.cfg.redonda ? `${it.cfg.altura}px` : `${Math.round(it.cfg.altura * 2.5)}px`,
-                                    objectFit: it.cfg.redonda ? 'cover' : 'contain',
-                                    borderRadius: it.cfg.redonda ? '50%' : 0,
-                                    aspectRatio: it.cfg.redonda ? '1 / 1' : 'auto',
-                                  }}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div style={{ textAlign: 'center', marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                          <div style={{ fontWeight: 700, textTransform: 'uppercase', color: '#0c4a6e', letterSpacing: 0.5, fontSize: `${Math.max(config.tipografia.tamanhoBase + 1, 12)}pt`, lineHeight: 1.25 }}>{config.linha1}</div>
-                          {config.linha2 && <div style={{ color: '#334155', fontSize: `${config.tipografia.tamanhoBase}pt` }}>{config.linha2}</div>}
-                          {config.linha3 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha3}</div>}
-                          {config.linha4 && <div style={{ color: '#475569', fontSize: `${Math.max(config.tipografia.tamanhoBase - 1, 9)}pt` }}>{config.linha4}</div>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div style={{ textAlign: 'center', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: `${config.tipografia.tamanhoTitulo}pt`, margin: '10px 0 14px', padding: '6px 0', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
-                    TÍTULO DO DOCUMENTO
-                  </div>
-                  <div style={{ textAlign: config.tipografia.alinhamento as any, color: '#334155' }}>
-                    Texto do corpo do documento aparece aqui no padrão configurado de fonte, tamanho e espaçamento. Use a aba "Tipografia & Margens" para ajustar.
-                  </div>
-                </div>
+              <div className="bg-muted/30 rounded-lg p-3 overflow-auto">
+                <iframe
+                  title="Preview institucional A4"
+                  srcDoc={buildSampleHtml(config)}
+                  style={{ width: '210mm', minHeight: '297mm', border: '1px solid hsl(var(--border))', background: '#fff', display: 'block', margin: '0 auto' }}
+                />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
+
 
         {/* ============== TIPOGRAFIA & MARGENS ============== */}
         <TabsContent value="tipografia" className="space-y-5 mt-5">
