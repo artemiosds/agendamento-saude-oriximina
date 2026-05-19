@@ -281,7 +281,7 @@ const BpaProducao: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [competencia, unidadeFiltro, profissionalFiltro, triagemSigtapPadrao]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [competencia, unidadeFiltro, triagemSigtapPadrao]);
 
   const validateRow = (l: LinhaBPA): ValidationFlags => {
     const pac = pacMap[l.paciente_id];
