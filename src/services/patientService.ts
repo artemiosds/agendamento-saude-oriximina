@@ -281,6 +281,16 @@ export const patientService = {
       }
     }
 
+    // Recalcula status de faltas (respeita exceção TFD / Ordem Judicial)
+    try {
+      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: pacienteId });
+    } catch (err: any) {
+      console.error('[Faltosos] Erro na regra de faltas/exceção', {
+        pacienteId, acao: 'atualizar_status_falta_save',
+        errorMessage: err?.message, errorCode: err?.code,
+      });
+    }
+
     return data;
   }
 };
