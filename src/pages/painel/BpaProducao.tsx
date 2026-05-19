@@ -433,7 +433,7 @@ const BpaProducao: React.FC = () => {
   const modalPreview = useMemo(() => {
     if (!modalOpen) return { validos: 0, pendentes: 0, total: 0 };
     let validos = 0, pendentes = 0, total = 0;
-    linhas.forEach((l) => {
+    linhasFiltradas.forEach((l) => {
       const lComp = (l.data || '').replace(/-/g, '').slice(0, 6);
       if (modalCompetencia && lComp !== modalCompetencia) return;
       total += 1;
@@ -442,7 +442,7 @@ const BpaProducao: React.FC = () => {
     });
     return { validos, pendentes, total };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalOpen, modalCompetencia, linhas, pacMap, profMap]);
+  }, [modalOpen, modalCompetencia, linhasFiltradas, pacMap, profMap]);
 
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) { toast.error('Competência inválida (AAAAMM)'); return; }
