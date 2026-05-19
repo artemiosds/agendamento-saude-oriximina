@@ -508,7 +508,7 @@ const BpaProducao: React.FC = () => {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success(`BPA gerado. ${linhasTxt.length} procedimento(s) exportado(s).`, {
-        description: `${linhas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
+        description: `${linhasFiltradas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
       });
       setModalOpen(false);
     } catch (err: unknown) {
