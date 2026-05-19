@@ -1,108 +1,162 @@
-# Padronização Global de Impressão, PDF e Preview
+# Personalização Dinâmica do Prontuário — Plano
 
-## Diagnóstico — Causa raiz
+Vou evoluir a página **Configuração de Campos** para virar um motor completo de personalização do prontuário, sem mexer em nenhuma outra parte do sistema (apenas estender o que já existe em `useCustomFields` + `CustomFieldsRenderer` + telas do prontuário).
 
-Mapeei 17 pontos do sistema que geram PDF/impressão/preview. Existem **3 problemas estruturais**:
+---
 
-1. **Múltiplos templates concorrentes.** Cada módulo escreve seu próprio HTML com `<style>` embutido (cabeçalho, fontes, margens, rodapé). Mesmo após criar `buildDocumentShell()` em `printLayout.ts`, apenas Ficha Cadastral foi migrada — os demais ignoram a config.
-2. **Preview ≠ Print ≠ PDF.** Preview usa CSS de tela (Tailwind, rem), `window.print()` injeta CSS próprio, e `jsPDF` (em `prontuarioPdf.ts`) re-renderiza tudo em pontos (pt) com layout manual. Não compartilham fonte de verdade.
-3. **Valores hardcoded.** Font-size em `px`, margens em `mm` arbitrárias, logos com tamanho fixo, cores e bordas embutidas. A config global de Impressão não é lida pela maioria.
+## 1. Fonte única de verdade (modelo de dados)
 
-## Pontos identificados (17 arquivos, ~12.500 linhas)
+Estende a estrutura atual `system_config.id='custom_fields_config'` (zero migration, zero quebra). Adiciono campos opcionais ao `CustomFieldDef` — os antigos continuam válidos via defaults.
 
-| Módulo | Arquivo | Estado atual |
-|---|---|---|
-| Ficha Paciente | `printFichaPaciente.ts` | ✅ já usa shell global |
-| Encaminhamento (regulação) | `referralPrinter.ts` | ❌ HTML próprio |
-| Encaminhamento (modal) | `ModalVerEncaminhamento.tsx` | ❌ window.print direto |
-| Prontuário PDF | `prontuarioPdf.ts` | ❌ jsPDF manual, ignora config |
-| Prontuário Histórico | `HistoricoClinico.tsx` | ❌ template próprio |
-| Histórico Completo | `HistoricoCompletoModal.tsx` | ❌ template próprio |
-| Documentos (atestado/receita/declaração) | `GerarDocumentoModal.tsx` | ❌ template próprio |
-| Documentos Histórico | `DocumentosHistorico.tsx` | ❌ template próprio |
-| Receita Médica | `PrescricaoMedicamentos.tsx` | ❌ A5 próprio |
-| Solicitação Exames | `SolicitacaoExames.tsx` | ❌ A5 próprio |
-| Relatório de Alta CER | `RelatorioAlta.tsx` | ❌ template próprio |
-| Ficha Impressão (alternativa) | `FichaImpressao.tsx` | ⚠️ parcial |
-| Encaminhamentos (lista) | `Encaminhamentos.tsx` | ❌ window.print |
-| Relatórios | `Relatorios.tsx` | ❌ window.print |
-| Auditoria | `Auditoria.tsx` | ❌ window.print |
-| Funcionários | `Funcionarios.tsx` | ❌ window.print |
-| Modelos | `ModelosDocumentos.tsx` | ❌ preview-only |
-| Portal Paciente | `PortalPaciente.tsx` | ❌ window.print |
-| Config Impressão | `ConfigImpressaoDocumentos.tsx` | ⚠️ preview não usa shell |
+```ts
+// src/hooks/useCustomFields.ts (extensão retrocompatível)
+export type CustomFieldType =
+  | 'text' | 'textarea' | 'number' | 'date'
+  | 'select' | 'multiselect' | 'checkbox' | 'radio'
+  | 'phone' | 'cpf' | 'cns' | 'email' | 'time';
 
-## Estratégia — Fonte única de verdade
+export interface CustomFieldValidation {
+  min?: number;          // num/data/length
+  max?: number;
+  maxLength?: number;
+  mask?: string;         // ex: '999.999.999-99'
+  regex?: string;
+}
 
-### 1. Consolidar `src/lib/printLayout.ts`
-- `buildDocumentShell(title, body, config, meta, opts?)` aceita:
-  - `pageSize`: `'A4' | 'A5'`
-  - `orientation`: `'portrait' | 'landscape'`
-  - `compactHeader`: boolean (para A5)
-  - `extraStyles`: string (CSS específico do documento, opcional)
-- Toda a tipografia/margens/cores vem **só** da `DocumentConfig` global (carregada via `loadDocumentConfig()`).
-- `@page` size + margins, font-family, font-size base, line-height, cor de texto, cor de bordas — todos vindos da config.
-- `printViaIframe(html)` é o único caminho de impressão (substitui `window.print()` direto).
-- Adicionar `renderDocumentPreview(html, container)` que injeta o **mesmo HTML** num iframe de preview — garante fidelidade tela = impressão.
+export interface CustomFieldCondition {
+  fieldName: string;     // campo de referência (nativo OU custom)
+  op: 'eq' | 'neq' | 'in' | 'notin' | 'empty' | 'notempty';
+  value?: string | string[];
+}
 
-### 2. Helpers de bloco reutilizáveis
-Em `printLayout.ts`, expor utilitários para os geradores montarem corpo sem reescrever CSS:
-- `docSection(title, innerHtml)`
-- `docField(label, value)`
-- `docGrid(fields[], cols)`
-- `docSignature(name, role)`
-- `docTable(headers, rows)`
-- `docParagraph(text)`
+export interface CustomFieldScope {
+  especialidades?: string[];     // [] = todas
+  tiposProntuario?: string[];    // 'primeira_consulta' | 'retorno' | ...; [] = todos
+  global?: boolean;              // true = sempre aparece (independente dos outros filtros)
+}
 
-### 3. Eliminar `prontuarioPdf.ts` (jsPDF)
-Substituir geração via jsPDF por **print-to-PDF do browser** usando o mesmo shell. Vantagens: fidelidade total preview/print/PDF, zero duplicação, respeita config. O botão "Baixar PDF" passa a chamar `printViaIframe()` (usuário escolhe "Salvar como PDF" no diálogo do browser). Documentar essa mudança de UX no commit.
+export interface CustomFieldDef {
+  id: string;
+  nome: string;
+  rotulo: string;
+  tipo: CustomFieldType;
+  opcoes: string[];
+  obrigatorio: boolean;
+  ativo: boolean;
+  ordem: number;
+  valorPadrao: string;
+  mostrarListagem: boolean;
+  // NOVOS (todos opcionais → não quebra dados antigos):
+  secao?: string;                          // agrupador visual
+  validacao?: CustomFieldValidation;
+  condicao?: CustomFieldCondition;         // exibição condicional
+  escopo?: CustomFieldScope;               // onde aparece
+  helpText?: string;
+}
+```
 
-### 4. Migração arquivo-por-arquivo
-Cada gerador vira ~20 linhas: monta corpo com helpers + chama `buildDocumentShell` + `printViaIframe`. Sem `<style>` local, sem `window.print()` direto, sem cabeçalho/rodapé manual.
+Persistência continua em `system_config.configuracoes[screen][unidadeId]`. Valores preenchidos continuam em `custom_data jsonb` das tabelas existentes (`pacientes`, `prontuarios`, etc.) — chave é `field.nome`.
 
-### 5. Config UI fiel
-`ConfigImpressaoDocumentos.tsx` renderiza o preview chamando `buildDocumentShell` com dados-exemplo dentro de iframe — o mesmo caminho de produção. Adicionar controles (já parcialmente existentes) para: margens A4/A5, rodapé institucional, tamanho base de fonte.
+---
 
-## Escopo de arquivos (17 edições + 1 novo helper)
+## 2. Aplicação de especialidade / tipo / regras condicionais
 
-**Reforçar/expandir:**
-- `src/lib/printLayout.ts` (helpers + suporte A5/landscape + preview iframe)
+Crio um único helper puro que decide se um campo deve renderizar:
 
-**Migrar para shell global:**
-- `src/lib/referralPrinter.ts`
-- `src/lib/prontuarioPdf.ts` (vira wrapper de print)
-- `src/components/ModalVerEncaminhamento.tsx`
-- `src/components/HistoricoClinico.tsx`
-- `src/components/HistoricoCompletoModal.tsx`
-- `src/components/GerarDocumentoModal.tsx`
-- `src/components/DocumentosHistorico.tsx`
-- `src/components/PrescricaoMedicamentos.tsx`
-- `src/components/SolicitacaoExames.tsx`
-- `src/components/FichaImpressao.tsx`
-- `src/components/ModelosDocumentos.tsx`
-- `src/components/config/ConfigImpressaoDocumentos.tsx` (preview via shell)
-- `src/pages/painel/RelatorioAlta.tsx`
-- `src/pages/painel/Encaminhamentos.tsx`
-- `src/pages/painel/Relatorios.tsx`
-- `src/pages/painel/Auditoria.tsx`
-- `src/pages/painel/Funcionarios.tsx`
-- `src/pages/PortalPaciente.tsx`
+```ts
+// src/lib/customFieldsEngine.ts (novo, sem dependências)
+export function resolveVisibleFields(
+  fields: CustomFieldDef[],
+  ctx: {
+    especialidade?: string;
+    tipoProntuario?: string;
+    values: Record<string, any>;
+  }
+): CustomFieldDef[];
 
-**Não tocar:** lógica clínica, BPA, RLS, agenda, dados.
+export function validateCustomFields(
+  fields: CustomFieldDef[],
+  values: Record<string, any>,
+  ctx
+): { ok: boolean; errors: Record<string, string> };
+
+export function applyMask(value: string, mask?: string): string;
+```
+
+Regras:
+- **Escopo**: `global=true` sempre passa. Senão, se `especialidades` definido, precisa bater; idem `tiposProntuario`.
+- **Condição**: avalia `op` contra `values[condicao.fieldName]`.
+- **Validação**: obrigatório + min/max + maxLength + mask + regex.
+
+---
+
+## 3. Reflexo automático em todas as telas do prontuário
+
+Já existe `CustomFieldsRenderer`. Estendo ele para:
+- Suportar novos tipos (`multiselect`, `radio`, `phone`, `cpf`, `cns`, `email`, `time`).
+- Usar `resolveVisibleFields` + `validateCustomFields` internamente.
+- Agrupar por `secao`.
+- Aceitar props `especialidade` e `tipoProntuario` para o filtro de escopo.
+- Modo `readOnly` (para visualização) e modo `print` (HTML estático).
+
+Adiciono função `renderCustomFieldsHtml(fields, values, ctx)` em `src/lib/customFieldsEngine.ts` para impressão/PDF — consumida pelo `printLayout.ts` já existente, dentro do shell global. Assim:
+
+- **Novo prontuário** → `<CustomFieldsRenderer screen="prontuario" especialidade={X} tipoProntuario={Y} />`
+- **Editar** → idem, com `values` populados.
+- **Visualização** → mesmo componente em `readOnly`.
+- **Impressão/PDF** → `renderCustomFieldsHtml(...)` injetado no shell.
+
+Uma única função de render = zero divergência.
+
+---
+
+## 4. Compatibilidade com dados antigos
+
+- Campos novos no `CustomFieldDef` são todos opcionais → configs antigas carregam normalmente.
+- Valores em `custom_data` são preservados mesmo se o campo for desativado/removido (apenas não renderiza; nada é deletado).
+- Se um campo mudar de tipo, o renderer faz fallback seguro (`String(val)`).
+- Versionamento leve: cada save grava `updatedAt` (já existe via `updated_at`).
+
+---
+
+## 5. UI da página `ConfigPersonalizarCampos`
+
+Mantenho a tela atual (lista por screen + dnd-kit), e adiciono no modal "Novo/Editar Campo":
+- Seletor de **Tipo** com os novos tipos.
+- Seção **"Onde aparece"**: switch global / multi-select especialidades / multi-select tipos prontuário.
+- Seção **"Validações"**: min, max, maxLength, máscara.
+- Seção **"Regra condicional"**: campo + operador + valor.
+- Campo **Seção** (agrupador).
+- Campo **Help text**.
+
+---
+
+## Arquivos tocados (escopo enxuto)
+
+1. `src/hooks/useCustomFields.ts` — estende tipos (retrocompat).
+2. `src/lib/customFieldsEngine.ts` — **novo**: resolveVisible, validate, applyMask, renderCustomFieldsHtml.
+3. `src/components/CustomFieldsRenderer.tsx` — novos tipos, agrupamento, escopo/condição, readOnly.
+4. `src/components/config/ConfigPersonalizarCampos.tsx` — UI do modal de campo (novos selects/validações/condições).
+5. Telas de prontuário que já usam o renderer → recebem props `especialidade`/`tipoProntuario` (mudança mínima, 1 linha cada).
+6. `src/lib/prontuarioPdf.ts` / fluxo de impressão → chama `renderCustomFieldsHtml` dentro do shell global já existente.
+
+**Nada fora desse escopo será alterado.** Sem mexer em agenda, BPA, auth, RLS, ou outras configs.
+
+---
+
+## 6. Extras úteis (incluídos)
+
+- **Duplicar campo** (botão no card).
+- **Importar/Exportar** definição em JSON (botão na toolbar).
+- **Preview ao vivo** no modal (renderiza o campo enquanto edita).
+- **Badge "condicional"** / **"por especialidade"** no card da lista.
+- Tipos `phone`/`cpf`/`cns` com máscara automática.
+
+---
 
 ## Critérios de aceite
-- 100% dos pontos listados usando `buildDocumentShell` + `printViaIframe`.
-- Zero `<style>` de cabeçalho/rodapé fora de `printLayout.ts`.
-- Zero `window.print()` direto fora de `printLayout.ts`.
-- Preview renderiza pelo mesmo HTML que vai pro print.
-- Alterar config global muda **todos** os documentos.
 
-## Tamanho e risco
-- ~12.500 linhas envolvidas; ~600–900 linhas efetivamente reescritas.
-- Risco: alterações de layout sutis em documentos hoje "bonitos por acaso". Mitigação: cada documento ganha seção própria via helpers, mantendo conteúdo idêntico — só o chrome (header/footer/fontes) vira global.
-- **Estimativa:** 12–18 turnos de edição. Recomendo fazer em 3 lotes:
-  1. **Lote A** — `printLayout.ts` (helpers + preview) + `prontuarioPdf.ts` + `referralPrinter.ts` + Config preview.
-  2. **Lote B** — Documentos clínicos: Prontuário, Histórico, Receita, Exames, Atestado/Declaração, Relatório Alta.
-  3. **Lote C** — Listagens administrativas: Encaminhamentos, Relatórios, Auditoria, Funcionários, Portal, Modelos.
-
-Aprovar para começar pelo **Lote A**?
+- Criar campo "Escala de Dor" tipo `select`, escopo especialidade=Fisioterapia, tipo prontuário=Avaliação Inicial → aparece **só** lá, em novo/editar/visualizar/PDF.
+- Criar campo condicional "Detalhe da dor" visível se "Escala de Dor" ≥ 5 → some/aparece dinamicamente.
+- Desativar um campo antigo → some das telas, valores antigos permanecem no banco.
+- Imprimir prontuário → campos personalizados aparecem agrupados por seção, no shell institucional global.
