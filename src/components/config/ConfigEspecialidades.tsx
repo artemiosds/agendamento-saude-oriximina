@@ -11,7 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
-import { Plus, Pencil, Trash2, Loader2, ChevronUp, ChevronDown, Eye, Copy, GripVertical, Sparkles } from 'lucide-react';
+import {
+  Plus, Pencil, Trash2, Loader2, ChevronUp, ChevronDown, Eye, Copy, GripVertical, Sparkles,
+  Type, AlignLeft, Hash, List, CheckSquare, Calendar as CalendarIcon, SlidersHorizontal,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -263,7 +266,15 @@ const ConfigEspecialidades: React.FC = () => {
   const [copyDialog, setCopyDialog] = useState<{ campo: CampoEspecialidade; targets: string[] } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTipo, setPreviewTipo] = useState<TipoProntuario>('avaliacao');
-  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '' });
+  const [newField, setNewField] = useState({
+    label: '',
+    tipo: 'textarea',
+    obrigatorio: false,
+    opcoes: '',
+    valor_padrao: '',
+    ajuda: '',
+    tipos_prontuario: [...DEFAULT_TIPOS] as TipoProntuario[],
+  });
   const [newEsp, setNewEsp] = useState({ label: '', profissoes: [] as string[] });
 
   const sensors = useSensors(
@@ -358,6 +369,7 @@ const ConfigEspecialidades: React.FC = () => {
 
   const addCampoEsp = () => {
     if (!newField.label.trim() || !esp) return;
+    const needsOpcoes = newField.tipo === 'select';
     const campo: CampoEspecialidade = {
       id: `custom_${Date.now()}`,
       key: `custom_${Date.now()}`,
@@ -367,12 +379,17 @@ const ConfigEspecialidades: React.FC = () => {
       habilitado: true,
       isBuiltin: false,
       order: esp.campos.length + 1,
-      tipos_prontuario: [...DEFAULT_TIPOS],
-      opcoes: newField.tipo === 'select' ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      tipos_prontuario: newField.tipos_prontuario.length ? newField.tipos_prontuario : [...DEFAULT_TIPOS],
+      opcoes: needsOpcoes ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      valor_padrao: newField.valor_padrao.trim() || undefined,
+      ajuda: newField.ajuda.trim() || undefined,
     };
     updateEsp(e => ({ ...e, campos: [...e.campos, campo] }));
     setAddFieldDialog(false);
-    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '' });
+    setNewField({
+      label: '', tipo: 'textarea', obrigatorio: false, opcoes: '',
+      valor_padrao: '', ajuda: '', tipos_prontuario: [...DEFAULT_TIPOS],
+    });
   };
 
   const deleteCampo = (campoId: string) => {
@@ -494,32 +511,150 @@ const ConfigEspecialidades: React.FC = () => {
 
       {/* Add field dialog */}
       <Dialog open={addFieldDialog} onOpenChange={setAddFieldDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Adicionar Campo para {esp?.label}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Nome do campo</Label><Input value={newField.label} onChange={e => setNewField(p => ({ ...p, label: e.target.value }))} /></div>
-            <div><Label>Tipo</Label>
-              <Select value={newField.tipo} onValueChange={v => setNewField(p => ({ ...p, tipo: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="textarea">Texto longo</SelectItem>
-                  <SelectItem value="text">Texto</SelectItem>
-                  <SelectItem value="number">Número</SelectItem>
-                  <SelectItem value="slider">Slider (0-10)</SelectItem>
-                  <SelectItem value="select">Seleção</SelectItem>
-                  <SelectItem value="date">Data</SelectItem>
-                  <SelectItem value="checkbox">Checkbox</SelectItem>
-                </SelectContent>
-              </Select>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Plus className="w-4 h-4 text-primary" />
+              </span>
+              Novo Campo Personalizado
+            </DialogTitle>
+            <DialogDescription>
+              Configure o campo e defina em quais tipos de prontuário ele será exibido para <strong>{esp?.label}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            {/* Nome */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nome do Campo</Label>
+              <Input
+                className="mt-1"
+                value={newField.label}
+                onChange={e => setNewField(p => ({ ...p, label: e.target.value }))}
+                placeholder="Ex: Queixa Principal, Observações Clínicas..."
+              />
             </div>
+
+            {/* Tipo — visual cards */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo do Campo</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                {([
+                  { tipo: 'text',     icon: Type,             title: 'Texto Curto',     desc: 'Campo de texto simples, uma linha' },
+                  { tipo: 'textarea', icon: AlignLeft,        title: 'Texto Longo',     desc: 'Área de texto com múltiplas linhas' },
+                  { tipo: 'number',   icon: Hash,             title: 'Número',          desc: 'Aceita apenas valores numéricos' },
+                  { tipo: 'select',   icon: List,             title: 'Seleção',         desc: 'Dropdown com opções pré-definidas' },
+                  { tipo: 'checkbox', icon: CheckSquare,      title: 'Múltipla Escolha', desc: 'Marcação Sim/Não (caixa única)' },
+                  { tipo: 'date',     icon: CalendarIcon,     title: 'Data',            desc: 'Seletor de data (calendário)' },
+                  { tipo: 'slider',   icon: SlidersHorizontal, title: 'Escala (0–10)',  desc: 'Slider numérico de escala' },
+                ] as const).map(opt => {
+                  const Icon = opt.icon;
+                  const active = newField.tipo === opt.tipo;
+                  return (
+                    <button
+                      type="button"
+                      key={opt.tipo}
+                      onClick={() => setNewField(p => ({ ...p, tipo: opt.tipo }))}
+                      className={`relative text-left p-3 rounded-lg border transition-all ${
+                        active ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-primary/40 hover:bg-muted/40'
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">✓</span>
+                      )}
+                      <Icon className={`w-4 h-4 mb-1.5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="text-sm font-semibold">{opt.title}</div>
+                      <div className="text-[11px] text-muted-foreground leading-snug">{opt.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Opções (apenas para select) */}
             {newField.tipo === 'select' && (
-              <div><Label>Opções (vírgula)</Label><Input value={newField.opcoes} onChange={e => setNewField(p => ({ ...p, opcoes: e.target.value }))} /></div>
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Opções (separadas por vírgula)</Label>
+                <Input
+                  className="mt-1"
+                  value={newField.opcoes}
+                  onChange={e => setNewField(p => ({ ...p, opcoes: e.target.value }))}
+                  placeholder="Opção 1, Opção 2, Opção 3"
+                />
+              </div>
             )}
-            <div className="flex items-center gap-2"><Switch checked={newField.obrigatorio} onCheckedChange={v => setNewField(p => ({ ...p, obrigatorio: v }))} /><Label>Obrigatório</Label></div>
+
+            {/* Obrigatório */}
+            <div className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-muted/30">
+              <div>
+                <Label className="cursor-pointer text-sm font-semibold">Campo Obrigatório</Label>
+                <p className="text-[11px] text-muted-foreground">O profissional não poderá salvar o prontuário sem preencher</p>
+              </div>
+              <Switch
+                checked={newField.obrigatorio}
+                onCheckedChange={v => setNewField(p => ({ ...p, obrigatorio: v }))}
+              />
+            </div>
+
+            {/* APARECE NOS TIPOS */}
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Aparece nos Tipos</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                {TIPOS_PRONTUARIO.map(t => {
+                  const active = newField.tipos_prontuario.includes(t.key);
+                  return (
+                    <button
+                      type="button"
+                      key={t.key}
+                      onClick={() => setNewField(p => ({
+                        ...p,
+                        tipos_prontuario: active
+                          ? p.tipos_prontuario.filter(x => x !== t.key)
+                          : [...p.tipos_prontuario, t.key],
+                      }))}
+                      className={`flex items-center gap-2 p-2 rounded-lg border text-sm transition-all ${
+                        active ? 'border-primary bg-primary/5 ring-1 ring-primary/30' : 'border-border hover:bg-muted/40'
+                      }`}
+                    >
+                      <Checkbox checked={active} className="pointer-events-none" />
+                      <span>{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Padrão: Avaliação Inicial e Retorno.</p>
+            </div>
+
+            {/* Avançado */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-4">
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor Padrão</Label>
+                <Input
+                  className="mt-1"
+                  value={newField.valor_padrao}
+                  onChange={e => setNewField(p => ({ ...p, valor_padrao: e.target.value }))}
+                  placeholder="Opcional"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Texto de Ajuda</Label>
+                <Input
+                  className="mt-1"
+                  value={newField.ajuda}
+                  onChange={e => setNewField(p => ({ ...p, ajuda: e.target.value }))}
+                  placeholder="Exibido abaixo do campo"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground -mt-2">
+              💡 Para regras condicionais avançadas, salve o campo e use o botão "Editar".
+            </p>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFieldDialog(false)}>Cancelar</Button>
-            <Button onClick={addCampoEsp} disabled={!newField.label.trim()}>Adicionar</Button>
+            <Button onClick={addCampoEsp} disabled={!newField.label.trim()}>Adicionar Campo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
