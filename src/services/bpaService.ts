@@ -219,29 +219,71 @@ const loadAll = async (table: string, select = '*', filters?: (q: any) => any) =
   return all;
 };
 
+// Cache em memória do catálogo SIGTAP global + DNE (tabelas estáticas).
+// Evita recarregar milhares de linhas a cada troca de filtro/competência.
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+let _globalCatalogCache: {
+  ts: number;
+  byCode: Map<string, any>;
+  byName: Map<string, any[]>;
+  allCatalog: any[];
+  dneMap: Map<string, string>;
+} | null = null;
+let _globalCatalogPromise: Promise<NonNullable<typeof _globalCatalogCache>> | null = null;
+
+const loadGlobalCatalog = async () => {
+  if (_globalCatalogCache && Date.now() - _globalCatalogCache.ts < CATALOG_TTL_MS) {
+    return _globalCatalogCache;
+  }
+  if (_globalCatalogPromise) return _globalCatalogPromise;
+  _globalCatalogPromise = (async () => {
+    const [catalog, dneRows] = await Promise.all([
+      loadAll('sigtap_procedimentos', 'id,codigo,nome,descricao,especialidade,ativo', (q) => q.eq('ativo', true)),
+      loadAll('logradouros_dne', 'codigo,descricao').catch(() => []),
+    ]);
+    const byCode = new Map<string, any>();
+    const byName = new Map<string, any[]>();
+    const allCatalog: any[] = [];
+    for (const p of catalog) {
+      const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap', norm: normalizeName(p.nome || ''), descNorm: normalizeName(p.descricao || '') };
+      allCatalog.push(obj);
+      if (obj.codigo) byCode.set(obj.codigo, obj);
+      if (obj.norm) byName.set(obj.norm, [...(byName.get(obj.norm) || []), obj]);
+    }
+    const dneMap = new Map<string, string>();
+    (dneRows || []).forEach((r: any) => {
+      const key = normalizeName(r.descricao);
+      const code = onlyDigits(r.codigo).padStart(3, '0').slice(-3);
+      if (key && code) dneMap.set(key, code);
+    });
+    _globalCatalogCache = { ts: Date.now(), byCode, byName, allCatalog, dneMap };
+    return _globalCatalogCache;
+  })();
+  try {
+    return await _globalCatalogPromise;
+  } finally {
+    _globalCatalogPromise = null;
+  }
+};
+
 const buildCatalog = async (procIds: string[]) => {
-  const [legacyByIds, sigtapByIds, catalog, dneRows] = await Promise.all([
+  const [global, legacyByIds, sigtapByIds] = await Promise.all([
+    loadGlobalCatalog(),
     inBatches(procIds, 500, async (batch) => ((await (supabase as any).from('procedimentos').select('id,nome,descricao,especialidade,codigo_sigtap').in('id', batch)).data || [])),
     inBatches(procIds, 500, async (batch) => ((await (supabase as any).from('sigtap_procedimentos').select('id,codigo,nome,descricao,especialidade').in('id', batch)).data || [])),
-    loadAll('sigtap_procedimentos', 'id,codigo,nome,descricao,especialidade,ativo', (q) => q.eq('ativo', true)),
-    loadAll('logradouros_dne', 'codigo,descricao').catch(() => []),
   ]);
 
   const byId = new Map<string, any>();
-  const byCode = new Map<string, any>();
-  const byName = new Map<string, any[]>();
-  const allCatalog: any[] = [...catalog];
+  const byCode = new Map(global.byCode);
+  const byName = new Map(global.byName);
 
-  for (const p of allCatalog) {
-    const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
-    if (obj.id) byId.set(obj.id, obj);
-    if (obj.codigo) byCode.set(obj.codigo, obj);
-    const n = normalizeName(obj.nome);
-    if (n) byName.set(n, [...(byName.get(n) || []), obj]);
+  for (const p of global.allCatalog) {
+    if (p.id) byId.set(p.id, p);
   }
   for (const p of sigtapByIds as any[]) {
     const obj = { id: p.id, codigo: onlyDigits(p.codigo), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'sigtap' };
-    if (obj.id && !byId.has(obj.id)) byId.set(obj.id, obj);
+    if (obj.id) byId.set(obj.id, obj);
+    if (obj.codigo && !byCode.has(obj.codigo)) byCode.set(obj.codigo, obj);
   }
   for (const p of legacyByIds as any[]) {
     const obj = { id: p.id, codigo: onlyDigits(p.codigo_sigtap), nome: p.nome || '', descricao: p.descricao || '', especialidade: p.especialidade || '', fonte: 'legacy' };
@@ -249,14 +291,7 @@ const buildCatalog = async (procIds: string[]) => {
     if (obj.codigo && !byCode.has(obj.codigo)) byCode.set(obj.codigo, obj);
   }
 
-  const dneMap = new Map<string, string>();
-  (dneRows || []).forEach((r: any) => {
-    const key = normalizeName(r.descricao);
-    const code = onlyDigits(r.codigo).padStart(3, '0').slice(-3);
-    if (key && code) dneMap.set(key, code);
-  });
-
-  return { byId, byCode, byName, allCatalog: allCatalog.map((p: any) => ({ ...p, codigo: onlyDigits(p.codigo), norm: normalizeName(p.nome), descNorm: normalizeName(p.descricao) })), dneMap };
+  return { byId, byCode, byName, allCatalog: global.allCatalog, dneMap: global.dneMap };
 };
 
 const resolveProcedimentoSigtap = (raw: RawProcedimento, catalog: Awaited<ReturnType<typeof buildCatalog>>, profissional?: any, especialidade?: string) => {
