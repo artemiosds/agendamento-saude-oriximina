@@ -521,7 +521,7 @@ const BpaProducao: React.FC = () => {
 
   // --- Exportação XLSX BPA-I (3 abas: BPA-I, Pendências, Resumo) ---
   const exportXlsx = () => {
-    const linhasParaExportar = linhasFiltradas.length ? linhasFiltradas : linhas;
+    const linhasParaExportar = linhasFiltradas;
     if (linhasParaExportar.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
 
     const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
