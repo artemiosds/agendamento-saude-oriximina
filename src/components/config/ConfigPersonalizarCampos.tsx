@@ -218,6 +218,15 @@ const ConfigPersonalizarCampos: React.FC = () => {
   const [fieldForm, setFieldForm] = useState({
     rotulo: '', tipo: 'text' as CustomFieldType, obrigatorio: false,
     opcoes: '', valorPadrao: '', mostrarListagem: false,
+    secao: '', helpText: '',
+    scopeGlobal: true,
+    especialidades: '',           // comma-separated
+    tiposProntuario: [] as string[],
+    valMin: '', valMax: '', valMaxLength: '', valMask: '', valRegex: '',
+    condEnabled: false,
+    condField: '',
+    condOp: 'notempty' as CustomFieldCondition['op'],
+    condValue: '',
   });
 
   const sensors = useSensors(
