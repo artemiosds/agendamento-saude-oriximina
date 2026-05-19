@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
   Plus, Pencil, Trash2, Eye, EyeOff, GripVertical, Settings2, Type,
   Hash, Calendar, CheckSquare, List, AlignLeft, ArrowUp, ArrowDown, Lock,
+  Phone, IdCard, Mail, Clock, CircleDot, ListChecks,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useData } from '@/contexts/DataContext';
@@ -21,6 +22,9 @@ import {
   SCREEN_LABELS,
   ScreenConfig,
   NATIVE_FIELDS,
+  CustomFieldCondition,
+  CustomFieldScope,
+  CustomFieldValidation,
 } from '@/hooks/useCustomFields';
 import {
   DndContext,
@@ -40,15 +44,40 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 const FIELD_TYPE_LABELS: Record<CustomFieldType, { label: string; icon: React.ElementType }> = {
-  text: { label: 'Texto', icon: Type },
+  text: { label: 'Texto Curto', icon: Type },
+  textarea: { label: 'Texto Longo', icon: AlignLeft },
   number: { label: 'Número', icon: Hash },
   date: { label: 'Data', icon: Calendar },
-  checkbox: { label: 'Checkbox', icon: CheckSquare },
+  time: { label: 'Hora', icon: Clock },
   select: { label: 'Seleção', icon: List },
-  textarea: { label: 'Texto Longo', icon: AlignLeft },
+  multiselect: { label: 'Múltipla Escolha', icon: ListChecks },
+  checkbox: { label: 'Checkbox', icon: CheckSquare },
+  radio: { label: 'Rádio', icon: CircleDot },
+  phone: { label: 'Telefone', icon: Phone },
+  cpf: { label: 'CPF', icon: IdCard },
+  cns: { label: 'CNS', icon: IdCard },
+  email: { label: 'E-mail', icon: Mail },
 };
+
+const TIPOS_PRONTUARIO_PADRAO = [
+  'primeira_consulta',
+  'retorno',
+  'avaliacao_inicial',
+  'sessao',
+  'urgencia',
+];
+
+const CONDITION_OPS: { value: 'eq' | 'neq' | 'in' | 'notin' | 'empty' | 'notempty'; label: string }[] = [
+  { value: 'eq', label: 'Igual a' },
+  { value: 'neq', label: 'Diferente de' },
+  { value: 'in', label: 'Está em (lista)' },
+  { value: 'notin', label: 'Não está em (lista)' },
+  { value: 'empty', label: 'Está vazio' },
+  { value: 'notempty', label: 'Não está vazio' },
+];
 
 const generateId = () => `cf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
