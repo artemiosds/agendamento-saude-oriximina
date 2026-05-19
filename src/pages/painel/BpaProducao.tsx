@@ -412,7 +412,11 @@ const BpaProducao: React.FC = () => {
   }, [linhas, funcionarios]);
 
   const openGenerateModal = () => {
-    const uniSelecionada = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
+    const uniSelecionada = unidadeFiltro !== 'all'
+      ? unidadeFiltro
+      : (profissionalFiltro !== 'all'
+          ? ((funcionarios.find((x) => x.id === profissionalFiltro) as any)?.unidadeId || user?.unidadeId || '')
+          : (user?.unidadeId || ''));
     setModalCompetencia(competencia);
     setModalUnidade(uniSelecionada);
     setModalCnes(getCnesFromUnidade(uniSelecionada));
