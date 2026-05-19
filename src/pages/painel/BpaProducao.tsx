@@ -447,7 +447,7 @@ const BpaProducao: React.FC = () => {
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) { toast.error('Competência inválida (AAAAMM)'); return; }
     if (!modalCnes || modalCnes.length !== 7) { toast.error('CNES obrigatório (7 dígitos)'); return; }
-    const exportRows = linhas
+    const exportRows = linhasFiltradas
       .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
       .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
       .filter((l) => !l.duplicado)
