@@ -658,7 +658,9 @@ const ProntuarioPage: React.FC = () => {
   const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
     const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
-    return available.slice(0, procSearch.trim() ? 300 : 120);
+    // Sem busca: corta para evitar render pesado (todos seguem acessíveis via busca unificada acima).
+    // Com busca: NÃO cortar — todos os resultados compatíveis devem aparecer.
+    return procSearch.trim() ? available : available.slice(0, 200);
   }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
 
   // Lighter projection for listing (avoid heavy text columns until detail)
