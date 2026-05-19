@@ -40,7 +40,13 @@ export const patientService = {
 
   mapPacienteDbToForm(paciente: any) {
     if (!paciente) return {};
-    const cd = paciente.custom_data || {};
+    const cd = {
+      ...(paciente.custom_data || {}),
+      is_tfd: paciente.is_tfd === true || paciente.custom_data?.is_tfd === true,
+      possui_ordem_judicial: paciente.possui_ordem_judicial === true || paciente.custom_data?.possui_ordem_judicial === true,
+      motivo_excecao_bloqueio: paciente.motivo_excecao_bloqueio ?? paciente.custom_data?.motivo_excecao_bloqueio ?? '',
+      observacao_tfd_ordem_judicial: paciente.observacao_tfd_ordem_judicial ?? paciente.custom_data?.observacao_tfd_ordem_judicial ?? '',
+    };
     return {
       nome: paciente.nome || "",
       nome_mae: paciente.nome_mae || "",
@@ -158,6 +164,16 @@ export const patientService = {
       endereco: getValue('endereco', getValue('logradouro', oldPaciente.endereco)),
       observacoes: getValue('observacoes', oldPaciente.observacoes),
       cid: getValue('cid', oldPaciente.cid),
+      // Exceção administrativa de bloqueio (TFD / Ordem Judicial)
+      is_tfd: (inputCustomData.is_tfd === true) || (oldPaciente.is_tfd === true && inputCustomData.is_tfd === undefined),
+      possui_ordem_judicial: (inputCustomData.possui_ordem_judicial === true) || (oldPaciente.possui_ordem_judicial === true && inputCustomData.possui_ordem_judicial === undefined),
+      motivo_excecao_bloqueio: (inputCustomData.is_tfd === true || inputCustomData.possui_ordem_judicial === true)
+        ? (inputCustomData.motivo_excecao_bloqueio || oldPaciente.motivo_excecao_bloqueio || null)
+        : null,
+      observacao_tfd_ordem_judicial: inputCustomData.observacao_tfd_ordem_judicial ?? oldPaciente.observacao_tfd_ordem_judicial ?? null,
+      data_marcacao_excecao: (inputCustomData.is_tfd === true || inputCustomData.possui_ordem_judicial === true)
+        ? (oldPaciente.data_marcacao_excecao || new Date().toISOString())
+        : null,
       custom_data: updatedCustomData,
     };
 
@@ -269,6 +285,16 @@ export const patientService = {
         const { error: insError } = await supabase.from('patient_procedures').insert(insertPayload);
         if (insError) console.error("[Paciente] Erro ao salvar procedimentos vinculados", insError);
       }
+    }
+
+    // Recalcula status de faltas (respeita exceção TFD / Ordem Judicial)
+    try {
+      await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: pacienteId });
+    } catch (err: any) {
+      console.error('[Faltosos] Erro na regra de faltas/exceção', {
+        pacienteId, acao: 'atualizar_status_falta_save',
+        errorMessage: err?.message, errorCode: err?.code,
+      });
     }
 
     return data;

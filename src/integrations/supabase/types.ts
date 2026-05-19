@@ -150,12 +150,17 @@ export type Database = {
           criado_por: string
           custom_data: Json
           data: string
+          falta_justificativa: string | null
+          falta_liberada: boolean
           google_event_id: string | null
           hora: string
           id: string
           iniciado_em: string | null
           lembrete_24h_enviado_em: string | null
           lembrete_proximo_enviado_em: string | null
+          liberada_em: string | null
+          liberada_por: string | null
+          motivo_liberacao: string | null
           nome_procedimento: string | null
           obs_conclusao: string | null
           observacoes: string
@@ -172,6 +177,7 @@ export type Database = {
           status: string
           sync_status: string | null
           tipo: string
+          tipo_falta: string | null
           turno: string | null
           unidade_id: string
         }
@@ -187,12 +193,17 @@ export type Database = {
           criado_por?: string
           custom_data?: Json
           data?: string
+          falta_justificativa?: string | null
+          falta_liberada?: boolean
           google_event_id?: string | null
           hora?: string
           id: string
           iniciado_em?: string | null
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          liberada_em?: string | null
+          liberada_por?: string | null
+          motivo_liberacao?: string | null
           nome_procedimento?: string | null
           obs_conclusao?: string | null
           observacoes?: string
@@ -209,6 +220,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          tipo_falta?: string | null
           turno?: string | null
           unidade_id?: string
         }
@@ -224,12 +236,17 @@ export type Database = {
           criado_por?: string
           custom_data?: Json
           data?: string
+          falta_justificativa?: string | null
+          falta_liberada?: boolean
           google_event_id?: string | null
           hora?: string
           id?: string
           iniciado_em?: string | null
           lembrete_24h_enviado_em?: string | null
           lembrete_proximo_enviado_em?: string | null
+          liberada_em?: string | null
+          liberada_por?: string | null
+          motivo_liberacao?: string | null
           nome_procedimento?: string | null
           obs_conclusao?: string | null
           observacoes?: string
@@ -246,6 +263,7 @@ export type Database = {
           status?: string
           sync_status?: string | null
           tipo?: string
+          tipo_falta?: string | null
           turno?: string | null
           unidade_id?: string
         }
@@ -1365,6 +1383,7 @@ export type Database = {
           criado_em: string | null
           custom_data: Json
           data_encaminhamento: string
+          data_marcacao_excecao: string | null
           data_nascimento: string
           descricao_clinica: string
           diagnostico_resumido: string
@@ -1378,10 +1397,13 @@ export type Database = {
           is_autista: boolean
           is_gestante: boolean
           is_pne: boolean
+          is_tfd: boolean
           justificativa: string
           logradouro: string | null
+          marcado_por: string | null
           menor_idade: boolean
           mobilidade: string
+          motivo_excecao_bloqueio: string | null
           municipio: string
           nacionalidade: string | null
           naturalidade: string
@@ -1391,8 +1413,10 @@ export type Database = {
           nome_responsavel: string
           numero: string | null
           observacao_equipamentos: string
+          observacao_tfd_ordem_judicial: string | null
           observacoes: string
           outro_servico_sus: boolean
+          possui_ordem_judicial: boolean
           profissional_solicitante: string
           raca_cor: string | null
           sexo: string | null
@@ -1427,6 +1451,7 @@ export type Database = {
           criado_em?: string | null
           custom_data?: Json
           data_encaminhamento?: string
+          data_marcacao_excecao?: string | null
           data_nascimento?: string
           descricao_clinica?: string
           diagnostico_resumido?: string
@@ -1440,10 +1465,13 @@ export type Database = {
           is_autista?: boolean
           is_gestante?: boolean
           is_pne?: boolean
+          is_tfd?: boolean
           justificativa?: string
           logradouro?: string | null
+          marcado_por?: string | null
           menor_idade?: boolean
           mobilidade?: string
+          motivo_excecao_bloqueio?: string | null
           municipio?: string
           nacionalidade?: string | null
           naturalidade?: string
@@ -1453,8 +1481,10 @@ export type Database = {
           nome_responsavel?: string
           numero?: string | null
           observacao_equipamentos?: string
+          observacao_tfd_ordem_judicial?: string | null
           observacoes?: string
           outro_servico_sus?: boolean
+          possui_ordem_judicial?: boolean
           profissional_solicitante?: string
           raca_cor?: string | null
           sexo?: string | null
@@ -1489,6 +1519,7 @@ export type Database = {
           criado_em?: string | null
           custom_data?: Json
           data_encaminhamento?: string
+          data_marcacao_excecao?: string | null
           data_nascimento?: string
           descricao_clinica?: string
           diagnostico_resumido?: string
@@ -1502,10 +1533,13 @@ export type Database = {
           is_autista?: boolean
           is_gestante?: boolean
           is_pne?: boolean
+          is_tfd?: boolean
           justificativa?: string
           logradouro?: string | null
+          marcado_por?: string | null
           menor_idade?: boolean
           mobilidade?: string
+          motivo_excecao_bloqueio?: string | null
           municipio?: string
           nacionalidade?: string | null
           naturalidade?: string
@@ -1515,8 +1549,10 @@ export type Database = {
           nome_responsavel?: string
           numero?: string | null
           observacao_equipamentos?: string
+          observacao_tfd_ordem_judicial?: string | null
           observacoes?: string
           outro_servico_sus?: boolean
+          possui_ordem_judicial?: boolean
           profissional_solicitante?: string
           raca_cor?: string | null
           sexo?: string | null
@@ -3232,13 +3268,19 @@ export type Database = {
           clinical_notes: string
           created_at: string
           cycle_id: string
+          falta_justificativa: string | null
+          falta_liberada: boolean
           id: string
+          liberada_em: string | null
+          liberada_por: string | null
+          motivo_liberacao: string | null
           patient_id: string
           procedure_done: string
           professional_id: string
           scheduled_date: string
           session_number: number
           status: string
+          tipo_falta: string | null
           total_sessions: number
         }
         Insert: {
@@ -3247,13 +3289,19 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           cycle_id: string
+          falta_justificativa?: string | null
+          falta_liberada?: boolean
           id?: string
+          liberada_em?: string | null
+          liberada_por?: string | null
+          motivo_liberacao?: string | null
           patient_id: string
           procedure_done?: string
           professional_id: string
           scheduled_date?: string
           session_number?: number
           status?: string
+          tipo_falta?: string | null
           total_sessions?: number
         }
         Update: {
@@ -3262,13 +3310,19 @@ export type Database = {
           clinical_notes?: string
           created_at?: string
           cycle_id?: string
+          falta_justificativa?: string | null
+          falta_liberada?: boolean
           id?: string
+          liberada_em?: string | null
+          liberada_por?: string | null
+          motivo_liberacao?: string | null
           patient_id?: string
           procedure_done?: string
           professional_id?: string
           scheduled_date?: string
           session_number?: number
           status?: string
+          tipo_falta?: string | null
           total_sessions?: number
         }
         Relationships: [
@@ -3809,6 +3863,18 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
+      liberar_falta: {
+        Args: {
+          p_agendamento_id?: string
+          p_all?: boolean
+          p_motivo?: string
+          p_paciente_id: string
+          p_session_id?: string
+          p_user_id?: string
+          p_user_nome?: string
+        }
+        Returns: Json
+      }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
@@ -3824,6 +3890,18 @@ export type Database = {
       }
       search_sigtap_and_cid: {
         Args: { lim?: number; q: string }
+        Returns: Json
+      }
+      set_excecao_bloqueio: {
+        Args: {
+          p_is_tfd: boolean
+          p_motivo?: string
+          p_observacao?: string
+          p_ordem_judicial: boolean
+          p_paciente_id: string
+          p_user_id?: string
+          p_user_nome?: string
+        }
         Returns: Json
       }
       show_limit: { Args: never; Returns: number }

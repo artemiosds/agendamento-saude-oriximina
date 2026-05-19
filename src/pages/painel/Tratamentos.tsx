@@ -842,8 +842,23 @@ const Tratamentos: React.FC = () => {
             clinical_notes: newSession.clinical_notes,
             procedure_done: newSession.procedure_done,
             absence_type: newSession.status === "paciente_faltou" ? newSession.absence_type : null,
-          })
+            tipo_falta: newSession.status === "paciente_faltou" ? (newSession.absence_type || 'injustificada') : null,
+            falta_justificativa: newSession.status === "paciente_faltou" ? (newSession.clinical_notes || null) : null,
+          } as any)
           .eq("id", nextSession.id);
+
+        // Recalcula status do paciente
+        if (newSession.status === "paciente_faltou") {
+          try {
+            await (supabase as any).rpc('atualizar_status_falta', { p_paciente_id: nextSession.patient_id });
+          } catch (err) {
+            console.error('[Faltosos] Erro na regra de faltas/exceção', {
+              pacienteId: nextSession.patient_id,
+              acao: 'atualizar_status_falta_tratamento',
+              errorMessage: (err as any)?.message,
+            });
+          }
+        }
       }
 
       await logAction({

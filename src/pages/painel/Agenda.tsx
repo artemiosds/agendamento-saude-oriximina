@@ -918,12 +918,18 @@ const Agenda: React.FC = () => {
       } as typeof pac;
     }
 
-    // Bloqueio por excesso de faltas
+    // Bloqueio por excesso de faltas — respeitando exceção administrativa (TFD/Ordem Judicial)
     try {
       const { data: pacStatus } = await (supabase as any)
-        .from('pacientes').select('status_falta, total_faltas').eq('id', newAg.pacienteId).maybeSingle();
-      if (pacStatus?.status_falta === 'BLOQUEADO') {
-        toast.error(`Paciente bloqueado por excesso de faltas (${pacStatus.total_faltas}). Está na lista de espera.`);
+        .from('pacientes')
+        .select('status_falta, total_faltas, is_tfd, possui_ordem_judicial, custom_data')
+        .eq('id', newAg.pacienteId).maybeSingle();
+      const { isPacienteIsentoBloqueio, getExcecaoLabel } = await import('@/lib/faltasUtils');
+      if (pacStatus && isPacienteIsentoBloqueio(pacStatus)) {
+        const label = getExcecaoLabel(pacStatus);
+        toast.info(`Paciente possui exceção administrativa de bloqueio (${label || 'TFD/Ordem Judicial'}). Agendamento permitido.`);
+      } else if (pacStatus?.status_falta === 'BLOQUEADO') {
+        toast.error(`Paciente bloqueado por excesso de faltas injustificadas (${pacStatus.total_faltas}). Está na lista de espera.`);
         return;
       }
     } catch {}
@@ -1595,7 +1601,11 @@ const Agenda: React.FC = () => {
     const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
 
     await updateAgendamento(ag.id, { status: "falta" as any });
-    await (supabase as any).from("agendamentos").update({ observacoes: novaObs }).eq("id", ag.id);
+    await (supabase as any).from("agendamentos").update({
+      observacoes: novaObs,
+      tipo_falta: dados.tipoFalta,
+      falta_justificativa: dados.descricao || dados.documento || null,
+    }).eq("id", ag.id);
 
     // Update linked treatment session
     try {
@@ -1612,6 +1622,8 @@ const Agenda: React.FC = () => {
           .update({
             status: "falta",
             absence_type: dados.tipoFalta,
+            tipo_falta: dados.tipoFalta,
+            falta_justificativa: dados.descricao || dados.documento || null,
             clinical_notes: JSON.stringify({
               tipo: "falta",
               tipo_falta: dados.tipoFalta,
