@@ -3074,6 +3074,7 @@ const ProntuarioPage: React.FC = () => {
                           </div>
                           {unifiedResults.procedimentos.map((p) => {
                             const already = selectedProcIds.includes(p.codigo);
+                            const viaCid = p.matched_by === 'cid';
                             return (
                               <button
                                 key={`p-${p.codigo}`}
@@ -3082,9 +3083,15 @@ const ProntuarioPage: React.FC = () => {
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => !already && handlePickProcedimento(p.codigo, p.nome)}
                                 className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 ${already ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={viaCid && p.cid_codigo ? `Vinculado pelo CID ${p.cid_codigo} — ${p.cid_descricao ?? ''}` : undefined}
                               >
                                 <span className="font-mono text-[10px] text-muted-foreground shrink-0">{p.codigo}</span>
                                 <span className="truncate flex-1">{p.nome}</span>
+                                {viaCid && (
+                                  <Badge variant="secondary" className="h-4 text-[9px] shrink-0">
+                                    via CID {p.cid_codigo}
+                                  </Badge>
+                                )}
                                 {already && <Badge variant="outline" className="h-4 text-[9px] shrink-0">já adicionado</Badge>}
                               </button>
                             );
