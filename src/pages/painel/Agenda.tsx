@@ -1601,7 +1601,11 @@ const Agenda: React.FC = () => {
     const novaObs = `${obsAnterior}\n${detalheFalta}`.trim();
 
     await updateAgendamento(ag.id, { status: "falta" as any });
-    await (supabase as any).from("agendamentos").update({ observacoes: novaObs }).eq("id", ag.id);
+    await (supabase as any).from("agendamentos").update({
+      observacoes: novaObs,
+      tipo_falta: dados.tipoFalta,
+      falta_justificativa: dados.descricao || dados.documento || null,
+    }).eq("id", ag.id);
 
     // Update linked treatment session
     try {
