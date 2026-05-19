@@ -2,7 +2,45 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-export type CustomFieldType = 'text' | 'number' | 'date' | 'checkbox' | 'select' | 'textarea';
+export type CustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'time'
+  | 'select'
+  | 'multiselect'
+  | 'checkbox'
+  | 'radio'
+  | 'phone'
+  | 'cpf'
+  | 'cns'
+  | 'email';
+
+export interface CustomFieldValidation {
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  mask?: string;
+  regex?: string;
+}
+
+export type CustomFieldConditionOp = 'eq' | 'neq' | 'in' | 'notin' | 'empty' | 'notempty';
+
+export interface CustomFieldCondition {
+  fieldName: string;
+  op: CustomFieldConditionOp;
+  value?: string | string[];
+}
+
+export interface CustomFieldScope {
+  /** Quando true, ignora filtros de especialidade/tipo. */
+  global?: boolean;
+  /** [] ou undefined = todas as especialidades. */
+  especialidades?: string[];
+  /** [] ou undefined = todos os tipos de prontuário. */
+  tiposProntuario?: string[];
+}
 
 export interface CustomFieldDef {
   id: string;
@@ -15,6 +53,16 @@ export interface CustomFieldDef {
   ordem: number;
   valorPadrao: string;
   mostrarListagem: boolean;
+  /** Agrupador visual opcional. */
+  secao?: string;
+  /** Texto de ajuda exibido abaixo do campo. */
+  helpText?: string;
+  /** Validações adicionais. */
+  validacao?: CustomFieldValidation;
+  /** Exibição condicional baseada em outro campo. */
+  condicao?: CustomFieldCondition;
+  /** Onde o campo deve aparecer. */
+  escopo?: CustomFieldScope;
 }
 
 export type ScreenKey =
