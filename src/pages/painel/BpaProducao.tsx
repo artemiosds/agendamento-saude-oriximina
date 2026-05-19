@@ -203,7 +203,8 @@ const BpaProducao: React.FC = () => {
       const result = await bpaService.resolveBpaProcedimentosECids({
         competencia,
         unidadeId: unidadeFiltro,
-        profissionalId: profissionalFiltro,
+        // profissional não é enviado: a filtragem é feita client-side em linhasFiltradas,
+        // o que torna a troca de profissional instantânea sem refetch.
         triagemSigtapPadrao
       });
 
