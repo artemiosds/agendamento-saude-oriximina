@@ -11,7 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
-import { Plus, Pencil, Trash2, Loader2, ChevronUp, ChevronDown, Eye, Copy, GripVertical, Sparkles } from 'lucide-react';
+import {
+  Plus, Pencil, Trash2, Loader2, ChevronUp, ChevronDown, Eye, Copy, GripVertical, Sparkles,
+  Type, AlignLeft, Hash, List, CheckSquare, Calendar as CalendarIcon, SlidersHorizontal,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
