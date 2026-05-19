@@ -1622,6 +1622,8 @@ const Agenda: React.FC = () => {
           .update({
             status: "falta",
             absence_type: dados.tipoFalta,
+            tipo_falta: dados.tipoFalta,
+            falta_justificativa: dados.descricao || dados.documento || null,
             clinical_notes: JSON.stringify({
               tipo: "falta",
               tipo_falta: dados.tipoFalta,
