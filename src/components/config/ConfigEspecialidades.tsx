@@ -369,6 +369,7 @@ const ConfigEspecialidades: React.FC = () => {
 
   const addCampoEsp = () => {
     if (!newField.label.trim() || !esp) return;
+    const needsOpcoes = newField.tipo === 'select';
     const campo: CampoEspecialidade = {
       id: `custom_${Date.now()}`,
       key: `custom_${Date.now()}`,
@@ -378,12 +379,17 @@ const ConfigEspecialidades: React.FC = () => {
       habilitado: true,
       isBuiltin: false,
       order: esp.campos.length + 1,
-      tipos_prontuario: [...DEFAULT_TIPOS],
-      opcoes: newField.tipo === 'select' ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      tipos_prontuario: newField.tipos_prontuario.length ? newField.tipos_prontuario : [...DEFAULT_TIPOS],
+      opcoes: needsOpcoes ? newField.opcoes.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      valor_padrao: newField.valor_padrao.trim() || undefined,
+      ajuda: newField.ajuda.trim() || undefined,
     };
     updateEsp(e => ({ ...e, campos: [...e.campos, campo] }));
     setAddFieldDialog(false);
-    setNewField({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '' });
+    setNewField({
+      label: '', tipo: 'textarea', obrigatorio: false, opcoes: '',
+      valor_padrao: '', ajuda: '', tipos_prontuario: [...DEFAULT_TIPOS],
+    });
   };
 
   const deleteCampo = (campoId: string) => {
