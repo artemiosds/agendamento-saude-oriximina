@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import { Slider } from '@/components/ui/slider';
 import {
   invalidateDocumentConfigCache, loadDocumentConfig,
-  docHeader, docFooter, buildInstitutionalCSS, docMeta,
+  buildDocumentShell,
   DEFAULT_CONFIG, type DocumentConfig, type LogoSlotConfig,
 } from '@/lib/printLayout';
 import logoSmsFallback from '@/assets/logo-sms-oriximina.jpeg';
