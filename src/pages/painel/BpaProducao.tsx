@@ -337,7 +337,7 @@ const BpaProducao: React.FC = () => {
 
   const stats = useMemo(() => {
     let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0, duplicados = 0;
-    linhas.forEach((l) => {
+    linhasFiltradas.forEach((l) => {
       if (l.duplicado) { duplicados++; return; }
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
@@ -345,9 +345,9 @@ const BpaProducao: React.FC = () => {
       else if (l.origem === 'pts') pts++;
       else triagem++;
     });
-    return { total: linhas.length, validos, pendentes, pront, pts, triagem, duplicados };
+    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem, duplicados };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhas, pacMap, profMap]);
+  }, [linhasFiltradas, pacMap, profMap]);
 
   const emptyFilterMessage = useMemo(() => {
     if (linhas.length === 0) return 'Nenhuma linha encontrada na competência. Verifique competência, unidade e se há Prontuários/PTS/sessões lançados.';
