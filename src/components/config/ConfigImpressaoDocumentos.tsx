@@ -158,25 +158,33 @@ const ConfigImpressaoDocumentos: React.FC = () => {
     toast.success('Logo removida');
   };
 
-  const handlePreview = async () => {
-    const cfg = await loadDocumentConfig();
-    const previewWindow = window.open('', '_blank');
-    if (!previewWindow) return;
-    const css = buildInstitutionalCSS(cfg);
-    const meta = docMeta({ Paciente: 'João da Silva (exemplo)', CPF: '123.456.789-00', Data: new Date().toLocaleDateString('pt-BR') });
+  // Monta o HTML do documento de amostra usando o MESMO shell
+  // que todos os documentos do sistema usam — preview, impressão e PDF
+  // saem idênticos.
+  const buildSampleHtml = (cfg: DocumentConfig): string => {
     const body = `
       <div class="doc-content">
         <p>Atesto para os devidos fins que o(a) paciente <strong>João da Silva</strong>, portador(a) do CPF <strong>123.456.789-00</strong>, compareceu nesta unidade de saúde na data de hoje para consulta clínica, necessitando de <strong>3 (três)</strong> dias de afastamento de suas atividades laborais.</p>
-        <p>Este documento é uma pré-visualização do layout institucional padrão.</p>
+        <p>Este documento é uma pré-visualização do layout institucional padrão e reflete exatamente como ficará a impressão e o PDF.</p>
       </div>
       <div class="signature" style="margin-top:60px;">
         <div class="signature-line"></div>
         <div class="name">DRA. MARIA SANTOS</div>
         <div class="role">Fisioterapia</div>
         <div class="conselho">CREFITO 12345/PA</div>
-      </div>
-    `;
-    previewWindow.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Pré-visualização</title>${css}</head><body>${docHeader('ATESTADO MÉDICO', cfg)}${meta}${body}${docFooter(cfg)}</body></html>`);
+      </div>`;
+    return buildDocumentShell('ATESTADO MÉDICO (EXEMPLO)', body, cfg, {
+      Paciente: 'João da Silva (exemplo)',
+      CPF: '123.456.789-00',
+      Data: new Date().toLocaleDateString('pt-BR'),
+    });
+  };
+
+  const handlePreview = async () => {
+    const cfg = await loadDocumentConfig();
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) return;
+    previewWindow.document.write(buildSampleHtml(cfg));
     previewWindow.document.close();
   };
 
