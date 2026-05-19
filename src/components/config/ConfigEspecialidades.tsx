@@ -266,7 +266,15 @@ const ConfigEspecialidades: React.FC = () => {
   const [copyDialog, setCopyDialog] = useState<{ campo: CampoEspecialidade; targets: string[] } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewTipo, setPreviewTipo] = useState<TipoProntuario>('avaliacao');
-  const [newField, setNewField] = useState({ label: '', tipo: 'textarea', obrigatorio: false, opcoes: '' });
+  const [newField, setNewField] = useState({
+    label: '',
+    tipo: 'textarea',
+    obrigatorio: false,
+    opcoes: '',
+    valor_padrao: '',
+    ajuda: '',
+    tipos_prontuario: [...DEFAULT_TIPOS] as TipoProntuario[],
+  });
   const [newEsp, setNewEsp] = useState({ label: '', profissoes: [] as string[] });
 
   const sensors = useSensors(
