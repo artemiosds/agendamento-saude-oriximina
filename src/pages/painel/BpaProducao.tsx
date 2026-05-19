@@ -186,20 +186,13 @@ const BpaProducao: React.FC = () => {
     }
   }, [user?.unidadeId, isGlobalAdmin, unidadeFiltro]);
 
-  // --- Carrega config global (SIGTAP triagem) e tabela DNE (códigos de logradouro) ---
+  // Carrega apenas a config global do SIGTAP da triagem.
+  // (A tabela DNE já é carregada e cacheada dentro do bpaService — não duplicar aqui.)
   useEffect(() => {
     (async () => {
       const { data } = await (supabase as any).from('system_config').select('configuracoes').limit(1).maybeSingle();
       const cfg = data?.configuracoes || {};
       setTriagemSigtapPadrao(String(cfg.bpa_triagem_sigtap || '').replace(/\D/g, ''));
-
-      try {
-        const { data: dne } = await (supabase as any).from('logradouros_dne').select('codigo, descricao');
-        (dne || []).forEach((r: any) => {
-          const k = normalizeAddressKey(String(r.descricao || ''));
-          if (k && r.codigo) DNE_DB[k] = String(r.codigo).replace(/\D/g, '').padStart(3, '0').slice(-3);
-        });
-      } catch (e) { console.warn('[BPA] DNE load skipped', e); }
     })();
   }, []);
 
@@ -210,7 +203,8 @@ const BpaProducao: React.FC = () => {
       const result = await bpaService.resolveBpaProcedimentosECids({
         competencia,
         unidadeId: unidadeFiltro,
-        profissionalId: profissionalFiltro,
+        // profissional não é enviado: a filtragem é feita client-side em linhasFiltradas,
+        // o que torna a troca de profissional instantânea sem refetch.
         triagemSigtapPadrao
       });
 
@@ -287,7 +281,7 @@ const BpaProducao: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [competencia, unidadeFiltro, profissionalFiltro, triagemSigtapPadrao]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [competencia, unidadeFiltro, triagemSigtapPadrao]);
 
   const validateRow = (l: LinhaBPA): ValidationFlags => {
     const pac = pacMap[l.paciente_id];
