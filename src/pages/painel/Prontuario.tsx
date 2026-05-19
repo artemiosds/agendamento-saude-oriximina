@@ -285,7 +285,14 @@ const ProntuarioPage: React.FC = () => {
   // ===== Unified Search (SIGTAP + CID-10) =====
   const [unifiedQuery, setUnifiedQuery] = useState("");
   const [unifiedResults, setUnifiedResults] = useState<{
-    procedimentos: { codigo: string; nome: string; especialidade: string | null }[];
+    procedimentos: {
+      codigo: string;
+      nome: string;
+      especialidade: string | null;
+      matched_by?: 'codigo' | 'nome' | 'cid';
+      cid_codigo?: string | null;
+      cid_descricao?: string | null;
+    }[];
     cids: { codigo: string; descricao: string }[];
   }>({ procedimentos: [], cids: [] });
   const [unifiedLoading, setUnifiedLoading] = useState(false);
@@ -302,7 +309,7 @@ const ProntuarioPage: React.FC = () => {
     }
     setUnifiedLoading(true);
     unifiedDebounceRef.current = window.setTimeout(async () => {
-      const res = await procedureService.searchUnified(q, 10);
+      const res = await procedureService.searchUnified(q, 50);
       setUnifiedResults(res);
       setUnifiedLoading(false);
     }, 300);
@@ -651,7 +658,9 @@ const ProntuarioPage: React.FC = () => {
   const selectedProcIdSet = useMemo(() => new Set(selectedProcIds), [selectedProcIds]);
   const listedProcedimentos = useMemo(() => {
     const available = filteredProcedimentos.filter((p) => !selectedProcIdSet.has(p.id));
-    return available.slice(0, procSearch.trim() ? 300 : 120);
+    // Sem busca: corta para evitar render pesado (todos seguem acessíveis via busca unificada acima).
+    // Com busca: NÃO cortar — todos os resultados compatíveis devem aparecer.
+    return procSearch.trim() ? available : available.slice(0, 200);
   }, [filteredProcedimentos, selectedProcIdSet, procSearch]);
 
   // Lighter projection for listing (avoid heavy text columns until detail)
@@ -3065,6 +3074,7 @@ const ProntuarioPage: React.FC = () => {
                           </div>
                           {unifiedResults.procedimentos.map((p) => {
                             const already = selectedProcIds.includes(p.codigo);
+                            const viaCid = p.matched_by === 'cid';
                             return (
                               <button
                                 key={`p-${p.codigo}`}
@@ -3073,9 +3083,15 @@ const ProntuarioPage: React.FC = () => {
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => !already && handlePickProcedimento(p.codigo, p.nome)}
                                 className={`w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 ${already ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={viaCid && p.cid_codigo ? `Vinculado pelo CID ${p.cid_codigo} — ${p.cid_descricao ?? ''}` : undefined}
                               >
                                 <span className="font-mono text-[10px] text-muted-foreground shrink-0">{p.codigo}</span>
                                 <span className="truncate flex-1">{p.nome}</span>
+                                {viaCid && (
+                                  <Badge variant="secondary" className="h-4 text-[9px] shrink-0">
+                                    via CID {p.cid_codigo}
+                                  </Badge>
+                                )}
                                 {already && <Badge variant="outline" className="h-4 text-[9px] shrink-0">já adicionado</Badge>}
                               </button>
                             );
