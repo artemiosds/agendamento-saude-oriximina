@@ -40,7 +40,13 @@ export const patientService = {
 
   mapPacienteDbToForm(paciente: any) {
     if (!paciente) return {};
-    const cd = paciente.custom_data || {};
+    const cd = {
+      ...(paciente.custom_data || {}),
+      is_tfd: paciente.is_tfd === true || paciente.custom_data?.is_tfd === true,
+      possui_ordem_judicial: paciente.possui_ordem_judicial === true || paciente.custom_data?.possui_ordem_judicial === true,
+      motivo_excecao_bloqueio: paciente.motivo_excecao_bloqueio ?? paciente.custom_data?.motivo_excecao_bloqueio ?? '',
+      observacao_tfd_ordem_judicial: paciente.observacao_tfd_ordem_judicial ?? paciente.custom_data?.observacao_tfd_ordem_judicial ?? '',
+    };
     return {
       nome: paciente.nome || "",
       nome_mae: paciente.nome_mae || "",
