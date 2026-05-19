@@ -285,7 +285,14 @@ const ProntuarioPage: React.FC = () => {
   // ===== Unified Search (SIGTAP + CID-10) =====
   const [unifiedQuery, setUnifiedQuery] = useState("");
   const [unifiedResults, setUnifiedResults] = useState<{
-    procedimentos: { codigo: string; nome: string; especialidade: string | null }[];
+    procedimentos: {
+      codigo: string;
+      nome: string;
+      especialidade: string | null;
+      matched_by?: 'codigo' | 'nome' | 'cid';
+      cid_codigo?: string | null;
+      cid_descricao?: string | null;
+    }[];
     cids: { codigo: string; descricao: string }[];
   }>({ procedimentos: [], cids: [] });
   const [unifiedLoading, setUnifiedLoading] = useState(false);
@@ -302,7 +309,7 @@ const ProntuarioPage: React.FC = () => {
     }
     setUnifiedLoading(true);
     unifiedDebounceRef.current = window.setTimeout(async () => {
-      const res = await procedureService.searchUnified(q, 10);
+      const res = await procedureService.searchUnified(q, 50);
       setUnifiedResults(res);
       setUnifiedLoading(false);
     }, 300);
