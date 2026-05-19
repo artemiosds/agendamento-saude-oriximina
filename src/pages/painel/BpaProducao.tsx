@@ -377,20 +377,26 @@ const BpaProducao: React.FC = () => {
 
   // --- Header dinâmico ---
   const cabecalho = useMemo(() => {
-    const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
-    const uni = unidades.find((u: any) => u.id === uniId);
-    let profCns = '', profCbo = '', profNome = '';
+    let profCns = '', profCbo = '', profNome = '', profUnidadeId = '';
     if (profissionalFiltro !== 'all') {
       const f = funcionarios.find((x) => x.id === profissionalFiltro);
       const cd = (f as any)?.custom_data || {};
       profCns = String(cd.cns || cd.cns_profissional || '').replace(/\D/g, '');
       profCbo = String(cd.cbo_codigo || '').replace(/\D/g, '');
       profNome = (cd.nome_social || f?.nome || '');
+      profUnidadeId = (f as any)?.unidadeId || '';
     }
+    // Unidade efetiva: filtro > unidade do profissional selecionado > unidade do usuário
+    const uniId = unidadeFiltro !== 'all'
+      ? unidadeFiltro
+      : (profUnidadeId || user?.unidadeId || '');
+    const uni = unidades.find((u: any) => u.id === uniId);
+    const unidadeNome = uni?.nome
+      || (unidadeFiltro === 'all' && !profUnidadeId ? 'Todas as unidades' : '—');
     return {
       cnes: getCnesFromUnidade(uniId),
       ine: getIneFromUnidade(uniId),
-      unidadeNome: (uni as any)?.nome || (unidadeFiltro === 'all' ? 'Todas as unidades' : '—'),
+      unidadeNome,
       profCns, profCbo, profNome,
       mesAno: fmtCompetencia(competencia),
       folha,
