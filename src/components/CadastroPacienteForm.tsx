@@ -1016,6 +1016,66 @@ const CadastroPacienteForm: React.FC<Props> = ({ pacienteId, form, onChange, onS
               </div>
             </div>
 
+            {/* Condições administrativas / Exceção de bloqueio */}
+            <div className="p-4 border rounded-lg bg-blue-50/40 border-blue-200">
+              <h4 className="font-semibold text-blue-900 mb-3 text-sm">
+                Condições administrativas / Exceção de bloqueio por faltas
+              </h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Pacientes marcados como TFD ou com Ordem Judicial ficam isentos de bloqueio por excesso de faltas.
+                O histórico de faltas continua preservado.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-blue-100/50">
+                  <input
+                    type="checkbox"
+                    checked={cd.is_tfd === true}
+                    onChange={(e) => setCustom('is_tfd', e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">Paciente TFD</div>
+                    <div className="text-xs text-muted-foreground">Tratamento Fora do Domicílio</div>
+                  </div>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer p-2 rounded hover:bg-blue-100/50">
+                  <input
+                    type="checkbox"
+                    checked={cd.possui_ordem_judicial === true}
+                    onChange={(e) => setCustom('possui_ordem_judicial', e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">Paciente com Ordem Judicial</div>
+                    <div className="text-xs text-muted-foreground">Atendimento garantido judicialmente</div>
+                  </div>
+                </label>
+              </div>
+              {(cd.is_tfd === true || cd.possui_ordem_judicial === true) && (
+                <div className="mt-3 space-y-2">
+                  <div>
+                    <label className="text-xs font-medium">Motivo da exceção *</label>
+                    <input
+                      type="text"
+                      className="w-full mt-1 px-2 py-1.5 text-sm border rounded"
+                      value={cd.motivo_excecao_bloqueio || ''}
+                      onChange={(e) => setCustom('motivo_excecao_bloqueio', e.target.value)}
+                      placeholder="Ex.: processo judicial nº 12345 / TFD para hemodiálise"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">Observação</label>
+                    <textarea
+                      className="w-full mt-1 px-2 py-1.5 text-sm border rounded"
+                      rows={2}
+                      value={cd.observacao_tfd_ordem_judicial || ''}
+                      onChange={(e) => setCustom('observacao_tfd_ordem_judicial', e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Custom Fields */}
             {customConfig.fields.length > 0 && (
               <div className="p-4 border rounded-lg bg-card">
