@@ -318,9 +318,23 @@ const ConfigPersonalizarCampos: React.FC = () => {
   }, [unifiedRows, persistOrder]);
 
   // ---------- Custom field CRUD ----------
+  const EMPTY_FORM = {
+    rotulo: '', tipo: 'text' as CustomFieldType, obrigatorio: false,
+    opcoes: '', valorPadrao: '', mostrarListagem: false,
+    secao: '', helpText: '',
+    scopeGlobal: true,
+    especialidades: '',
+    tiposProntuario: [] as string[],
+    valMin: '', valMax: '', valMaxLength: '', valMask: '', valRegex: '',
+    condEnabled: false,
+    condField: '',
+    condOp: 'notempty' as CustomFieldCondition['op'],
+    condValue: '',
+  };
+
   const openAddModal = () => {
     setEditingField(null);
-    setFieldForm({ rotulo: '', tipo: 'text', obrigatorio: false, opcoes: '', valorPadrao: '', mostrarListagem: false });
+    setFieldForm(EMPTY_FORM);
     setModalOpen(true);
   };
 
@@ -333,8 +347,56 @@ const ConfigPersonalizarCampos: React.FC = () => {
       opcoes: field.opcoes.join(', '),
       valorPadrao: field.valorPadrao,
       mostrarListagem: field.mostrarListagem,
+      secao: field.secao ?? '',
+      helpText: field.helpText ?? '',
+      scopeGlobal: field.escopo?.global ?? true,
+      especialidades: (field.escopo?.especialidades || []).join(', '),
+      tiposProntuario: field.escopo?.tiposProntuario || [],
+      valMin: field.validacao?.min != null ? String(field.validacao.min) : '',
+      valMax: field.validacao?.max != null ? String(field.validacao.max) : '',
+      valMaxLength: field.validacao?.maxLength != null ? String(field.validacao.maxLength) : '',
+      valMask: field.validacao?.mask ?? '',
+      valRegex: field.validacao?.regex ?? '',
+      condEnabled: !!field.condicao?.fieldName,
+      condField: field.condicao?.fieldName ?? '',
+      condOp: field.condicao?.op ?? 'notempty',
+      condValue: Array.isArray(field.condicao?.value) ? field.condicao!.value.join(', ') : (field.condicao?.value ?? ''),
     });
     setModalOpen(true);
+  };
+
+  const buildValidation = (): CustomFieldValidation | undefined => {
+    const v: CustomFieldValidation = {};
+    if (fieldForm.valMin !== '') v.min = Number(fieldForm.valMin);
+    if (fieldForm.valMax !== '') v.max = Number(fieldForm.valMax);
+    if (fieldForm.valMaxLength !== '') v.maxLength = Number(fieldForm.valMaxLength);
+    if (fieldForm.valMask) v.mask = fieldForm.valMask;
+    if (fieldForm.valRegex) v.regex = fieldForm.valRegex;
+    return Object.keys(v).length ? v : undefined;
+  };
+
+  const buildScope = (): CustomFieldScope | undefined => {
+    if (fieldForm.scopeGlobal && !fieldForm.especialidades && fieldForm.tiposProntuario.length === 0) {
+      return { global: true };
+    }
+    const esp = fieldForm.especialidades.split(',').map(s => s.trim()).filter(Boolean);
+    return {
+      global: fieldForm.scopeGlobal,
+      especialidades: esp.length ? esp : undefined,
+      tiposProntuario: fieldForm.tiposProntuario.length ? fieldForm.tiposProntuario : undefined,
+    };
+  };
+
+  const buildCondition = (): CustomFieldCondition | undefined => {
+    if (!fieldForm.condEnabled || !fieldForm.condField) return undefined;
+    const op = fieldForm.condOp;
+    const needsValue = op !== 'empty' && op !== 'notempty';
+    const value = needsValue
+      ? (op === 'in' || op === 'notin'
+          ? fieldForm.condValue.split(',').map(s => s.trim()).filter(Boolean)
+          : fieldForm.condValue)
+      : undefined;
+    return { fieldName: fieldForm.condField, op, value };
   };
 
   const saveField = async () => {
@@ -349,17 +411,24 @@ const ConfigPersonalizarCampos: React.FC = () => {
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_|_$/g, '');
 
+    const hasOptions = fieldForm.tipo === 'select' || fieldForm.tipo === 'multiselect' || fieldForm.tipo === 'radio';
+
     const field: CustomFieldDef = {
       id: editingField?.id || generateId(),
       nome,
       rotulo: fieldForm.rotulo.trim(),
       tipo: fieldForm.tipo,
-      opcoes: fieldForm.tipo === 'select' ? fieldForm.opcoes.split(',').map((o) => o.trim()).filter(Boolean) : [],
+      opcoes: hasOptions ? fieldForm.opcoes.split(',').map((o) => o.trim()).filter(Boolean) : [],
       obrigatorio: fieldForm.obrigatorio,
       ativo: editingField?.ativo ?? true,
       ordem: editingField?.ordem ?? (screenConfig.fields.length + 1) * 10,
       valorPadrao: fieldForm.valorPadrao,
       mostrarListagem: fieldForm.mostrarListagem,
+      secao: fieldForm.secao.trim() || undefined,
+      helpText: fieldForm.helpText.trim() || undefined,
+      validacao: buildValidation(),
+      escopo: buildScope(),
+      condicao: buildCondition(),
     };
 
     const newFields = editingField
