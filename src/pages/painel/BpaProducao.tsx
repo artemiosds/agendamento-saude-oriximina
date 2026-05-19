@@ -337,7 +337,7 @@ const BpaProducao: React.FC = () => {
 
   const stats = useMemo(() => {
     let validos = 0, pendentes = 0, pront = 0, pts = 0, triagem = 0, duplicados = 0;
-    linhas.forEach((l) => {
+    linhasFiltradas.forEach((l) => {
       if (l.duplicado) { duplicados++; return; }
       const v = validateRow(l);
       if (isLinhaValida(l, v)) validos++; else pendentes++;
@@ -345,9 +345,9 @@ const BpaProducao: React.FC = () => {
       else if (l.origem === 'pts') pts++;
       else triagem++;
     });
-    return { total: linhas.length, validos, pendentes, pront, pts, triagem, duplicados };
+    return { total: linhasFiltradas.length, validos, pendentes, pront, pts, triagem, duplicados };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linhas, pacMap, profMap]);
+  }, [linhasFiltradas, pacMap, profMap]);
 
   const emptyFilterMessage = useMemo(() => {
     if (linhas.length === 0) return 'Nenhuma linha encontrada na competência. Verifique competência, unidade e se há Prontuários/PTS/sessões lançados.';
@@ -377,20 +377,26 @@ const BpaProducao: React.FC = () => {
 
   // --- Header dinâmico ---
   const cabecalho = useMemo(() => {
-    const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
-    const uni = unidades.find((u: any) => u.id === uniId);
-    let profCns = '', profCbo = '', profNome = '';
+    let profCns = '', profCbo = '', profNome = '', profUnidadeId = '';
     if (profissionalFiltro !== 'all') {
       const f = funcionarios.find((x) => x.id === profissionalFiltro);
       const cd = (f as any)?.custom_data || {};
       profCns = String(cd.cns || cd.cns_profissional || '').replace(/\D/g, '');
       profCbo = String(cd.cbo_codigo || '').replace(/\D/g, '');
       profNome = (cd.nome_social || f?.nome || '');
+      profUnidadeId = (f as any)?.unidadeId || '';
     }
+    // Unidade efetiva: filtro > unidade do profissional selecionado > unidade do usuário
+    const uniId = unidadeFiltro !== 'all'
+      ? unidadeFiltro
+      : (profUnidadeId || user?.unidadeId || '');
+    const uni = unidades.find((u: any) => u.id === uniId);
+    const unidadeNome = uni?.nome
+      || (unidadeFiltro === 'all' && !profUnidadeId ? 'Todas as unidades' : '—');
     return {
       cnes: getCnesFromUnidade(uniId),
       ine: getIneFromUnidade(uniId),
-      unidadeNome: (uni as any)?.nome || (unidadeFiltro === 'all' ? 'Todas as unidades' : '—'),
+      unidadeNome,
       profCns, profCbo, profNome,
       mesAno: fmtCompetencia(competencia),
       folha,
@@ -406,7 +412,11 @@ const BpaProducao: React.FC = () => {
   }, [linhas, funcionarios]);
 
   const openGenerateModal = () => {
-    const uniSelecionada = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
+    const uniSelecionada = unidadeFiltro !== 'all'
+      ? unidadeFiltro
+      : (profissionalFiltro !== 'all'
+          ? ((funcionarios.find((x) => x.id === profissionalFiltro) as any)?.unidadeId || user?.unidadeId || '')
+          : (user?.unidadeId || ''));
     setModalCompetencia(competencia);
     setModalUnidade(uniSelecionada);
     setModalCnes(getCnesFromUnidade(uniSelecionada));
@@ -423,7 +433,7 @@ const BpaProducao: React.FC = () => {
   const modalPreview = useMemo(() => {
     if (!modalOpen) return { validos: 0, pendentes: 0, total: 0 };
     let validos = 0, pendentes = 0, total = 0;
-    linhas.forEach((l) => {
+    linhasFiltradas.forEach((l) => {
       const lComp = (l.data || '').replace(/-/g, '').slice(0, 6);
       if (modalCompetencia && lComp !== modalCompetencia) return;
       total += 1;
@@ -432,12 +442,12 @@ const BpaProducao: React.FC = () => {
     });
     return { validos, pendentes, total };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modalOpen, modalCompetencia, linhas, pacMap, profMap]);
+  }, [modalOpen, modalCompetencia, linhasFiltradas, pacMap, profMap]);
 
   const handleGenerate = async () => {
     if (modalCompetencia.length !== 6) { toast.error('Competência inválida (AAAAMM)'); return; }
     if (!modalCnes || modalCnes.length !== 7) { toast.error('CNES obrigatório (7 dígitos)'); return; }
-    const exportRows = linhas
+    const exportRows = linhasFiltradas
       .filter((l) => (l.data || '').replace(/-/g, '').slice(0, 6) === modalCompetencia)
       .filter((l) => !modalUnidade || l.unidade_id === modalUnidade)
       .filter((l) => !l.duplicado)
@@ -498,7 +508,7 @@ const BpaProducao: React.FC = () => {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success(`BPA gerado. ${linhasTxt.length} procedimento(s) exportado(s).`, {
-        description: `${linhas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
+        description: `${linhasFiltradas.length - exportRows.length} pendente(s) pulado(s).`, duration: 6000,
       });
       setModalOpen(false);
     } catch (err: unknown) {
@@ -511,7 +521,7 @@ const BpaProducao: React.FC = () => {
 
   // --- Exportação XLSX BPA-I (3 abas: BPA-I, Pendências, Resumo) ---
   const exportXlsx = () => {
-    const linhasParaExportar = linhasFiltradas.length ? linhasFiltradas : linhas;
+    const linhasParaExportar = linhasFiltradas;
     if (linhasParaExportar.length === 0) { toast.error('Nenhuma linha para exportar'); return; }
 
     const uniId = unidadeFiltro !== 'all' ? unidadeFiltro : (user?.unidadeId || '');
