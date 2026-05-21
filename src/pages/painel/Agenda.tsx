@@ -711,8 +711,12 @@ const Agenda: React.FC = () => {
       result = result.filter((a) => allowed.includes(a.status));
     }
 
+    if (tipoFilter !== "all") {
+      result = result.filter((a) => (a.tipo || "") === tipoFilter);
+    }
+
     return result;
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
