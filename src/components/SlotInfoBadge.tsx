@@ -81,37 +81,66 @@ export const SlotInfoBadge = React.forwardRef<HTMLElement, SlotInfoBadgeProps>((
           📊 {totalOcupadas} de {totalVagas} vagas ocupadas no dia
           {totalExcedido && ' • LIMITE EXCEDIDO'}
         </span>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
           {turnoData.map((t) => {
             const pct = t.vagasTotal > 0 ? (t.vagasOcupadas / t.vagasTotal) * 100 : 0;
+            const titulo = t.descricao || t.nome;
+            const periodo = t.periodo || t.nome;
+            const emoji = periodo === 'Manhã' ? '🌅' : periodo === 'Tarde' ? '🌆' : '🌙';
+            const disponiveis = Math.max(0, t.vagasTotal - t.vagasOcupadas);
+            const excedente = Math.max(0, t.vagasOcupadas - t.vagasTotal);
+            let situacao = 'Disponível';
+            let situacaoClass = 'bg-success/10 text-success';
+            let mensagem = '';
+            if (t.excedido) {
+              situacao = 'Excedido';
+              situacaoClass = 'bg-destructive/10 text-destructive';
+              mensagem = `Há ${excedente} agendamento${excedente !== 1 ? 's' : ''} acima da capacidade prevista.`;
+            } else if (t.lotado) {
+              situacao = 'Lotado';
+              situacaoClass = 'bg-destructive/10 text-destructive';
+              mensagem = 'Sem vagas restantes neste bloco.';
+            } else if (pct >= 80) {
+              situacao = 'Quase cheio';
+              situacaoClass = 'bg-warning/10 text-warning';
+              mensagem = `Restam ${disponiveis} vaga${disponiveis !== 1 ? 's' : ''} neste bloco.`;
+            } else {
+              mensagem = `Restam ${disponiveis} vaga${disponiveis !== 1 ? 's' : ''} neste bloco.`;
+            }
             return (
               <div
                 key={t.turnoId}
                 className={cn(
-                  'flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border',
-                  t.lotado
-                    ? 'bg-destructive/5 border-destructive/20 text-destructive'
-                    : pct > 60
-                      ? 'bg-warning/5 border-warning/20 text-warning'
-                      : 'bg-success/5 border-success/20 text-success',
+                  'flex flex-col gap-1 text-xs px-2.5 py-2 rounded-lg border',
+                  t.excedido || t.lotado
+                    ? 'bg-destructive/5 border-destructive/20'
+                    : pct >= 80
+                      ? 'bg-warning/5 border-warning/20'
+                      : 'bg-success/5 border-success/20',
                 )}
               >
-                <span>{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
-                <span className="font-medium">{t.nome}</span>
-                <span className="text-muted-foreground">{t.horaInicio}–{t.horaFim}</span>
-                <span className="ml-auto font-semibold">
-                  {t.excedido
-                    ? `${t.vagasOcupadas} de ${t.vagasTotal} ocupadas`
-                    : `${t.vagasLivresInternas} de ${t.vagasTotal} livres internas`}
-                </span>
-                {t.excedido ? (
-                  <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
-                    Excedido
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span>{emoji}</span>
+                  <span className="font-semibold text-foreground">{titulo}</span>
+                  {t.descricao && (
+                    <span className="text-muted-foreground">
+                      {periodo} • {t.horaInicio} às {t.horaFim}
+                    </span>
+                  )}
+                  {!t.descricao && (
+                    <span className="text-muted-foreground">{t.horaInicio} às {t.horaFim}</span>
+                  )}
+                  <span className={cn('ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full', situacaoClass)}>
+                    {situacao}
                   </span>
-                ) : t.lotado && (
-                  <span className="text-[10px] font-bold bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">
-                    Lotado
-                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-muted-foreground">
+                  <span>Capacidade: <strong className="text-foreground">{t.vagasTotal} vagas</strong></span>
+                  <span>Agendados: <strong className="text-foreground">{t.vagasOcupadas} paciente{t.vagasOcupadas !== 1 ? 's' : ''}</strong></span>
+                  <span>Disponíveis: <strong className="text-foreground">{disponiveis} vaga{disponiveis !== 1 ? 's' : ''}</strong></span>
+                </div>
+                {mensagem && (
+                  <p className="text-[11px] text-muted-foreground italic">{mensagem}</p>
                 )}
               </div>
             );

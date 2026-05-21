@@ -38,6 +38,10 @@ import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, today
 export interface TurnoInfoResult {
   turnoId: string;
   nome: string;
+  /** Custom block name configured on disponibilidade (e.g. "Eco"). Optional. */
+  descricao?: string;
+  /** Period label derived from horaInicio (Manhã/Tarde/Noite). */
+  periodo: string;
   horaInicio: string;
   horaFim: string;
   vagasTotal: number;
@@ -1922,11 +1926,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const vagasLivresInternas = Math.max(0, vagasTotal - vagasReservadasExterno - vagasOcupadasInterno);
         const vagasLivresTotal = Math.max(0, vagasTotal - turnoAppCount);
 
-        const nome = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
-        
+        const periodo = td.horaInicio < '12:00' ? 'Manhã' : td.horaInicio < '18:00' ? 'Tarde' : 'Noite';
+
+        // Resolve custom block name (descricao):
+        // - In turno mode, td.salaId holds either a globalTurno id (padrão) or a free-text name (custom, e.g. "Eco").
+        // - We cache global turnos via window.__turnosGlobaisCached (loaded by the Agenda/Disponibilidade pages).
+        const turnosGlobais: Array<{ id: string; nome: string }> =
+          (window as any).__turnosGlobaisCached || [];
+        const matchedGlobal = td.salaId ? turnosGlobais.find((t) => t.id === td.salaId) : undefined;
+        const rawCustomName = td.salaId && !matchedGlobal ? String(td.salaId).trim() : '';
+        // If the salaId equals the period label itself, treat as no custom descricao.
+        const descricao = rawCustomName && rawCustomName.toLowerCase() !== periodo.toLowerCase()
+          ? rawCustomName
+          : (matchedGlobal && matchedGlobal.nome && matchedGlobal.nome.toLowerCase() !== periodo.toLowerCase()
+              ? matchedGlobal.nome
+              : undefined);
+
         return {
           turnoId: td.salaId || td.id,
-          nome,
+          nome: periodo,
+          descricao,
+          periodo,
           horaInicio: td.horaInicio,
           horaFim: td.horaFim,
           vagasTotal,

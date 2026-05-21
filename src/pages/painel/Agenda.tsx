@@ -382,6 +382,7 @@ const Agenda: React.FC = () => {
   // BUSCA na agenda
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [tipoFilter, setTipoFilter] = useState<string>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 300);
@@ -393,6 +394,29 @@ const Agenda: React.FC = () => {
   React.useEffect(() => {
     const id = setInterval(() => setNowMinutes(nowMinutesInBrazil()), 60_000);
     return () => clearInterval(id);
+  }, []);
+
+  // Load turnos globais (custom block names like "Eco") into a window cache so
+  // DataContext.getTurnoInfo can resolve `descricao` for the agenda blocks.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data } = await supabase
+          .from('system_config')
+          .select('configuracoes')
+          .eq('id', 'default')
+          .maybeSingle();
+        if (cancelled) return;
+        const cfg = (data?.configuracoes as any) || {};
+        const turnos = cfg?.config_fluxo_atendimento?.turnos || [];
+        (window as any).__turnosGlobaisCached = turnos;
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // EDIÇÃO de agendamento
@@ -710,8 +734,12 @@ const Agenda: React.FC = () => {
       result = result.filter((a) => allowed.includes(a.status));
     }
 
+    if (tipoFilter !== "all") {
+      result = result.filter((a) => (a.tipo || "") === tipoFilter);
+    }
+
     return result;
-  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
+  }, [agendamentos, selectedDate, filterUnit, filterProf, isProfissional, user, debouncedSearch, statusFilter, tipoFilter, pacientes, triageMap, arrivalMap, nowMinutes]);
 
   const filteredPacienteKey = React.useMemo(
     () => [...new Set(filtered.map((f) => f.pacienteId))].sort().join(","),
@@ -2186,11 +2214,13 @@ const Agenda: React.FC = () => {
                                   lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
                                 )}
                               >
-                              <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
+                              <span className="text-xl">{(t.periodo || t.nome) === 'Manhã' ? '🌅' : (t.periodo || t.nome) === 'Tarde' ? '🌆' : '🌙'}</span>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-sm text-foreground">{t.nome}</span>
-                                  <span className="text-xs text-muted-foreground">{t.horaInicio} – {t.horaFim}</span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-sm text-foreground">{t.descricao || t.nome}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {t.descricao ? `${t.periodo || t.nome} • ` : ''}{t.horaInicio} – {t.horaFim}
+                                  </span>
                                 </div>
                                 <div className="mt-1.5 w-full bg-muted rounded-full h-1.5">
                                   <div
@@ -2493,11 +2523,26 @@ const Agenda: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            {(statusFilter !== "all" || debouncedSearch) && (
+            {/* Filtro de Tipo de atendimento */}
+            <Select value={tipoFilter} onValueChange={setTipoFilter}>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Tipo de atendimento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                <SelectItem value="Retorno">Retorno</SelectItem>
+                <SelectItem value="Exame">Exame</SelectItem>
+                <SelectItem value="Procedimento">Procedimento</SelectItem>
+                <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                <SelectItem value="Urgência">Urgência</SelectItem>
+              </SelectContent>
+            </Select>
+            {(statusFilter !== "all" || tipoFilter !== "all" || debouncedSearch) && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setStatusFilter("all"); setSearchTerm(""); }}
+                onClick={() => { setStatusFilter("all"); setTipoFilter("all"); setSearchTerm(""); }}
                 className="h-9"
               >
                 Limpar filtros
