@@ -2521,11 +2521,26 @@ const Agenda: React.FC = () => {
                 ))}
               </SelectContent>
             </Select>
-            {(statusFilter !== "all" || debouncedSearch) && (
+            {/* Filtro de Tipo de atendimento */}
+            <Select value={tipoFilter} onValueChange={setTipoFilter}>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Tipo de atendimento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                <SelectItem value="Consulta">Primeira Consulta</SelectItem>
+                <SelectItem value="Retorno">Retorno</SelectItem>
+                <SelectItem value="Exame">Exame</SelectItem>
+                <SelectItem value="Procedimento">Procedimento</SelectItem>
+                <SelectItem value="Sessão de Tratamento">Sessão de Tratamento</SelectItem>
+                <SelectItem value="Urgência">Urgência</SelectItem>
+              </SelectContent>
+            </Select>
+            {(statusFilter !== "all" || tipoFilter !== "all" || debouncedSearch) && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setStatusFilter("all"); setSearchTerm(""); }}
+                onClick={() => { setStatusFilter("all"); setTipoFilter("all"); setSearchTerm(""); }}
                 className="h-9"
               >
                 Limpar filtros
