@@ -2214,11 +2214,13 @@ const Agenda: React.FC = () => {
                                   lotadoBlocked && 'border-destructive/20 bg-destructive/5 cursor-not-allowed opacity-60',
                                 )}
                               >
-                              <span className="text-xl">{t.nome === 'Manhã' ? '🌅' : t.nome === 'Tarde' ? '🌆' : '🌙'}</span>
+                              <span className="text-xl">{(t.periodo || t.nome) === 'Manhã' ? '🌅' : (t.periodo || t.nome) === 'Tarde' ? '🌆' : '🌙'}</span>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-sm text-foreground">{t.nome}</span>
-                                  <span className="text-xs text-muted-foreground">{t.horaInicio} – {t.horaFim}</span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-sm text-foreground">{t.descricao || t.nome}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {t.descricao ? `${t.periodo || t.nome} • ` : ''}{t.horaInicio} – {t.horaFim}
+                                  </span>
                                 </div>
                                 <div className="mt-1.5 w-full bg-muted rounded-full h-1.5">
                                   <div
