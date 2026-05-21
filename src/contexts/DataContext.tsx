@@ -38,6 +38,10 @@ import { addDaysToDateStr, isoDayOfWeek, localDateStr, nowMinutesInBrazil, today
 export interface TurnoInfoResult {
   turnoId: string;
   nome: string;
+  /** Custom block name configured on disponibilidade (e.g. "Eco"). Optional. */
+  descricao?: string;
+  /** Period label derived from horaInicio (Manhã/Tarde/Noite). */
+  periodo: string;
   horaInicio: string;
   horaFim: string;
   vagasTotal: number;
