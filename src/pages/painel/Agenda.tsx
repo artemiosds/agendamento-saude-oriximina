@@ -396,6 +396,29 @@ const Agenda: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
+  // Load turnos globais (custom block names like "Eco") into a window cache so
+  // DataContext.getTurnoInfo can resolve `descricao` for the agenda blocks.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data } = await supabase
+          .from('system_config')
+          .select('configuracoes')
+          .eq('id', 'default')
+          .maybeSingle();
+        if (cancelled) return;
+        const cfg = (data?.configuracoes as any) || {};
+        const turnos = cfg?.config_fluxo_atendimento?.turnos || [];
+        (window as any).__turnosGlobaisCached = turnos;
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // EDIÇÃO de agendamento
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editAg, setEditAg] = useState<{
