@@ -1368,6 +1368,33 @@ export type Database = {
         }
         Relationships: []
       }
+      paciente_profissional_status: {
+        Row: {
+          paciente_id: string
+          profissional_id: string
+          status_falta: string | null
+          total_faltas: number | null
+          ultima_falta: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          paciente_id: string
+          profissional_id: string
+          status_falta?: string | null
+          total_faltas?: number | null
+          ultima_falta?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          paciente_id?: string
+          profissional_id?: string
+          status_falta?: string | null
+          total_faltas?: number | null
+          ultima_falta?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       pacientes: {
         Row: {
           auth_user_id: string | null
@@ -3786,7 +3813,12 @@ export type Database = {
       }
     }
     Functions: {
-      atualizar_status_falta: { Args: { p_paciente_id: string }; Returns: Json }
+      atualizar_status_falta:
+        | { Args: { p_paciente_id: string }; Returns: Json }
+        | {
+            Args: { p_paciente_id: string; p_profissional_id?: string }
+            Returns: Json
+          }
       check_slot_availability: {
         Args: {
           p_data: string
@@ -3863,18 +3895,32 @@ export type Database = {
       }
       is_external_professional: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
-      liberar_falta: {
-        Args: {
-          p_agendamento_id?: string
-          p_all?: boolean
-          p_motivo?: string
-          p_paciente_id: string
-          p_session_id?: string
-          p_user_id?: string
-          p_user_nome?: string
-        }
-        Returns: Json
-      }
+      liberar_falta:
+        | {
+            Args: {
+              p_agendamento_id?: string
+              p_all?: boolean
+              p_motivo?: string
+              p_paciente_id: string
+              p_session_id?: string
+              p_user_id?: string
+              p_user_nome?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_agendamento_id?: string
+              p_all?: boolean
+              p_motivo?: string
+              p_paciente_id: string
+              p_profissional_id?: string
+              p_session_id?: string
+              p_user_id?: string
+              p_user_nome?: string
+            }
+            Returns: Json
+          }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
