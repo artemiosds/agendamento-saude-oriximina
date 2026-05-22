@@ -128,6 +128,7 @@ const Faltosos: React.FC = () => {
       const regularizado = r.status_falta === 'REGULAR' && r.total_faltas === 0;
 
       if (status === 'TODOS') {
+        // Mostrar faltosos ou bloqueados, a menos que mostrarExcecao esteja ativo (que já inclui isentos)
         if (!['FALTOSO', 'BLOQUEADO'].includes(r.status_falta) && !temExcecao) return false;
       } else if (status === 'REGULARIZADO') {
         if (!regularizado) return false;
@@ -200,7 +201,7 @@ const Faltosos: React.FC = () => {
             <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="TODOS">Inconsistentes</SelectItem>
+                <SelectItem value="TODOS">Todos</SelectItem>
                 <SelectItem value="FALTOSO">Faltoso</SelectItem>
                 <SelectItem value="BLOQUEADO">Bloqueado</SelectItem>
                 <SelectItem value="REGULARIZADO">Regularizado</SelectItem>
