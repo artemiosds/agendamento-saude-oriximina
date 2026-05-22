@@ -1099,6 +1099,19 @@ const Tratamentos: React.FC = () => {
       const pac = pacientes.find((p) => p.id === selectedCycle.patient_id);
       if (!prof || !pac) throw new Error("Profissional ou paciente não encontrado.");
 
+      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const isento = isPacienteIsentoBloqueio(pac);
+      if (isento) {
+        toast.info("Paciente possui exceção administrativa (TFD/Ordem Judicial). Agendamento permitido.");
+      } else {
+        const bloqueado = await isPacienteBloqueadoParaProfissional(selectedCycle.patient_id, selectedCycle.professional_id);
+        if (bloqueado) {
+          toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+          setAgendandoSessao(false);
+          return;
+        }
+      }
+
       const agId = `ag${Date.now()}`;
       await addAgendamento({
         id: agId,
