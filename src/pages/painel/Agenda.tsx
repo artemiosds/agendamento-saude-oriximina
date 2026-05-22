@@ -948,17 +948,16 @@ const Agenda: React.FC = () => {
 
     // Bloqueio por excesso de faltas — respeitando exceção administrativa (TFD/Ordem Judicial)
     try {
-      const { data: pacStatus } = await (supabase as any)
-        .from('pacientes')
-        .select('status_falta, total_faltas, is_tfd, possui_ordem_judicial, custom_data')
-        .eq('id', newAg.pacienteId).maybeSingle();
-      const { isPacienteIsentoBloqueio, getExcecaoLabel } = await import('@/lib/faltasUtils');
-      if (pacStatus && isPacienteIsentoBloqueio(pacStatus)) {
-        const label = getExcecaoLabel(pacStatus);
-        toast.info(`Paciente possui exceção administrativa de bloqueio (${label || 'TFD/Ordem Judicial'}). Agendamento permitido.`);
-      } else if (pacStatus?.status_falta === 'BLOQUEADO') {
-        toast.error(`Paciente bloqueado por excesso de faltas injustificadas (${pacStatus.total_faltas}). Está na lista de espera.`);
-        return;
+      const { isPacienteIsentoBloqueio, isPacienteBloqueadoParaProfissional } = await import('@/lib/faltasUtils');
+      const isento = isPacienteIsentoBloqueio(pac);
+      if (isento) {
+        toast.info("Paciente possui exceção administrativa (TFD/Ordem Judicial). Agendamento permitido.");
+      } else {
+        const bloqueado = await isPacienteBloqueadoParaProfissional(newAg.pacienteId, newAg.profissionalId);
+        if (bloqueado) {
+          toast.error("Paciente bloqueado por faltas injustificadas para este profissional.");
+          return;
+        }
       }
     } catch {}
 
