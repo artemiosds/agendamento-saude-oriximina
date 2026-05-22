@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 /**
  * Helpers centralizados para regra de faltas e exceção administrativa
  * de bloqueio (TFD / Ordem Judicial).
@@ -9,6 +11,10 @@
 export type TipoFalta = 'justificada' | 'injustificada';
 
 export interface FaltaRegistro {
+  paciente_id?: string | null;
+  patient_id?: string | null;
+  profissional_id?: string | null;
+  professional_id?: string | null;
   status?: string | null;
   tipo_falta?: string | null;
   falta_liberada?: boolean | null;
@@ -16,6 +22,7 @@ export interface FaltaRegistro {
 }
 
 export interface PacienteIsentoLike {
+  id?: string;
   is_tfd?: boolean | null;
   possui_ordem_judicial?: boolean | null;
   custom_data?: Record<string, any> | null;
@@ -66,4 +73,46 @@ export function getExcecaoLabel(
   if (isTfd) return 'TFD';
   if (isOj) return 'Ordem Judicial';
   return null;
+}
+
+/** 
+ * Verifica se o paciente está bloqueado para um profissional específico.
+ * Se profissionalId não for passado, verifica o status global.
+ */
+export async function isPacienteBloqueadoParaProfissional(
+  pacienteId: string, 
+  profissionalId?: string | null
+): Promise<boolean> {
+  const { data: pac } = await supabase.from('pacientes').select('is_tfd, possui_ordem_judicial, status_falta').eq('id', pacienteId).single();
+  if (isPacienteIsentoBloqueio(pac)) return false;
+
+  if (profissionalId) {
+    const { data: status } = await supabase
+      .from('paciente_profissional_status')
+      .select('status_falta')
+      .eq('paciente_id', pacienteId)
+      .eq('profissional_id', profissionalId)
+      .maybeSingle();
+    
+    return status?.status_falta === 'BLOQUEADO';
+  }
+
+  return pac?.status_falta === 'BLOQUEADO';
+}
+
+/** 
+ * Retorna as estatísticas de faltas do paciente com um profissional.
+ */
+export async function getFaltasPorProfissional(
+  pacienteId: string, 
+  profissionalId: string
+) {
+  const { data } = await supabase
+    .from('paciente_profissional_status')
+    .select('*')
+    .eq('paciente_id', pacienteId)
+    .eq('profissional_id', profissionalId)
+    .maybeSingle();
+  
+  return data || { total_faltas: 0, status_falta: 'REGULAR', ultima_falta: null };
 }

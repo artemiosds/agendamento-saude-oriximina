@@ -18,7 +18,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
-import { Loader2, Unlock, Search, ShieldCheck } from 'lucide-react';
+import { Loader2, Unlock, Search, ShieldCheck, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/ui/page-header';
 import { getExcecaoLabel } from '@/lib/faltasUtils';
@@ -26,8 +26,11 @@ import { getExcecaoLabel } from '@/lib/faltasUtils';
 type StatusFilter = 'TODOS' | 'FALTOSO' | 'BLOQUEADO' | 'REGULARIZADO';
 
 interface Linha {
-  id: string;
-  nome: string;
+  id: string; // paciente_id|profissional_id
+  paciente_id: string;
+  paciente_nome: string;
+  profissional_id: string;
+  profissional_nome: string;
   unidade_id: string | null;
   total_faltas: number;
   status_falta: string;
@@ -35,101 +38,75 @@ interface Linha {
   is_tfd: boolean;
   possui_ordem_judicial: boolean;
   motivo_excecao_bloqueio?: string | null;
-  faltas_injustificadas_ativas: number;
-  faltas_liberadas: number;
 }
 
 const Faltosos: React.FC = () => {
   const { user, isGlobalAdmin } = useAuth();
   const role = (user?.role || '').toLowerCase();
   const canUnblock = role === 'master' || role === 'gestor' || role === 'admin' || isGlobalAdmin;
-  const canLiberateAll = role === 'master' || isGlobalAdmin;
   const canAccess = ['master', 'gestor', 'admin', 'coordenador', 'recepcao'].includes(role) || isGlobalAdmin;
 
   const [loading, setLoading] = useState(true);
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [status, setStatus] = useState<StatusFilter>('TODOS');
   const [busca, setBusca] = useState('');
+  const [filterProf, setFilterProf] = useState('all');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [mostrarExcecao, setMostrarExcecao] = useState(false);
 
   // Modal de liberação
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalPaciente, setModalPaciente] = useState<Linha | null>(null);
+  const [modalLinha, setModalLinha] = useState<Linha | null>(null);
   const [motivoLib, setMotivoLib] = useState('');
-  const [liberarTodas, setLiberarTodas] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Buscar pacientes com qualquer status (inclui REGULAR, para mostrar exceções/regularizados)
-      const { data: pacientes, error: pacErr } = await supabase
-        .from('pacientes')
-        .select('id, nome, total_faltas, status_falta, custom_data, is_tfd, possui_ordem_judicial, motivo_excecao_bloqueio')
-        .or('status_falta.in.(FALTOSO,BLOQUEADO),is_tfd.eq.true,possui_ordem_judicial.eq.true,total_faltas.gt.0')
-        .order('total_faltas', { ascending: false })
-        .limit(1000);
+      const { data, error } = await supabase
+        .from('paciente_profissional_status')
+        .select(`
+          paciente_id,
+          profissional_id,
+          total_faltas,
+          status_falta,
+          ultima_falta,
+          pacientes:paciente_id (
+            nome, is_tfd, possui_ordem_judicial, motivo_excecao_bloqueio, unidade_id
+          ),
+          funcionarios:profissional_id (
+            nome
+          )
+        `);
 
-      if (pacErr) throw pacErr;
-      const ids = (pacientes || []).map((p: any) => p.id);
-
-      // Mapear faltas por paciente (status='falta')
-      const ultimasMap: Record<string, string> = {};
-      const injustAtivas: Record<string, number> = {};
-      const liberadas: Record<string, number> = {};
-      const unidadesPorPaciente: Record<string, string | null> = {};
-
-      if (ids.length > 0) {
-        const { data: ags } = await supabase
-          .from('agendamentos')
-          .select('paciente_id, data, hora, unidade_id, status, tipo_falta, falta_liberada')
-          .in('paciente_id', ids)
-          .order('data', { ascending: false });
-
-        (ags || []).forEach((a: any) => {
-          if (!unidadesPorPaciente[a.paciente_id]) unidadesPorPaciente[a.paciente_id] = a.unidade_id;
-          if (a.status === 'falta') {
-            if (!ultimasMap[a.paciente_id]) ultimasMap[a.paciente_id] = a.data;
-            const tipo = (a.tipo_falta || 'injustificada').toLowerCase();
-            if (tipo === 'injustificada' && !a.falta_liberada) {
-              injustAtivas[a.paciente_id] = (injustAtivas[a.paciente_id] || 0) + 1;
-            }
-            if (a.falta_liberada) {
-              liberadas[a.paciente_id] = (liberadas[a.paciente_id] || 0) + 1;
-            }
-          }
-        });
-      }
+      if (error) throw error;
 
       const userUnit = user?.unidadeId;
       const isolar = !!userUnit && user?.usuario !== 'admin.sms';
 
-      let rows: Linha[] = (pacientes || []).map((p: any) => ({
-        id: p.id,
-        nome: p.nome,
-        total_faltas: p.total_faltas || 0,
-        status_falta: p.status_falta,
-        unidade_id: unidadesPorPaciente[p.id] || null,
-        ultima_falta: ultimasMap[p.id] || null,
-        is_tfd: p.is_tfd === true || p.custom_data?.is_tfd === true,
-        possui_ordem_judicial: p.possui_ordem_judicial === true || p.custom_data?.possui_ordem_judicial === true,
-        motivo_excecao_bloqueio: p.motivo_excecao_bloqueio,
-        faltas_injustificadas_ativas: injustAtivas[p.id] || 0,
-        faltas_liberadas: liberadas[p.id] || 0,
+      let rows: Linha[] = (data || []).map((item: any) => ({
+        id: `${item.paciente_id}|${item.profissional_id}`,
+        paciente_id: item.paciente_id,
+        paciente_nome: item.pacientes?.nome || 'Paciente não encontrado',
+        profissional_id: item.profissional_id,
+        profissional_nome: item.funcionarios?.nome || 'Profissional não encontrado',
+        unidade_id: item.pacientes?.unidade_id || null,
+        total_faltas: item.total_faltas || 0,
+        status_falta: item.status_falta,
+        ultima_falta: item.ultima_falta,
+        is_tfd: item.pacientes?.is_tfd === true,
+        possui_ordem_judicial: item.pacientes?.possui_ordem_judicial === true,
+        motivo_excecao_bloqueio: item.pacientes?.motivo_excecao_bloqueio,
       }));
 
-      if (isolar) rows = rows.filter((r) => r.unidade_id === userUnit);
+      if (isolar) {
+        rows = rows.filter((r) => r.unidade_id === userUnit);
+      }
 
       setLinhas(rows);
     } catch (e: any) {
-      console.error('[Faltosos] Erro na regra de faltas/exceção', {
-        acao: 'fetchData',
-        errorMessage: e?.message,
-        errorDetails: e?.details,
-        errorCode: e?.code,
-      });
+      console.error('[Faltosos] Erro ao carregar dados', e);
       toast.error('Não foi possível carregar a lista de faltas.');
     } finally {
       setLoading(false);
@@ -142,38 +119,42 @@ const Faltosos: React.FC = () => {
 
   const filtradas = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
+    const profLower = filterProf === 'all' ? '' : filterProf;
+
     return linhas.filter((r) => {
       const temExcecao = r.is_tfd || r.possui_ordem_judicial;
-
-      // Por padrão, esconder pacientes com exceção
       if (!mostrarExcecao && temExcecao) return false;
 
-      // Identificar regularizado: tinha faltas mas hoje status REGULAR e tem liberadas
-      const regularizado = r.status_falta === 'REGULAR' && r.faltas_liberadas > 0;
+      const regularizado = r.status_falta === 'REGULAR' && r.total_faltas === 0;
 
       if (status === 'TODOS') {
-        // Mostrar apenas FALTOSO/BLOQUEADO ou Regularizados/com exceção
-        if (!['FALTOSO', 'BLOQUEADO'].includes(r.status_falta) && !regularizado && !temExcecao) return false;
+        if (!['FALTOSO', 'BLOQUEADO'].includes(r.status_falta) && !temExcecao) return false;
       } else if (status === 'REGULARIZADO') {
         if (!regularizado) return false;
       } else if (r.status_falta !== status) return false;
 
-      if (buscaLower && !r.nome?.toLowerCase().includes(buscaLower)) return false;
+      if (buscaLower && !r.paciente_nome?.toLowerCase().includes(buscaLower)) return false;
+      if (profLower && r.profissional_id !== profLower) return false;
       if (dataInicio && (!r.ultima_falta || r.ultima_falta < dataInicio)) return false;
       if (dataFim && (!r.ultima_falta || r.ultima_falta > dataFim)) return false;
       return true;
     });
-  }, [linhas, status, busca, dataInicio, dataFim, mostrarExcecao]);
+  }, [linhas, status, busca, filterProf, dataInicio, dataFim, mostrarExcecao]);
+
+  const uniqueProfs = useMemo(() => {
+    const map = new Map();
+    linhas.forEach(r => map.set(r.profissional_id, r.profissional_nome));
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [linhas]);
 
   const abrirModal = (linha: Linha) => {
-    setModalPaciente(linha);
+    setModalLinha(linha);
     setMotivoLib('');
-    setLiberarTodas(false);
     setModalOpen(true);
   };
 
   const submitLiberacao = async () => {
-    if (!modalPaciente) return;
+    if (!modalLinha) return;
     if (!motivoLib.trim()) {
       toast.error('Informe o motivo da liberação.');
       return;
@@ -181,27 +162,20 @@ const Faltosos: React.FC = () => {
     setSalvando(true);
     try {
       const { error } = await (supabase as any).rpc('liberar_falta', {
-        p_paciente_id: modalPaciente.id,
-        p_agendamento_id: null,
-        p_session_id: null,
+        p_paciente_id: modalLinha.paciente_id,
+        p_profissional_id: modalLinha.profissional_id,
         p_motivo: motivoLib.trim(),
         p_user_id: user?.id || null,
         p_user_nome: user?.nome || null,
-        p_all: liberarTodas,
+        p_all: true,
       });
       if (error) throw error;
-      toast.success(liberarTodas ? 'Faltas liberadas com sucesso.' : 'Falta liberada com sucesso.');
+      toast.success('Faltas regularizadas para este profissional.');
       setModalOpen(false);
       await fetchData();
     } catch (e: any) {
-      console.error('[Faltosos] Erro na regra de faltas/exceção', {
-        pacienteId: modalPaciente?.id,
-        acao: 'liberar_falta',
-        errorMessage: e?.message,
-        errorDetails: e?.details,
-        errorCode: e?.code,
-      });
-      toast.error('Não foi possível atualizar a regra de faltas deste paciente.');
+      console.error('[Faltosos] Erro ao liberar falta', e);
+      toast.error('Não foi possível regularizar as faltas.');
     } finally {
       setSalvando(false);
     }
@@ -217,39 +191,51 @@ const Faltosos: React.FC = () => {
 
   return (
     <div className="space-y-5 p-5">
-      <PageHeader title="Pacientes Faltosos / Bloqueados" subtitle="Controle de faltas injustificadas por unidade" />
+      <PageHeader title="Pacientes Faltosos / Bloqueados" subtitle="Controle de faltas injustificadas por vínculo Profissional + Paciente" />
 
       <Card>
-        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-          <div>
+        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+          <div className="md:col-span-1">
             <Label className="text-xs">Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="TODOS">Todos</SelectItem>
+                <SelectItem value="TODOS">Inconsistentes</SelectItem>
                 <SelectItem value="FALTOSO">Faltoso</SelectItem>
                 <SelectItem value="BLOQUEADO">Bloqueado</SelectItem>
                 <SelectItem value="REGULARIZADO">Regularizado</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-xs">Busca por nome</Label>
+          <div className="md:col-span-1">
+            <Label className="text-xs">Profissional</Label>
+            <Select value={filterProf} onValueChange={setFilterProf}>
+              <SelectTrigger><SelectValue placeholder="Filtrar Profissional" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os Profissionais</SelectItem>
+                {uniqueProfs.map(([id, nome]) => (
+                  <SelectItem key={id} value={id}>{nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="md:col-span-1">
+            <Label className="text-xs">Paciente</Label>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-8" placeholder="Nome do paciente..." />
+              <Input value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-8" placeholder="Nome..." />
             </div>
           </div>
           <div>
-            <Label className="text-xs">Última falta — de</Label>
+            <Label className="text-xs">Desde</Label>
             <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
           </div>
           <div>
             <Label className="text-xs">Até</Label>
             <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
           </div>
-          <div className="flex items-center justify-between gap-2 h-9">
-            <Label htmlFor="excecao" className="text-xs">Mostrar pacientes com exceção</Label>
+          <div className="flex items-center justify-between gap-2 h-9 border rounded-md px-2">
+            <Label htmlFor="excecao" className="text-[10px] leading-tight">Exceções (TFD/OJ)</Label>
             <Switch id="excecao" checked={mostrarExcecao} onCheckedChange={setMostrarExcecao} />
           </div>
         </CardContent>
@@ -262,76 +248,64 @@ const Faltosos: React.FC = () => {
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando...
             </div>
           ) : filtradas.length === 0 ? (
-            <div className="py-10 text-center text-muted-foreground text-sm">Nenhum paciente encontrado.</div>
+            <div className="py-10 text-center text-muted-foreground text-sm">Nenhum registro encontrado para os filtros aplicados.</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Paciente</TableHead>
-                  <TableHead className="w-32 text-center">Faltas Injustificadas</TableHead>
+                  <TableHead>Profissional</TableHead>
+                  <TableHead className="w-32 text-center">Faltas</TableHead>
                   <TableHead className="w-32">Última Falta</TableHead>
                   <TableHead className="w-36">Status</TableHead>
-                  <TableHead className="w-40 text-right">Ação</TableHead>
+                  <TableHead className="w-40 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtradas.map((r) => {
                   const excecao = getExcecaoLabel(r);
-                  const regularizado = r.status_falta === 'REGULAR' && r.faltas_liberadas > 0;
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span>{r.nome}</span>
-                          {excecao && (
-                            <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50">
-                              <ShieldCheck className="w-3 h-3 mr-1" />
-                              {excecao}
-                            </Badge>
-                          )}
+                        <div className="flex flex-col">
+                          <span className="flex items-center gap-2">
+                            {r.paciente_nome}
+                            {excecao && (
+                              <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50 py-0 text-[10px]">
+                                <ShieldCheck className="w-3 h-3 mr-1" /> {excecao}
+                              </Badge>
+                            )}
+                          </span>
                         </div>
-                        {r.motivo_excecao_bloqueio && excecao && (
-                          <div className="text-[11px] text-muted-foreground mt-0.5 italic">
-                            Motivo: {r.motivo_excecao_bloqueio}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div>{r.faltas_injustificadas_ativas}</div>
-                        {r.faltas_liberadas > 0 && (
-                          <div className="text-[11px] text-muted-foreground">
-                            ({r.faltas_liberadas} liberada{r.faltas_liberadas > 1 ? 's' : ''})
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell>
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <User className="w-3 h-3 mr-1" /> {r.profissional_nome}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center font-bold">
+                        {r.total_faltas}
+                      </TableCell>
+                      <TableCell className="text-xs">
                         {r.ultima_falta ? new Date(r.ultima_falta + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
                       </TableCell>
                       <TableCell>
                         {excecao ? (
-                          <Badge className="bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-100">
-                            ISENTO
-                          </Badge>
-                        ) : regularizado ? (
-                          <Badge className="bg-green-100 text-green-800 border border-green-300 hover:bg-green-100">
-                            REGULARIZADO
-                          </Badge>
+                          <Badge className="bg-blue-100 text-blue-800 border-blue-200">ISENTO</Badge>
                         ) : r.status_falta === 'BLOQUEADO' ? (
-                          <Badge className="bg-red-100 text-red-800 border border-red-300 hover:bg-red-100">BLOQUEADO</Badge>
+                          <Badge className="bg-red-100 text-red-800 border-red-200">BLOQUEADO</Badge>
                         ) : r.status_falta === 'FALTOSO' ? (
-                          <Badge className="bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-100">FALTOSO</Badge>
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">FALTOSO</Badge>
                         ) : (
-                          <Badge variant="outline">{r.status_falta || 'REGULAR'}</Badge>
+                          <Badge variant="outline">REGULAR</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canUnblock && r.faltas_injustificadas_ativas > 0 ? (
+                        {canUnblock && r.total_faltas > 0 ? (
                           <Button size="sm" variant="outline" onClick={() => abrirModal(r)}>
-                            <Unlock className="w-4 h-4 mr-1" /> Liberar falta
+                            <Unlock className="w-4 h-4 mr-1" /> Regularizar
                           </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        ) : '—'}
                       </TableCell>
                     </TableRow>
                   );
@@ -345,67 +319,44 @@ const Faltosos: React.FC = () => {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Liberar / Regularizar falta</DialogTitle>
+            <DialogTitle>Regularizar Faltas por Profissional</DialogTitle>
             <DialogDescription>
-              A liberação não apaga o histórico. As faltas continuam visíveis, mas deixam de contar para bloqueio.
+              A regularização impacta apenas o vínculo do paciente com este profissional.
             </DialogDescription>
           </DialogHeader>
-          {modalPaciente && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-2 bg-muted/40 rounded p-3">
-                <div>
-                  <div className="text-xs text-muted-foreground">Paciente</div>
-                  <div className="font-medium">{modalPaciente.nome}</div>
+          {modalLinha && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 p-4 rounded-lg space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Paciente:</span>
+                  <span className="font-semibold">{modalLinha.paciente_nome}</span>
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Faltas injustificadas ativas</div>
-                  <div className="font-medium">{modalPaciente.faltas_injustificadas_ativas}</div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Profissional:</span>
+                  <span className="font-semibold">{modalLinha.profissional_nome}</span>
                 </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Última falta</div>
-                  <div className="font-medium">
-                    {modalPaciente.ultima_falta
-                      ? new Date(modalPaciente.ultima_falta + 'T12:00:00').toLocaleDateString('pt-BR')
-                      : '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground">Status atual</div>
-                  <div className="font-medium">{modalPaciente.status_falta}</div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Faltas Injustificadas:</span>
+                  <span className="font-bold text-red-600">{modalLinha.total_faltas}</span>
                 </div>
               </div>
 
-              <div>
-                <Label className="text-xs">Motivo da liberação (obrigatório)</Label>
-                <Textarea
-                  value={motivoLib}
+              <div className="space-y-2">
+                <Label>Motivo da Regularização (obrigatório)</Label>
+                <Textarea 
+                  value={motivoLib} 
                   onChange={(e) => setMotivoLib(e.target.value)}
-                  placeholder="Ex.: apresentou justificativa médica posterior, decisão administrativa..."
+                  placeholder="Justificativa administrativa para liberar o agendamento..."
                   rows={3}
                 />
               </div>
-
-              {canLiberateAll && modalPaciente.faltas_injustificadas_ativas > 1 && (
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="all"
-                    checked={liberarTodas}
-                    onCheckedChange={(v) => setLiberarTodas(v === true)}
-                  />
-                  <Label htmlFor="all" className="text-sm cursor-pointer">
-                    Liberar todas as faltas injustificadas (Master)
-                  </Label>
-                </div>
-              )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={salvando}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={salvando}>Cancelar</Button>
             <Button onClick={submitLiberacao} disabled={salvando || !motivoLib.trim()}>
               {salvando ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Unlock className="w-4 h-4 mr-2" />}
-              {liberarTodas ? 'Liberar todas' : 'Liberar última falta'}
+              Confirmar Regularização
             </Button>
           </DialogFooter>
         </DialogContent>
