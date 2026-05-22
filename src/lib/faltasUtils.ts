@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 /**
  * Helpers centralizados para regra de faltas e exceção administrativa
  * de bloqueio (TFD / Ordem Judicial).
