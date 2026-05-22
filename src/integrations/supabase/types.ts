@@ -1372,24 +1372,24 @@ export type Database = {
         Row: {
           paciente_id: string
           profissional_id: string
-          status_falta: string | null
-          total_faltas: number | null
+          status_falta: string
+          total_faltas: number
           ultima_falta: string | null
           updated_at: string | null
         }
         Insert: {
           paciente_id: string
           profissional_id: string
-          status_falta?: string | null
-          total_faltas?: number | null
+          status_falta: string
+          total_faltas?: number
           ultima_falta?: string | null
           updated_at?: string | null
         }
         Update: {
           paciente_id?: string
           profissional_id?: string
-          status_falta?: string | null
-          total_faltas?: number | null
+          status_falta?: string
+          total_faltas?: number
           ultima_falta?: string | null
           updated_at?: string | null
         }
@@ -3922,6 +3922,7 @@ export type Database = {
             Returns: Json
           }
       reavaliar_todos_status_falta: { Args: never; Returns: Json }
+      refresh_paciente_profissional_status: { Args: never; Returns: undefined }
       resetar_faltas_paciente: {
         Args: { p_paciente_id: string }
         Returns: undefined
