@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/ui/page-header';
 import { getExcecaoLabel } from '@/lib/faltasUtils';
 
-type StatusFilter = 'TODOS' | 'FALTOSO' | 'BLOQUEADO' | 'REGULARIZADO';
+type StatusFilter = 'TODOS' | 'FALTOSO' | 'BLOQUEADO' | 'REGULAR';
 
 interface Linha {
   id: string; // paciente_id|profissional_id
@@ -48,7 +48,7 @@ const Faltosos: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [linhas, setLinhas] = useState<Linha[]>([]);
-  const [status, setStatus] = useState<StatusFilter>('TODOS');
+  const [status, setStatus] = useState<StatusFilter>('BLOQUEADO');
   const [busca, setBusca] = useState('');
   const [filterProf, setFilterProf] = useState('all');
   const [dataInicio, setDataInicio] = useState('');
@@ -122,22 +122,37 @@ const Faltosos: React.FC = () => {
     const profLower = filterProf === 'all' ? '' : filterProf;
 
     return linhas.filter((r) => {
+      // 1. Filtro de Exceção (TFD/OJ)
       const temExcecao = r.is_tfd || r.possui_ordem_judicial;
       if (!mostrarExcecao && temExcecao) return false;
 
-      const regularizado = r.status_falta === 'REGULAR' && r.total_faltas === 0;
-
-      if (status === 'TODOS') {
-        // Mostrar faltosos ou bloqueados, a menos que mostrarExcecao esteja ativo (que já inclui isentos)
+      // 2. Filtro de Status
+      if (status !== 'TODOS') {
+        if (r.status_falta !== status) return false;
+      } else {
+        // No "TODOS", por padrão mostramos apenas quem tem algo (FALTOSO ou BLOQUEADO)
+        // a menos que o usuário queira ver as exceções (que podem ser REGULAR)
         if (!['FALTOSO', 'BLOQUEADO'].includes(r.status_falta) && !temExcecao) return false;
-      } else if (status === 'REGULARIZADO') {
-        if (!regularizado) return false;
-      } else if (r.status_falta !== status) return false;
+      }
 
-      if (buscaLower && !r.paciente_nome?.toLowerCase().includes(buscaLower)) return false;
+      // 3. Filtro de Profissional
       if (profLower && r.profissional_id !== profLower) return false;
-      if (dataInicio && (!r.ultima_falta || r.ultima_falta < dataInicio)) return false;
-      if (dataFim && (!r.ultima_falta || r.ultima_falta > dataFim)) return false;
+
+      // 4. Filtro de Busca (Paciente ou Profissional)
+      if (buscaLower) {
+        const matchPaciente = r.paciente_nome?.toLowerCase().includes(buscaLower);
+        const matchProf = r.profissional_nome?.toLowerCase().includes(buscaLower);
+        if (!matchPaciente && !matchProf) return false;
+      }
+
+      // 5. Filtro de Datas (Ultima Falta)
+      if (dataInicio && r.ultima_falta) {
+        if (r.ultima_falta < dataInicio) return false;
+      }
+      if (dataFim && r.ultima_falta) {
+        if (r.ultima_falta > dataFim) return false;
+      }
+
       return true;
     });
   }, [linhas, status, busca, filterProf, dataInicio, dataFim, mostrarExcecao]);
@@ -202,9 +217,9 @@ const Faltosos: React.FC = () => {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="TODOS">Todos</SelectItem>
-                <SelectItem value="FALTOSO">Faltoso</SelectItem>
                 <SelectItem value="BLOQUEADO">Bloqueado</SelectItem>
-                <SelectItem value="REGULARIZADO">Regularizado</SelectItem>
+                <SelectItem value="FALTOSO">Faltoso</SelectItem>
+                <SelectItem value="REGULAR">Regular</SelectItem>
               </SelectContent>
             </Select>
           </div>
