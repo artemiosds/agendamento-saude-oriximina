@@ -1470,9 +1470,9 @@ ${dataRows}
     };
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      const rows = cap(filtered).map(a => {
+      const rows = cap(consolidatedData).map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
-        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
+        return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
       const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
