@@ -180,6 +180,7 @@ interface TriagemData {
   confirmado_em?: string;
   tecnico_nome?: string;
   tecnico_coren?: string;
+  custom_data?: any;
 }
 
 const retornoOptions = [
@@ -2500,6 +2501,28 @@ const ProntuarioPage: React.FC = () => {
                         Medicamentos em uso
                       </p>
                       <p className="text-foreground">{triagem.medicamentos.join(", ")}</p>
+                    </div>
+                  )}
+
+                  {/* Comorbidades e Sintomas */}
+                  {(triagem.custom_data?.comorbidades?.length > 0 || triagem.custom_data?.sintomas_30_dias?.length > 0) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-border/40 pt-3">
+                      {triagem.custom_data?.comorbidades?.length > 0 && (
+                        <div className="text-sm">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                            Comorbidades
+                          </p>
+                          <p className="text-foreground">{triagem.custom_data.comorbidades.join(", ")}</p>
+                        </div>
+                      )}
+                      {triagem.custom_data?.sintomas_30_dias?.length > 0 && (
+                        <div className="text-sm">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                            Sintomas (últimos 30 dias)
+                          </p>
+                          <p className="text-foreground">{triagem.custom_data.sintomas_30_dias.join(", ")}</p>
+                        </div>
+                      )}
                     </div>
                   )}
 
