@@ -1825,7 +1825,7 @@ ${dataRows}
           </ActionButton>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
-          </ActionButton>
+          </Button>
           <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Preparando impressão...">
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </ActionButton>
