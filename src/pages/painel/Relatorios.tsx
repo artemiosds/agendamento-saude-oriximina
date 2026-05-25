@@ -414,37 +414,39 @@ const Relatorios: React.FC = () => {
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     
-    filtered.forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
-      const func = funcionarios.find(f => f.id === a.profissionalId);
-      const key = a.profissionalId || a.profissionalNome;
-      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
-      const m = map[key];
-      m.total++;
-      m.pacientesSet.add(a.pacienteId);
-      if (a.status === 'concluido') m.concluidos++;
-      if (a.status === 'falta') m.faltas++;
-      if (a.status === 'cancelado') m.cancelados++;
-      if (a.status === 'remarcado') m.remarcados++;
-      if (a.status === 'retorno' || a.tipo === 'Retorno') m.retornos++;
-    });
-
-    // Add prontuarios to productivity
-    prontuariosFull.forEach(p => {
-      const key = p.profissional_id || p.profissional_nome;
+    consolidatedData.forEach(d => {
+      const func = funcionarios.find(f => f.id === d.profissionalId);
+      const un = unidades.find(u => u.id === d.unidadeId);
+      const key = d.profissionalId || d.profissionalNome || 'Não Identificado';
+      
       if (!map[key]) {
-        const func = funcionarios.find(f => f.id === p.profissional_id || f.nome === p.profissional_nome);
-        const un = unidades.find(u => u.id === p.unidade_id);
-        map[key] = { id: p.profissional_id, nome: p.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+        map[key] = { 
+          id: d.profissionalId, 
+          nome: d.profissionalNome || 'Não Identificado', 
+          role: func?.role || 'profissional', 
+          profissao: func?.profissao || '', 
+          unidade: un?.nome || '', 
+          total: 0, 
+          concluidos: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          tempoTotal: 0, 
+          atendimentos: 0, 
+          retornos: 0, 
+          pacientesSet: new Set() 
+        };
       }
       
       const m = map[key];
-      // Only count as new completion if not already counted via agendamento
-      if (!p.agendamento_id || !filtered.some(a => a.id === p.agendamento_id && a.status === 'concluido')) {
-        m.concluidos++;
-        m.total = Math.max(m.total, m.concluidos); // Ensure total reflects production
-      }
-      m.pacientesSet.add(p.paciente_id);
+      m.total++;
+      m.pacientesSet.add(d.pacienteId);
+      
+      if (d.status === 'concluido' || d.hasProntuario) m.concluidos++;
+      if (d.status === 'falta') m.faltas++;
+      if (d.status === 'cancelado') m.cancelados++;
+      if (d.status === 'remarcado') m.remarcados++;
+      if (d.status === 'retorno' || d.tipo === 'Retorno') m.retornos++;
     });
 
     return Object.values(map)
@@ -474,7 +476,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, prontuariosFull, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [consolidatedData, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
