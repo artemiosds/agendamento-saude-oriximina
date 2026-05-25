@@ -82,6 +82,8 @@ const Relatorios: React.FC = () => {
   const [ptsData, setPtsData] = useState<any[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [lastUpdatedLabel, setLastUpdatedLabel] = useState('agora');
+  const [clinicalSearch, setClinicalSearch] = useState('');
+
 
   // Mapa de Atendimento state
   const [mapaDateFrom, setMapaDateFrom] = useState('');
@@ -651,7 +653,22 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    const patientsList = Object.values(patientStats);
+    let patientsList = Object.values(patientStats);
+
+    if (clinicalSearch) {
+      const term = clinicalSearch.toUpperCase().trim();
+      const normTerm = term.replace('.', '');
+      
+      patientsList = patientsList.filter(ps => {
+        const matchesName = ps.nome.toUpperCase().includes(term);
+        const matchesCid = Array.from(ps.cids).some(c => {
+          const normC = c.replace('.', '');
+          return normC.startsWith(normTerm) || normTerm.startsWith(normC);
+        });
+        return matchesName || matchesCid;
+      });
+    }
+
 
     const byCategory: Record<string, {
       name: string;
@@ -709,7 +726,7 @@ const Relatorios: React.FC = () => {
       topCids,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions]);
+  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
@@ -1149,7 +1166,11 @@ const Relatorios: React.FC = () => {
         const un = unidades.find(u => u.id === f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
       });
+    } else if (type === 'clinico') {
+      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
+      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
     }
+
 
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -1201,7 +1222,11 @@ const Relatorios: React.FC = () => {
         const un = unidades.find(u => u.id === f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
       });
+    } else if (type === 'clinico') {
+      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
+      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
     }
+
 
     // Build XML Spreadsheet (Excel-compatible)
     const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1246,7 +1271,9 @@ ${dataRows}
       type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
       type === 'pacientes' ? pacientesReport.length === 0 :
+      type === 'clinico' ? clinicalReport.byCategory.length === 0 :
       type === 'fila' ? filaReport.items.length === 0 : false;
+
     if (isEmpty) {
       toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
       return;
@@ -1255,7 +1282,7 @@ ${dataRows}
     const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
-      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', clinico: 'Relatório de Análise Clínica' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
@@ -1323,7 +1350,11 @@ ${dataRows}
         addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
       } else if (type === 'fila') {
         addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidades.find(u => u.id === f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
+      } else if (type === 'clinico') {
+        addTable('Análise Clínica por Categoria', ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'], cap(clinicalReport.byCategory).map(c => [c.name, c.pacientes, c.atendimentos, c.procedimentos]));
+        addTable('CIDs Mais Frequentes', ['Código CID-10', 'Descrição', 'Frequência (Pacientes)'], cap(clinicalReport.topCids).map(c => [c.cid, c.descricao, c.count]));
       }
+
 
       if (truncated) {
         toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use Excel.' });
@@ -1628,6 +1659,7 @@ ${dataRows}
   };
 
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
+
 
   const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx') => {
     const loadingId = toast.loading(`Gerando relatório completo (${format.toUpperCase()})...`, { description: 'Preparando análise e formatação ABNT.' });
@@ -3035,6 +3067,49 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === CLÍNICO === */}
         <TabsContent value="clinico" className="space-y-5 mt-4">
+          <Card className="shadow-sm border-0 mb-4 bg-muted/30">
+            <CardContent className="p-4 flex flex-col md:flex-row items-end gap-4">
+              <div className="flex-1 w-full">
+                <Label className="text-xs font-semibold mb-1.5 flex items-center gap-2">
+                  <Search className="w-3 h-3 text-primary" /> Busca Ampla (Nome ou CID-10)
+                </Label>
+                <div className="relative">
+                  <Input 
+                    placeholder="Ex: F84 ou Nome do Paciente..." 
+                    value={clinicalSearch}
+                    onChange={(e) => setClinicalSearch(e.target.value)}
+                    className="h-10 pl-9 bg-white shadow-sm focus:ring-2 focus:ring-primary/20"
+                  />
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                  {clinicalSearch && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 w-6 p-0 absolute right-2 top-2 rounded-full hover:bg-muted"
+                      onClick={() => setClinicalSearch('')}
+                    >
+                      <span className="text-lg">×</span>
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 ml-1">
+                  💡 A busca é inteligente: ao digitar <strong>F84</strong> o sistema encontrará pacientes com <strong>F84.0, F84.5</strong>, etc.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-10 px-4 bg-white"
+                  onClick={() => setClinicalSearch('')}
+                  disabled={!clinicalSearch}
+                >
+                  Limpar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {[
               { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
