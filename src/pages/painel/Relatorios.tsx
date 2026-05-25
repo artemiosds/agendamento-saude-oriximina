@@ -1628,6 +1628,7 @@ ${dataRows}
   };
 
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
+  const [clinicalSearch, setClinicalSearch] = useState('');
 
   const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx') => {
     const loadingId = toast.loading(`Gerando relatório completo (${format.toUpperCase()})...`, { description: 'Preparando análise e formatação ABNT.' });
