@@ -819,14 +819,14 @@ const Relatorios: React.FC = () => {
   // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     const map: Record<string, { data: string; agendamentos: number; concluidos: number; faltas: number }> = {};
-    filtered.forEach(a => {
-      if (!map[a.data]) map[a.data] = { data: a.data, agendamentos: 0, concluidos: 0, faltas: 0 };
-      map[a.data].agendamentos++;
-      if (a.status === 'concluido') map[a.data].concluidos++;
-      if (a.status === 'falta') map[a.data].faltas++;
+    consolidatedData.forEach(d => {
+      if (!map[d.data]) map[d.data] = { data: d.data, agendamentos: 0, concluidos: 0, faltas: 0 };
+      map[d.data].agendamentos++;
+      if (d.status === 'concluido' || d.hasProntuario) map[d.data].concluidos++;
+      if (d.status === 'falta') map[d.data].faltas++;
     });
     return Object.values(map).sort((a, b) => a.data.localeCompare(b.data)).slice(-30);
-  }, [filtered]);
+  }, [consolidatedData]);
 
   const statusData = useMemo(() => [
     { name: 'Concluídos', value: stats.concluidos },
@@ -839,32 +839,32 @@ const Relatorios: React.FC = () => {
   // === TIMELINE GROUPED (dia/semana/mês) ===
   const timelineGrouped = useMemo(() => {
     const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
-    filtered.forEach(a => {
+    consolidatedData.forEach(d => {
       let key: string;
-      const d = new Date(a.data + 'T12:00:00');
+      const dateVal = new Date(d.data + 'T12:00:00');
       if (timelineGroup === 'dia') {
-        key = a.data;
+        key = d.data;
       } else if (timelineGroup === 'semana') {
-        const startOfWeek = new Date(d);
-        startOfWeek.setDate(d.getDate() - d.getDay());
+        const startOfWeek = new Date(dateVal);
+        startOfWeek.setDate(dateVal.getDate() - dateVal.getDay());
         key = startOfWeek.toISOString().split('T')[0];
       } else {
-        key = a.data.substring(0, 7); // YYYY-MM
+        key = d.data.substring(0, 7); // YYYY-MM
       }
       if (!map[key]) {
         const label = timelineGroup === 'mes'
-          ? d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+          ? dateVal.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
           : timelineGroup === 'semana'
           ? `Sem ${key.substring(5)}`
           : key.substring(5);
         map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
       }
-      if (a.status === 'concluido') map[key].concluidos++;
-      if (a.status === 'falta') map[key].faltas++;
-      if (a.status === 'cancelado') map[key].cancelados++;
+      if (d.status === 'concluido' || d.hasProntuario) map[key].concluidos++;
+      if (d.status === 'falta') map[key].faltas++;
+      if (d.status === 'cancelado') map[key].cancelados++;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
-  }, [filtered, timelineGroup]);
+  }, [consolidatedData, timelineGroup]);
 
   // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
@@ -873,8 +873,8 @@ const Relatorios: React.FC = () => {
       const label = `${String(h).padStart(2, '0')}:00`;
       map[label] = 0;
     }
-    filtered.forEach(a => {
-      const hourKey = (a.hora || '').substring(0, 2);
+    consolidatedData.forEach(d => {
+      const hourKey = (d.hora || '').substring(0, 2);
       const h = parseInt(hourKey);
       if (h >= 7 && h <= 18) {
         const label = `${String(h).padStart(2, '0')}:00`;
@@ -882,7 +882,7 @@ const Relatorios: React.FC = () => {
       }
     });
     return Object.entries(map).map(([hora, total]) => ({ hora, total }));
-  }, [filtered]);
+  }, [consolidatedData]);
 
 
   const municipioReport = useMemo(() => {
