@@ -1243,9 +1243,9 @@ const Relatorios: React.FC = () => {
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
-      rows = filtered.map(a => {
-        const un = unidades.find(u => u.id === a.unidadeId);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
+      rows = consolidatedData.map(d => {
+        const un = unidades.find(u => u.id === d.unidadeId);
+        return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || ''];
       });
     } else if (type === 'municipios') {
       headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
