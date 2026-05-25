@@ -1430,7 +1430,7 @@ ${dataRows}
     try {
       // Empty-data guard per tab
       const isEmpty =
-        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
         type === 'produtividade' ? porProfissional.length === 0 :
         type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
