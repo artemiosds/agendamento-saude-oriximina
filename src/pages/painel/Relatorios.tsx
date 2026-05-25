@@ -724,7 +724,7 @@ const Relatorios: React.FC = () => {
       topCids,
       kpis
     };
-  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions]);
+  }, [prontuariosFull, pacientes, ptsData, procedimentosDB, cid10Descriptions, clinicalSearch]);
 
   // === FILA REPORT ===
   const filaReport = useMemo(() => {
