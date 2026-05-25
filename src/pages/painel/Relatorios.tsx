@@ -162,8 +162,20 @@ const Relatorios: React.FC = () => {
           let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
           
           if (dateField) {
-            if (dateFrom) query = query.gte(dateField, dateFrom);
-            if (dateTo) query = query.lte(dateField, dateTo);
+            if (dateFrom) {
+              // Se for TIMESTAMPTZ, garante que comece no início do dia
+              const fromVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
+                ? `${dateFrom}T00:00:00` 
+                : dateFrom;
+              query = query.gte(dateField, fromVal);
+            }
+            if (dateTo) {
+              // Se for TIMESTAMPTZ, garante que termine no final do dia
+              const toVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
+                ? `${dateTo}T23:59:59` 
+                : dateTo;
+              query = query.lte(dateField, toVal);
+            }
           }
 
           if (user?.unidadeId && user?.usuario !== 'admin.sms') {
@@ -178,10 +190,20 @@ const Relatorios: React.FC = () => {
           } else if (table === 'prontuarios') {
             if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+          } else if (['triage_records', 'nursing_evaluations', 'multiprofessional_evaluations', 'pts'].includes(table)) {
+            // These tables might have unidade_id or profissional_id
+            // We should apply unit filter if applicable
+            if (filterUnit !== 'all') {
+              // Note: check if field exists, but most have it
+              query = query.eq('unidade_id', filterUnit);
+            }
           }
 
           const { data, error } = await query;
-          if (error) throw error;
+          if (error) {
+            console.error(`Error fetching ${table}:`, error);
+            break;
+          };
           if (!data || data.length === 0) break;
           
           allData = allData.concat(data);
@@ -205,26 +227,26 @@ const Relatorios: React.FC = () => {
       ] = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
-        supabase.from('fila_espera').select('*').limit(2000),
-        supabase.from('triage_records' as any).select('*'),
-        supabase.from('treatment_cycles' as any).select('*'),
-        supabase.from('treatment_sessions' as any).select('*'),
-        supabase.from('nursing_evaluations' as any).select('*'),
-        supabase.from('multiprofessional_evaluations' as any).select('*'),
-        supabase.from('pts' as any).select('*'),
-        supabase.from('patient_procedures' as any).select('*'),
+        fetchAllPages('fila_espera', 'criado_em'),
+        fetchAllPages('triage_records', 'criado_em'),
+        fetchAllPages('treatment_cycles', 'created_at'),
+        fetchAllPages('treatment_sessions', 'data'),
+        fetchAllPages('nursing_evaluations', 'created_at'),
+        fetchAllPages('multiprofessional_evaluations', 'created_at'),
+        fetchAllPages('pts', 'created_at'),
+        fetchAllPages('patient_procedures', 'data'),
       ]);
 
       setAgendamentosFull(ags || []);
       setProntuariosFull(prons || []);
-      setFilaDB(filaRes.data || []);
-      setTriagensDB(triageRes.data as any as TriagemDB[] || []);
-      setTreatmentCycles(cyclesRes.data || []);
-      setTreatmentSessions(sessRes.data || []);
-      setNursingEvals(nursingRes.data || []);
-      setMultiEvals(multiRes.data || []);
-      setPtsData(ptsRes.data || []);
-      setProcedimentosDB(proceduresRes.data || []);
+      setFilaDB(filaRes || []);
+      setTriagensDB(triageRes as any as TriagemDB[] || []);
+      setTreatmentCycles(cyclesRes || []);
+      setTreatmentSessions(sessRes || []);
+      setNursingEvals(nursingRes || []);
+      setMultiEvals(multiRes || []);
+      setPtsData(ptsRes || []);
+      setProcedimentosDB(proceduresRes || []);
 
       // Extract all CIDs to fetch official descriptions
       const allCids = new Set<string>();
