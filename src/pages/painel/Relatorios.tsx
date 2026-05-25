@@ -328,42 +328,68 @@ const Relatorios: React.FC = () => {
     }));
   }, [agendamentosFull, normalizeStatus]);
 
-  const stats = useMemo(() => {
+  const consolidatedData = useMemo(() => {
     const ags = filtered;
     const prons = prontuariosFull;
-
-    const totalAgendamentos = ags.length;
     
-    // Status counters using normalized status
-    const concluidosAgs = ags.filter(a => a.status === 'concluido').length;
-    const pendentes = ags.filter(a => a.status === 'pendente').length;
-    const faltas = ags.filter(a => a.status === 'falta').length;
-    const cancelados = ags.filter(a => a.status === 'cancelado').length;
-    const remarcados = ags.filter(a => a.status === 'remarcado').length;
-    const retornos = ags.filter(a => a.status === 'retorno' || a.tipo === 'Retorno').length;
-    
-    // Medical records are also completions
-    const totalProntuarios = prons.length;
-    
-    // To avoid duplication, we count agendamentos concluidos OR if a record exists
-    // If agendamento_id exists in prontuario, it's the same thing.
+    // Identifica quais prontuários estão vinculados a agendamentos
     const agendamentoIdsComProntuario = new Set(prons.map(p => p.agendamento_id).filter(Boolean));
-    const agsConcluidosSemProntuario = ags.filter(a => a.status === 'concluido' && !agendamentoIdsComProntuario.has(a.id)).length;
     
-    const totalRealizados = totalProntuarios + agsConcluidosSemProntuario;
+    // Mapeia agendamentos e marca os que têm prontuário
+    const result = ags.map(a => ({
+      ...a,
+      hasProntuario: agendamentoIdsComProntuario.has(a.id)
+    }));
     
-    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((totalRealizados / (totalAgendamentos - cancelados || 1)) * 100) : 0;
-    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / (totalAgendamentos || 1)) * 100) : 0;
+    // Adiciona prontuários "órfãos" (sem agendamento ou cujo agendamento não está no filtro atual)
+    const agIdsNoFiltro = new Set(ags.map(a => a.id));
+    const pronsOrfaos = prons.filter(p => !p.agendamento_id || !agIdsNoFiltro.has(p.agendamento_id));
     
-    const primeiraConsulta = ags.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
-    const online = ags.filter(a => a.origem === 'online').length;
-    const recepcao = ags.filter(a => a.origem === 'recepcao').length;
+    pronsOrfaos.forEach(p => {
+      result.push({
+        id: `pron-${p.id}`,
+        agendamento_id: p.agendamento_id,
+        pacienteId: p.paciente_id,
+        pacienteNome: p.paciente_nome,
+        profissionalId: p.profissional_id,
+        profissionalNome: p.profissional_nome,
+        unidadeId: p.unidade_id,
+        status: 'concluido',
+        data: p.data_atendimento,
+        tipo: 'Atendimento (S/ Agend.)',
+        hasProntuario: true,
+        origem: 'prontuario'
+      } as any);
+    });
+    
+    return result;
+  }, [filtered, prontuariosFull]);
 
-    console.log("[Relatórios] stats calculados", { totalAgendamentos, totalRealizados, totalProntuarios, concluidosAgs });
+  const stats = useMemo(() => {
+    const data = consolidatedData;
+    
+    const totalAgendamentos = data.length;
+    
+    // Consideramos "concluído" se o status for concluído OU se existir um prontuário vinculado
+    const concluidos = data.filter(d => d.status === 'concluido' || d.hasProntuario).length;
+    const pendentes = data.filter(d => d.status === 'pendente' && !d.hasProntuario).length;
+    const faltas = data.filter(d => d.status === 'falta').length;
+    const cancelados = data.filter(d => d.status === 'cancelado').length;
+    const remarcados = data.filter(d => d.status === 'remarcado').length;
+    const retornos = data.filter(d => d.status === 'retorno' || d.tipo === 'Retorno').length;
+    
+    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((concluidos / (totalAgendamentos - cancelados || 1)) * 100) : 0;
+    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / totalAgendamentos) * 100) : 0;
+    
+    const primeiraConsulta = data.filter(d => d.tipo === 'Consulta' || d.tipo === 'Primeira Consulta').length;
+    const online = data.filter(d => d.origem === 'online').length;
+    const recepcao = data.filter(d => d.origem === 'recepcao').length;
+
+    console.log("[Relatórios] stats calculados (consolidado)", { totalAgendamentos, concluidos, pendentes, faltas });
 
     return { 
       total: totalAgendamentos, 
-      concluidos: totalRealizados, 
+      concluidos, 
       pendentes, 
       faltas, 
       cancelados, 
@@ -374,9 +400,9 @@ const Relatorios: React.FC = () => {
       taxaFalta,
       online,
       recepcao,
-      emAtendimento: ags.filter(a => a.status === 'em_atendimento').length
+      emAtendimento: data.filter(d => d.status === 'em_atendimento').length
     };
-  }, [filtered, prontuariosFull]);
+  }, [consolidatedData]);
 
   const tempoStats = useMemo(() => {
     // We don't have atendimentosDB anymore, we use agendamentos with durations if exists or mock 0 for now
