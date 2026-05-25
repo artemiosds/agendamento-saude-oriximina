@@ -3051,6 +3051,49 @@ th{background:#f1f5f9;font-weight:600;}
 
         {/* === CLÍNICO === */}
         <TabsContent value="clinico" className="space-y-5 mt-4">
+          <Card className="shadow-sm border-0 mb-4 bg-muted/30">
+            <CardContent className="p-4 flex flex-col md:flex-row items-end gap-4">
+              <div className="flex-1 w-full">
+                <Label className="text-xs font-semibold mb-1.5 flex items-center gap-2">
+                  <Search className="w-3 h-3 text-primary" /> Busca Ampla (Nome ou CID-10)
+                </Label>
+                <div className="relative">
+                  <Input 
+                    placeholder="Ex: F84 ou Nome do Paciente..." 
+                    value={clinicalSearch}
+                    onChange={(e) => setClinicalSearch(e.target.value)}
+                    className="h-10 pl-9 bg-white shadow-sm focus:ring-2 focus:ring-primary/20"
+                  />
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+                  {clinicalSearch && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 w-6 p-0 absolute right-2 top-2 rounded-full hover:bg-muted"
+                      onClick={() => setClinicalSearch('')}
+                    >
+                      <span className="text-lg">×</span>
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5 ml-1">
+                  💡 A busca é inteligente: ao digitar <strong>F84</strong> o sistema encontrará pacientes com <strong>F84.0, F84.5</strong>, etc.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-10 px-4 bg-white"
+                  onClick={() => setClinicalSearch('')}
+                  disabled={!clinicalSearch}
+                >
+                  Limpar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
             {[
               { label: 'Total com CID', value: clinicalReport.kpis.totalPacientesComCID, icon: Activity, color: 'text-primary' },
