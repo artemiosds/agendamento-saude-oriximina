@@ -1736,7 +1736,7 @@ ${dataRows}
           </section>
 
           <div style="margin-top: 60px;">
-            ${docCarimbo(carimbo, { nome: user?.nome || '', especialidade: user?.perfil || '' })}
+            ${docCarimbo(carimbo, { nome: user?.nome || '', especialidade: user?.cargo || user?.profissao || '' })}
           </div>
         </div>
       `;
@@ -1759,13 +1759,13 @@ ${dataRows}
               new Paragraph({ text: `Unidade: ${un}`, alignment: AlignmentType.CENTER }),
               new Paragraph({ text: "", spacing: { after: 400 } }),
               new Paragraph({ text: "1. Introdução", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: intro, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: intro, alignment: AlignmentType.BOTH }),
               new Paragraph({ text: "2. Metodologia", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: metodologia, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: metodologia, alignment: AlignmentType.BOTH }),
               new Paragraph({ text: "3. Resumo Executivo", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.BOTH }),
               new Paragraph({ text: "4. Considerações Finais", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: "Este é um resumo exportado para Word. Para o layout institucional completo, utilize a opção PDF/Imprimir.", alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: "Este é um resumo exportado para Word. Para o layout institucional completo, utilize a opção PDF/Imprimir.", alignment: AlignmentType.BOTH }),
               new Paragraph({ text: "", spacing: { after: 600 } }),
               new Paragraph({ text: "_______________________________________", alignment: AlignmentType.CENTER }),
               new Paragraph({ text: user?.nome || "Responsável", alignment: AlignmentType.CENTER }),
