@@ -1350,7 +1350,11 @@ ${dataRows}
         addTable('Relatório de Pacientes', ['Paciente', 'E-mail', 'Telefone', 'Agendamentos', 'Concluídos', 'Faltas', 'Retornos', 'Última Consulta'], cap(pacientesReport).map(p => [p.nome, p.email, p.telefone, p.totalAgendamentos, p.concluidos, p.faltas, p.retornos, p.ultimaConsulta]));
       } else if (type === 'fila') {
         addTable('Fila de Espera', ['Posição', 'Paciente', 'Unidade', 'Setor', 'Prioridade', 'Status', 'Chegada', 'Chamada'], cap(filaReport.items).map(f => [f.posicao, f.paciente_nome, unidades.find(u => u.id === f.unidade_id)?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || '-']));
+      } else if (type === 'clinico') {
+        addTable('Análise Clínica por Categoria', ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'], cap(clinicalReport.byCategory).map(c => [c.name, c.pacientes, c.atendimentos, c.procedimentos]));
+        addTable('CIDs Mais Frequentes', ['Código CID-10', 'Descrição', 'Frequência (Pacientes)'], cap(clinicalReport.topCids).map(c => [c.cid, c.descricao, c.count]));
       }
+
 
       if (truncated) {
         toast.warning(`PDF limitado a ${ROW_LIMIT} linhas`, { description: 'Para o conjunto completo, use Excel.' });
