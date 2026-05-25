@@ -1667,51 +1667,102 @@ ${dataRows}
       const config = await loadDocumentConfig();
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas as Unidades';
-      const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
+      const profFilter = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
       const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
       
-      const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão.`;
+      const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
       
-      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando os filtros de unidade, profissional e período selecionados. A análise utiliza indicadores de produtividade (atendimentos concluídos), taxa de absenteísmo (faltas) e fluxo de pacientes por município (naturalidade).`;
+      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando os filtros de unidade, profissional e período selecionados. A análise utiliza indicadores de produtividade, taxa de absenteísmo, fluxo de pacientes por município e análises clínicas baseadas em CID-10 e categorias de reabilitação.`;
       
-      const analiseExecutiva = `No período analisado, foram registrados um total de ${stats.total} agendamentos. Destes, ${stats.concluidos} atendimentos foram efetivamente concluídos, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total), o que sugere a necessidade de avaliação das causas do absenteísmo.`;
-      
-      const analiseMunicipios = municipioStats.muniComMaisPacientes 
-        ? `A análise por origem geográfica indica que o município com maior volume de pacientes é ${municipioStats.muniComMaisPacientes.municipio}, com ${municipioStats.muniComMaisPacientes.pacientesCount} pacientes cadastrados.`
-        : "Não foram identificados dados significativos de naturalidade no período.";
+      const analiseExecutiva = `No período analisado, foram registrados um total de ${stats.total} agendamentos. Destes, ${stats.concluidos} atendimentos foram efetivamente concluídos, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total). O sistema também registrou ${clinicalReport.kpis.totalPacientesComCID} pacientes com diagnósticos clínicos ativos, sendo ${clinicalReport.kpis.tea} casos de TEA.`;
+
+      const renderSection = (title: string, content: string, hasData: boolean = true) => `
+        <section class="section">
+          <h2>${title}</h2>
+          ${hasData ? content : '<p style="color: #64748b; font-style: italic;">Sem dados disponíveis para o período filtrado.</p>'}
+        </section>
+      `;
 
       const bodyHtml = `
         <div style="text-align: justify;">
-          <section class="section">
-            <h2>1. Introdução</h2>
-            <p>${intro}</p>
-          </section>
-
-          <section class="section">
-            <h2>2. Metodologia</h2>
-            <p>${metodologia}</p>
-          </section>
-
-          <section class="section">
-            <h2>3. Resumo Executivo</h2>
+          ${renderSection("1. Introdução", `<p>${intro}</p>`)}
+          ${renderSection("2. Metodologia", `<p>${metodologia}</p>`)}
+          
+          ${renderSection("3. Resumo Executivo", `
             <p>${analiseExecutiva}</p>
             <div class="summary">
               <div class="stat"><strong>${stats.total}</strong><small>Agendamentos</small></div>
               <div class="stat"><strong>${stats.concluidos}</strong><small>Atendimentos</small></div>
               <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
-              <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
               <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
+              <div class="stat"><strong>${clinicalReport.kpis.totalPacientesComCID}</strong><small>Pacientes Clínicos</small></div>
             </div>
-          </section>
+          `)}
 
-          <section class="section">
-            <h2>4. Análise de Produtividade</h2>
-            <p>Abaixo, a distribuição da produtividade por profissional atuante na unidade no período filtrado.</p>
+          ${renderSection("4. Indicadores Gerais por Categoria", `
+            <table>
+              <thead>
+                <tr><th>Categoria</th><th>Total Agendados</th><th>Concluídos</th><th>Taxa</th></tr>
+              </thead>
+              <tbody>
+                ${categoriaCards.map(c => `
+                  <tr>
+                    <td>${c.label}</td>
+                    <td>${c.total}</td>
+                    <td>${c.concluidos}</td>
+                    <td>${c.total > 0 ? Math.round((c.concluidos / c.total) * 100) : 0}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, categoriaCards.some(c => c.total > 0))}
+
+          ${renderSection("5. Atendimentos por Período", `
+            <p>Distribuição temporal dos atendimentos realizados no período.</p>
+            <table>
+              <thead>
+                <tr><th>Data</th><th>Agendamentos</th><th>Concluídos</th><th>Faltas</th></tr>
+              </thead>
+              <tbody>
+                ${timelineData.map(t => `
+                  <tr>
+                    <td>${formatDateBR(t.data)}</td>
+                    <td>${t.agendamentos}</td>
+                    <td>${t.concluidos}</td>
+                    <td>${t.faltas}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, timelineData.length > 0)}
+
+          ${renderSection("6. Horários de Pico", `
+            <p>Análise de fluxo por faixa horária (07:00 às 18:00).</p>
+            <table>
+              <thead>
+                <tr><th>Horário</th><th>Volume de Atendimentos</th></tr>
+              </thead>
+              <tbody>
+                ${peakHoursData.map(h => `
+                  <tr><td>${h.hora}</td><td>${h.total}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, peakHoursData.some(h => h.total > 0))}
+
+          ${renderSection("7. Novos vs Retorno", `
+            <div class="summary">
+              ${novosVsRetorno.map(d => `
+                <div class="stat"><strong>${d.value}</strong><small>${d.name}</small></div>
+              `).join('')}
+            </div>
+          `, novosVsRetorno.length > 0)}
+
+          ${renderSection("8. Produtividade por Profissional", `
             <table>
               <thead>
                 <tr>
                   <th>Profissional</th>
-                  <th>Unidade</th>
                   <th>Pacientes</th>
                   <th>Total</th>
                   <th>Concluídos</th>
@@ -1720,10 +1771,9 @@ ${dataRows}
                 </tr>
               </thead>
               <tbody>
-                ${porProfissional.slice(0, 50).map(p => `
+                ${porProfissional.slice(0, 40).map(p => `
                   <tr>
                     <td>${p.nome}</td>
-                    <td>${p.unidade}</td>
                     <td>${p.pacientesAtendidos}</td>
                     <td>${p.total}</td>
                     <td>${p.concluidos}</td>
@@ -1733,39 +1783,140 @@ ${dataRows}
                 `).join('')}
               </tbody>
             </table>
-          </section>
+          `, porProfissional.length > 0)}
 
-          <section class="section">
-            <h2>5. Análise Geográfica (Municípios)</h2>
-            <p>${analiseMunicipios}</p>
+          ${renderSection("9. Procedimentos Realizados", `
             <table>
               <thead>
-                <tr>
-                  <th>Município</th>
-                  <th>Pacientes</th>
-                  <th>Atendimentos</th>
-                  <th>Concluídos</th>
-                  <th>Comparecimento</th>
-                </tr>
+                <tr><th>Procedimento</th><th>Quantidade</th></tr>
               </thead>
               <tbody>
-                ${municipioReport.slice(0, 30).map(m => `
+                ${procedimentoStats.byProcedure.slice(0, 20).map(p => `
+                  <tr><td>${p.nome}</td><td>${p.total}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, procedimentoStats.total > 0)}
+
+          ${renderSection("10. Análise de Absenteísmo (Faltas)", `
+            <p>Pacientes com maior recorrência de faltas no período.</p>
+            <table>
+              <thead>
+                <tr><th>Paciente</th><th>Telefone</th><th>Profissional</th><th>Total Faltas</th></tr>
+              </thead>
+              <tbody>
+                ${faltasReport.slice(0, 15).map(f => `
+                  <tr><td>${f.nome}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.total}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, faltasReport.length > 0)}
+
+          ${renderSection("11. Fila de Espera", `
+            <div class="summary">
+              <div class="stat"><strong>${filaReport.aguardando}</strong><small>Aguardando</small></div>
+              <div class="stat"><strong>${filaReport.chamados}</strong><small>Chamados/Atendidos</small></div>
+              <div class="stat"><strong>${filaReport.desistencias}</strong><small>Desistências</small></div>
+            </div>
+          `, filaReport.total > 0)}
+
+          ${renderSection("12. Triagem e Acolhimento", `
+            <p>Produtividade da equipe de triagem.</p>
+            <table>
+              <thead>
+                <tr><th>Técnico</th><th>Total</th><th>Confirmadas</th><th>Pendentes</th></tr>
+              </thead>
+              <tbody>
+                ${triagemReport.porTecnico.map(t => `
+                  <tr><td>${t.nome}</td><td>${t.total}</td><td>${t.confirmadas}</td><td>${t.pendentes}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, triagemReport.total > 0)}
+
+          ${renderSection("13. Avaliações de Enfermagem", `
+            <div class="summary">
+              <div class="stat"><strong>${nursingReport.total}</strong><small>Total</small></div>
+              <div class="stat"><strong>${nursingReport.aptos}</strong><small>Aptos</small></div>
+              <div class="stat"><strong>${nursingReport.inaptos}</strong><small>Inaptos</small></div>
+            </div>
+          `, nursingReport.total > 0)}
+
+          ${renderSection("14. Avaliações Multiprofissionais", `
+            <table>
+              <thead>
+                <tr><th>Especialidade</th><th>Quantidade</th></tr>
+              </thead>
+              <tbody>
+                ${multiReport.bySpecialty.map(s => `<tr><td>${s.nome}</td><td>${s.total}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          `, multiReport.total > 0)}
+
+          ${renderSection("15. Projetos Terapêuticos Singulares (PTS)", `
+            <div class="summary">
+              <div class="stat"><strong>${ptsReport.total}</strong><small>Total PTS</small></div>
+              <div class="stat"><strong>${ptsReport.ativos}</strong><small>Ativos</small></div>
+              <div class="stat"><strong>${ptsReport.concluidos}</strong><small>Concluídos/Inativos</small></div>
+            </div>
+          `, ptsReport.total > 0)}
+
+          ${renderSection("16. Gestão de Tratamentos", `
+            <p>Monitoramento de ciclos de reabilitação e sintonização de sessões.</p>
+            <div class="summary">
+              <div class="stat"><strong>${treatmentStats.ativos}</strong><small>Ciclos Ativos</small></div>
+              <div class="stat"><strong>${treatmentStats.sessRealizadas}</strong><small>Sessões Realizadas</small></div>
+              <div class="stat"><strong>${treatmentStats.taxaAbandono}%</strong><small>Taxa de Abandono</small></div>
+            </div>
+          `, treatmentStats.total > 0)}
+
+          ${renderSection("17. Análise Clínica e Diagnóstica", `
+            <p>Distribuição dos 10 principais diagnósticos (CID-10) identificados.</p>
+            <table>
+              <thead>
+                <tr><th>CID-10</th><th>Descrição</th><th>Frequência</th></tr>
+              </thead>
+              <tbody>
+                ${clinicalReport.topCids.map(c => `
+                  <tr><td>${c.cid}</td><td>${c.descricao}</td><td>${c.count}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <p>Distribuição por Categorias Clínicas:</p>
+            <table>
+              <thead>
+                <tr><th>Categoria</th><th>Pacientes</th><th>Atendimentos</th></tr>
+              </thead>
+              <tbody>
+                ${clinicalReport.byCategory.filter(c => c.pacientes > 0).slice(0, 10).map(c => `
+                  <tr><td>${c.name}</td><td>${c.pacientes}</td><td>${c.atendimentos}</td></tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, clinicalReport.patients.length > 0)}
+
+          ${renderSection("18. Análise Geográfica (Naturalidade)", `
+            <p>Distribuição de pacientes e atendimentos por município de origem.</p>
+            <table>
+              <thead>
+                <tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Comparecimento</th></tr>
+              </thead>
+              <tbody>
+                ${municipioReport.slice(0, 20).map(m => `
                   <tr>
                     <td>${m.municipio}</td>
                     <td>${m.pacientesCount}</td>
                     <td>${m.atendimentos}</td>
-                    <td>${m.concluidos}</td>
                     <td>${m.taxaComparecimento}%</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
-          </section>
+          `, municipioReport.length > 0)}
 
-          <section class="section">
-            <h2>6. Considerações Finais</h2>
-            <p>Os dados apresentados demonstram o volume operacional da unidade. Recomenda-se a continuidade do monitoramento das taxas de falta para otimização da grade de agendamentos e melhor aproveitamento do tempo dos profissionais.</p>
-          </section>
+          ${renderSection("19. Considerações Finais", `
+            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período. Observa-se um volume significativo de atendimentos ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
+          `)}
 
           <div style="margin-top: 60px;">
             ${docCarimbo(carimbo, { nome: user?.nome || '', especialidade: user?.cargo || user?.profissao || '' })}
@@ -1774,21 +1925,22 @@ ${dataRows}
       `;
 
       if (format === 'pdf') {
-        const fullHtml = buildDocumentShell("Relatório Completo de Gestão", bodyHtml, config, {
+        const fullHtml = buildDocumentShell("Relatório Institucional Completo", bodyHtml, config, {
           "Unidade": un,
-          "Profissional": prof,
-          "Período": periodo
+          "Profissional": profFilter,
+          "Período": periodo,
+          "Tipo": "Relatório ABNT"
         });
         printViaIframe(fullHtml);
         toast.success("Relatório gerado", { description: "O documento foi preparado para impressão/PDF." });
       } else {
+        // Simple DOCX fallback for complete report
         const doc = new Document({
           sections: [{
             properties: {},
             children: [
-              new Paragraph({ text: "RELATÓRIO DE GESTÃO E PRODUTIVIDADE", heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
-              new Paragraph({ text: `Período: ${periodo}`, alignment: AlignmentType.CENTER }),
-              new Paragraph({ text: `Unidade: ${un}`, alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: "RELATÓRIO INSTITUCIONAL DE GESTÃO E PRODUTIVIDADE", heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: `Período: ${periodo} | Unidade: ${un}`, alignment: AlignmentType.CENTER }),
               new Paragraph({ text: "", spacing: { after: 400 } }),
               new Paragraph({ text: "1. Introdução", heading: HeadingLevel.HEADING_1 }),
               new Paragraph({ text: intro, alignment: AlignmentType.JUSTIFIED }),
@@ -1796,8 +1948,8 @@ ${dataRows}
               new Paragraph({ text: metodologia, alignment: AlignmentType.JUSTIFIED }),
               new Paragraph({ text: "3. Resumo Executivo", heading: HeadingLevel.HEADING_1 }),
               new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.JUSTIFIED }),
-              new Paragraph({ text: "4. Considerações Finais", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: "Este é um resumo exportado para Word. Para o layout institucional completo, utilize a opção PDF/Imprimir.", alignment: AlignmentType.JUSTIFIED }),
+              new Paragraph({ text: "4. Conclusão", heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: "Este é um resumo estruturado. Para o relatório institucional completo com todas as 19 seções, tabelas e formatação ABNT, utilize a exportação via PDF/Imprimir.", alignment: AlignmentType.JUSTIFIED }),
               new Paragraph({ text: "", spacing: { after: 600 } }),
               new Paragraph({ text: "_______________________________________", alignment: AlignmentType.CENTER }),
               new Paragraph({ text: user?.nome || "Responsável", alignment: AlignmentType.CENTER }),
@@ -1815,7 +1967,8 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, municipioStats, porProfissional, municipioReport, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+
 
   return (
     <div className="space-y-5 animate-fade-in">
