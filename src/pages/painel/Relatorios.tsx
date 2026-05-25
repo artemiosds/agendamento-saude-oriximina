@@ -253,11 +253,11 @@ const Relatorios: React.FC = () => {
       (prons || []).forEach(p => {
         if (p.cid_codigo) p.cid_codigo.split(/[,;\s]+/).filter(Boolean).forEach((c: string) => allCids.add(c.toUpperCase()));
       });
-      (ptsRes.data || []).forEach((p: any) => {
+      (ptsRes || []).forEach((p: any) => {
         if (p.cid_primario) allCids.add(p.cid_primario.toUpperCase());
         if (p.cid_secundario) allCids.add(p.cid_secundario.toUpperCase());
       });
-      (proceduresRes.data || []).forEach((p: any) => {
+      (proceduresRes || []).forEach((p: any) => {
         if (p.cid) allCids.add(p.cid.toUpperCase());
       });
       
