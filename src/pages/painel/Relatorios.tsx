@@ -1317,12 +1317,12 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
+  }, [consolidatedData, porProfissional, faltasReport, pacientesReport, filaReport, unidades, municipioReport, clinicalReport]);
 
   // === DOWNLOAD PDF REAL ===
   const downloadPDF = useCallback(async (type: string) => {
     const isEmpty =
-      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
       type === 'produtividade' ? porProfissional.length === 0 :
       type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
