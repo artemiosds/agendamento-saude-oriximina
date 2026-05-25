@@ -1222,7 +1222,11 @@ const Relatorios: React.FC = () => {
         const un = unidades.find(u => u.id === f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada];
       });
+    } else if (type === 'clinico') {
+      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
+      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
     }
+
 
     // Build XML Spreadsheet (Excel-compatible)
     const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
