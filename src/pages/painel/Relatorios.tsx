@@ -926,9 +926,9 @@ const Relatorios: React.FC = () => {
       muniMap[muni].pacientesIds.add(p.id);
     });
 
-    // Add attendance data based on filtered agendamentos
-    filtered.forEach(a => {
-      const pac = pacMap.get(a.pacienteId);
+    // Add attendance data based on consolidated data
+    consolidatedData.forEach(d => {
+      const pac = pacMap.get(d.pacienteId);
       const muni = getMuniKey((pac as any)?.naturalidade);
       
       if (!muniMap[muni]) {
@@ -947,21 +947,27 @@ const Relatorios: React.FC = () => {
       }
       
       muniMap[muni].atendimentos++;
-      if (a.status === 'concluido') muniMap[muni].concluidos++;
-      else if (a.status === 'pendente') muniMap[muni].pendentes++;
-      else if (a.status === 'falta') muniMap[muni].faltas++;
-      else if (a.status === 'cancelado') muniMap[muni].cancelados++;
-      else if (a.status === 'remarcado') muniMap[muni].remarcados++;
+      if (d.status === 'concluido' || d.hasProntuario) muniMap[muni].concluidos++;
+      else if (d.status === 'pendente') muniMap[muni].pendentes++;
+      else if (d.status === 'falta') muniMap[muni].faltas++;
+      else if (d.status === 'cancelado') muniMap[muni].cancelados++;
+      else if (d.status === 'remarcado') muniMap[muni].remarcados++;
       
-      if (a.status === 'retorno' || a.tipo === 'Retorno') muniMap[muni].retornos++;
+      if (d.status === 'retorno' || d.tipo === 'Retorno') muniMap[muni].retornos++;
     });
 
-    return Object.values(muniMap).map(m => ({
-      ...m,
-      taxaComparecimento: m.atendimentos > 0 ? Math.round((m.concluidos / (m.atendimentos - m.cancelados || 1)) * 100) : 0,
-      taxaFalta: m.atendimentos > 0 ? Math.round((m.faltas / (m.atendimentos || 1)) * 100) : 0
-    })).sort((a, b) => b.pacientesCount - a.pacientesCount);
-  }, [pacientes, filtered]);
+    return Object.values(muniMap).map(m => {
+      const totalAgendamentos = m.atendimentos;
+      const taxaComparecimento = totalAgendamentos > 0 ? Math.round((m.concluidos / (totalAgendamentos - m.cancelados || 1)) * 100) : 0;
+      const taxaFalta = totalAgendamentos > 0 ? Math.round((m.faltas / totalAgendamentos) * 100) : 0;
+      
+      return {
+        ...m,
+        taxaComparecimento,
+        taxaFalta
+      };
+    }).sort((a, b) => b.atendimentos - a.atendimentos);
+  }, [consolidatedData, pacientes]);
 
   const municipioStats = useMemo(() => {
     const list = municipioReport;
