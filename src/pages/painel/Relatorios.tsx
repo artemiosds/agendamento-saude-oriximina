@@ -1271,7 +1271,9 @@ ${dataRows}
       type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
       type === 'pacientes' ? pacientesReport.length === 0 :
+      type === 'clinico' ? clinicalReport.byCategory.length === 0 :
       type === 'fila' ? filaReport.items.length === 0 : false;
+
     if (isEmpty) {
       toast.warning('Não há dados para exportar', { description: 'Ajuste os filtros e tente novamente.' });
       return;
