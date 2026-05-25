@@ -1393,7 +1393,7 @@ ${dataRows}
       };
 
       if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(filtered).map(a => [a.data || '', a.hora || '', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
