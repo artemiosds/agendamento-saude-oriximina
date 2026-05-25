@@ -2587,6 +2587,140 @@ th{background:#f1f5f9;font-weight:600;}
             </Card>
           )}
         </TabsContent>
+2590: 
+2591:         {/* === MUNICÍPIOS === */}
+2592:         <TabsContent value="municipios" className="space-y-5 mt-4">
+2593:           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+2594:             <Card className="shadow-card border-0">
+2595:               <CardContent className="p-4 text-center">
+2596:                 <p className="text-2xl font-bold text-[#1B3A5C]">{municipioStats.totalMunicipios}</p>
+2597:                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total de Municípios</p>
+2598:               </CardContent>
+2599:             </Card>
+2600:             <Card className="shadow-card border-0">
+2601:               <CardContent className="p-4 text-center">
+2602:                 <p className="text-lg font-bold text-[#2D7A4F] truncate" title={municipioStats.muniComMaisPacientes?.municipio}>
+2603:                   {municipioStats.muniComMaisPacientes?.municipio || '-'}
+2604:                 </p>
+2605:                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais Pacientes</p>
+2606:                 <p className="text-xs font-semibold">{municipioStats.muniComMaisPacientes?.pacientesCount || 0} pacientes</p>
+2607:               </CardContent>
+2608:             </Card>
+2609:             <Card className="shadow-card border-0">
+2610:               <CardContent className="p-4 text-center">
+2611:                 <p className="text-lg font-bold text-[#1B3A5C] truncate" title={municipioStats.muniComMaisAtendimentos?.municipio}>
+2612:                   {municipioStats.muniComMaisAtendimentos?.municipio || '-'}
+2613:                 </p>
+2614:                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais Atendimentos</p>
+2615:                 <p className="text-xs font-semibold">{municipioStats.muniComMaisAtendimentos?.atendimentos || 0} atendimentos</p>
+2616:               </CardContent>
+2617:             </Card>
+2618:             <Card className="shadow-card border-0">
+2619:               <CardContent className="p-4 text-center">
+2620:                 <p className="text-2xl font-bold text-[#2D7A4F]">{municipioStats.totalComNaturalidade}</p>
+2621:                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Com Naturalidade</p>
+2622:               </CardContent>
+2623:             </Card>
+2624:             <Card className="shadow-card border-0 border-l-4 border-l-[#B83232]">
+2625:               <CardContent className="p-4 text-center">
+2626:                 <p className="text-2xl font-bold text-[#B83232]">{municipioStats.totalSemNaturalidade}</p>
+2627:                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem Naturalidade</p>
+2628:               </CardContent>
+2629:             </Card>
+2630:           </div>
+2631: 
+2632:           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+2633:             <Card className="shadow-card border-0">
+2634:               <CardContent className="p-5">
+2635:                 <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 Municípios (Pacientes)</h3>
+2636:                 <ResponsiveContainer width="100%" height={300}>
+2637:                   <BarChart data={municipioReport.slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+2638:                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EEF2F7" />
+2639:                     <XAxis type="number" hide />
+2640:                     <YAxis dataKey="municipio" type="category" width={75} tick={{ fontSize: 10, fill: '#6B7280' }} />
+2641:                     <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+2642:                     <Bar dataKey="pacientesCount" name="Pacientes" fill="#2E8B8B" radius={[0, 4, 4, 0]} />
+2643:                   </BarChart>
+2644:                 </ResponsiveContainer>
+2645:               </CardContent>
+2646:             </Card>
+2647: 
+2648:             <Card className="shadow-card border-0">
+2649:               <CardContent className="p-5">
+2650:                 <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 Municípios (Atendimentos)</h3>
+2651:                 <ResponsiveContainer width="100%" height={300}>
+2652:                   <BarChart data={[...municipioReport].sort((a, b) => b.atendimentos - a.atendimentos).slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+2653:                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EEF2F7" />
+2654:                     <XAxis type="number" hide />
+2655:                     <YAxis dataKey="municipio" type="category" width={75} tick={{ fontSize: 10, fill: '#6B7280' }} />
+2656:                     <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+2657:                     <Bar dataKey="atendimentos" name="Atendimentos" fill="#1B3A5C" radius={[0, 4, 4, 0]} />
+2658:                   </BarChart>
+2659:                 </ResponsiveContainer>
+2660:               </CardContent>
+2661:             </Card>
+2662:           </div>
+2663: 
+2664:           <Card className="shadow-card border-0">
+2665:             <CardContent className="p-0">
+2666:               <div className="p-5 flex items-center justify-between border-b">
+2667:                 <h3 className="font-semibold font-display text-[#1B3A5C]">Relatório por Município</h3>
+2668:                 <div className="flex gap-2">
+2669:                   <Button variant="outline" size="sm" onClick={() => exportCSV('municipios')}><Download className="w-4 h-4 mr-1" />CSV</Button>
+2670:                   <Button variant="outline" size="sm" onClick={() => exportExcel('municipios')}><Download className="w-4 h-4 mr-1" />Excel</Button>
+2671:                 </div>
+2672:               </div>
+2673:               <div className="overflow-x-auto">
+2674:                 <table className="w-full text-sm">
+2675:                   <thead className="bg-muted/50 border-b">
+2676:                     <tr>
+2677:                       <th className="text-left py-3 px-4 text-muted-foreground font-medium">Município</th>
+2678:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pacientes</th>
+2679:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Atendimentos</th>
+2680:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Concluídos</th>
+2681:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pendentes</th>
+2682:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Faltas</th>
+2683:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Cancelados</th>
+2684:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Remarcados</th>
+2685:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Retornos</th>
+2686:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Comparecimento</th>
+2687:                       <th className="text-center py-3 px-2 text-muted-foreground font-medium">Taxa Falta</th>
+2688:                     </tr>
+2689:                   </thead>
+2690:                   <tbody>
+2691:                     {municipioReport.map((m, idx) => (
+2692:                       <tr key={idx} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+2693:                         <td className="py-3 px-4 font-medium text-foreground">{m.municipio}</td>
+2694:                         <td className="text-center py-3 px-2 font-semibold text-[#1B3A5C]">{m.pacientesCount}</td>
+2695:                         <td className="text-center py-3 px-2 text-[#1B3A5C]">{m.atendimentos}</td>
+2696:                         <td className="text-center py-3 px-2 text-[#2D7A4F]">{m.concluidos}</td>
+2697:                         <td className="text-center py-3 px-2 text-[#C17B1A]">{m.pendentes}</td>
+2698:                         <td className="text-center py-3 px-2 text-[#B83232] font-medium">{m.faltas}</td>
+2699:                         <td className="text-center py-3 px-2 text-muted-foreground">{m.cancelados}</td>
+2700:                         <td className="text-center py-3 px-2 text-[#C17B1A]">{m.remarcados}</td>
+2701:                         <td className="text-center py-3 px-2 font-medium">{m.retornos}</td>
+2702:                         <td className="text-center py-3 px-2">
+2703:                           <Badge variant="outline" className="font-mono text-[10px] bg-[#EEF7F2] text-[#2D7A4F] border-[#2D7A4F]/20">
+2704:                             {m.taxaComparecimento}%
+2705:                           </Badge>
+2706:                         </td>
+2707:                         <td className="text-center py-3 px-2">
+2708:                           <Badge variant="outline" className="font-mono text-[10px] bg-[#FDEAEA] text-[#B83232] border-[#B83232]/20">
+2709:                             {m.taxaFalta}%
+2710:                           </Badge>
+2711:                         </td>
+2712:                       </tr>
+2713:                     ))}
+2714:                     {municipioReport.length === 0 && (
+2715:                       <tr><td colSpan={11} className="text-center py-12 text-muted-foreground">Nenhum dado encontrado</td></tr>
+2716:                     )}
+2717:                   </tbody>
+2718:                 </table>
+2719:               </div>
+2720:             </CardContent>
+2721:           </Card>
+2722:         </TabsContent>
+
 
         {/* === TRATAMENTOS === */}
         <TabsContent value="tratamentos" className="space-y-5 mt-4">
