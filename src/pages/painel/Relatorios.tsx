@@ -562,42 +562,42 @@ const Relatorios: React.FC = () => {
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
     const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number }> = {};
-    filtered.forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
+    consolidatedData.forEach(d => {
+      const un = unidades.find(u => u.id === d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { nome: name, total: 0, concluidos: 0, faltas: 0, cancelados: 0 };
       map[name].total++;
-      if (a.status === 'concluido') map[name].concluidos++;
-      if (a.status === 'falta') map[name].faltas++;
-      if (a.status === 'cancelado') map[name].cancelados++;
+      if (d.status === 'concluido' || d.hasProntuario) map[name].concluidos++;
+      if (d.status === 'falta') map[name].faltas++;
+      if (d.status === 'cancelado') map[name].cancelados++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [filtered, unidades]);
+  }, [consolidatedData, unidades]);
 
   // === FALTAS REPORT ===
   const faltasReport = useMemo(() => {
-    const faltaAgs = filtered.filter(a => a.status === 'falta');
+    const faltaAgs = consolidatedData.filter(d => d.status === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
-    faltaAgs.forEach(a => {
-      const pac = pacientes.find(p => p.id === a.pacienteId);
-      const un = unidades.find(u => u.id === a.unidadeId);
-      const key = a.pacienteId || a.pacienteNome;
-      if (!porPaciente[key]) porPaciente[key] = { nome: a.pacienteNome, email: pac?.email || '', telefone: pac?.telefone || '', profissional: a.profissionalNome, unidade: un?.nome || '', datas: [], total: 0 };
-      porPaciente[key].datas.push(a.data);
+    faltaAgs.forEach(d => {
+      const pac = pacientes.find(p => p.id === d.pacienteId);
+      const un = unidades.find(u => u.id === d.unidadeId);
+      const key = d.pacienteId || d.pacienteNome;
+      if (!porPaciente[key]) porPaciente[key] = { nome: d.pacienteNome, email: pac?.email || '', telefone: pac?.telefone || '', profissional: d.profissionalNome, unidade: un?.nome || '', datas: [], total: 0 };
+      porPaciente[key].datas.push(d.data);
       porPaciente[key].total++;
     });
     return Object.values(porPaciente).sort((a, b) => b.total - a.total);
-  }, [filtered, pacientes, unidades]);
+  }, [consolidatedData, pacientes, unidades]);
 
   // === PATIENTS REPORT ===
   const pacientesReport = useMemo(() => {
-    const pacIds = new Set(filtered.map(a => a.pacienteId));
+    const pacIds = new Set(consolidatedData.map(d => d.pacienteId));
     return Array.from(pacIds).map(pid => {
       const pac = pacientes.find(p => p.id === pid);
-      const ags = filtered.filter(a => a.pacienteId === pid);
-      const concluidos = ags.filter(a => a.status === 'concluido').length;
-      const faltas = ags.filter(a => a.status === 'falta').length;
-      const retornos = ags.filter(a => a.tipo === 'Retorno').length;
+      const ags = consolidatedData.filter(d => d.pacienteId === pid);
+      const concluidos = ags.filter(d => d.status === 'concluido' || d.hasProntuario).length;
+      const faltas = ags.filter(d => d.status === 'falta').length;
+      const retornos = ags.filter(d => d.tipo === 'Retorno').length;
       return {
         id: pid,
         nome: pac?.nome || ags[0]?.pacienteNome || 'Desconhecido',
@@ -610,7 +610,7 @@ const Relatorios: React.FC = () => {
         ultimaConsulta: ags.sort((a, b) => b.data.localeCompare(a.data))[0]?.data || '',
       };
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
-  }, [filtered, pacientes]);
+  }, [consolidatedData, pacientes]);
 
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
