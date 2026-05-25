@@ -1629,6 +1629,162 @@ ${dataRows}
 
   const [clinicalDetailDialog, setClinicalDetailDialog] = useState<{ open: boolean, category?: string }>({ open: false });
 
+  const exportCompleteReport = useCallback(async (format: 'pdf' | 'docx') => {
+    const loadingId = toast.loading(`Gerando relatório completo (${format.toUpperCase()})...`, { description: 'Preparando análise e formatação ABNT.' });
+    try {
+      const config = await loadDocumentConfig();
+      const carimbo = user?.id ? await loadCarimbo(user.id) : null;
+      const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas as Unidades';
+      const prof = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
+      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+      
+      const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão.`;
+      
+      const metodologia = `Os dados foram extraídos da base de dados do sistema de gestão, considerando os filtros de unidade, profissional e período selecionados. A análise utiliza indicadores de produtividade (atendimentos concluídos), taxa de absenteísmo (faltas) e fluxo de pacientes por município (naturalidade).`;
+      
+      const analiseExecutiva = `No período analisado, foram registrados um total de ${stats.total} agendamentos. Destes, ${stats.concluidos} atendimentos foram efetivamente concluídos, resultando em uma taxa de comparecimento de ${stats.taxaComparecimento}%. As faltas totalizaram ${stats.faltas} (${stats.taxaFalta}% do total), o que sugere a necessidade de avaliação das causas do absenteísmo.`;
+      
+      const analiseMunicipios = municipioStats.muniComMaisPacientes 
+        ? `A análise por origem geográfica indica que o município com maior volume de pacientes é ${municipioStats.muniComMaisPacientes.municipio}, com ${municipioStats.muniComMaisPacientes.pacientesCount} pacientes cadastrados.`
+        : "Não foram identificados dados significativos de naturalidade no período.";
+
+      const bodyHtml = `
+        <div style="text-align: justify;">
+          <section class="section">
+            <h2>1. Introdução</h2>
+            <p>${intro}</p>
+          </section>
+
+          <section class="section">
+            <h2>2. Metodologia</h2>
+            <p>${metodologia}</p>
+          </section>
+
+          <section class="section">
+            <h2>3. Resumo Executivo</h2>
+            <p>${analiseExecutiva}</p>
+            <div class="summary">
+              <div class="stat"><strong>${stats.total}</strong><small>Agendamentos</small></div>
+              <div class="stat"><strong>${stats.concluidos}</strong><small>Atendimentos</small></div>
+              <div class="stat"><strong>${stats.faltas}</strong><small>Faltas</small></div>
+              <div class="stat"><strong>${stats.cancelados}</strong><small>Cancelados</small></div>
+              <div class="stat"><strong>${stats.taxaComparecimento}%</strong><small>Comparecimento</small></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h2>4. Análise de Produtividade</h2>
+            <p>Abaixo, a distribuição da produtividade por profissional atuante na unidade no período filtrado.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Profissional</th>
+                  <th>Unidade</th>
+                  <th>Pacientes</th>
+                  <th>Total</th>
+                  <th>Concluídos</th>
+                  <th>Faltas</th>
+                  <th>Taxa</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${porProfissional.slice(0, 50).map(p => `
+                  <tr>
+                    <td>${p.nome}</td>
+                    <td>${p.unidade}</td>
+                    <td>${p.pacientesAtendidos}</td>
+                    <td>${p.total}</td>
+                    <td>${p.concluidos}</td>
+                    <td>${p.faltas}</td>
+                    <td>${p.taxaConclusao}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <h2>5. Análise Geográfica (Municípios)</h2>
+            <p>${analiseMunicipios}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Município</th>
+                  <th>Pacientes</th>
+                  <th>Atendimentos</th>
+                  <th>Concluídos</th>
+                  <th>Comparecimento</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${municipioReport.slice(0, 30).map(m => `
+                  <tr>
+                    <td>${m.municipio}</td>
+                    <td>${m.pacientesCount}</td>
+                    <td>${m.atendimentos}</td>
+                    <td>${m.concluidos}</td>
+                    <td>${m.taxaComparecimento}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </section>
+
+          <section class="section">
+            <h2>6. Considerações Finais</h2>
+            <p>Os dados apresentados demonstram o volume operacional da unidade. Recomenda-se a continuidade do monitoramento das taxas de falta para otimização da grade de agendamentos e melhor aproveitamento do tempo dos profissionais.</p>
+          </section>
+
+          <div style="margin-top: 60px;">
+            ${docCarimbo(carimbo, { nome: user?.nome || '', especialidade: user?.perfil || '' })}
+          </div>
+        </div>
+      `;
+
+      if (format === 'pdf') {
+        const fullHtml = buildDocumentShell("Relatório Completo de Gestão", bodyHtml, config, {
+          "Unidade": un,
+          "Profissional": prof,
+          "Período": periodo
+        });
+        printViaIframe(fullHtml);
+        toast.success("Relatório gerado", { description: "O documento foi preparado para impressão/PDF." });
+      } else {
+        const doc = new Document({
+          sections: [{
+            properties: {},
+            children: [
+              new Paragraph({ text: "RELATÓRIO DE GESTÃO E PRODUTIVIDADE", heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: `Período: ${periodo}`, alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: `Unidade: ${un}`, alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: "", spacing: { after: 400 } }),
+              new Paragraph({ text: "1. Introdução", heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: intro, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: "2. Metodologia", heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: metodologia, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: "3. Resumo Executivo", heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: "4. Considerações Finais", heading: HeadingLevel.HEADING_1 }),
+              new Paragraph({ text: "Este é um resumo exportado para Word. Para o layout institucional completo, utilize a opção PDF/Imprimir.", alignment: AlignmentType.JUSTIFY }),
+              new Paragraph({ text: "", spacing: { after: 600 } }),
+              new Paragraph({ text: "_______________________________________", alignment: AlignmentType.CENTER }),
+              new Paragraph({ text: user?.nome || "Responsável", alignment: AlignmentType.CENTER }),
+            ],
+          }],
+        });
+
+        const buffer = await Packer.toBlob(doc);
+        saveAs(buffer, `Relatorio_Completo_${new Date().toISOString().split('T')[0]}.docx`);
+        toast.success("Documento Word gerado", { description: "O download foi iniciado." });
+      }
+    } catch (err) {
+      console.error("[exportCompleteReport] erro:", err);
+      toast.error("Erro ao gerar relatório", { description: "Não foi possível consolidar os dados." });
+    } finally {
+      toast.dismiss(loadingId);
+    }
+  }, [stats, municipioStats, porProfissional, municipioReport, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
