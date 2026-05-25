@@ -838,7 +838,7 @@ const Relatorios: React.FC = () => {
 
     // Initialize with all patients to get patient counts per municipality
     pacientes.forEach(p => {
-      const muni = getMuniKey(p.naturalidade);
+      const muni = getMuniKey((p as any).naturalidade);
       if (!muniMap[muni]) {
         muniMap[muni] = { 
           municipio: muni, 
@@ -860,7 +860,7 @@ const Relatorios: React.FC = () => {
     // Add attendance data based on filtered agendamentos
     filtered.forEach(a => {
       const pac = pacMap.get(a.pacienteId);
-      const muni = getMuniKey(pac?.naturalidade);
+      const muni = getMuniKey((pac as any)?.naturalidade);
       
       if (!muniMap[muni]) {
         muniMap[muni] = { 
@@ -899,7 +899,7 @@ const Relatorios: React.FC = () => {
     const totalMunicipios = list.filter(m => m.municipio !== 'Não informado').length;
     const muniComMaisPacientes = list.length > 0 ? list[0] : null;
     const muniComMaisAtendimentos = [...list].sort((a, b) => b.atendimentos - a.atendimentos)[0];
-    const totalComNaturalidade = pacientes.filter(p => p.naturalidade && p.naturalidade.trim() !== '').length;
+    const totalComNaturalidade = pacientes.filter(p => (p as any).naturalidade && (p as any).naturalidade.trim() !== '').length;
     const totalSemNaturalidade = pacientes.length - totalComNaturalidade;
 
     return {
