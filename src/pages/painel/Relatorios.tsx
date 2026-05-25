@@ -2909,7 +2909,7 @@ th{background:#f1f5f9;font-weight:600;}
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
+                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({consolidatedData.length})</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
