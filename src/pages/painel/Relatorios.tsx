@@ -1107,7 +1107,12 @@ const Relatorios: React.FC = () => {
     const filename = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.csv`;
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-...
+      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
+      rows = filtered.map(a => {
+        const un = unidades.find(u => u.id === a.unidadeId);
+        // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
+      });
     } else if (type === 'municipios') {
       headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1124,12 +1129,6 @@ const Relatorios: React.FC = () => {
         m.taxaFalta.toString()
       ]);
 
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
-      rows = filtered.map(a => {
-        const un = unidades.find(u => u.id === a.unidadeId);
-        // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
-      });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
       rows = porProfissional.map(p => {
@@ -1164,7 +1163,11 @@ const Relatorios: React.FC = () => {
     let rows: string[][] = [];
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-...
+      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
+      rows = filtered.map(a => {
+        const un = unidades.find(u => u.id === a.unidadeId);
+        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
+      });
     } else if (type === 'municipios') {
       headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
       rows = municipioReport.map(m => [
@@ -1181,11 +1184,6 @@ const Relatorios: React.FC = () => {
         m.taxaFalta.toString()
       ]);
 
-      headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
-      rows = filtered.map(a => {
-        const un = unidades.find(u => u.id === a.unidadeId);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
-      });
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Pacientes', 'Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Tempo Médio (min)', 'Taxa Conclusão (%)'];
       rows = porProfissional.map(p => [p.nome, p.pacientesAtendidos.toString(), p.total.toString(), p.concluidos.toString(), p.faltas.toString(), p.cancelados.toString(), p.tempoMedio.toString(), p.taxaConclusao.toString()]);
