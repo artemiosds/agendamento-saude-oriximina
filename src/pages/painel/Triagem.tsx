@@ -734,7 +734,7 @@ const Triagem: React.FC = () => {
               />
             </div>
             <div>
-              <Label className="text-base font-semibold">IV-Baseado nos últimos 30 dias responda sim ou não para os sintomas:</Label>
+              
               <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {SINTOMAS_ACOLHIMENTO.map((s) => {
                   const checked = form.sintomas30Dias.includes(s);
