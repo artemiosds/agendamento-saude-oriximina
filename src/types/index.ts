@@ -124,6 +124,8 @@ export interface Paciente {
   isGestante?: boolean;
   isPne?: boolean;
   isAutista?: boolean;
+  naturalidade?: string;
+  naturalidade_uf?: string;
 }
 
 export interface Agendamento {

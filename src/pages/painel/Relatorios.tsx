@@ -815,6 +815,103 @@ const Relatorios: React.FC = () => {
     return Object.entries(map).map(([hora, total]) => ({ hora, total }));
   }, [filtered]);
 
+
+  const municipioReport = useMemo(() => {
+    const pacMap = new Map(pacientes.map(p => [p.id, p]));
+    const muniMap: Record<string, { 
+      municipio: string; 
+      pacientesCount: number; 
+      atendimentos: number;
+      concluidos: number;
+      pendentes: number;
+      faltas: number;
+      cancelados: number;
+      remarcados: number;
+      retornos: number;
+      pacientesIds: Set<string>;
+    }> = {};
+
+    const getMuniKey = (muni: string | null | undefined) => {
+      if (!muni || muni.trim() === '') return 'Não informado';
+      return muni.trim();
+    };
+
+    // Initialize with all patients to get patient counts per municipality
+    pacientes.forEach(p => {
+      const muni = getMuniKey((p as any).naturalidade);
+      if (!muniMap[muni]) {
+        muniMap[muni] = { 
+          municipio: muni, 
+          pacientesCount: 0, 
+          atendimentos: 0, 
+          concluidos: 0, 
+          pendentes: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          retornos: 0,
+          pacientesIds: new Set() 
+        };
+      }
+      muniMap[muni].pacientesCount++;
+      muniMap[muni].pacientesIds.add(p.id);
+    });
+
+    // Add attendance data based on filtered agendamentos
+    filtered.forEach(a => {
+      const pac = pacMap.get(a.pacienteId);
+      const muni = getMuniKey((pac as any)?.naturalidade);
+      
+      if (!muniMap[muni]) {
+        muniMap[muni] = { 
+          municipio: muni, 
+          pacientesCount: 0, 
+          atendimentos: 0, 
+          concluidos: 0, 
+          pendentes: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          retornos: 0,
+          pacientesIds: new Set() 
+        };
+      }
+      
+      muniMap[muni].atendimentos++;
+      if (a.status === 'concluido') muniMap[muni].concluidos++;
+      else if (a.status === 'pendente') muniMap[muni].pendentes++;
+      else if (a.status === 'falta') muniMap[muni].faltas++;
+      else if (a.status === 'cancelado') muniMap[muni].cancelados++;
+      else if (a.status === 'remarcado') muniMap[muni].remarcados++;
+      
+      if (a.status === 'retorno' || a.tipo === 'Retorno') muniMap[muni].retornos++;
+    });
+
+    return Object.values(muniMap).map(m => ({
+      ...m,
+      taxaComparecimento: m.atendimentos > 0 ? Math.round((m.concluidos / (m.atendimentos - m.cancelados || 1)) * 100) : 0,
+      taxaFalta: m.atendimentos > 0 ? Math.round((m.faltas / (m.atendimentos || 1)) * 100) : 0
+    })).sort((a, b) => b.pacientesCount - a.pacientesCount);
+  }, [pacientes, filtered]);
+
+  const municipioStats = useMemo(() => {
+    const list = municipioReport;
+    const totalMunicipios = list.filter(m => m.municipio !== 'Não informado').length;
+    const muniComMaisPacientes = list.length > 0 ? list[0] : null;
+    const muniComMaisAtendimentos = [...list].sort((a, b) => b.atendimentos - a.atendimentos)[0];
+    const totalComNaturalidade = pacientes.filter(p => (p as any).naturalidade && (p as any).naturalidade.trim() !== '').length;
+    const totalSemNaturalidade = pacientes.length - totalComNaturalidade;
+
+    return {
+      totalMunicipios,
+      muniComMaisPacientes,
+      muniComMaisAtendimentos,
+      totalComNaturalidade,
+      totalSemNaturalidade
+    };
+  }, [municipioReport, pacientes]);
+
+
   // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
     const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
@@ -1016,6 +1113,22 @@ const Relatorios: React.FC = () => {
         // We use mock/empty fields for start/end/duration as they were usually from atendimentosDB
         return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, a.tipo, statusLabels[a.status] || a.status, a.origem, '', '', ''];
       });
+    } else if (type === 'municipios') {
+      headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
+      rows = municipioReport.map(m => [
+        m.municipio, 
+        m.pacientesCount.toString(), 
+        m.atendimentos.toString(), 
+        m.concluidos.toString(), 
+        m.pendentes.toString(), 
+        m.faltas.toString(), 
+        m.cancelados.toString(), 
+        m.remarcados.toString(), 
+        m.retornos.toString(), 
+        m.taxaComparecimento.toString(), 
+        m.taxaFalta.toString()
+      ]);
+
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Perfil', 'Unidade', 'Pacientes Atendidos', 'Total Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio (min)', 'Taxa Conclusão (%)', 'Taxa Retorno (%)'];
       rows = porProfissional.map(p => {
@@ -1055,6 +1168,22 @@ const Relatorios: React.FC = () => {
         const un = unidades.find(u => u.id === a.unidadeId);
         return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
       });
+    } else if (type === 'municipios') {
+      headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
+      rows = municipioReport.map(m => [
+        m.municipio, 
+        m.pacientesCount.toString(), 
+        m.atendimentos.toString(), 
+        m.concluidos.toString(), 
+        m.pendentes.toString(), 
+        m.faltas.toString(), 
+        m.cancelados.toString(), 
+        m.remarcados.toString(), 
+        m.retornos.toString(), 
+        m.taxaComparecimento.toString(), 
+        m.taxaFalta.toString()
+      ]);
+
     } else if (type === 'produtividade') {
       headers = ['Profissional', 'Pacientes', 'Agendamentos', 'Concluídos', 'Faltas', 'Cancelamentos', 'Tempo Médio (min)', 'Taxa Conclusão (%)'];
       rows = porProfissional.map(p => [p.nome, p.pacientesAtendidos.toString(), p.total.toString(), p.concluidos.toString(), p.faltas.toString(), p.cancelados.toString(), p.tempoMedio.toString(), p.taxaConclusao.toString()]);
@@ -1112,6 +1241,7 @@ ${dataRows}
     const isEmpty =
       (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
       type === 'produtividade' ? porProfissional.length === 0 :
+      type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
       type === 'pacientes' ? pacientesReport.length === 0 :
       type === 'fila' ? filaReport.items.length === 0 : false;
@@ -1123,7 +1253,7 @@ ${dataRows}
     const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
-      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
@@ -1182,6 +1312,9 @@ ${dataRows}
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
+      } else if (type === 'municipios') {
+        addTable('Relatório por Município', ['Município', 'Pacientes', 'Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Comparecim.', 'Taxa Falta'], cap(municipioReport).map(m => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.pendentes, m.faltas, m.cancelados, m.remarcados, m.retornos, `${m.taxaComparecimento}%`, `${m.taxaFalta}%`]));
+
       } else if (type === 'faltas') {
         addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
       } else if (type === 'pacientes') {
@@ -1210,6 +1343,7 @@ ${dataRows}
       const isEmpty =
         (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
         type === 'produtividade' ? porProfissional.length === 0 :
+        type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
         type === 'pacientes' ? pacientesReport.length === 0 :
         type === 'fila' ? filaReport.items.length === 0 : false;
@@ -1266,6 +1400,22 @@ ${dataRows}
       body = `${summaryBlock}
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelamentos</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}</tbody></table>`;
+    } else if (type === 'municipios') {
+      const muniRows = cap(municipioReport).map(m =>
+        `<tr><td>${m.municipio}</td><td>${m.pacientesCount}</td><td>${m.atendimentos}</td><td>${m.concluidos}</td><td>${m.pendentes}</td><td>${m.faltas}</td><td>${m.cancelados}</td><td>${m.remarcados}</td><td>${m.retornos}</td><td>${m.taxaComparecimento}%</td><td>${m.taxaFalta}%</td></tr>`
+      ).join('');
+      body = `${summaryBlock}
+        <h2>Relatório por Município</h2>
+        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+
+    } else if (type === 'municipios') {
+      const muniRows = cap(municipioReport).map(m =>
+        `<tr><td>${m.municipio}</td><td>${m.pacientesCount}</td><td>${m.atendimentos}</td><td>${m.concluidos}</td><td>${m.pendentes}</td><td>${m.faltas}</td><td>${m.cancelados}</td><td>${m.remarcados}</td><td>${m.retornos}</td><td>${m.taxaComparecimento}%</td><td>${m.taxaFalta}%</td></tr>`
+      ).join('');
+      body = `${summaryBlock}
+        <h2>Relatório por Município</h2>
+        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+
     } else if (type === 'faltas') {
       const rows = cap(faltasReport).map(f =>
         `<tr><td>${f.nome}</td><td>${f.email}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.unidade}</td><td>${f.total}</td><td>${f.datas.join(', ')}</td></tr>`
@@ -1592,6 +1742,7 @@ ${dataRows}
             { value: 'geral', label: 'Geral' },
             { value: 'produtividade', label: 'Produtividade' },
             { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'municipios', label: 'Municípios' },
             { value: 'faltas', label: 'Faltas' },
             { value: 'pacientes', label: 'Pacientes' },
             { value: 'fila', label: 'Fila de Espera' },
@@ -2444,6 +2595,140 @@ th{background:#f1f5f9;font-weight:600;}
             </Card>
           )}
         </TabsContent>
+
+        {/* === MUNICÍPIOS === */}
+        <TabsContent value="municipios" className="space-y-5 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-[#1B3A5C]">{municipioStats.totalMunicipios}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total de Municípios</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-lg font-bold text-[#2D7A4F] truncate" title={municipioStats.muniComMaisPacientes?.municipio}>
+                  {municipioStats.muniComMaisPacientes?.municipio || '-'}
+                </p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais Pacientes</p>
+                <p className="text-xs font-semibold">{municipioStats.muniComMaisPacientes?.pacientesCount || 0} pacientes</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-lg font-bold text-[#1B3A5C] truncate" title={municipioStats.muniComMaisAtendimentos?.municipio}>
+                  {municipioStats.muniComMaisAtendimentos?.municipio || '-'}
+                </p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Mais Atendimentos</p>
+                <p className="text-xs font-semibold">{municipioStats.muniComMaisAtendimentos?.atendimentos || 0} atendimentos</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-[#2D7A4F]">{municipioStats.totalComNaturalidade}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Com Naturalidade</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-card border-0 border-l-4 border-l-[#B83232]">
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-[#B83232]">{municipioStats.totalSemNaturalidade}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Sem Naturalidade</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 Municípios (Pacientes)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={municipioReport.slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EEF2F7" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="municipio" type="category" width={75} tick={{ fontSize: 10, fill: '#6B7280' }} />
+                    <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="pacientesCount" name="Pacientes" fill="#2E8B8B" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-card border-0">
+              <CardContent className="p-5">
+                <h3 className="font-semibold font-display text-[#1B3A5C] mb-4">Top 10 Municípios (Atendimentos)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={[...municipioReport].sort((a, b) => b.atendimentos - a.atendimentos).slice(0, 10)} layout="vertical" margin={{ left: 80 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#EEF2F7" />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="municipio" type="category" width={75} tick={{ fontSize: 10, fill: '#6B7280' }} />
+                    <Tooltip cursor={{ fill: '#F8FAFC' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="atendimentos" name="Atendimentos" fill="#1B3A5C" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-card border-0">
+            <CardContent className="p-0">
+              <div className="p-5 flex items-center justify-between border-b">
+                <h3 className="font-semibold font-display text-[#1B3A5C]">Relatório por Município</h3>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => exportCSV('municipios')}><Download className="w-4 h-4 mr-1" />CSV</Button>
+                  <Button variant="outline" size="sm" onClick={() => exportExcel('municipios')}><Download className="w-4 h-4 mr-1" />Excel</Button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left py-3 px-4 text-muted-foreground font-medium">Município</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pacientes</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Atendimentos</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Concluídos</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Pendentes</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Faltas</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Cancelados</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Remarcados</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Retornos</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Comparecimento</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium">Taxa Falta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {municipioReport.map((m, idx) => (
+                      <tr key={idx} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4 font-medium text-foreground">{m.municipio}</td>
+                        <td className="text-center py-3 px-2 font-semibold text-[#1B3A5C]">{m.pacientesCount}</td>
+                        <td className="text-center py-3 px-2 text-[#1B3A5C]">{m.atendimentos}</td>
+                        <td className="text-center py-3 px-2 text-[#2D7A4F]">{m.concluidos}</td>
+                        <td className="text-center py-3 px-2 text-[#C17B1A]">{m.pendentes}</td>
+                        <td className="text-center py-3 px-2 text-[#B83232] font-medium">{m.faltas}</td>
+                        <td className="text-center py-3 px-2 text-muted-foreground">{m.cancelados}</td>
+                        <td className="text-center py-3 px-2 text-[#C17B1A]">{m.remarcados}</td>
+                        <td className="text-center py-3 px-2 font-medium">{m.retornos}</td>
+                        <td className="text-center py-3 px-2">
+                          <Badge variant="outline" className="font-mono text-[10px] bg-[#EEF7F2] text-[#2D7A4F] border-[#2D7A4F]/20">
+                            {m.taxaComparecimento}%
+                          </Badge>
+                        </td>
+                        <td className="text-center py-3 px-2">
+                          <Badge variant="outline" className="font-mono text-[10px] bg-[#FDEAEA] text-[#B83232] border-[#B83232]/20">
+                            {m.taxaFalta}%
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                    {municipioReport.length === 0 && (
+                      <tr><td colSpan={11} className="text-center py-12 text-muted-foreground">Nenhum dado encontrado</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
 
         {/* === TRATAMENTOS === */}
         <TabsContent value="tratamentos" className="space-y-5 mt-4">
