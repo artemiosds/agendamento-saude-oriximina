@@ -2062,7 +2062,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, filtered, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
 
 
   return (
