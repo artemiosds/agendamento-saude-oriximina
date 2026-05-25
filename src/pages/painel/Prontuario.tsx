@@ -180,6 +180,7 @@ interface TriagemData {
   confirmado_em?: string;
   tecnico_nome?: string;
   tecnico_coren?: string;
+  custom_data?: any;
 }
 
 const retornoOptions = [
