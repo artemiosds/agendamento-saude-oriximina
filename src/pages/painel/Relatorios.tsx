@@ -989,39 +989,39 @@ const Relatorios: React.FC = () => {
 
   // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
-    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
-    const novos = filtered.length - retornos;
+    const retornos = consolidatedData.filter(d => d.tipo === 'Retorno').length;
+    const novos = consolidatedData.length - retornos;
     return [
       { name: 'Novos', value: novos },
       { name: 'Retorno', value: retornos },
     ].filter(d => d.value > 0);
-  }, [filtered]);
+  }, [consolidatedData]);
 
   // === FALTAS POR UNIDADE (pie) ===
   const faltasPorUnidade = useMemo(() => {
     const map: Record<string, { name: string; value: number }> = {};
-    filtered.filter(a => a.status === 'falta').forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
+    consolidatedData.filter(d => d.status === 'falta').forEach(d => {
+      const un = unidades.find(u => u.id === d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { name, value: 0 };
       map[name].value++;
     });
     return Object.values(map).sort((a, b) => b.value - a.value);
-  }, [filtered, unidades]);
+  }, [consolidatedData, unidades]);
 
   // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
   const evolucaoMensal = useMemo(() => {
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const map: Record<string, number> = {};
-    filtered.filter(a => a.status === 'concluido').forEach(a => {
-      const key = a.data.substring(0, 7);
+    consolidatedData.filter(d => d.status === 'concluido' || d.hasProntuario).forEach(d => {
+      const key = d.data.substring(0, 7);
       map[key] = (map[key] || 0) + 1;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([key, total]) => {
       const [, m] = key.split('-');
       return { mes: meses[parseInt(m) - 1] || key, total };
     });
-  }, [filtered]);
+  }, [consolidatedData]);
 
   // === RANKING PRODUTIVIDADE (barras horizontais) ===
   const rankingProdutividade = useMemo(() => {
