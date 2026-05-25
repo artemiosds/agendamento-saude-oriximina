@@ -162,8 +162,20 @@ const Relatorios: React.FC = () => {
           let query = (supabase.from(table as any) as any).select('*').range(from, from + PAGE_SIZE - 1);
           
           if (dateField) {
-            if (dateFrom) query = query.gte(dateField, dateFrom);
-            if (dateTo) query = query.lte(dateField, dateTo);
+            if (dateFrom) {
+              // Se for TIMESTAMPTZ, garante que comece no início do dia
+              const fromVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
+                ? `${dateFrom}T00:00:00` 
+                : dateFrom;
+              query = query.gte(dateField, fromVal);
+            }
+            if (dateTo) {
+              // Se for TIMESTAMPTZ, garante que termine no final do dia
+              const toVal = dateField.includes('em') || dateField.includes('at') || dateField === 'criado_em' 
+                ? `${dateTo}T23:59:59` 
+                : dateTo;
+              query = query.lte(dateField, toVal);
+            }
           }
 
           if (user?.unidadeId && user?.usuario !== 'admin.sms') {
@@ -178,10 +190,20 @@ const Relatorios: React.FC = () => {
           } else if (table === 'prontuarios') {
             if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
+          } else if (['triage_records', 'nursing_evaluations', 'multiprofessional_evaluations', 'pts'].includes(table)) {
+            // These tables might have unidade_id or profissional_id
+            // We should apply unit filter if applicable
+            if (filterUnit !== 'all') {
+              // Note: check if field exists, but most have it
+              query = query.eq('unidade_id', filterUnit);
+            }
           }
 
           const { data, error } = await query;
-          if (error) throw error;
+          if (error) {
+            console.error(`Error fetching ${table}:`, error);
+            break;
+          };
           if (!data || data.length === 0) break;
           
           allData = allData.concat(data);
@@ -205,37 +227,37 @@ const Relatorios: React.FC = () => {
       ] = await Promise.all([
         fetchAllPages('agendamentos', 'data'),
         fetchAllPages('prontuarios', 'data_atendimento'),
-        supabase.from('fila_espera').select('*').limit(2000),
-        supabase.from('triage_records' as any).select('*'),
-        supabase.from('treatment_cycles' as any).select('*'),
-        supabase.from('treatment_sessions' as any).select('*'),
-        supabase.from('nursing_evaluations' as any).select('*'),
-        supabase.from('multiprofessional_evaluations' as any).select('*'),
-        supabase.from('pts' as any).select('*'),
-        supabase.from('patient_procedures' as any).select('*'),
+        fetchAllPages('fila_espera', 'criado_em'),
+        fetchAllPages('triage_records', 'criado_em'),
+        fetchAllPages('treatment_cycles', 'created_at'),
+        fetchAllPages('treatment_sessions', 'data'),
+        fetchAllPages('nursing_evaluations', 'created_at'),
+        fetchAllPages('multiprofessional_evaluations', 'created_at'),
+        fetchAllPages('pts', 'created_at'),
+        fetchAllPages('patient_procedures', 'data'),
       ]);
 
       setAgendamentosFull(ags || []);
       setProntuariosFull(prons || []);
-      setFilaDB(filaRes.data || []);
-      setTriagensDB(triageRes.data as any as TriagemDB[] || []);
-      setTreatmentCycles(cyclesRes.data || []);
-      setTreatmentSessions(sessRes.data || []);
-      setNursingEvals(nursingRes.data || []);
-      setMultiEvals(multiRes.data || []);
-      setPtsData(ptsRes.data || []);
-      setProcedimentosDB(proceduresRes.data || []);
+      setFilaDB(filaRes || []);
+      setTriagensDB(triageRes as any as TriagemDB[] || []);
+      setTreatmentCycles(cyclesRes || []);
+      setTreatmentSessions(sessRes || []);
+      setNursingEvals(nursingRes || []);
+      setMultiEvals(multiRes || []);
+      setPtsData(ptsRes || []);
+      setProcedimentosDB(proceduresRes || []);
 
       // Extract all CIDs to fetch official descriptions
       const allCids = new Set<string>();
       (prons || []).forEach(p => {
         if (p.cid_codigo) p.cid_codigo.split(/[,;\s]+/).filter(Boolean).forEach((c: string) => allCids.add(c.toUpperCase()));
       });
-      (ptsRes.data || []).forEach((p: any) => {
+      (ptsRes || []).forEach((p: any) => {
         if (p.cid_primario) allCids.add(p.cid_primario.toUpperCase());
         if (p.cid_secundario) allCids.add(p.cid_secundario.toUpperCase());
       });
-      (proceduresRes.data || []).forEach((p: any) => {
+      (proceduresRes || []).forEach((p: any) => {
         if (p.cid) allCids.add(p.cid.toUpperCase());
       });
       
@@ -306,42 +328,68 @@ const Relatorios: React.FC = () => {
     }));
   }, [agendamentosFull, normalizeStatus]);
 
-  const stats = useMemo(() => {
+  const consolidatedData = useMemo(() => {
     const ags = filtered;
     const prons = prontuariosFull;
-
-    const totalAgendamentos = ags.length;
     
-    // Status counters using normalized status
-    const concluidosAgs = ags.filter(a => a.status === 'concluido').length;
-    const pendentes = ags.filter(a => a.status === 'pendente').length;
-    const faltas = ags.filter(a => a.status === 'falta').length;
-    const cancelados = ags.filter(a => a.status === 'cancelado').length;
-    const remarcados = ags.filter(a => a.status === 'remarcado').length;
-    const retornos = ags.filter(a => a.status === 'retorno' || a.tipo === 'Retorno').length;
-    
-    // Medical records are also completions
-    const totalProntuarios = prons.length;
-    
-    // To avoid duplication, we count agendamentos concluidos OR if a record exists
-    // If agendamento_id exists in prontuario, it's the same thing.
+    // Identifica quais prontuários estão vinculados a agendamentos
     const agendamentoIdsComProntuario = new Set(prons.map(p => p.agendamento_id).filter(Boolean));
-    const agsConcluidosSemProntuario = ags.filter(a => a.status === 'concluido' && !agendamentoIdsComProntuario.has(a.id)).length;
     
-    const totalRealizados = totalProntuarios + agsConcluidosSemProntuario;
+    // Mapeia agendamentos e marca os que têm prontuário
+    const result = ags.map(a => ({
+      ...a,
+      hasProntuario: agendamentoIdsComProntuario.has(a.id)
+    }));
     
-    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((totalRealizados / (totalAgendamentos - cancelados || 1)) * 100) : 0;
-    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / (totalAgendamentos || 1)) * 100) : 0;
+    // Adiciona prontuários "órfãos" (sem agendamento ou cujo agendamento não está no filtro atual)
+    const agIdsNoFiltro = new Set(ags.map(a => a.id));
+    const pronsOrfaos = prons.filter(p => !p.agendamento_id || !agIdsNoFiltro.has(p.agendamento_id));
     
-    const primeiraConsulta = ags.filter(a => a.tipo === 'Consulta' || a.tipo === 'Primeira Consulta').length;
-    const online = ags.filter(a => a.origem === 'online').length;
-    const recepcao = ags.filter(a => a.origem === 'recepcao').length;
+    pronsOrfaos.forEach(p => {
+      result.push({
+        id: `pron-${p.id}`,
+        agendamento_id: p.agendamento_id,
+        pacienteId: p.paciente_id,
+        pacienteNome: p.paciente_nome,
+        profissionalId: p.profissional_id,
+        profissionalNome: p.profissional_nome,
+        unidadeId: p.unidade_id,
+        status: 'concluido',
+        data: p.data_atendimento,
+        tipo: 'Atendimento (S/ Agend.)',
+        hasProntuario: true,
+        origem: 'prontuario'
+      } as any);
+    });
+    
+    return result;
+  }, [filtered, prontuariosFull]);
 
-    console.log("[Relatórios] stats calculados", { totalAgendamentos, totalRealizados, totalProntuarios, concluidosAgs });
+  const stats = useMemo(() => {
+    const data = consolidatedData;
+    
+    const totalAgendamentos = data.length;
+    
+    // Consideramos "concluído" se o status for concluído OU se existir um prontuário vinculado
+    const concluidos = data.filter(d => d.status === 'concluido' || d.hasProntuario).length;
+    const pendentes = data.filter(d => d.status === 'pendente' && !d.hasProntuario).length;
+    const faltas = data.filter(d => d.status === 'falta').length;
+    const cancelados = data.filter(d => d.status === 'cancelado').length;
+    const remarcados = data.filter(d => d.status === 'remarcado').length;
+    const retornos = data.filter(d => d.status === 'retorno' || d.tipo === 'Retorno').length;
+    
+    const taxaComparecimento = totalAgendamentos > 0 ? Math.round((concluidos / (totalAgendamentos - cancelados || 1)) * 100) : 0;
+    const taxaFalta = totalAgendamentos > 0 ? Math.round((faltas / totalAgendamentos) * 100) : 0;
+    
+    const primeiraConsulta = data.filter(d => d.tipo === 'Consulta' || d.tipo === 'Primeira Consulta').length;
+    const online = data.filter(d => d.origem === 'online').length;
+    const recepcao = data.filter(d => d.origem === 'recepcao').length;
+
+    console.log("[Relatórios] stats calculados (consolidado)", { totalAgendamentos, concluidos, pendentes, faltas });
 
     return { 
       total: totalAgendamentos, 
-      concluidos: totalRealizados, 
+      concluidos, 
       pendentes, 
       faltas, 
       cancelados, 
@@ -352,9 +400,9 @@ const Relatorios: React.FC = () => {
       taxaFalta,
       online,
       recepcao,
-      emAtendimento: ags.filter(a => a.status === 'em_atendimento').length
+      emAtendimento: data.filter(d => d.status === 'em_atendimento').length
     };
-  }, [filtered, prontuariosFull]);
+  }, [consolidatedData]);
 
   const tempoStats = useMemo(() => {
     // We don't have atendimentosDB anymore, we use agendamentos with durations if exists or mock 0 for now
@@ -366,37 +414,39 @@ const Relatorios: React.FC = () => {
   const porProfissional = useMemo(() => {
     const map: Record<string, { id: string; nome: string; role: string; profissao: string; unidade: string; total: number; concluidos: number; faltas: number; cancelados: number; remarcados: number; tempoTotal: number; atendimentos: number; retornos: number; pacientesSet: Set<string> }> = {};
     
-    filtered.forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
-      const func = funcionarios.find(f => f.id === a.profissionalId);
-      const key = a.profissionalId || a.profissionalNome;
-      if (!map[key]) map[key] = { id: a.profissionalId, nome: a.profissionalNome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
-      const m = map[key];
-      m.total++;
-      m.pacientesSet.add(a.pacienteId);
-      if (a.status === 'concluido') m.concluidos++;
-      if (a.status === 'falta') m.faltas++;
-      if (a.status === 'cancelado') m.cancelados++;
-      if (a.status === 'remarcado') m.remarcados++;
-      if (a.status === 'retorno' || a.tipo === 'Retorno') m.retornos++;
-    });
-
-    // Add prontuarios to productivity
-    prontuariosFull.forEach(p => {
-      const key = p.profissional_id || p.profissional_nome;
+    consolidatedData.forEach(d => {
+      const func = funcionarios.find(f => f.id === d.profissionalId);
+      const un = unidades.find(u => u.id === d.unidadeId);
+      const key = d.profissionalId || d.profissionalNome || 'Não Identificado';
+      
       if (!map[key]) {
-        const func = funcionarios.find(f => f.id === p.profissional_id || f.nome === p.profissional_nome);
-        const un = unidades.find(u => u.id === p.unidade_id);
-        map[key] = { id: p.profissional_id, nome: p.profissional_nome, role: func?.role || 'profissional', profissao: func?.profissao || '', unidade: un?.nome || '', total: 0, concluidos: 0, faltas: 0, cancelados: 0, remarcados: 0, tempoTotal: 0, atendimentos: 0, retornos: 0, pacientesSet: new Set() };
+        map[key] = { 
+          id: d.profissionalId, 
+          nome: d.profissionalNome || 'Não Identificado', 
+          role: func?.role || 'profissional', 
+          profissao: func?.profissao || '', 
+          unidade: un?.nome || '', 
+          total: 0, 
+          concluidos: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          tempoTotal: 0, 
+          atendimentos: 0, 
+          retornos: 0, 
+          pacientesSet: new Set() 
+        };
       }
       
       const m = map[key];
-      // Only count as new completion if not already counted via agendamento
-      if (!p.agendamento_id || !filtered.some(a => a.id === p.agendamento_id && a.status === 'concluido')) {
-        m.concluidos++;
-        m.total = Math.max(m.total, m.concluidos); // Ensure total reflects production
-      }
-      m.pacientesSet.add(p.paciente_id);
+      m.total++;
+      m.pacientesSet.add(d.pacienteId);
+      
+      if (d.status === 'concluido' || d.hasProntuario) m.concluidos++;
+      if (d.status === 'falta') m.faltas++;
+      if (d.status === 'cancelado') m.cancelados++;
+      if (d.status === 'remarcado') m.remarcados++;
+      if (d.status === 'retorno' || d.tipo === 'Retorno') m.retornos++;
     });
 
     return Object.values(map)
@@ -426,7 +476,7 @@ const Relatorios: React.FC = () => {
         taxaConclusao: d.total > 0 ? Math.round((d.concluidos / d.total) * 100) : 0,
         taxaRetorno: d.total > 0 ? Math.round((d.retornos / d.total) * 100) : 0,
       })).sort((a, b) => b.total - a.total);
-  }, [filtered, prontuariosFull, unidades, funcionarios, filterRoleProd, filterCargoProd]);
+  }, [consolidatedData, unidades, funcionarios, filterRoleProd, filterCargoProd]);
 
   // === CATEGORY CARDS (by profissao) ===
   const normalizarProfissao = (str: string) => {
@@ -465,14 +515,14 @@ const Relatorios: React.FC = () => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
     const counts: Record<string, { total: number; concluidos: number }> = {};
 
-    filtered.forEach(a => {
-      const func = profMap.get(a.profissionalId);
+    consolidatedData.forEach(d => {
+      const func = profMap.get(d.profissionalId);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
         if (profissionalPertenceCategoria(profissao, cat)) {
           if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
           counts[cat.key].total++;
-          if (a.status === 'concluido') counts[cat.key].concluidos++;
+          if (d.status === 'concluido' || d.hasProntuario) counts[cat.key].concluidos++;
           break;
         }
       }
@@ -483,7 +533,7 @@ const Relatorios: React.FC = () => {
       total: counts[cat.key]?.total || 0,
       concluidos: counts[cat.key]?.concluidos || 0,
     }));
-  }, [filtered, funcionarios]);
+  }, [consolidatedData, funcionarios]);
 
   // === PROD TOTALS ===
   const prodTotals = useMemo(() => {
@@ -512,42 +562,42 @@ const Relatorios: React.FC = () => {
   // === BY UNIT ===
   const porUnidade = useMemo(() => {
     const map: Record<string, { nome: string; total: number; concluidos: number; faltas: number; cancelados: number }> = {};
-    filtered.forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
+    consolidatedData.forEach(d => {
+      const un = unidades.find(u => u.id === d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { nome: name, total: 0, concluidos: 0, faltas: 0, cancelados: 0 };
       map[name].total++;
-      if (a.status === 'concluido') map[name].concluidos++;
-      if (a.status === 'falta') map[name].faltas++;
-      if (a.status === 'cancelado') map[name].cancelados++;
+      if (d.status === 'concluido' || d.hasProntuario) map[name].concluidos++;
+      if (d.status === 'falta') map[name].faltas++;
+      if (d.status === 'cancelado') map[name].cancelados++;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [filtered, unidades]);
+  }, [consolidatedData, unidades]);
 
   // === FALTAS REPORT ===
   const faltasReport = useMemo(() => {
-    const faltaAgs = filtered.filter(a => a.status === 'falta');
+    const faltaAgs = consolidatedData.filter(d => d.status === 'falta');
     const porPaciente: Record<string, { nome: string; email: string; telefone: string; profissional: string; unidade: string; datas: string[]; total: number }> = {};
-    faltaAgs.forEach(a => {
-      const pac = pacientes.find(p => p.id === a.pacienteId);
-      const un = unidades.find(u => u.id === a.unidadeId);
-      const key = a.pacienteId || a.pacienteNome;
-      if (!porPaciente[key]) porPaciente[key] = { nome: a.pacienteNome, email: pac?.email || '', telefone: pac?.telefone || '', profissional: a.profissionalNome, unidade: un?.nome || '', datas: [], total: 0 };
-      porPaciente[key].datas.push(a.data);
+    faltaAgs.forEach(d => {
+      const pac = pacientes.find(p => p.id === d.pacienteId);
+      const un = unidades.find(u => u.id === d.unidadeId);
+      const key = d.pacienteId || d.pacienteNome;
+      if (!porPaciente[key]) porPaciente[key] = { nome: d.pacienteNome, email: pac?.email || '', telefone: pac?.telefone || '', profissional: d.profissionalNome, unidade: un?.nome || '', datas: [], total: 0 };
+      porPaciente[key].datas.push(d.data);
       porPaciente[key].total++;
     });
     return Object.values(porPaciente).sort((a, b) => b.total - a.total);
-  }, [filtered, pacientes, unidades]);
+  }, [consolidatedData, pacientes, unidades]);
 
   // === PATIENTS REPORT ===
   const pacientesReport = useMemo(() => {
-    const pacIds = new Set(filtered.map(a => a.pacienteId));
+    const pacIds = new Set(consolidatedData.map(d => d.pacienteId));
     return Array.from(pacIds).map(pid => {
       const pac = pacientes.find(p => p.id === pid);
-      const ags = filtered.filter(a => a.pacienteId === pid);
-      const concluidos = ags.filter(a => a.status === 'concluido').length;
-      const faltas = ags.filter(a => a.status === 'falta').length;
-      const retornos = ags.filter(a => a.tipo === 'Retorno').length;
+      const ags = consolidatedData.filter(d => d.pacienteId === pid);
+      const concluidos = ags.filter(d => d.status === 'concluido' || d.hasProntuario).length;
+      const faltas = ags.filter(d => d.status === 'falta').length;
+      const retornos = ags.filter(d => d.tipo === 'Retorno').length;
       return {
         id: pid,
         nome: pac?.nome || ags[0]?.pacienteNome || 'Desconhecido',
@@ -560,7 +610,7 @@ const Relatorios: React.FC = () => {
         ultimaConsulta: ags.sort((a, b) => b.data.localeCompare(a.data))[0]?.data || '',
       };
     }).sort((a, b) => b.totalAgendamentos - a.totalAgendamentos);
-  }, [filtered, pacientes]);
+  }, [consolidatedData, pacientes]);
 
   // === CLINICAL ANALYSIS REPORT ===
   const clinicalReport = useMemo(() => {
@@ -769,14 +819,14 @@ const Relatorios: React.FC = () => {
   // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     const map: Record<string, { data: string; agendamentos: number; concluidos: number; faltas: number }> = {};
-    filtered.forEach(a => {
-      if (!map[a.data]) map[a.data] = { data: a.data, agendamentos: 0, concluidos: 0, faltas: 0 };
-      map[a.data].agendamentos++;
-      if (a.status === 'concluido') map[a.data].concluidos++;
-      if (a.status === 'falta') map[a.data].faltas++;
+    consolidatedData.forEach(d => {
+      if (!map[d.data]) map[d.data] = { data: d.data, agendamentos: 0, concluidos: 0, faltas: 0 };
+      map[d.data].agendamentos++;
+      if (d.status === 'concluido' || d.hasProntuario) map[d.data].concluidos++;
+      if (d.status === 'falta') map[d.data].faltas++;
     });
     return Object.values(map).sort((a, b) => a.data.localeCompare(b.data)).slice(-30);
-  }, [filtered]);
+  }, [consolidatedData]);
 
   const statusData = useMemo(() => [
     { name: 'Concluídos', value: stats.concluidos },
@@ -789,32 +839,32 @@ const Relatorios: React.FC = () => {
   // === TIMELINE GROUPED (dia/semana/mês) ===
   const timelineGrouped = useMemo(() => {
     const map: Record<string, { label: string; concluidos: number; faltas: number; cancelados: number }> = {};
-    filtered.forEach(a => {
+    consolidatedData.forEach(d => {
       let key: string;
-      const d = new Date(a.data + 'T12:00:00');
+      const dateVal = new Date(d.data + 'T12:00:00');
       if (timelineGroup === 'dia') {
-        key = a.data;
+        key = d.data;
       } else if (timelineGroup === 'semana') {
-        const startOfWeek = new Date(d);
-        startOfWeek.setDate(d.getDate() - d.getDay());
+        const startOfWeek = new Date(dateVal);
+        startOfWeek.setDate(dateVal.getDate() - dateVal.getDay());
         key = startOfWeek.toISOString().split('T')[0];
       } else {
-        key = a.data.substring(0, 7); // YYYY-MM
+        key = d.data.substring(0, 7); // YYYY-MM
       }
       if (!map[key]) {
         const label = timelineGroup === 'mes'
-          ? d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+          ? dateVal.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
           : timelineGroup === 'semana'
           ? `Sem ${key.substring(5)}`
           : key.substring(5);
         map[key] = { label, concluidos: 0, faltas: 0, cancelados: 0 };
       }
-      if (a.status === 'concluido') map[key].concluidos++;
-      if (a.status === 'falta') map[key].faltas++;
-      if (a.status === 'cancelado') map[key].cancelados++;
+      if (d.status === 'concluido' || d.hasProntuario) map[key].concluidos++;
+      if (d.status === 'falta') map[key].faltas++;
+      if (d.status === 'cancelado') map[key].cancelados++;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-30);
-  }, [filtered, timelineGroup]);
+  }, [consolidatedData, timelineGroup]);
 
   // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
@@ -823,8 +873,8 @@ const Relatorios: React.FC = () => {
       const label = `${String(h).padStart(2, '0')}:00`;
       map[label] = 0;
     }
-    filtered.forEach(a => {
-      const hourKey = (a.hora || '').substring(0, 2);
+    consolidatedData.forEach(d => {
+      const hourKey = (d.hora || '').substring(0, 2);
       const h = parseInt(hourKey);
       if (h >= 7 && h <= 18) {
         const label = `${String(h).padStart(2, '0')}:00`;
@@ -832,7 +882,7 @@ const Relatorios: React.FC = () => {
       }
     });
     return Object.entries(map).map(([hora, total]) => ({ hora, total }));
-  }, [filtered]);
+  }, [consolidatedData]);
 
 
   const municipioReport = useMemo(() => {
@@ -876,9 +926,9 @@ const Relatorios: React.FC = () => {
       muniMap[muni].pacientesIds.add(p.id);
     });
 
-    // Add attendance data based on filtered agendamentos
-    filtered.forEach(a => {
-      const pac = pacMap.get(a.pacienteId);
+    // Add attendance data based on consolidated data
+    consolidatedData.forEach(d => {
+      const pac = pacMap.get(d.pacienteId);
       const muni = getMuniKey((pac as any)?.naturalidade);
       
       if (!muniMap[muni]) {
@@ -897,21 +947,27 @@ const Relatorios: React.FC = () => {
       }
       
       muniMap[muni].atendimentos++;
-      if (a.status === 'concluido') muniMap[muni].concluidos++;
-      else if (a.status === 'pendente') muniMap[muni].pendentes++;
-      else if (a.status === 'falta') muniMap[muni].faltas++;
-      else if (a.status === 'cancelado') muniMap[muni].cancelados++;
-      else if (a.status === 'remarcado') muniMap[muni].remarcados++;
+      if (d.status === 'concluido' || d.hasProntuario) muniMap[muni].concluidos++;
+      else if (d.status === 'pendente') muniMap[muni].pendentes++;
+      else if (d.status === 'falta') muniMap[muni].faltas++;
+      else if (d.status === 'cancelado') muniMap[muni].cancelados++;
+      else if (d.status === 'remarcado') muniMap[muni].remarcados++;
       
-      if (a.status === 'retorno' || a.tipo === 'Retorno') muniMap[muni].retornos++;
+      if (d.status === 'retorno' || d.tipo === 'Retorno') muniMap[muni].retornos++;
     });
 
-    return Object.values(muniMap).map(m => ({
-      ...m,
-      taxaComparecimento: m.atendimentos > 0 ? Math.round((m.concluidos / (m.atendimentos - m.cancelados || 1)) * 100) : 0,
-      taxaFalta: m.atendimentos > 0 ? Math.round((m.faltas / (m.atendimentos || 1)) * 100) : 0
-    })).sort((a, b) => b.pacientesCount - a.pacientesCount);
-  }, [pacientes, filtered]);
+    return Object.values(muniMap).map(m => {
+      const totalAgendamentos = m.atendimentos;
+      const taxaComparecimento = totalAgendamentos > 0 ? Math.round((m.concluidos / (totalAgendamentos - m.cancelados || 1)) * 100) : 0;
+      const taxaFalta = totalAgendamentos > 0 ? Math.round((m.faltas / totalAgendamentos) * 100) : 0;
+      
+      return {
+        ...m,
+        taxaComparecimento,
+        taxaFalta
+      };
+    }).sort((a, b) => b.atendimentos - a.atendimentos);
+  }, [consolidatedData, pacientes]);
 
   const municipioStats = useMemo(() => {
     const list = municipioReport;
@@ -933,39 +989,39 @@ const Relatorios: React.FC = () => {
 
   // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
-    const retornos = filtered.filter(a => a.tipo === 'Retorno').length;
-    const novos = filtered.length - retornos;
+    const retornos = consolidatedData.filter(d => d.tipo === 'Retorno').length;
+    const novos = consolidatedData.length - retornos;
     return [
       { name: 'Novos', value: novos },
       { name: 'Retorno', value: retornos },
     ].filter(d => d.value > 0);
-  }, [filtered]);
+  }, [consolidatedData]);
 
   // === FALTAS POR UNIDADE (pie) ===
   const faltasPorUnidade = useMemo(() => {
     const map: Record<string, { name: string; value: number }> = {};
-    filtered.filter(a => a.status === 'falta').forEach(a => {
-      const un = unidades.find(u => u.id === a.unidadeId);
+    consolidatedData.filter(d => d.status === 'falta').forEach(d => {
+      const un = unidades.find(u => u.id === d.unidadeId);
       const name = un?.nome || 'Desconhecida';
       if (!map[name]) map[name] = { name, value: 0 };
       map[name].value++;
     });
     return Object.values(map).sort((a, b) => b.value - a.value);
-  }, [filtered, unidades]);
+  }, [consolidatedData, unidades]);
 
   // === EVOLUÇÃO MENSAL PRODUTIVIDADE ===
   const evolucaoMensal = useMemo(() => {
     const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const map: Record<string, number> = {};
-    filtered.filter(a => a.status === 'concluido').forEach(a => {
-      const key = a.data.substring(0, 7);
+    consolidatedData.filter(d => d.status === 'concluido' || d.hasProntuario).forEach(d => {
+      const key = d.data.substring(0, 7);
       map[key] = (map[key] || 0) + 1;
     });
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([key, total]) => {
       const [, m] = key.split('-');
       return { mes: meses[parseInt(m) - 1] || key, total };
     });
-  }, [filtered]);
+  }, [consolidatedData]);
 
   // === RANKING PRODUTIVIDADE (barras horizontais) ===
   const rankingProdutividade = useMemo(() => {
@@ -1187,9 +1243,9 @@ const Relatorios: React.FC = () => {
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
-      rows = filtered.map(a => {
-        const un = unidades.find(u => u.id === a.unidadeId);
-        return [a.data, a.hora, a.pacienteNome, a.profissionalNome, un?.nome || '', a.tipo, statusLabels[a.status] || a.status, a.origem];
+      rows = consolidatedData.map(d => {
+        const un = unidades.find(u => u.id === d.unidadeId);
+        return [d.data, d.hora || '-', d.pacienteNome, d.profissionalNome, un?.nome || '', d.tipo, statusLabels[d.status] || d.status, d.origem || ''];
       });
     } else if (type === 'municipios') {
       headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
@@ -1261,12 +1317,12 @@ ${dataRows}
     a.download = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filtered, porProfissional, faltasReport, pacientesReport, filaReport, unidades]);
+  }, [consolidatedData, porProfissional, faltasReport, pacientesReport, filaReport, unidades, municipioReport, clinicalReport]);
 
   // === DOWNLOAD PDF REAL ===
   const downloadPDF = useCallback(async (type: string) => {
     const isEmpty =
-      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+      (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
       type === 'produtividade' ? porProfissional.length === 0 :
       type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
@@ -1337,7 +1393,7 @@ ${dataRows}
       };
 
       if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(filtered).map(a => [a.data || '', a.hora || '', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
+        addTable('Agendamentos Detalhados', ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status'], cap(consolidatedData).map(a => [a.data || '', a.hora || '-', a.pacienteNome || '', a.profissionalNome || '', unidades.find(u => u.id === a.unidadeId)?.nome || '', a.tipo || '', statusLabels[a.status] || a.status || '']));
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
@@ -1374,7 +1430,7 @@ ${dataRows}
     try {
       // Empty-data guard per tab
       const isEmpty =
-        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
+        (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (consolidatedData.length === 0 && porProfissional.length === 0) :
         type === 'produtividade' ? porProfissional.length === 0 :
         type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
@@ -1414,9 +1470,9 @@ ${dataRows}
     };
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
-      const rows = cap(filtered).map(a => {
+      const rows = cap(consolidatedData).map(a => {
         const unName = unidades.find(u => u.id === a.unidadeId)?.nome || '';
-        return `<tr><td>${a.data}</td><td>${a.hora}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
+        return `<tr><td>${a.data}</td><td>${a.hora || '-'}</td><td>${a.pacienteNome}</td><td>${a.profissionalNome}</td><td>${unName}</td><td>${a.tipo}</td><td>${statusLabels[a.status] || a.status}</td><td>-</td><td>-</td><td>-</td></tr>`;
       }).join('');
       const prodRows = cap(porProfissional).map(p =>
         `<tr><td>${p.nome}</td><td>${p.unidade}</td><td>${p.pacientesAtendidos}</td><td>${p.total}</td><td>${p.concluidos}</td><td>${p.faltas}</td><td>${p.cancelados}</td><td>${p.tempoMedio ? p.tempoMedio + 'min' : '-'}</td><td>${p.taxaConclusao}%</td></tr>`
@@ -2006,7 +2062,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, filtered, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, consolidatedData, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
 
 
   return (
@@ -2853,7 +2909,7 @@ th{background:#f1f5f9;font-weight:600;}
           <Card className="shadow-card border-0">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({filtered.length})</h3>
+                <h3 className="font-semibold font-display text-foreground">Agendamentos Detalhados ({consolidatedData.length})</h3>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => exportCSV('agendamentos')}><Download className="w-3 h-3 mr-1" />CSV</Button>
                   <ActionButton variant="ghost" size="sm" loadingText="Gerando..." onClick={() => downloadPDF('geral')}><FileText className="w-3 h-3 mr-1" />PDF</ActionButton>
@@ -2877,28 +2933,28 @@ th{background:#f1f5f9;font-weight:600;}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.slice(0, 200).map(a => {
-                      const un = unidades.find(u => u.id === a.unidadeId);
+                    {consolidatedData.slice(0, 200).map(d => {
+                      const un = unidades.find(u => u.id === d.unidadeId);
                       return (
-                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2 px-2 text-foreground">{a.data}</td>
-                          <td className="py-2 px-2 text-foreground">{a.hora}</td>
-                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
-                          <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
+                        <tr key={d.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 px-2 text-foreground">{d.data}</td>
+                          <td className="py-2 px-2 text-foreground">{d.hora || '-'}</td>
+                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(d.pacienteId, d.pacienteNome)}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{d.profissionalNome}</td>
                           <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
-                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
-                          <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
+                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{d.tipo}</Badge></td>
+                          <td className="py-2 px-2"><Badge variant={d.status === 'concluido' || d.hasProntuario ? 'default' : d.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[d.status] || d.status}</Badge></td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{d.origem}</td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
                           <td className="py-2 px-2 text-center text-primary font-medium">-</td>
                         </tr>
                       );
                     })}
-                    {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
+                    {consolidatedData.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
                   </tbody>
                 </table>
-                {filtered.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {filtered.length} — exporte para ver todos</p>}
+                {consolidatedData.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {consolidatedData.length} — exporte para ver todos</p>}
               </div>
             </CardContent>
           </Card>
