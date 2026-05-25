@@ -1798,6 +1798,19 @@ ${dataRows}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
+          <ActionButton
+            variant="default"
+            size="sm"
+            className="bg-primary hover:bg-primary/90 shadow-sm"
+            onClick={() => exportCompleteReport('pdf')}
+            loadingText="Gerando..."
+          >
+            <BookOpen className="w-4 h-4 mr-2" />
+            Relatório Completo ABNT
+          </ActionButton>
+
+          <div className="h-8 w-px bg-border mx-1 hidden sm:block" />
+
           <span className="text-xs flex items-center gap-1 mr-2" style={{ color: '#6B7280' }}>
             <RefreshCw className="w-3 h-3" /> Atualizado {lastUpdatedLabel}
           </span>
@@ -1812,7 +1825,7 @@ ${dataRows}
           </ActionButton>
           <Button variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportExcel(activeTab === 'geral' ? 'agendamentos' : activeTab)}>
             <Download className="w-4 h-4 mr-1" />Excel
-          </Button>
+          </ActionButton>
           <ActionButton variant="outline" size="sm" className="hover:bg-accent/50" onClick={() => exportPDF(activeTab)} loadingText="Preparando impressão...">
             <Printer className="w-4 h-4 mr-1" />Imprimir
           </ActionButton>
