@@ -1914,8 +1914,47 @@ ${dataRows}
             </table>
           `, municipioReport.length > 0)}
 
-          ${renderSection("19. Considerações Finais", `
-            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período. Observa-se um volume significativo de atendimentos ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
+          ${renderSection("19. Mapa de Atendimento", `
+            <p>Resumo do mapa de atendimentos concluídos para o período.</p>
+            <div class="summary">
+              <div class="stat"><strong>${mapaData.length}</strong><small>Atendimentos Mapeados</small></div>
+            </div>
+            ${mapaData.length > 0 ? `
+              <table>
+                <thead>
+                  <tr><th>Nº</th><th>Paciente</th><th>Profissional</th><th>Procedimento</th></tr>
+                </thead>
+                <tbody>
+                  ${mapaData.slice(0, 15).map(m => `
+                    <tr><td>${m.num}</td><td>${m.paciente_nome}</td><td>${m.profissional_nome}</td><td>${m.procedimento_sigtap}</td></tr>
+                  `).join('')}
+                </tbody>
+              </table>
+              <p><small>* Exibindo os 15 primeiros registros. Para o mapa completo, utilize a exportação específica na aba Mapa.</small></p>
+            ` : ''}
+          `, mapaData.length > 0)}
+
+          ${renderSection("20. Relatório Detalhado de Agendamentos", `
+            <p>Relação dos agendamentos registrados no período (exibindo os 30 mais recentes).</p>
+            <table>
+              <thead>
+                <tr><th>Data</th><th>Hora</th><th>Paciente</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                ${filtered.slice(0, 30).map(a => `
+                  <tr>
+                    <td>${formatDateBR(a.data)}</td>
+                    <td>${a.hora}</td>
+                    <td>${a.pacienteNome}</td>
+                    <td>${statusLabels[a.status] || a.status}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `, filtered.length > 0)}
+
+          ${renderSection("21. Considerações Finais", `
+            <p>O presente relatório consolida as atividades assistenciais e administrativas realizadas no período. Observa-se um volume operacional ${stats.concluidos > 500 ? 'elevado' : 'estável'}, com destaque para a atuação da equipe multiprofissional. Recomenda-se a análise contínua dos indicadores de absenteísmo e o fortalecimento das estratégias de acolhimento e triagem para otimizar o fluxo de atendimento.</p>
           `)}
 
           <div style="margin-top: 60px;">
@@ -1949,7 +1988,7 @@ ${dataRows}
               new Paragraph({ text: "3. Resumo Executivo", heading: HeadingLevel.HEADING_1 }),
               new Paragraph({ text: analiseExecutiva, alignment: AlignmentType.JUSTIFIED }),
               new Paragraph({ text: "4. Conclusão", heading: HeadingLevel.HEADING_1 }),
-              new Paragraph({ text: "Este é um resumo estruturado. Para o relatório institucional completo com todas as 19 seções, tabelas e formatação ABNT, utilize a exportação via PDF/Imprimir.", alignment: AlignmentType.JUSTIFIED }),
+              new Paragraph({ text: "Este é um resumo estruturado. Para o relatório institucional completo com todas as 21 seções, tabelas e formatação ABNT, utilize a exportação via PDF/Imprimir.", alignment: AlignmentType.JUSTIFIED }),
               new Paragraph({ text: "", spacing: { after: 600 } }),
               new Paragraph({ text: "_______________________________________", alignment: AlignmentType.CENTER }),
               new Paragraph({ text: user?.nome || "Responsável", alignment: AlignmentType.CENTER }),
@@ -1967,7 +2006,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
+  }, [stats, clinicalReport, categoriaCards, timelineData, peakHoursData, novosVsRetorno, porProfissional, procedimentoStats, faltasReport, filaReport, triagemReport, nursingReport, multiReport, ptsReport, treatmentStats, municipioReport, mapaData, filtered, user, filterUnit, filterProf, dateFrom, dateTo, unidades, profissionais]);
 
 
   return (
