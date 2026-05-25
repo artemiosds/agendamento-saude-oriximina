@@ -651,7 +651,22 @@ const Relatorios: React.FC = () => {
       });
     });
 
-    const patientsList = Object.values(patientStats);
+    let patientsList = Object.values(patientStats);
+
+    if (clinicalSearch) {
+      const term = clinicalSearch.toUpperCase().trim();
+      const normTerm = term.replace('.', '');
+      
+      patientsList = patientsList.filter(ps => {
+        const matchesName = ps.nome.toUpperCase().includes(term);
+        const matchesCid = Array.from(ps.cids).some(c => {
+          const normC = c.replace('.', '');
+          return normC.startsWith(normTerm) || normTerm.startsWith(normC);
+        });
+        return matchesName || matchesCid;
+      });
+    }
+
 
     const byCategory: Record<string, {
       name: string;
