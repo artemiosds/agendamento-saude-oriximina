@@ -799,6 +799,105 @@ const Relatorios: React.FC = () => {
 
   // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
+// ... keep existing code
+    return Array.from({ length: 11 }, (_, i) => ({ hora: `${i + 7}:00`, total: counts[i + 7] || 0 }));
+  }, [filtered]);
+
+  const municipioReport = useMemo(() => {
+    const pacMap = new Map(pacientes.map(p => [p.id, p]));
+    const muniMap: Record<string, { 
+      municipio: string; 
+      pacientesCount: number; 
+      atendimentos: number;
+      concluidos: number;
+      pendentes: number;
+      faltas: number;
+      cancelados: number;
+      remarcados: number;
+      retornos: number;
+      pacientesIds: Set<string>;
+    }> = {};
+
+    const getMuniKey = (muni: string | null | undefined) => {
+      if (!muni || muni.trim() === '') return 'Não informado';
+      return muni.trim();
+    };
+
+    // Initialize with all patients to get patient counts per municipality
+    pacientes.forEach(p => {
+      const muni = getMuniKey(p.naturalidade);
+      if (!muniMap[muni]) {
+        muniMap[muni] = { 
+          municipio: muni, 
+          pacientesCount: 0, 
+          atendimentos: 0, 
+          concluidos: 0, 
+          pendentes: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          retornos: 0,
+          pacientesIds: new Set() 
+        };
+      }
+      muniMap[muni].pacientesCount++;
+      muniMap[muni].pacientesIds.add(p.id);
+    });
+
+    // Add attendance data based on filtered agendamentos
+    filtered.forEach(a => {
+      const pac = pacMap.get(a.pacienteId);
+      const muni = getMuniKey(pac?.naturalidade);
+      
+      if (!muniMap[muni]) {
+        muniMap[muni] = { 
+          municipio: muni, 
+          pacientesCount: 0, 
+          atendimentos: 0, 
+          concluidos: 0, 
+          pendentes: 0, 
+          faltas: 0, 
+          cancelados: 0, 
+          remarcados: 0, 
+          retornos: 0,
+          pacientesIds: new Set() 
+        };
+      }
+      
+      muniMap[muni].atendimentos++;
+      if (a.status === 'concluido') muniMap[muni].concluidos++;
+      else if (a.status === 'pendente') muniMap[muni].pendentes++;
+      else if (a.status === 'falta') muniMap[muni].faltas++;
+      else if (a.status === 'cancelado') muniMap[muni].cancelados++;
+      else if (a.status === 'remarcado') muniMap[muni].remarcados++;
+      
+      if (a.status === 'retorno' || a.tipo === 'Retorno') muniMap[muni].retornos++;
+    });
+
+    return Object.values(muniMap).map(m => ({
+      ...m,
+      taxaComparecimento: m.atendimentos > 0 ? Math.round((m.concluidos / (m.atendimentos - m.cancelados || 1)) * 100) : 0,
+      taxaFalta: m.atendimentos > 0 ? Math.round((m.faltas / (m.atendimentos || 1)) * 100) : 0
+    })).sort((a, b) => b.pacientesCount - a.pacientesCount);
+  }, [pacientes, filtered]);
+
+  const municipioStats = useMemo(() => {
+    const list = municipioReport;
+    const totalMunicipios = list.filter(m => m.municipio !== 'Não informado').length;
+    const muniComMaisPacientes = list.length > 0 ? list[0] : null;
+    const muniComMaisAtendimentos = [...list].sort((a, b) => b.atendimentos - a.atendimentos)[0];
+    const totalComNaturalidade = pacientes.filter(p => p.naturalidade && p.naturalidade.trim() !== '').length;
+    const totalSemNaturalidade = pacientes.length - totalComNaturalidade;
+
+    return {
+      totalMunicipios,
+      muniComMaisPacientes,
+      muniComMaisAtendimentos,
+      totalComNaturalidade,
+      totalSemNaturalidade
+    };
+  }, [municipioReport, pacientes]);
+
     const map: Record<string, number> = {};
     for (let h = 7; h <= 18; h++) {
       const label = `${String(h).padStart(2, '0')}:00`;
@@ -1010,6 +1109,23 @@ const Relatorios: React.FC = () => {
     const filename = `relatorio_${type}_${new Date().toISOString().split('T')[0]}.csv`;
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
+...
+    } else if (type === 'municipios') {
+      headers = ['Município', 'Total de Pacientes', 'Total de Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa de Comparecimento (%)', 'Taxa de Falta (%)'];
+      rows = municipioReport.map(m => [
+        m.municipio, 
+        m.pacientesCount.toString(), 
+        m.atendimentos.toString(), 
+        m.concluidos.toString(), 
+        m.pendentes.toString(), 
+        m.faltas.toString(), 
+        m.cancelados.toString(), 
+        m.remarcados.toString(), 
+        m.retornos.toString(), 
+        m.taxaComparecimento.toString(), 
+        m.taxaFalta.toString()
+      ]);
+
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Setor', 'Tipo', 'Status', 'Origem', 'Hora Início', 'Hora Fim', 'Duração (min)'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
@@ -1050,6 +1166,23 @@ const Relatorios: React.FC = () => {
     let rows: string[][] = [];
 
     if (type === 'agendamentos' || type === 'geral' || type === 'detalhado') {
+...
+    } else if (type === 'municipios') {
+      headers = ['Município', 'Total Pacientes', 'Total Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Taxa Comparecimento (%)', 'Taxa Falta (%)'];
+      rows = municipioReport.map(m => [
+        m.municipio, 
+        m.pacientesCount.toString(), 
+        m.atendimentos.toString(), 
+        m.concluidos.toString(), 
+        m.pendentes.toString(), 
+        m.faltas.toString(), 
+        m.cancelados.toString(), 
+        m.remarcados.toString(), 
+        m.retornos.toString(), 
+        m.taxaComparecimento.toString(), 
+        m.taxaFalta.toString()
+      ]);
+
       headers = ['Data', 'Hora', 'Paciente', 'Profissional', 'Unidade', 'Tipo', 'Status', 'Origem'];
       rows = filtered.map(a => {
         const un = unidades.find(u => u.id === a.unidadeId);
@@ -1112,6 +1245,7 @@ ${dataRows}
     const isEmpty =
       (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
       type === 'produtividade' ? porProfissional.length === 0 :
+      type === 'municipios' ? municipioReport.length === 0 :
       type === 'faltas' ? faltasReport.length === 0 :
       type === 'pacientes' ? pacientesReport.length === 0 :
       type === 'fila' ? filaReport.items.length === 0 : false;
@@ -1123,7 +1257,7 @@ ${dataRows}
     const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
-      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
@@ -1182,6 +1316,9 @@ ${dataRows}
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelados', 'Tempo Médio', 'Taxa'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`]));
       } else if (type === 'produtividade') {
         addTable('Produtividade por Profissional', ['Profissional', 'Unidade', 'Pacientes', 'Total', 'Concluídos', 'Faltas', 'Cancelamentos', 'Remarcados', 'Retornos', 'Tempo Médio', 'Taxa Conclusão', 'Taxa Retorno'], cap(porProfissional).map(p => [p.nome, p.unidade, p.pacientesAtendidos, p.total, p.concluidos, p.faltas, p.cancelados, p.remarcados, p.retornos, p.tempoMedio ? `${p.tempoMedio}min` : '-', `${p.taxaConclusao}%`, `${p.taxaRetorno}%`]));
+      } else if (type === 'municipios') {
+        addTable('Relatório por Município', ['Município', 'Pacientes', 'Atendimentos', 'Concluídos', 'Pendentes', 'Faltas', 'Cancelados', 'Remarcados', 'Retornos', 'Comparecim.', 'Taxa Falta'], cap(municipioReport).map(m => [m.municipio, m.pacientesCount, m.atendimentos, m.concluidos, m.pendentes, m.faltas, m.cancelados, m.remarcados, m.retornos, `${m.taxaComparecimento}%`, `${m.taxaFalta}%`]));
+
       } else if (type === 'faltas') {
         addTable('Relatório de Faltas', ['Paciente', 'E-mail', 'Telefone', 'Profissional', 'Unidade', 'Total', 'Datas'], cap(faltasReport).map(f => [f.nome, f.email, f.telefone, f.profissional, f.unidade, f.total, f.datas.join(', ')]));
       } else if (type === 'pacientes') {
@@ -1210,6 +1347,7 @@ ${dataRows}
       const isEmpty =
         (type === 'agendamentos' || type === 'geral' || type === 'detalhado') ? (filtered.length === 0 && porProfissional.length === 0) :
         type === 'produtividade' ? porProfissional.length === 0 :
+        type === 'municipios' ? municipioReport.length === 0 :
         type === 'faltas' ? faltasReport.length === 0 :
         type === 'pacientes' ? pacientesReport.length === 0 :
         type === 'fila' ? filaReport.items.length === 0 : false;
@@ -1266,6 +1404,14 @@ ${dataRows}
       body = `${summaryBlock}
         <h2>Produtividade por Profissional</h2>
         <table><thead><tr><th>Profissional</th><th>Unidade</th><th>Pacientes</th><th>Total</th><th>Concluídos</th><th>Faltas</th><th>Cancelamentos</th><th>Remarcados</th><th>Retornos</th><th>Tempo Médio</th><th>Taxa Conclusão</th><th>Taxa Retorno</th></tr></thead><tbody>${prodRows}</tbody></table>`;
+    } else if (type === 'municipios') {
+      const muniRows = cap(municipioReport).map(m =>
+        `<tr><td>${m.municipio}</td><td>${m.pacientesCount}</td><td>${m.atendimentos}</td><td>${m.concluidos}</td><td>${m.pendentes}</td><td>${m.faltas}</td><td>${m.cancelados}</td><td>${m.remarcados}</td><td>${m.retornos}</td><td>${m.taxaComparecimento}%</td><td>${m.taxaFalta}%</td></tr>`
+      ).join('');
+      body = `${summaryBlock}
+        <h2>Relatório por Município</h2>
+        <table><thead><tr><th>Município</th><th>Pacientes</th><th>Atendimentos</th><th>Concluídos</th><th>Pendentes</th><th>Faltas</th><th>Cancelados</th><th>Remarcados</th><th>Retornos</th><th>Comparecim.</th><th>Taxa Falta</th></tr></thead><tbody>${muniRows}</tbody></table>`;
+
     } else if (type === 'faltas') {
       const rows = cap(faltasReport).map(f =>
         `<tr><td>${f.nome}</td><td>${f.email}</td><td>${f.telefone}</td><td>${f.profissional}</td><td>${f.unidade}</td><td>${f.total}</td><td>${f.datas.join(', ')}</td></tr>`
@@ -1592,6 +1738,7 @@ ${dataRows}
             { value: 'geral', label: 'Geral' },
             { value: 'produtividade', label: 'Produtividade' },
             { value: 'procedimentos', label: 'Procedimentos' },
+            { value: 'municipios', label: 'Municípios' },
             { value: 'faltas', label: 'Faltas' },
             { value: 'pacientes', label: 'Pacientes' },
             { value: 'fila', label: 'Fila de Espera' },
