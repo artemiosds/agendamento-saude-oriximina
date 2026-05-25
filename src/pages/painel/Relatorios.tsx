@@ -1282,7 +1282,7 @@ ${dataRows}
     const loadingId = toast.loading('Gerando arquivo PDF...', { description: 'Montando o documento para download.' });
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
-      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera' };
+      const titleMap: Record<string, string> = { geral: 'Relatório Geral', agendamentos: 'Relatório de Agendamentos', detalhado: 'Relatório Detalhado', produtividade: 'Relatório de Produtividade', municipios: 'Relatório por Município', faltas: 'Relatório de Faltas', pacientes: 'Relatório de Pacientes', fila: 'Relatório de Fila de Espera', clinico: 'Relatório de Análise Clínica' };
       const title = titleMap[type] || 'Relatório';
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas';
