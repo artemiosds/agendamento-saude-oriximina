@@ -2933,28 +2933,28 @@ th{background:#f1f5f9;font-weight:600;}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.slice(0, 200).map(a => {
-                      const un = unidades.find(u => u.id === a.unidadeId);
+                    {consolidatedData.slice(0, 200).map(d => {
+                      const un = unidades.find(u => u.id === d.unidadeId);
                       return (
-                        <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2 px-2 text-foreground">{a.data}</td>
-                          <td className="py-2 px-2 text-foreground">{a.hora}</td>
-                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(a.pacienteId, a.pacienteNome)}</td>
-                          <td className="py-2 px-2 text-muted-foreground">{a.profissionalNome}</td>
+                        <tr key={d.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 px-2 text-foreground">{d.data}</td>
+                          <td className="py-2 px-2 text-foreground">{d.hora || '-'}</td>
+                          <td className="py-2 px-3 text-foreground font-medium">{resolvePaciente(d.pacienteId, d.pacienteNome)}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{d.profissionalNome}</td>
                           <td className="py-2 px-2 text-muted-foreground text-xs">{un?.nome || ''}</td>
-                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{a.tipo}</Badge></td>
-                          <td className="py-2 px-2"><Badge variant={a.status === 'concluido' ? 'default' : a.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[a.status] || a.status}</Badge></td>
-                          <td className="py-2 px-2 text-xs text-muted-foreground">{a.origem}</td>
+                          <td className="py-2 px-2"><Badge variant="outline" className="text-xs">{d.tipo}</Badge></td>
+                          <td className="py-2 px-2"><Badge variant={d.status === 'concluido' || d.hasProntuario ? 'default' : d.status === 'falta' ? 'destructive' : 'secondary'} className="text-xs">{statusLabels[d.status] || d.status}</Badge></td>
+                          <td className="py-2 px-2 text-xs text-muted-foreground">{d.origem}</td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
                           <td className="py-2 px-2 text-xs text-muted-foreground">-</td>
                           <td className="py-2 px-2 text-center text-primary font-medium">-</td>
                         </tr>
                       );
                     })}
-                    {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
+                    {consolidatedData.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground">Nenhum agendamento encontrado</td></tr>}
                   </tbody>
                 </table>
-                {filtered.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {filtered.length} — exporte para ver todos</p>}
+                {consolidatedData.length > 200 && <p className="text-xs text-muted-foreground text-center mt-2">Mostrando 200 de {consolidatedData.length} — exporte para ver todos</p>}
               </div>
             </CardContent>
           </Card>
