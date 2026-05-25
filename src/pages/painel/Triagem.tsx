@@ -74,6 +74,7 @@ interface TriagemForm {
   alergias: string[];
   medicamentos: string[];
   comorbidades: string[];
+  sintomas30Dias: string[];
   observacoes: string;
 }
 
@@ -92,8 +93,23 @@ const COMORBIDADES_COMUNS = [
   "Câncer",
   "Depressão",
   "Ansiedade",
+  "TEA",
+  "TDAH",
   "AVC prévio",
   "IAM prévio",
+];
+
+const SINTOMAS_ACOLHIMENTO = [
+  "alucinação", "delírios", "labilidade emocional", "embotamento afetivo", 
+  "pensamento e fala alterada", "aparência alterada", "tristeza", "medo", 
+  "ansiedade", "nervosismo", "falta de prazer", "perda de interesse", 
+  "insônia ou sono alterado", "culpa", "agressividade", "raiva", 
+  "pensamentos negativos", "autoagressão", "choro", "dificuldades em tomar decisões", 
+  "baixa autoestima", "alteração do apetite", "preocupação", "tremor", 
+  "falta de ar", "dor de cabeça", "tontura", "palpitação", 
+  "desconforto abdominal", "cansaço", "inquietação", "angústia", 
+  "irritabilidade", "memória alterada", "atenção e concentração alterada", 
+  "orientação alterada de tempo e espaço", "presença de pensamento de morte"
 ];
 
 const ESPECIALIDADE_LABELS: Record<string, string> = {
@@ -227,6 +243,7 @@ const Triagem: React.FC = () => {
     alergias: [],
     medicamentos: [],
     comorbidades: [],
+    sintomas30Dias: [],
     observacoes: "",
   });
   const [newAlergia, setNewAlergia] = useState("");
@@ -348,6 +365,7 @@ const Triagem: React.FC = () => {
         alergias: [],
         medicamentos: [],
         comorbidades: [],
+        sintomas30Dias: [],
         observacoes: "",
       });
       setCustomData({});
@@ -397,7 +415,7 @@ const Triagem: React.FC = () => {
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
         observacoes: form.observacoes || '',
-        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa },
+        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa, sintomas_30_dias: form.sintomas30Dias },
         iniciado_em: new Date().toISOString(),
       };
 
@@ -450,7 +468,7 @@ const Triagem: React.FC = () => {
         queixa: form.queixaPrincipal || null,
         classificacao_risco: form.classificacaoRisco || '',
         observacoes: form.observacoes || '',
-        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa },
+        custom_data: { ...customData, comorbidades: form.comorbidades, historico_queixa: form.historicoQueixa, sintomas_30_dias: form.sintomas30Dias },
         confirmado_em: new Date().toISOString(),
       };
 
@@ -714,6 +732,37 @@ const Triagem: React.FC = () => {
                 onChange={(e) => setForm((p) => ({ ...p, historicoQueixa: e.target.value }))}
                 placeholder="Detalhe a evolução dos sintomas: início, duração, fatores de melhora/piora, tratamentos prévios..."
               />
+            </div>
+            <div>
+              <Label className="text-base font-semibold">IV-Baseado nos últimos 30 dias responda sim ou não para os sintomas:</Label>
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {SINTOMAS_ACOLHIMENTO.map((s) => {
+                  const checked = form.sintomas30Dias.includes(s);
+                  return (
+                    <label
+                      key={s}
+                      className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-[11px] cursor-pointer transition-colors ${
+                        checked ? "border-primary bg-primary/5 text-primary" : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-primary"
+                        checked={checked}
+                        onChange={() =>
+                          setForm((p) => ({
+                            ...p,
+                            sintomas30Dias: checked
+                              ? p.sintomas30Dias.filter((x) => x !== s)
+                              : [...p.sintomas30Dias, s],
+                          }))
+                        }
+                      />
+                      <span className="leading-tight capitalize">{s}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <Label>Comorbidades</Label>
