@@ -515,14 +515,14 @@ const Relatorios: React.FC = () => {
     const profMap = new Map(funcionarios.map(f => [f.id, f]));
     const counts: Record<string, { total: number; concluidos: number }> = {};
 
-    filtered.forEach(a => {
-      const func = profMap.get(a.profissionalId);
+    consolidatedData.forEach(d => {
+      const func = profMap.get(d.profissionalId);
       const profissao = func?.profissao || '';
       for (const cat of CATEGORIAS) {
         if (profissionalPertenceCategoria(profissao, cat)) {
           if (!counts[cat.key]) counts[cat.key] = { total: 0, concluidos: 0 };
           counts[cat.key].total++;
-          if (a.status === 'concluido') counts[cat.key].concluidos++;
+          if (d.status === 'concluido' || d.hasProntuario) counts[cat.key].concluidos++;
           break;
         }
       }
@@ -533,7 +533,7 @@ const Relatorios: React.FC = () => {
       total: counts[cat.key]?.total || 0,
       concluidos: counts[cat.key]?.concluidos || 0,
     }));
-  }, [filtered, funcionarios]);
+  }, [consolidatedData, funcionarios]);
 
   // === PROD TOTALS ===
   const prodTotals = useMemo(() => {
