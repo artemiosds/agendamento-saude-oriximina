@@ -1166,7 +1166,11 @@ const Relatorios: React.FC = () => {
         const un = unidades.find(u => u.id === f.unidade_id);
         return [f.posicao.toString(), f.paciente_nome, un?.nome || '', f.setor, f.prioridade, f.status, f.hora_chegada, f.hora_chamada || ''];
       });
+    } else if (type === 'clinico') {
+      headers = ['Categoria Clínica', 'Pacientes Únicos', 'Total Atendimentos', 'Total Procedimentos'];
+      rows = clinicalReport.byCategory.map(c => [c.name, c.pacientes.toString(), c.atendimentos.toString(), c.procedimentos.toString()]);
     }
+
 
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
