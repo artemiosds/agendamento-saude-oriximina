@@ -799,9 +799,22 @@ const Relatorios: React.FC = () => {
 
   // === PEAK HOURS ===
   const peakHoursData = useMemo(() => {
-// ... keep existing code
-    return Array.from({ length: 11 }, (_, i) => ({ hora: `${i + 7}:00`, total: counts[i + 7] || 0 }));
+    const map: Record<string, number> = {};
+    for (let h = 7; h <= 18; h++) {
+      const label = `${String(h).padStart(2, '0')}:00`;
+      map[label] = 0;
+    }
+    filtered.forEach(a => {
+      const hourKey = (a.hora || '').substring(0, 2);
+      const h = parseInt(hourKey);
+      if (h >= 7 && h <= 18) {
+        const label = `${String(h).padStart(2, '0')}:00`;
+        map[label] = (map[label] || 0) + 1;
+      }
+    });
+    return Object.entries(map).map(([hora, total]) => ({ hora, total }));
   }, [filtered]);
+
 
   const municipioReport = useMemo(() => {
     const pacMap = new Map(pacientes.map(p => [p.id, p]));
@@ -898,21 +911,6 @@ const Relatorios: React.FC = () => {
     };
   }, [municipioReport, pacientes]);
 
-    const map: Record<string, number> = {};
-    for (let h = 7; h <= 18; h++) {
-      const label = `${String(h).padStart(2, '0')}:00`;
-      map[label] = 0;
-    }
-    filtered.forEach(a => {
-      const hourKey = (a.hora || '').substring(0, 2);
-      const h = parseInt(hourKey);
-      if (h >= 7 && h <= 18) {
-        const label = `${String(h).padStart(2, '0')}:00`;
-        map[label] = (map[label] || 0) + 1;
-      }
-    });
-    return Object.entries(map).map(([hora, total]) => ({ hora, total }));
-  }, [filtered]);
 
   // === NOVOS VS RETORNO ===
   const novosVsRetorno = useMemo(() => {
