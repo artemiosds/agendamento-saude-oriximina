@@ -35,6 +35,26 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
 
+const formatDateBR = (d: string | null | undefined): string => {
+  if (!d || d === '0001-01-01' || d.startsWith('0001') || d === 'undefined' || d === 'null') return 'Não informado';
+  try {
+    // Trata datas que podem vir com tempo (ISO ou formatadas)
+    const dateOnly = d.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length < 3) {
+      // Tenta padrão brasileiro se não for ISO
+      if (d.includes('/')) return d;
+      return d || 'Não informado';
+    }
+    const [y, m, day] = parts;
+    // Validação extra para ano 0001 ou outros valores residuais
+    if (y === '0001' || parseInt(y) < 1900) return 'Não informado';
+    return `${day}/${m}/${y}`;
+  } catch (e) {
+    return d || 'Não informado';
+  }
+};
+
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
   profissional_id: string; profissional_nome: string; unidade_id: string;
