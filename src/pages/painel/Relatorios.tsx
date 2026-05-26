@@ -89,10 +89,27 @@ const Relatorios: React.FC = () => {
   const [mapaDateFrom, setMapaDateFrom] = useState('');
   const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
-    num: number; paciente_nome: string; cns: string; telefone: string;
-    profissional_nome: string; profissional_id: string; especialidade: string; cid: string;
-    tipo: string; cpf: string; data_nascimento: string; endereco: string;
-    procedimento_sigtap: string; nome_procedimento: string; data_atendimento: string;
+    num: number;
+    paciente_nome: string;
+    data_atendimento: string;
+    data_nascimento: string;
+    cpf: string;
+    cns: string;
+    telefone: string;
+    tipo_logradouro: string;
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    municipio: string;
+    endereco_completo: string;
+    profissional_nome: string;
+    profissional_id: string;
+    especialidade: string;
+    procedimentos_realizados: string;
+    procedimento_sigtap: string;
+    cid: string;
+    observacoes: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -1603,7 +1620,8 @@ ${dataRows}
       const agendIds = agend.map(a => a.id);
       const { data: prons } = await supabase
         .from('prontuarios')
-        .select('id, agendamento_id, hipotese, outro_procedimento, procedimentos_texto')
+        .select('id, agendamento_id, hipotese, outro_procedimento, procedimentos_texto, queixa_principal')
+
         .in('agendamento_id', agendIds);
 
       const pronIds = prons?.map(p => p.id) || [];
@@ -1660,46 +1678,43 @@ ${dataRows}
         const pac = pacMap.get(a.paciente_id);
         const prof = profMap.get(a.profissional_id);
         
-        // Montar endereço completo conforme solicitado: "Tipo Logradouro + Logradouro, Nº Número, Complemento, Bairro, Município"
+        // Montar dados de endereço
         let enderecoComp = 'Não informado';
+        const tipo_logradouro = pac?.tipo_logradouro || '';
+        const logradouro = pac?.logradouro || '';
+        const numero = pac?.numero || '';
+        const complemento = pac?.complemento || '';
+        const bairro = pac?.bairro || '';
+        const municipio = pac?.municipio || '';
+
         if (pac) {
-          const hasMainInfo = pac.logradouro || pac.numero || pac.bairro;
+          const hasMainInfo = logradouro || numero || bairro;
           if (hasMainInfo) {
             const addrParts = [];
-            
-            // Tipo Logradouro + Logradouro
-            const logradouroFull = `${pac.tipo_logradouro || ''} ${pac.logradouro || ''}`.trim();
+            const logradouroFull = `${tipo_logradouro} ${logradouro}`.trim();
             if (logradouroFull) addrParts.push(logradouroFull);
-            
-            // Nº Número
-            if (pac.numero) addrParts.push(`Nº ${pac.numero}`);
-            
-            // Complemento
-            if (pac.complemento) addrParts.push(pac.complemento);
-            
-            // Bairro
-            if (pac.bairro) addrParts.push(pac.bairro);
-            
-            // Município
-            if (pac.municipio) addrParts.push(pac.municipio);
-            
+            if (numero) addrParts.push(`Nº ${numero}`);
+            if (complemento) addrParts.push(complemento);
+            if (bairro) addrParts.push(bairro);
+            if (municipio) addrParts.push(municipio);
             enderecoComp = addrParts.join(', ');
-          } else if (pac.municipio) {
-            enderecoComp = `Endereço incompleto (${pac.municipio})`;
+          } else if (municipio) {
+            enderecoComp = `Endereço incompleto (${municipio})`;
           } else if (pac.endereco) {
              enderecoComp = pac.endereco;
           }
         }
 
-
-        const procsList = new Set<string>();
+        const procsRealizadosList = new Set<string>();
+        const procsSigtapList = new Set<string>();
         const cidsList = new Set<string>();
+        const obsList = new Set<string>();
 
         groupAgend.forEach(ag => {
           // 1. SIGTAP do agendamento
           if (ag.procedimento_sigtap) {
-            const label = `${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`;
-            procsList.add(label);
+            procsSigtapList.add(`${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`);
+            if (ag.nome_procedimento) procsRealizadosList.add(ag.nome_procedimento);
           }
           if (ag.cid_concluido) {
             ag.cid_concluido.split(/[,;\s]+/).forEach((c: string) => {
@@ -1711,6 +1726,7 @@ ${dataRows}
           // 2. Dados do prontuário vinculado ao agendamento
           const relatedProns = pronsMap.get(ag.id) || [];
           relatedProns.forEach(pron => {
+            if (pron.queixa_principal) obsList.add(pron.queixa_principal);
             if (pron.hipotese) {
               pron.hipotese.split(/[,;\s]+/).forEach((c: string) => {
                 const cleaned = c.trim().toUpperCase();
@@ -1718,15 +1734,15 @@ ${dataRows}
               });
             }
             
-            // 3. Procedimentos detalhados do prontuário (Procedimentos Realizados)
+            // 3. Procedimentos detalhados do prontuário
             const pProcs = pronProcsGrouped.get(pron.id) || [];
             pProcs.forEach(pp => {
               const procInfo = proceduresMap.get(pp.procedimento_id);
               if (procInfo) {
-                const label = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
-                procsList.add(label);
+                const sigtapLabel = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
+                procsSigtapList.add(sigtapLabel);
+                if (procInfo.nome) procsRealizadosList.add(procInfo.nome);
               }
-
               
               if (Array.isArray(pp.cids_selecionados)) {
                 pp.cids_selecionados.forEach((c: string) => {
@@ -1736,28 +1752,38 @@ ${dataRows}
               }
             });
 
-            if (pron.outro_procedimento) procsList.add(pron.outro_procedimento);
+            if (pron.outro_procedimento) {
+              procsRealizadosList.add(pron.outro_procedimento);
+              procsSigtapList.add(pron.outro_procedimento);
+            }
           });
         });
 
         rows.push({
           num: counter++,
           paciente_nome: a.paciente_nome || '',
+          data_atendimento: a.data,
+          data_nascimento: pac?.data_nascimento || '',
+          cpf: pac?.cpf || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
+          tipo_logradouro,
+          logradouro,
+          numero,
+          complemento,
+          bairro,
+          municipio,
+          endereco_completo: enderecoComp,
           profissional_nome: a.profissional_nome || '',
           profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
+          procedimentos_realizados: Array.from(procsRealizadosList).filter(Boolean).sort().join('; ') || 'Não informado',
+          procedimento_sigtap: Array.from(procsSigtapList).filter(Boolean).sort().join('; ') || 'Não informado',
           cid: Array.from(cidsList).filter(Boolean).sort().join(', ') || 'Não informado',
-          tipo: a.tipo || '',
-          cpf: pac?.cpf || '',
-          data_nascimento: pac?.data_nascimento || '',
-          endereco: enderecoComp,
-          procedimento_sigtap: Array.from(procsList).filter(Boolean).sort().join('; ') || 'Não informado',
-          nome_procedimento: '',
-          data_atendimento: a.data
+          observacoes: Array.from(obsList).filter(Boolean).join('; ') || ''
         });
       });
+
 
       setMapaData(rows);
 
@@ -1789,8 +1815,28 @@ ${dataRows}
       const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
       const rows = mapaData.slice(0, ROW_LIMIT).map(r => {
-        const proc = r.procedimento_sigtap || '-';
-        return [String(r.num).padStart(2, '0'), r.paciente_nome || '', formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf), r.endereco || '-', fmtCNS(r.cns), r.telefone || '-', r.profissional_nome || '', r.especialidade || '-', proc, r.cid || '-'];
+        return [
+          String(r.num).padStart(2, '0'), 
+          r.paciente_nome || '', 
+          formatDateBR(r.data_atendimento), 
+          formatDateBR(r.data_nascimento), 
+          fmtCPF(r.cpf), 
+          r.cns || '-',
+          r.telefone || '-',
+          r.tipo_logradouro || '-',
+          r.logradouro || '-',
+          r.numero || '-',
+          r.complemento || '-',
+          r.bairro || '-',
+          r.municipio || '-',
+          r.endereco_completo || '-',
+          r.profissional_nome || '', 
+          r.especialidade || '-', 
+          r.procedimentos_realizados || '-',
+          r.procedimento_sigtap || '-', 
+          r.cid || '-',
+          r.observacoes || '-'
+        ];
       });
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1807,14 +1853,15 @@ ${dataRows}
 
       autoTable(doc, {
         startY: 36,
-        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID']],
+        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'CNS', 'Telefone', 'Tipo Logr', 'Logradouro', 'Nº', 'Compl', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procs Realizados', 'Proc. SIGTAP', 'CID', 'Obs']],
         body: rows,
         theme: 'grid',
-        styles: { fontSize: 6.2, cellPadding: 1.2, overflow: 'linebreak', valign: 'middle' },
+        styles: { fontSize: 4.5, cellPadding: 0.8, overflow: 'linebreak', valign: 'middle' },
         headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 6, right: 6 },
+        margin: { left: 4, right: 4 },
       });
+
 
       const finalY = ((doc as any).lastAutoTable?.finalY || 36) + 6;
       doc.setFontSize(8);
@@ -1835,13 +1882,30 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
     const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
-      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.num.toString(), 
+      r.paciente_nome, 
+      formatDateBR(r.data_atendimento), 
+      formatDateBR(r.data_nascimento), 
+      fmtCPF(r.cpf),
+      r.cns || '',
+      r.telefone || '',
+      r.tipo_logradouro || '',
+      r.logradouro || '',
+      r.numero || '',
+      r.complemento || '',
+      r.bairro || '',
+      r.municipio || '',
+      r.endereco_completo || '',
+      r.profissional_nome, 
+      r.especialidade,
+      r.procedimentos_realizados || '',
       r.procedimento_sigtap || '',
       r.cid,
+      r.observacoes || ''
     ]);
+
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -3728,25 +3792,45 @@ th{background:#f1f5f9;font-weight:600;}
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
-                      const proc = r.procedimento_sigtap || '-';
-                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_atendimento)}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}">
+                        <td style="text-align:center">${String(r.num).padStart(2, '0')}</td>
+                        <td>${r.paciente_nome}</td>
+                        <td>${formatDateBR(r.data_atendimento)}</td>
+                        <td>${formatDateBR(r.data_nascimento)}</td>
+                        <td>${formatCPF(r.cpf)}</td>
+                        <td>${r.cns || '-'}</td>
+                        <td>${r.telefone || '-'}</td>
+                        <td>${r.tipo_logradouro || '-'}</td>
+                        <td>${r.logradouro || '-'}</td>
+                        <td>${r.numero || '-'}</td>
+                        <td>${r.complemento || '-'}</td>
+                        <td>${r.bairro || '-'}</td>
+                        <td>${r.municipio || '-'}</td>
+                        <td>${r.endereco_completo || '-'}</td>
+                        <td>${r.profissional_nome}</td>
+                        <td>${r.especialidade || '-'}</td>
+                        <td>${r.procedimentos_realizados || '-'}</td>
+                        <td>${r.procedimento_sigtap || '-'}</td>
+                        <td>${r.cid || '-'}</td>
+                        <td>${r.observacoes || '-'}</td>
+                      </tr>`;
                     }).join('');
                     const logoUrl = logoSmsFallback;
                     const logoUrlRight = logoCerFallback;
                     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
-<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
-.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
-.header img{max-height:48px;max-width:90px;object-fit:contain;}
-.header h1{font-size:13px;font-weight:700;}
-.header .sub{font-size:10px;color:#555;margin-top:1px;}
-.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
-th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
+<style>@page{size:A4 landscape;margin:5mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:10px;color:#1e293b;font-size:8px;}
+.header{display:flex;align-items:center;gap:14px;padding:8px 12px;margin-bottom:8px;border-bottom:2px solid #0369a1;}
+.header img{max-height:40px;max-width:80px;object-fit:contain;}
+.header h1{font-size:11px;font-weight:700;}
+.header .sub{font-size:8px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:9px;margin-bottom:8px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+th,td{border:1px solid #ccc;padding:2px 3px;text-align:left;font-size:6px;}
 th{background:#f1f5f9;font-weight:600;}
-@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
-<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+@media print{body{padding:0;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Endereço Completo</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="20" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`;
                     printViaIframe(html);
                     toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
@@ -3755,6 +3839,7 @@ th{background:#f1f5f9;font-weight:600;}
                     toast.error('Não foi possível iniciar a impressão');
                   }
                 }}>
+
                   <Printer className="w-4 h-4 mr-1" />Imprimir
                 </ActionButton>
               </div>
@@ -3775,21 +3860,29 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-left w-24">Dt Atendimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
                         <th className="border border-border px-2 py-1.5 text-left">CNS</th>
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Tipo Logr.</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Logradouro</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Compl.</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Bairro</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Município</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Endereço Completo</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Procedimentos Realizados</th>
                         <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Obs</th>
                       </tr>
+
                     </thead>
                     <tbody>
                       {mapaData.map((r, i) => {
                         const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
                         const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
                         const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
                         return (
                           <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
                             <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
@@ -3803,25 +3896,35 @@ th{background:#f1f5f9;font-weight:600;}
                                 </div>
                               </div>
                             </td>
-                             <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
                             <td className="border border-border px-2 py-1">{formatDateBR(r.data_atendimento)}</td>
                             <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
                             <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
-                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.tipo_logradouro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.logradouro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.numero || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.complemento || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.bairro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.municipio || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.endereco_completo || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.procedimentos_realizados || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.procedimento_sigtap || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.observacoes || '-'}</td>
                           </tr>
                         );
                       })}
+
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={12} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={21} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
+
                     </tfoot>
                   </table>
                 </div>
