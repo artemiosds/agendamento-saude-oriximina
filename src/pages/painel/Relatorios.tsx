@@ -3756,11 +3756,11 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                   <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Profissional</Label>
