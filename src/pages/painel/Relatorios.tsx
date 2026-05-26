@@ -3831,9 +3831,7 @@ th{background:#f1f5f9;font-weight:600;}
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
 <table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Endereço Completo</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
 <tfoot><tr><td colspan="20" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
-                    printViaIframe(html);
-                    toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
-
+</body></html>`;
                     printViaIframe(html);
                     toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
                   } catch (err) {
@@ -3841,6 +3839,7 @@ th{background:#f1f5f9;font-weight:600;}
                     toast.error('Não foi possível iniciar a impressão');
                   }
                 }}>
+
                   <Printer className="w-4 h-4 mr-1" />Imprimir
                 </ActionButton>
               </div>
