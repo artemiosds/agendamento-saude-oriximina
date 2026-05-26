@@ -1744,7 +1744,7 @@ ${dataRows}
           data_atendimento: a.data
         });
       });
-      });
+
 
       setMapaData(rows);
       setMapaGenerated(true);
