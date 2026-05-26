@@ -1663,30 +1663,34 @@ ${dataRows}
         // Montar endereço completo conforme solicitado: "Tipo Logradouro + Logradouro, Nº Número, Complemento, Bairro, Município"
         let enderecoComp = 'Não informado';
         if (pac) {
-          const addrParts = [];
-          
-          // Tipo Logradouro + Logradouro
-          const logradouroFull = `${pac.tipo_logradouro || ''} ${pac.logradouro || ''}`.trim();
-          if (logradouroFull) addrParts.push(logradouroFull);
-          
-          // Nº Número
-          if (pac.numero) addrParts.push(`Nº ${pac.numero}`);
-          
-          // Complemento
-          if (pac.complemento) addrParts.push(pac.complemento);
-          
-          // Bairro
-          if (pac.bairro) addrParts.push(pac.bairro);
-          
-          // Município
-          if (pac.municipio) addrParts.push(pac.municipio);
-          
-          if (addrParts.length > 0) {
+          const hasMainInfo = pac.logradouro || pac.numero || pac.bairro;
+          if (hasMainInfo) {
+            const addrParts = [];
+            
+            // Tipo Logradouro + Logradouro
+            const logradouroFull = `${pac.tipo_logradouro || ''} ${pac.logradouro || ''}`.trim();
+            if (logradouroFull) addrParts.push(logradouroFull);
+            
+            // Nº Número
+            if (pac.numero) addrParts.push(`Nº ${pac.numero}`);
+            
+            // Complemento
+            if (pac.complemento) addrParts.push(pac.complemento);
+            
+            // Bairro
+            if (pac.bairro) addrParts.push(pac.bairro);
+            
+            // Município
+            if (pac.municipio) addrParts.push(pac.municipio);
+            
             enderecoComp = addrParts.join(', ');
+          } else if (pac.municipio) {
+            enderecoComp = `Endereço incompleto (${pac.municipio})`;
           } else if (pac.endereco) {
              enderecoComp = pac.endereco;
           }
         }
+
 
         const procsList = new Set<string>();
         const cidsList = new Set<string>();
