@@ -285,7 +285,7 @@ const Relatorios: React.FC = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, filterSetor]);
+  }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
 
   useEffect(() => {
     loadReportData();
