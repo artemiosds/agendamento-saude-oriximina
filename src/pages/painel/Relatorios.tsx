@@ -1678,46 +1678,43 @@ ${dataRows}
         const pac = pacMap.get(a.paciente_id);
         const prof = profMap.get(a.profissional_id);
         
-        // Montar endereço completo conforme solicitado: "Tipo Logradouro + Logradouro, Nº Número, Complemento, Bairro, Município"
+        // Montar dados de endereço
         let enderecoComp = 'Não informado';
+        const tipo_logradouro = pac?.tipo_logradouro || '';
+        const logradouro = pac?.logradouro || '';
+        const numero = pac?.numero || '';
+        const complemento = pac?.complemento || '';
+        const bairro = pac?.bairro || '';
+        const municipio = pac?.municipio || '';
+
         if (pac) {
-          const hasMainInfo = pac.logradouro || pac.numero || pac.bairro;
+          const hasMainInfo = logradouro || numero || bairro;
           if (hasMainInfo) {
             const addrParts = [];
-            
-            // Tipo Logradouro + Logradouro
-            const logradouroFull = `${pac.tipo_logradouro || ''} ${pac.logradouro || ''}`.trim();
+            const logradouroFull = `${tipo_logradouro} ${logradouro}`.trim();
             if (logradouroFull) addrParts.push(logradouroFull);
-            
-            // Nº Número
-            if (pac.numero) addrParts.push(`Nº ${pac.numero}`);
-            
-            // Complemento
-            if (pac.complemento) addrParts.push(pac.complemento);
-            
-            // Bairro
-            if (pac.bairro) addrParts.push(pac.bairro);
-            
-            // Município
-            if (pac.municipio) addrParts.push(pac.municipio);
-            
+            if (numero) addrParts.push(`Nº ${numero}`);
+            if (complemento) addrParts.push(complemento);
+            if (bairro) addrParts.push(bairro);
+            if (municipio) addrParts.push(municipio);
             enderecoComp = addrParts.join(', ');
-          } else if (pac.municipio) {
-            enderecoComp = `Endereço incompleto (${pac.municipio})`;
+          } else if (municipio) {
+            enderecoComp = `Endereço incompleto (${municipio})`;
           } else if (pac.endereco) {
              enderecoComp = pac.endereco;
           }
         }
 
-
-        const procsList = new Set<string>();
+        const procsRealizadosList = new Set<string>();
+        const procsSigtapList = new Set<string>();
         const cidsList = new Set<string>();
+        const obsList = new Set<string>();
 
         groupAgend.forEach(ag => {
           // 1. SIGTAP do agendamento
           if (ag.procedimento_sigtap) {
-            const label = `${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`;
-            procsList.add(label);
+            procsSigtapList.add(`${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`);
+            if (ag.nome_procedimento) procsRealizadosList.add(ag.nome_procedimento);
           }
           if (ag.cid_concluido) {
             ag.cid_concluido.split(/[,;\s]+/).forEach((c: string) => {
@@ -1729,6 +1726,7 @@ ${dataRows}
           // 2. Dados do prontuário vinculado ao agendamento
           const relatedProns = pronsMap.get(ag.id) || [];
           relatedProns.forEach(pron => {
+            if (pron.queixa_principal) obsList.add(pron.queixa_principal);
             if (pron.hipotese) {
               pron.hipotese.split(/[,;\s]+/).forEach((c: string) => {
                 const cleaned = c.trim().toUpperCase();
@@ -1736,15 +1734,15 @@ ${dataRows}
               });
             }
             
-            // 3. Procedimentos detalhados do prontuário (Procedimentos Realizados)
+            // 3. Procedimentos detalhados do prontuário
             const pProcs = pronProcsGrouped.get(pron.id) || [];
             pProcs.forEach(pp => {
               const procInfo = proceduresMap.get(pp.procedimento_id);
               if (procInfo) {
-                const label = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
-                procsList.add(label);
+                const sigtapLabel = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
+                procsSigtapList.add(sigtapLabel);
+                if (procInfo.nome) procsRealizadosList.add(procInfo.nome);
               }
-
               
               if (Array.isArray(pp.cids_selecionados)) {
                 pp.cids_selecionados.forEach((c: string) => {
@@ -1754,28 +1752,38 @@ ${dataRows}
               }
             });
 
-            if (pron.outro_procedimento) procsList.add(pron.outro_procedimento);
+            if (pron.outro_procedimento) {
+              procsRealizadosList.add(pron.outro_procedimento);
+              procsSigtapList.add(pron.outro_procedimento);
+            }
           });
         });
 
         rows.push({
           num: counter++,
           paciente_nome: a.paciente_nome || '',
+          data_atendimento: a.data,
+          data_nascimento: pac?.data_nascimento || '',
+          cpf: pac?.cpf || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
+          tipo_logradouro,
+          logradouro,
+          numero,
+          complemento,
+          bairro,
+          municipio,
+          endereco_completo: enderecoComp,
           profissional_nome: a.profissional_nome || '',
           profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
+          procedimentos_realizados: Array.from(procsRealizadosList).filter(Boolean).sort().join('; ') || 'Não informado',
+          procedimento_sigtap: Array.from(procsSigtapList).filter(Boolean).sort().join('; ') || 'Não informado',
           cid: Array.from(cidsList).filter(Boolean).sort().join(', ') || 'Não informado',
-          tipo: a.tipo || '',
-          cpf: pac?.cpf || '',
-          data_nascimento: pac?.data_nascimento || '',
-          endereco: enderecoComp,
-          procedimento_sigtap: Array.from(procsList).filter(Boolean).sort().join('; ') || 'Não informado',
-          nome_procedimento: '',
-          data_atendimento: a.data
+          observacoes: Array.from(obsList).filter(Boolean).join('; ') || ''
         });
       });
+
 
       setMapaData(rows);
 
