@@ -281,15 +281,10 @@ const Relatorios: React.FC = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo]);
+  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo, filterSetor]);
 
-  // Use a stable ref to avoid infinite loops if loadReportData changes
-  const hasLoadedRef = useRef(false);
   useEffect(() => {
-    if (!hasLoadedRef.current) {
-      loadReportData();
-      hasLoadedRef.current = true;
-    }
+    loadReportData();
   }, [loadReportData]);
 
   const handleRefresh = () => {
