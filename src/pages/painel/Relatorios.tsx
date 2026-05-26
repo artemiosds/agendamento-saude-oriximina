@@ -35,6 +35,26 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado', remarcado: 'Remarcado', atraso: 'Atraso',
 };
 
+const formatDateBR = (d: string | null | undefined): string => {
+  if (!d || d === '0001-01-01' || d.startsWith('0001') || d === 'undefined' || d === 'null') return 'Não informado';
+  try {
+    // Trata datas que podem vir com tempo (ISO ou formatadas)
+    const dateOnly = d.split('T')[0].split(' ')[0];
+    const parts = dateOnly.split('-');
+    if (parts.length < 3) {
+      // Tenta padrão brasileiro se não for ISO
+      if (d.includes('/')) return d;
+      return d || 'Não informado';
+    }
+    const [y, m, day] = parts;
+    // Validação extra para ano 0001 ou outros valores residuais
+    if (y === '0001' || parseInt(y) < 1900) return 'Não informado';
+    return `${day}/${m}/${y}`;
+  } catch (e) {
+    return d || 'Não informado';
+  }
+};
+
 interface AtendimentoDB {
   id: string; agendamento_id: string; paciente_id: string; paciente_nome: string;
   profissional_id: string; profissional_nome: string; unidade_id: string;
@@ -85,9 +105,6 @@ const Relatorios: React.FC = () => {
   const [clinicalSearch, setClinicalSearch] = useState('');
 
 
-  // Mapa de Atendimento state
-  const [mapaDateFrom, setMapaDateFrom] = useState('');
-  const [mapaDateTo, setMapaDateTo] = useState('');
   const [mapaData, setMapaData] = useState<Array<{
     num: number;
     paciente_nome: string;
@@ -1576,7 +1593,7 @@ ${dataRows}
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
-    if (!mapaDateFrom || !mapaDateTo) {
+    if (!dateFrom || !dateTo) {
       toast.warning('Selecione o período para o mapa');
       return;
     }
@@ -1586,8 +1603,8 @@ ${dataRows}
         .from('agendamentos')
         .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento, cid_concluido')
         .eq('status', 'concluido')
-        .gte('data', mapaDateFrom)
-        .lte('data', mapaDateTo)
+        .gte('data', dateFrom)
+        .lte('data', dateTo)
         .order('data', { ascending: true });
 
       if (mapaProf !== 'all') {
@@ -1794,13 +1811,8 @@ ${dataRows}
     } finally {
       setMapaLoading(false);
     }
-  }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
+  }, [dateFrom, dateTo, mapaProf, funcionarios]);
 
-  const formatDateBR = (d: string) => {
-    if (!d) return '';
-    const [y, m, day] = d.split('-');
-    return `${day}/${m}/${y}`;
-  };
 
   const exportMapaPDF = useCallback(async () => {
     if (mapaData.length === 0) {
@@ -1811,7 +1823,7 @@ ${dataRows}
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
       const now = new Date().toLocaleString('pt-BR');
-      const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
       const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
       const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
@@ -1877,7 +1889,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [mapaData, mapaDateFrom, mapaDateTo, user]);
+  }, [mapaData, dateFrom, dateTo, user]);
 
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
@@ -1910,10 +1922,10 @@ ${dataRows}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mapa-atendimentos-${mapaDateFrom}-a-${mapaDateTo}.csv`;
+    a.download = `mapa-atendimentos-${dateFrom}-a-${dateTo}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [mapaData, mapaDateFrom, mapaDateTo]);
+  }, [mapaData, dateFrom, dateTo]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
@@ -1929,7 +1941,7 @@ ${dataRows}
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas as Unidades';
       const profFilter = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
-      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
       
       const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
       
@@ -3756,11 +3768,11 @@ th{background:#f1f5f9;font-weight:600;}
               <div className="flex flex-wrap items-end gap-3 mb-4">
                 <div>
                   <Label className="text-xs">Data Inicial *</Label>
-                  <Input type="date" value={mapaDateFrom} onChange={e => { setMapaDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Data Final *</Label>
-                  <Input type="date" value={mapaDateTo} onChange={e => { setMapaDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
+                  <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setMapaGenerated(false); }} className="h-9 w-44" />
                 </div>
                 <div>
                   <Label className="text-xs">Profissional</Label>
@@ -3774,7 +3786,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                <Button onClick={generateMapa} disabled={!dateFrom || !dateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
                 <ActionButton variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Gerando PDF...">
@@ -3787,7 +3799,7 @@ th{background:#f1f5f9;font-weight:600;}
                   if (mapaData.length === 0) { toast.warning('Não há dados para exportar'); return; }
                   try {
                     const now = new Date().toLocaleString('pt-BR');
-                    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                    const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
@@ -3848,7 +3860,7 @@ th{background:#f1f5f9;font-weight:600;}
 
               {mapaGenerated && mapaData.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-border/60">
-                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(dateFrom)} a {formatDateBR(dateTo)} — {mapaData.length} atendimentos</p>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-muted/60">
