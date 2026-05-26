@@ -3792,25 +3792,47 @@ th{background:#f1f5f9;font-weight:600;}
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
-                      const proc = r.procedimento_sigtap || '-';
-                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_atendimento)}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}">
+                        <td style="text-align:center">${String(r.num).padStart(2, '0')}</td>
+                        <td>${r.paciente_nome}</td>
+                        <td>${formatDateBR(r.data_atendimento)}</td>
+                        <td>${formatDateBR(r.data_nascimento)}</td>
+                        <td>${formatCPF(r.cpf)}</td>
+                        <td>${r.cns || '-'}</td>
+                        <td>${r.telefone || '-'}</td>
+                        <td>${r.tipo_logradouro || '-'}</td>
+                        <td>${r.logradouro || '-'}</td>
+                        <td>${r.numero || '-'}</td>
+                        <td>${r.complemento || '-'}</td>
+                        <td>${r.bairro || '-'}</td>
+                        <td>${r.municipio || '-'}</td>
+                        <td>${r.endereco_completo || '-'}</td>
+                        <td>${r.profissional_nome}</td>
+                        <td>${r.especialidade || '-'}</td>
+                        <td>${r.procedimentos_realizados || '-'}</td>
+                        <td>${r.procedimento_sigtap || '-'}</td>
+                        <td>${r.cid || '-'}</td>
+                        <td>${r.observacoes || '-'}</td>
+                      </tr>`;
                     }).join('');
                     const logoUrl = logoSmsFallback;
                     const logoUrlRight = logoCerFallback;
                     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Mapa de Atendimentos</title>
-<style>@page{size:A4 landscape;margin:10mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:16px;color:#1e293b;font-size:10px;}
-.header{display:flex;align-items:center;gap:14px;padding:12px 16px;margin-bottom:12px;border-bottom:2px solid #0369a1;}
-.header img{max-height:48px;max-width:90px;object-fit:contain;}
-.header h1{font-size:13px;font-weight:700;}
-.header .sub{font-size:10px;color:#555;margin-top:1px;}
-.periodo{text-align:center;font-size:11px;margin-bottom:10px;font-weight:600;}
-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
-th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
+<style>@page{size:A4 landscape;margin:5mm;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,sans-serif;padding:10px;color:#1e293b;font-size:8px;}
+.header{display:flex;align-items:center;gap:14px;padding:8px 12px;margin-bottom:8px;border-bottom:2px solid #0369a1;}
+.header img{max-height:40px;max-width:80px;object-fit:contain;}
+.header h1{font-size:11px;font-weight:700;}
+.header .sub{font-size:8px;color:#555;margin-top:1px;}
+.periodo{text-align:center;font-size:9px;margin-bottom:8px;font-weight:600;}
+table{width:100%;border-collapse:collapse;margin-bottom:8px;}
+th,td{border:1px solid #ccc;padding:2px 3px;text-align:left;font-size:6px;}
 th{background:#f1f5f9;font-weight:600;}
-@media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
-<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+@media print{body{padding:0;}.no-print{display:none!important;}}</style></head><body>
+<div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
+<table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Endereço Completo</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="20" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+</body></html>`;
+
 </body></html>`;
                     printViaIframe(html);
                     toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
