@@ -140,7 +140,7 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentosFull]);
 
-  const loadReportData = useCallback(async () => {
+  const loadReportData = useCallback(async (isAutoRefresh = false) => {
     if (isFetching) return;
     setIsFetching(true);
     
@@ -150,10 +150,11 @@ const Relatorios: React.FC = () => {
         prof: filterProf, 
         status: filterStatus, 
         type: filterTipo, 
+        setor: filterSetor,
         dateFrom, 
         dateTo 
       };
-      console.log("[Relatórios] buscando dados com filtros:", filters);
+      console.log(`[Relatórios] ${isAutoRefresh ? 'Auto-refresh' : 'Buscando'} dados com filtros:`, filters);
 
       const fetchAllPages = async (table: string, dateField?: string) => {
         let allData: any[] = [];
