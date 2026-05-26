@@ -1882,13 +1882,30 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
     const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
-      r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
+      r.num.toString(), 
+      r.paciente_nome, 
+      formatDateBR(r.data_atendimento), 
+      formatDateBR(r.data_nascimento), 
+      fmtCPF(r.cpf),
+      r.cns || '',
+      r.telefone || '',
+      r.tipo_logradouro || '',
+      r.logradouro || '',
+      r.numero || '',
+      r.complemento || '',
+      r.bairro || '',
+      r.municipio || '',
+      r.endereco_completo || '',
+      r.profissional_nome, 
+      r.especialidade,
+      r.procedimentos_realizados || '',
       r.procedimento_sigtap || '',
       r.cid,
+      r.observacoes || ''
     ]);
+
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
