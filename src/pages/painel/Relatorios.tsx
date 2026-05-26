@@ -3905,7 +3905,6 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="border border-border px-2 py-1">{r.complemento || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.bairro || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.municipio || '-'}</td>
-                            <td className="border border-border px-2 py-1">{r.endereco_completo || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.procedimentos_realizados || '-'}</td>
