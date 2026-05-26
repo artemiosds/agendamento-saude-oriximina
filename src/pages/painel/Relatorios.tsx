@@ -85,9 +85,9 @@ const Relatorios: React.FC = () => {
   const [clinicalSearch, setClinicalSearch] = useState('');
 
 
-  // Mapa de Atendimento state
-  const [mapaDateFrom, setMapaDateFrom] = useState('');
-  const [mapaDateTo, setMapaDateTo] = useState('');
+  // Mapa de Atendimento state - Unificado com os filtros globais
+  const mapaDateFrom = dateFrom;
+  const mapaDateTo = dateTo;
   const [mapaData, setMapaData] = useState<Array<{
     num: number;
     paciente_nome: string;
