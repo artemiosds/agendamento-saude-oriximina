@@ -294,9 +294,12 @@ const Relatorios: React.FC = () => {
   // Realtime subscription for auto-refresh
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: loadReportData,
+    onchange: () => {
+      console.log("[Relatórios] Mudança detectada, atualizando...");
+      loadReportData();
+    },
     enabled: true,
-    debounceMs: 2000,
+    debounceMs: 5000,
   });
 
   // Update "last updated" label every 10s
