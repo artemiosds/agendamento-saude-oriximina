@@ -1830,7 +1830,6 @@ ${dataRows}
           r.complemento || '-',
           r.bairro || '-',
           r.municipio || '-',
-          r.endereco_completo || '-',
           r.profissional_nome || '', 
           r.especialidade || '-', 
           r.procedimentos_realizados || '-',
@@ -1883,7 +1882,7 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
     const rows = mapaData.map(r => [
       r.num.toString(), 
       r.paciente_nome, 
@@ -1898,7 +1897,6 @@ ${dataRows}
       r.complemento || '',
       r.bairro || '',
       r.municipio || '',
-      r.endereco_completo || '',
       r.profissional_nome, 
       r.especialidade,
       r.procedimentos_realizados || '',
@@ -3807,7 +3805,6 @@ th{background:#f1f5f9;font-weight:600;}
                         <td>${r.complemento || '-'}</td>
                         <td>${r.bairro || '-'}</td>
                         <td>${r.municipio || '-'}</td>
-                        <td>${r.endereco_completo || '-'}</td>
                         <td>${r.profissional_nome}</td>
                         <td>${r.especialidade || '-'}</td>
                         <td>${r.procedimentos_realizados || '-'}</td>
@@ -3830,8 +3827,8 @@ th,td{border:1px solid #ccc;padding:2px 3px;text-align:left;font-size:6px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:0;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:2px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:8px;font-size:7px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Endereço Completo</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
-<tfoot><tr><td colspan="20" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
+<table><thead><tr><th style="width:20px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>CNS</th><th>Tel</th><th>Tipo</th><th>Logr</th><th>Nº</th><th>Compl</th><th>Bairro</th><th>Mun</th><th>Profissional</th><th>Espec</th><th>Procs Realizados</th><th>SIGTAP</th><th>CID</th><th>Obs</th></tr></thead><tbody>${tableRows}</tbody>
+<tfoot><tr><td colspan="19" style="text-align:right;font-weight:600;padding:4px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`;
                     printViaIframe(html);
                     toast.success('Documento pronto', { description: 'Use "Salvar como PDF" para baixar.' });
@@ -3869,7 +3866,6 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-left">Compl.</th>
                         <th className="border border-border px-2 py-1.5 text-left">Bairro</th>
                         <th className="border border-border px-2 py-1.5 text-left">Município</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Endereço Completo</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
                         <th className="border border-border px-2 py-1.5 text-left">Procedimentos Realizados</th>
@@ -3909,7 +3905,6 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="border border-border px-2 py-1">{r.complemento || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.bairro || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.municipio || '-'}</td>
-                            <td className="border border-border px-2 py-1">{r.endereco_completo || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.procedimentos_realizados || '-'}</td>
@@ -3923,7 +3918,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={21} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={20} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
 
                     </tfoot>
