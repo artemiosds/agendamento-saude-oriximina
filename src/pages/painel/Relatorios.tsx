@@ -1609,7 +1609,7 @@ ${dataRows}
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
-        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro, custom_data')
         .in('id', pacienteIds);
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
@@ -1678,15 +1678,16 @@ ${dataRows}
         const pac = pacMap.get(a.paciente_id);
         const prof = profMap.get(a.profissional_id);
         
-        // Montar dados de endereço
-        let enderecoComp = 'Não informado';
-        const tipo_logradouro = pac?.tipo_logradouro || '';
-        const logradouro = pac?.logradouro || '';
-        const numero = pac?.numero || '';
-        const complemento = pac?.complemento || '';
-        const bairro = pac?.bairro || '';
-        const municipio = pac?.municipio || '';
+        // Montar dados de endereço a partir do paciente e seu custom_data
+        const cd = (pac?.custom_data as any) || {};
+        const tipo_logradouro = pac?.tipo_logradouro || cd.tipo_logradouro_dne || cd.tipoLogradouroDne || cd.tipoLogradouro || '';
+        const logradouro = pac?.logradouro || cd.logradouro || '';
+        const numero = pac?.numero || cd.numero || '';
+        const complemento = pac?.complemento || cd.complemento || '';
+        const bairro = pac?.bairro || cd.bairro || '';
+        const municipio = pac?.municipio || cd.municipio || '';
 
+        let enderecoComp = 'Não informado';
         if (pac) {
           const hasMainInfo = logradouro || numero || bairro;
           if (hasMainInfo) {
@@ -1700,7 +1701,7 @@ ${dataRows}
             enderecoComp = addrParts.join(', ');
           } else if (municipio) {
             enderecoComp = `Endereço incompleto (${municipio})`;
-          } else if (pac.endereco) {
+          } else if (pac.endereco && pac.endereco.trim()) {
              enderecoComp = pac.endereco;
           }
         }
