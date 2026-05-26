@@ -1815,8 +1815,28 @@ ${dataRows}
       const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
       const rows = mapaData.slice(0, ROW_LIMIT).map(r => {
-        const proc = r.procedimento_sigtap || '-';
-        return [String(r.num).padStart(2, '0'), r.paciente_nome || '', formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf), r.endereco || '-', fmtCNS(r.cns), r.telefone || '-', r.profissional_nome || '', r.especialidade || '-', proc, r.cid || '-'];
+        return [
+          String(r.num).padStart(2, '0'), 
+          r.paciente_nome || '', 
+          formatDateBR(r.data_atendimento), 
+          formatDateBR(r.data_nascimento), 
+          fmtCPF(r.cpf), 
+          r.cns || '-',
+          r.telefone || '-',
+          r.tipo_logradouro || '-',
+          r.logradouro || '-',
+          r.numero || '-',
+          r.complemento || '-',
+          r.bairro || '-',
+          r.municipio || '-',
+          r.endereco_completo || '-',
+          r.profissional_nome || '', 
+          r.especialidade || '-', 
+          r.procedimentos_realizados || '-',
+          r.procedimento_sigtap || '-', 
+          r.cid || '-',
+          r.observacoes || '-'
+        ];
       });
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1833,14 +1853,15 @@ ${dataRows}
 
       autoTable(doc, {
         startY: 36,
-        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID']],
+        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'CNS', 'Telefone', 'Tipo Logr', 'Logradouro', 'Nº', 'Compl', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procs Realizados', 'Proc. SIGTAP', 'CID', 'Obs']],
         body: rows,
         theme: 'grid',
-        styles: { fontSize: 6.2, cellPadding: 1.2, overflow: 'linebreak', valign: 'middle' },
+        styles: { fontSize: 4.5, cellPadding: 0.8, overflow: 'linebreak', valign: 'middle' },
         headStyles: { fillColor: [42, 111, 151], textColor: [255, 255, 255], fontStyle: 'bold' },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: 6, right: 6 },
+        margin: { left: 4, right: 4 },
       });
+
 
       const finalY = ((doc as any).lastAutoTable?.finalY || 36) + 6;
       doc.setFontSize(8);
