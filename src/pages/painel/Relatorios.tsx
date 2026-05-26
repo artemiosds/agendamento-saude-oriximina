@@ -1609,7 +1609,7 @@ ${dataRows}
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
-        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro, custom_data')
         .in('id', pacienteIds);
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
