@@ -1557,7 +1557,10 @@ ${dataRows}
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
-    if (!mapaDateFrom || !mapaDateTo) return;
+    if (!mapaDateFrom || !mapaDateTo) {
+      toast.warning('Selecione o período para o mapa');
+      return;
+    }
     setMapaLoading(true);
     try {
       let query = supabase
