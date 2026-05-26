@@ -1755,8 +1755,8 @@ ${dataRows}
         });
       });
 
-
       setMapaData(rows);
+
       setMapaGenerated(true);
     } catch (e) {
       console.error('Erro ao gerar mapa:', e);
