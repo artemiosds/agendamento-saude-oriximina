@@ -1796,8 +1796,7 @@ ${dataRows}
     }
   }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
 
-  const formatDateBR = (d: string) => {
-  const formatDateBR = (d: string) => {
+  const formatDateBR = (d: string): string => {
     if (!d || d === '0001-01-01' || d.startsWith('0001')) return 'Não informado';
     try {
       const parts = d.split('-');
@@ -1810,7 +1809,6 @@ ${dataRows}
     } catch (e) {
       return d || 'Não informado';
     }
-  };
   };
 
   const exportMapaPDF = useCallback(async () => {
