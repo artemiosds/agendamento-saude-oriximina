@@ -1882,7 +1882,7 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Endereço Completo', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'CNS', 'Telefone', 'Tipo de Logradouro', 'Logradouro', 'Número', 'Complemento', 'Bairro', 'Município', 'Profissional', 'Especialidade', 'Procedimentos Realizados', 'Proc. SIGTAP', 'CID', 'Observações'];
     const rows = mapaData.map(r => [
       r.num.toString(), 
       r.paciente_nome, 
@@ -1897,7 +1897,6 @@ ${dataRows}
       r.complemento || '',
       r.bairro || '',
       r.municipio || '',
-      r.endereco_completo || '',
       r.profissional_nome, 
       r.especialidade,
       r.procedimentos_realizados || '',
