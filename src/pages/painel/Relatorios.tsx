@@ -3860,14 +3860,23 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-left w-24">Dt Atendimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
-                        <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
                         <th className="border border-border px-2 py-1.5 text-left">CNS</th>
                         <th className="border border-border px-2 py-1.5 text-left">Telefone</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Tipo Logr.</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Logradouro</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Nº</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Compl.</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Bairro</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Município</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Endereço Completo</th>
                         <th className="border border-border px-2 py-1.5 text-left">Profissional</th>
                         <th className="border border-border px-2 py-1.5 text-left">Especialidade</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Procedimentos Realizados</th>
                         <th className="border border-border px-2 py-1.5 text-left">Proc. SIGTAP</th>
                         <th className="border border-border px-2 py-1.5 text-left w-16">CID</th>
+                        <th className="border border-border px-2 py-1.5 text-left">Obs</th>
                       </tr>
+
                     </thead>
                     <tbody>
                       {mapaData.map((r, i) => {
