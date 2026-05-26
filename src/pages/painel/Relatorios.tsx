@@ -1941,7 +1941,7 @@ ${dataRows}
       const carimbo = user?.id ? await loadCarimbo(user.id) : null;
       const un = filterUnit !== 'all' ? unidades.find(u => u.id === filterUnit)?.nome : 'Todas as Unidades';
       const profFilter = filterProf !== 'all' ? profissionais.find(p => p.id === filterProf)?.nome : 'Todos os Profissionais';
-      const periodo = `${dateFrom || 'Início'} a ${dateTo || 'Atual'}`;
+      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
       
       const intro = `Este documento apresenta o Relatório de Gestão e Produtividade da Unidade ${un}, referente ao período de ${periodo}. Os dados aqui consolidados refletem os agendamentos, atendimentos e procedimentos registrados no sistema institucional, servindo como base para análise de desempenho e tomada de decisão institucional.`;
       
