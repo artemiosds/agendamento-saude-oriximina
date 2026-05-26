@@ -1612,23 +1612,20 @@ ${dataRows}
         .select('prontuario_id, procedimento_id, cids_selecionados')
         .in('prontuario_id', pronIds);
 
-      // Buscar dados de PTS
-      const { data: ptsList } = await supabase
-        .from('pts')
-        .select('id, patient_id')
-        .in('patient_id', pacienteIds);
-      const ptsIds = ptsList?.map(p => p.id) || [];
-
-      const [ptsCids, ptsSigtaps, patientProcs] = await Promise.all([
-        supabase.from('pts_cid').select('pts_id, cid_codigo').in('pts_id', ptsIds),
-        supabase.from('pts_sigtap').select('pts_id, procedimento_codigo, procedimento_nome').in('pts_id', ptsIds),
-        supabase.from('patient_procedures').select('patient_id, sigtap_codigo, procedimento_nome, cid').in('patient_id', pacienteIds)
+      // Fetch procedures from both tables to map IDs to SIGTAP codes and names
+      const [{ data: legacyProcs }, { data: sigtapProcs }] = await Promise.all([
+        supabase.from('procedimentos').select('id, codigo_sigtap, nome'),
+        supabase.from('sigtap_procedimentos').select('id, codigo, nome')
       ]);
 
-      const { data: allSigtap } = await supabase
-        .from('sigtap_procedimentos')
-        .select('codigo, descricao');
-      const sigtapMap = new Map((allSigtap || []).map(s => [s.codigo, s.descricao]));
+      const proceduresMap = new Map();
+      (legacyProcs || []).forEach(p => {
+        proceduresMap.set(p.id, { codigo: p.codigo_sigtap, nome: p.nome });
+      });
+      (sigtapProcs || []).forEach(p => {
+        proceduresMap.set(p.id, { codigo: p.codigo, nome: p.nome });
+      });
+
 
       const pronsMap = new Map<string, any[]>();
       prons?.forEach(p => {
@@ -1646,34 +1643,6 @@ ${dataRows}
         pronProcsGrouped.set(pp.prontuario_id, list);
       });
 
-      const ptsCidsGrouped = new Map<string, string[]>();
-      ptsCids.data?.forEach(pc => {
-        const list = ptsCidsGrouped.get(pc.pts_id) || [];
-        list.push(pc.cid_codigo);
-        ptsCidsGrouped.set(pc.pts_id, list);
-      });
-
-      const ptsSigtapsGrouped = new Map<string, any[]>();
-      ptsSigtaps.data?.forEach(ps => {
-        const list = ptsSigtapsGrouped.get(ps.pts_id) || [];
-        list.push(ps);
-        ptsSigtapsGrouped.set(ps.pts_id, list);
-      });
-
-      const patientProcsGrouped = new Map<string, any[]>();
-      patientProcs.data?.forEach(pp => {
-        const list = patientProcsGrouped.get(pp.patient_id) || [];
-        list.push(pp);
-        patientProcsGrouped.set(pp.patient_id, list);
-      });
-
-      const patientPtsMap = new Map<string, string[]>();
-      ptsList?.forEach(pts => {
-        const list = patientPtsMap.get(pts.patient_id) || [];
-        list.push(pts.id);
-        patientPtsMap.set(pts.patient_id, list);
-      });
-
       // Consolidar registros por Paciente + Data + Profissional
       const groups = new Map<string, any[]>();
       agend.forEach(a => {
@@ -1687,80 +1656,89 @@ ${dataRows}
       let counter = 1;
 
       groups.forEach((groupAgend, key) => {
-        const a = groupAgend[0]; // Referência para dados básicos
+        const a = groupAgend[0]; 
         const pac = pacMap.get(a.paciente_id);
         const prof = profMap.get(a.profissional_id);
         
-        // Montar endereço completo
+        // Montar endereço completo conforme solicitado: "Tipo Logradouro + Logradouro, Nº Número, Complemento, Bairro, Município"
         let enderecoComp = 'Não informado';
         if (pac) {
-          const parts = [
-            pac.tipo_logradouro,
-            pac.logradouro,
-            pac.numero ? `Nº ${pac.numero}` : null,
-            pac.complemento,
-            pac.bairro,
-            pac.municipio
-          ].filter(Boolean);
-          if (parts.length > 0) enderecoComp = parts.join(', ');
-          else if (pac.endereco) enderecoComp = pac.endereco;
+          const hasMainInfo = pac.logradouro || pac.numero || pac.bairro;
+          if (hasMainInfo) {
+            const addrParts = [];
+            
+            // Tipo Logradouro + Logradouro
+            const logradouroFull = `${pac.tipo_logradouro || ''} ${pac.logradouro || ''}`.trim();
+            if (logradouroFull) addrParts.push(logradouroFull);
+            
+            // Nº Número
+            if (pac.numero) addrParts.push(`Nº ${pac.numero}`);
+            
+            // Complemento
+            if (pac.complemento) addrParts.push(pac.complemento);
+            
+            // Bairro
+            if (pac.bairro) addrParts.push(pac.bairro);
+            
+            // Município
+            if (pac.municipio) addrParts.push(pac.municipio);
+            
+            enderecoComp = addrParts.join(', ');
+          } else if (pac.municipio) {
+            enderecoComp = `Endereço incompleto (${pac.municipio})`;
+          } else if (pac.endereco) {
+             enderecoComp = pac.endereco;
+          }
         }
+
 
         const procsList = new Set<string>();
         const cidsList = new Set<string>();
 
         groupAgend.forEach(ag => {
-          // SIGTAP do agendamento
+          // 1. SIGTAP do agendamento
           if (ag.procedimento_sigtap) {
-            procsList.add(`${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`);
+            const label = `${ag.procedimento_sigtap}${ag.nome_procedimento ? ' - ' + ag.nome_procedimento : ''}`;
+            procsList.add(label);
           }
           if (ag.cid_concluido) {
-            ag.cid_concluido.split(/[,;\s]+/).forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
+            ag.cid_concluido.split(/[,;\s]+/).forEach((c: string) => {
+              const cleaned = c.trim().toUpperCase();
+              if (cleaned) cidsList.add(cleaned);
+            });
           }
 
-          // Dados do prontuário
+          // 2. Dados do prontuário vinculado ao agendamento
           const relatedProns = pronsMap.get(ag.id) || [];
           relatedProns.forEach(pron => {
-            if (pron.outro_procedimento) procsList.add(pron.outro_procedimento);
             if (pron.hipotese) {
-              pron.hipotese.split(/[,;\s]+/).forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
+              pron.hipotese.split(/[,;\s]+/).forEach((c: string) => {
+                const cleaned = c.trim().toUpperCase();
+                if (cleaned) cidsList.add(cleaned);
+              });
             }
             
-            // Procedimentos detalhados do prontuário
+            // 3. Procedimentos detalhados do prontuário (Procedimentos Realizados)
             const pProcs = pronProcsGrouped.get(pron.id) || [];
             pProcs.forEach(pp => {
-              const desc = sigtapMap.get(pp.procedimento_id);
-              procsList.add(`${pp.procedimento_id}${desc ? ' - ' + desc : ''}`);
+              const procInfo = proceduresMap.get(pp.procedimento_id);
+              if (procInfo) {
+                const label = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
+                procsList.add(label);
+              }
+
+              
               if (Array.isArray(pp.cids_selecionados)) {
-                pp.cids_selecionados.forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
+                pp.cids_selecionados.forEach((c: string) => {
+                  const cleaned = c.trim().toUpperCase();
+                  if (cleaned) cidsList.add(cleaned);
+                });
               }
             });
+
+            if (pron.outro_procedimento) procsList.add(pron.outro_procedimento);
           });
         });
-
-        // Adicionar dados do PTS do paciente
-        const pPtsIds = patientPtsMap.get(a.paciente_id) || [];
-        pPtsIds.forEach(ptsId => {
-          const pCids = ptsCidsGrouped.get(ptsId) || [];
-          pCids.forEach(c => cidsList.add(c.trim().toUpperCase()));
-          
-          const pSigtaps = ptsSigtapsGrouped.get(ptsId) || [];
-          pSigtaps.forEach(ps => {
-            procsList.add(`${ps.procedimento_codigo}${ps.procedimento_nome ? ' - ' + ps.procedimento_nome : ''}`);
-          });
-        });
-
-        // Adicionar outros procedimentos históricos
-        const hProcs = patientProcsGrouped.get(a.paciente_id) || [];
-        hProcs.forEach(hp => {
-          if (hp.sigtap_codigo) procsList.add(`${hp.sigtap_codigo}${hp.procedimento_nome ? ' - ' + hp.procedimento_nome : ''}`);
-          if (hp.cid) hp.cid.split(/[,;\s]+/).forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
-        });
-
-        // Fallback para CID do cadastro
-        if (cidsList.size === 0 && pac?.cid) {
-          pac.cid.split(/[,;\s]+/).forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
-        }
 
         rows.push({
           num: counter++,
@@ -1770,18 +1748,19 @@ ${dataRows}
           profissional_nome: a.profissional_nome || '',
           profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
-          cid: Array.from(cidsList).filter(Boolean).join(', ') || 'Não informado',
+          cid: Array.from(cidsList).filter(Boolean).sort().join(', ') || 'Não informado',
           tipo: a.tipo || '',
           cpf: pac?.cpf || '',
           data_nascimento: pac?.data_nascimento || '',
           endereco: enderecoComp,
-          procedimento_sigtap: Array.from(procsList).filter(Boolean).join('; ') || 'Não informado',
+          procedimento_sigtap: Array.from(procsList).filter(Boolean).sort().join('; ') || 'Não informado',
           nome_procedimento: '',
           data_atendimento: a.data
         });
       });
 
       setMapaData(rows);
+
       setMapaGenerated(true);
     } catch (e) {
       console.error('Erro ao gerar mapa:', e);
