@@ -1719,9 +1719,10 @@ ${dataRows}
             pProcs.forEach(pp => {
               const procInfo = proceduresMap.get(pp.procedimento_id);
               if (procInfo) {
-                const label = `${procInfo.codigo_sigtap || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
+                const label = `${procInfo.codigo || ''}${procInfo.nome ? ' - ' + procInfo.nome : ''}`;
                 procsList.add(label);
               }
+
               
               if (Array.isArray(pp.cids_selecionados)) {
                 pp.cids_selecionados.forEach((c: string) => {
