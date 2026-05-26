@@ -3805,7 +3805,6 @@ th{background:#f1f5f9;font-weight:600;}
                         <td>${r.complemento || '-'}</td>
                         <td>${r.bairro || '-'}</td>
                         <td>${r.municipio || '-'}</td>
-                        <td>${r.endereco_completo || '-'}</td>
                         <td>${r.profissional_nome}</td>
                         <td>${r.especialidade || '-'}</td>
                         <td>${r.procedimentos_realizados || '-'}</td>
