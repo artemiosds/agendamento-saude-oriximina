@@ -1725,8 +1725,8 @@ ${dataRows}
       const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
       const rows = mapaData.slice(0, ROW_LIMIT).map(r => {
-        const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-        return [String(r.num).padStart(2, '0'), r.paciente_nome || '', formatDateBR(r.data_nascimento), fmtCPF(r.cpf), r.endereco || '-', fmtCNS(r.cns), r.telefone || '-', r.profissional_nome || '', r.especialidade || '-', proc, r.cid || '-'];
+        const proc = r.procedimento_sigtap || '-';
+        return [String(r.num).padStart(2, '0'), r.paciente_nome || '', formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf), r.endereco || '-', fmtCNS(r.cns), r.telefone || '-', r.profissional_nome || '', r.especialidade || '-', proc, r.cid || '-'];
       });
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -1743,7 +1743,7 @@ ${dataRows}
 
       autoTable(doc, {
         startY: 36,
-        head: [['Nº', 'Paciente', 'Dt Nasc', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID']],
+        head: [['Nº', 'Paciente', 'Dt Atend', 'Dt Nasc', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID']],
         body: rows,
         theme: 'grid',
         styles: { fontSize: 6.2, cellPadding: 1.2, overflow: 'linebreak', valign: 'middle' },
