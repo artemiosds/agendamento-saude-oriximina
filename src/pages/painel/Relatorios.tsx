@@ -1816,20 +1816,6 @@ ${dataRows}
     }
   }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
 
-  const formatDateBR = (d: string): string => {
-    if (!d || d === '0001-01-01' || d.startsWith('0001')) return 'Não informado';
-    try {
-      const parts = d.split('-');
-      if (parts.length < 3) return d;
-      const [y, m, day] = parts;
-      if (y === '0001' || y === '1' || y === '01') return 'Não informado';
-      // Limpeza de possíveis sufixos de tempo se vier de um timestamp
-      const cleanDay = day.split('T')[0].split(' ')[0];
-      return `${cleanDay}/${m}/${y}`;
-    } catch (e) {
-      return d || 'Não informado';
-    }
-  };
 
   const exportMapaPDF = useCallback(async () => {
     if (mapaData.length === 0) {
