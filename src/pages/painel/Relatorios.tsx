@@ -1603,7 +1603,7 @@ ${dataRows}
       const agendIds = agend.map(a => a.id);
       const { data: prons } = await supabase
         .from('prontuarios')
-        .select('id, agendamento_id, cid_codigo:hipotese, outro_procedimento, procedimentos_texto')
+        .select('id, agendamento_id, hipotese, outro_procedimento, procedimentos_texto')
         .in('agendamento_id', agendIds);
 
       const { data: pronProcs } = await supabase
