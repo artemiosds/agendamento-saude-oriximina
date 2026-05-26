@@ -3883,7 +3883,6 @@ th{background:#f1f5f9;font-weight:600;}
                         const initials = r.profissional_nome.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toUpperCase();
                         const hashColor = `hsl(${[...r.profissional_nome].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 55%, 50%)`;
                         const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-                        const procSigtap = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
                         return (
                           <tr key={i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
                             <td className="border border-border px-2 py-1 text-center font-medium">{String(r.num).padStart(2, '0')}</td>
@@ -3897,20 +3896,29 @@ th{background:#f1f5f9;font-weight:600;}
                                 </div>
                               </div>
                             </td>
-                             <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
                             <td className="border border-border px-2 py-1">{formatDateBR(r.data_atendimento)}</td>
                             <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
                             <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
-                            <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.cns || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.tipo_logradouro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.logradouro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.numero || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.complemento || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.bairro || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.municipio || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.endereco_completo || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.procedimentos_realizados || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.procedimento_sigtap || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
+                            <td className="border border-border px-2 py-1">{r.observacoes || '-'}</td>
                           </tr>
                         );
                       })}
+
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
