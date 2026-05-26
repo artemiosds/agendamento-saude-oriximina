@@ -129,7 +129,9 @@ const Relatorios: React.FC = () => {
   }, []);
 
   const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
+    // Definimos uma lista fixa de setores para garantir consistência se os dados filtrados forem vazios
+    const setoresBase = ['Ambulatório', 'Fisioterapia', 'Fonoaudiologia', 'Neuropediatria', 'Odontologia', 'Psicologia', 'Psicopedagogia', 'Serviço Social', 'Terapia Ocupacional', 'Triagem'];
+    const s = new Set([...setoresBase, ...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
   }, [atendimentosDB, agendamentosFull]);
 
