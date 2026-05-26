@@ -92,7 +92,7 @@ const Relatorios: React.FC = () => {
     num: number; paciente_nome: string; cns: string; telefone: string;
     profissional_nome: string; profissional_id: string; especialidade: string; cid: string;
     tipo: string; cpf: string; data_nascimento: string; endereco: string;
-    procedimento_sigtap: string; nome_procedimento: string;
+    procedimento_sigtap: string; nome_procedimento: string; data_atendimento: string;
   }>>([]);
   const [mapaGenerated, setMapaGenerated] = useState(false);
   const [mapaLoading, setMapaLoading] = useState(false);
@@ -1567,12 +1567,11 @@ ${dataRows}
     try {
       let query = supabase
         .from('agendamentos')
-        .select('paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento')
+        .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento, cid_concluido')
         .eq('status', 'concluido')
         .gte('data', mapaDateFrom)
         .lte('data', mapaDateTo)
-        .order('data', { ascending: true })
-        .limit(2000);
+        .order('data', { ascending: true });
 
       if (mapaProf !== 'all') {
         query = query.eq('profissional_id', mapaProf);
@@ -1593,34 +1592,108 @@ ${dataRows}
       const pacienteIds = [...new Set(agend.map(a => a.paciente_id).filter(Boolean))];
       const { data: pacs } = await supabase
         .from('pacientes')
-        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco')
+        .select('id, cns, telefone, cid, cpf, data_nascimento, endereco, logradouro, numero, complemento, bairro, municipio, tipo_logradouro')
         .in('id', pacienteIds);
 
       const pacMap = new Map((pacs || []).map(p => [p.id, p]));
-
-      // Get profissional specialties from funcionarios
       const profIds = [...new Set(agend.map(a => a.profissional_id).filter(Boolean))];
       const profMap = new Map(funcionarios.filter(f => profIds.includes(f.id)).map(f => [f.id, f]));
 
-      const rows = agend.map((a, i) => {
+      // Buscar CIDs e Procedimentos dos prontuários concluídos para os agendamentos encontrados
+      const agendIds = agend.map(a => a.id);
+      const { data: prons } = await supabase
+        .from('prontuarios')
+        .select('id, agendamento_id, cid_codigo, outro_procedimento, procedimentos_texto')
+        .in('agendamento_id', agendIds);
+
+      const { data: pronProcs } = await supabase
+        .from('prontuario_procedimentos')
+        .select('prontuario_id, procedimento_id, cids_selecionados')
+        .in('prontuario_id', prons?.map(p => p.id) || []);
+
+      const { data: allSigtap } = await supabase
+        .from('sigtap_procedimentos')
+        .select('codigo, descricao');
+      const sigtapMap = new Map((allSigtap || []).map(s => [s.codigo, s.descricao]));
+
+      const pronsMap = new Map(prons?.map(p => [p.agendamento_id, p]) || []);
+      const pronProcsGrouped = new Map<string, any[]>();
+      pronProcs?.forEach(pp => {
+        const list = pronProcsGrouped.get(pp.prontuario_id) || [];
+        list.push(pp);
+        pronProcsGrouped.set(pp.prontuario_id, list);
+      });
+
+      // Evitar duplicidade de (paciente, data, profissional)
+      const seen = new Set<string>();
+      const rows: any[] = [];
+      let counter = 1;
+
+      agend.forEach((a) => {
+        const key = `${a.paciente_id}-${a.data}-${a.profissional_id}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+
         const pac = pacMap.get(a.paciente_id);
         const prof = profMap.get(a.profissional_id);
-        return {
-          num: i + 1,
+        const pron = pronsMap.get(a.id);
+        const pProcs = pron ? pronProcsGrouped.get(pron.id) || [] : [];
+
+        // Montar endereço completo
+        let enderecoComp = 'Não informado';
+        if (pac) {
+          const parts = [
+            pac.tipo_logradouro,
+            pac.logradouro,
+            pac.numero ? `Nº ${pac.numero}` : null,
+            pac.complemento,
+            pac.bairro,
+            pac.municipio
+          ].filter(Boolean);
+          if (parts.length > 0) enderecoComp = parts.join(', ');
+          else if (pac.endereco) enderecoComp = pac.endereco;
+        }
+
+        // Buscar Procedimentos (SIGTAP)
+        const procsList: string[] = [];
+        if (a.procedimento_sigtap) {
+          procsList.push(`${a.procedimento_sigtap}${a.nome_procedimento ? ' - ' + a.nome_procedimento : ''}`);
+        }
+        pProcs.forEach(pp => {
+          const desc = sigtapMap.get(pp.procedimento_id);
+          const entry = `${pp.procedimento_id}${desc ? ' - ' + desc : ''}`;
+          if (!procsList.includes(entry)) procsList.push(entry);
+        });
+        if (pron?.outro_procedimento) procsList.push(pron.outro_procedimento);
+        
+        // Buscar CIDs
+        const cidsList = new Set<string>();
+        if (a.cid_concluido) a.cid_concluido.split(/[,;\s]+/).forEach(c => cidsList.add(c.trim().toUpperCase()));
+        if (pron?.cid_codigo) pron.cid_codigo.split(/[,;\s]+/).forEach(c => cidsList.add(c.trim().toUpperCase()));
+        pProcs.forEach(pp => {
+          if (Array.isArray(pp.cids_selecionados)) {
+            pp.cids_selecionados.forEach((c: string) => cidsList.add(c.trim().toUpperCase()));
+          }
+        });
+        if (cidsList.size === 0 && pac?.cid) pac.cid.split(/[,;\s]+/).forEach(c => cidsList.add(c.trim().toUpperCase()));
+
+        rows.push({
+          num: counter++,
           paciente_nome: a.paciente_nome || '',
           cns: pac?.cns || '',
           telefone: pac?.telefone || '',
           profissional_nome: a.profissional_nome || '',
           profissional_id: a.profissional_id || '',
           especialidade: prof?.profissao || prof?.setor || a.setor_id || '',
-          cid: pac?.cid || '',
+          cid: Array.from(cidsList).join(', ') || 'Não informado',
           tipo: a.tipo || '',
           cpf: pac?.cpf || '',
           data_nascimento: pac?.data_nascimento || '',
-          endereco: pac?.endereco || '',
-          procedimento_sigtap: (a as any).procedimento_sigtap || '',
-          nome_procedimento: (a as any).nome_procedimento || '',
-        };
+          endereco: enderecoComp,
+          procedimento_sigtap: procsList.join('; ') || 'Não informado',
+          nome_procedimento: '', // Ja incluso no sigtap acima
+          data_atendimento: a.data
+        });
       });
 
       setMapaData(rows);
@@ -1698,11 +1771,11 @@ ${dataRows}
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
     const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || ''; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
-    const headers = ['Nº', 'Nome do Paciente', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
+    const headers = ['Nº', 'Nome do Paciente', 'Data Atendimento', 'Data Nascimento', 'CPF', 'Endereço', 'CNS', 'Telefone', 'Profissional', 'Especialidade', 'Proc. SIGTAP', 'CID'];
     const rows = mapaData.map(r => [
-      r.num.toString(), r.paciente_nome, formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
+      r.num.toString(), r.paciente_nome, formatDateBR(r.data_atendimento), formatDateBR(r.data_nascimento), fmtCPF(r.cpf),
       r.endereco || '', r.cns, r.telefone, r.profissional_nome, r.especialidade,
-      r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '',
+      r.procedimento_sigtap || '',
       r.cid,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(';')).join('\n');
@@ -3591,8 +3664,8 @@ th{background:#f1f5f9;font-weight:600;}
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
-                      const proc = r.procedimento_sigtap ? `${r.procedimento_sigtap}${r.nome_procedimento ? ' - ' + r.nome_procedimento : ''}` : '-';
-                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
+                      const proc = r.procedimento_sigtap || '-';
+                      return `<tr style="${i % 2 === 1 ? 'background:#f9f9f9;' : ''}"><td style="text-align:center">${String(r.num).padStart(2, '0')}</td><td>${r.paciente_nome}</td><td>${formatDateBR(r.data_atendimento)}</td><td>${formatDateBR(r.data_nascimento)}</td><td>${formatCPF(r.cpf)}</td><td>${r.endereco || '-'}</td><td>${formatCNS(r.cns)}</td><td>${r.telefone || '-'}</td><td>${r.profissional_nome}</td><td>${r.especialidade || '-'}</td><td>${proc}</td><td>${r.cid || '-'}</td></tr>`;
                     }).join('');
                     const logoUrl = logoSmsFallback;
                     const logoUrlRight = logoCerFallback;
@@ -3608,7 +3681,7 @@ th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:8px;}
 th{background:#f1f5f9;font-weight:600;}
 @media print{body{padding:6px;}.no-print{display:none!important;}}</style></head><body>
 <div class="header"><img src="${logoUrl}" alt="Logo SMS"/><div style="flex:1;text-align:center;"><h1>SECRETARIA MUNICIPAL DE SAÚDE DE ORIXIMINÁ</h1><div class="sub">CENTRO ESPECIALIZADO EM REABILITAÇÃO NÍVEL II</div><div style="font-weight:700;margin-top:4px;text-transform:uppercase;">Mapa de Atendimentos Concluídos</div></div><img src="${logoUrlRight}" alt="Logo CER II"/><div style="margin-left:12px;font-size:8px;text-align:right;">Data: ${now}<br/>Período: ${periodo}</div></div>
-<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
+<table><thead><tr><th style="width:30px;text-align:center">Nº</th><th>Paciente</th><th>Dt Atend</th><th>Dt Nasc</th><th>CPF</th><th>Endereço</th><th>CNS</th><th>Telefone</th><th>Profissional</th><th>Especialidade</th><th>Proc. SIGTAP</th><th>CID</th></tr></thead><tbody>${tableRows}</tbody>
 <tfoot><tr><td colspan="11" style="text-align:right;font-weight:600;padding:8px;">Total: ${mapaData.length} atendimentos</td></tr></tfoot></table>
 </body></html>`;
                     printViaIframe(html);
@@ -3635,6 +3708,7 @@ th{background:#f1f5f9;font-weight:600;}
                         <th className="border border-border px-2 py-1.5 text-center w-8">Nº</th>
                         <th className="border border-border px-2 py-1.5 text-center w-10">Foto</th>
                         <th className="border border-border px-2 py-1.5 text-left">Nome do Paciente</th>
+                        <th className="border border-border px-2 py-1.5 text-left w-24">Dt Atendimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-24">Dt Nascimento</th>
                         <th className="border border-border px-2 py-1.5 text-left w-28">CPF</th>
                         <th className="border border-border px-2 py-1.5 text-left">Endereço</th>
@@ -3665,7 +3739,8 @@ th{background:#f1f5f9;font-weight:600;}
                                 </div>
                               </div>
                             </td>
-                            <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                             <td className="border border-border px-2 py-1">{r.paciente_nome}</td>
+                            <td className="border border-border px-2 py-1">{formatDateBR(r.data_atendimento)}</td>
                             <td className="border border-border px-2 py-1">{formatDateBR(r.data_nascimento)}</td>
                             <td className="border border-border px-2 py-1">{formatCPF(r.cpf)}</td>
                             <td className="border border-border px-2 py-1">{r.endereco || '-'}</td>
@@ -3673,7 +3748,7 @@ th{background:#f1f5f9;font-weight:600;}
                             <td className="border border-border px-2 py-1">{r.telefone || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.profissional_nome}</td>
                             <td className="border border-border px-2 py-1">{r.especialidade || '-'}</td>
-                            <td className="border border-border px-2 py-1">{procSigtap}</td>
+                            <td className="border border-border px-2 py-1">{r.procedimento_sigtap || '-'}</td>
                             <td className="border border-border px-2 py-1">{r.cid || '-'}</td>
                           </tr>
                         );
