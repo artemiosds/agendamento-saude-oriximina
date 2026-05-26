@@ -1593,7 +1593,7 @@ ${dataRows}
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
-    if (!mapaDateFrom || !mapaDateTo) {
+    if (!dateFrom || !dateTo) {
       toast.warning('Selecione o período para o mapa');
       return;
     }
@@ -1603,8 +1603,8 @@ ${dataRows}
         .from('agendamentos')
         .select('id, paciente_id, paciente_nome, profissional_id, profissional_nome, data, hora, tipo, setor_id, procedimento_sigtap, nome_procedimento, cid_concluido')
         .eq('status', 'concluido')
-        .gte('data', mapaDateFrom)
-        .lte('data', mapaDateTo)
+        .gte('data', dateFrom)
+        .lte('data', dateTo)
         .order('data', { ascending: true });
 
       if (mapaProf !== 'all') {
@@ -1811,7 +1811,7 @@ ${dataRows}
     } finally {
       setMapaLoading(false);
     }
-  }, [mapaDateFrom, mapaDateTo, mapaProf, funcionarios]);
+  }, [dateFrom, dateTo, mapaProf, funcionarios]);
 
 
   const exportMapaPDF = useCallback(async () => {
@@ -1823,7 +1823,7 @@ ${dataRows}
     try {
       await new Promise(r => requestAnimationFrame(() => r(null)));
       const now = new Date().toLocaleString('pt-BR');
-      const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+      const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
       const fmtCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
       const fmtCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
       const ROW_LIMIT = 3000;
@@ -1889,7 +1889,7 @@ ${dataRows}
     } finally {
       toast.dismiss(loadingId);
     }
-  }, [mapaData, mapaDateFrom, mapaDateTo, user]);
+  }, [mapaData, dateFrom, dateTo, user]);
 
   const exportMapaCSV = useCallback(() => {
     if (mapaData.length === 0) return;
@@ -1922,10 +1922,10 @@ ${dataRows}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mapa-atendimentos-${mapaDateFrom}-a-${mapaDateTo}.csv`;
+    a.download = `mapa-atendimentos-${dateFrom}-a-${dateTo}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [mapaData, mapaDateFrom, mapaDateTo]);
+  }, [mapaData, dateFrom, dateTo]);
 
   const clearFilters = () => {
     setFilterUnit('all'); setFilterProf('all'); setFilterStatus('all'); setFilterSetor('all'); setFilterTipo('all'); setDateFrom(''); setDateTo('');
@@ -3786,7 +3786,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={generateMapa} disabled={!mapaDateFrom || !mapaDateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
+                <Button onClick={generateMapa} disabled={!dateFrom || !dateTo || mapaLoading} className="gradient-primary text-primary-foreground h-9">
                   <Search className="w-4 h-4 mr-1" />{mapaLoading ? 'Gerando...' : 'Gerar Relatório'}
                 </Button>
                 <ActionButton variant="outline" size="sm" onClick={exportMapaPDF} disabled={!mapaGenerated || mapaData.length === 0} className="h-9" loadingText="Gerando PDF...">
@@ -3799,7 +3799,7 @@ th{background:#f1f5f9;font-weight:600;}
                   if (mapaData.length === 0) { toast.warning('Não há dados para exportar'); return; }
                   try {
                     const now = new Date().toLocaleString('pt-BR');
-                    const periodo = `${formatDateBR(mapaDateFrom)} a ${formatDateBR(mapaDateTo)}`;
+                    const periodo = `${formatDateBR(dateFrom)} a ${formatDateBR(dateTo)}`;
                     const formatCPF = (c: string) => { if (!c || c.length !== 11) return c || '-'; return c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4'); };
                     const formatCNS = (c: string) => { const d = (c || '').replace(/\D/g, ''); if (d.length !== 15) return c || '-'; return `${d.slice(0,3)} ${d.slice(3,7)} ${d.slice(7,11)} ${d.slice(11)}`; };
                     const tableRows = mapaData.map((r, i) => {
@@ -3860,7 +3860,7 @@ th{background:#f1f5f9;font-weight:600;}
 
               {mapaGenerated && mapaData.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-border/60">
-                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(mapaDateFrom)} a {formatDateBR(mapaDateTo)} — {mapaData.length} atendimentos</p>
+                  <p className="text-xs text-muted-foreground px-3 py-2 bg-muted/30">Período: {formatDateBR(dateFrom)} a {formatDateBR(dateTo)} — {mapaData.length} atendimentos</p>
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-muted/60">
