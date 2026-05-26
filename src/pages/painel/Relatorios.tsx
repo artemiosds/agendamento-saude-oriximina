@@ -129,7 +129,9 @@ const Relatorios: React.FC = () => {
   }, []);
 
   const setoresUnicos = useMemo(() => {
-    const s = new Set([...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
+    // Definimos uma lista fixa de setores para garantir consistência se os dados filtrados forem vazios
+    const setoresBase = ['Ambulatório', 'Fisioterapia', 'Fonoaudiologia', 'Neuropediatria', 'Odontologia', 'Psicologia', 'Psicopedagogia', 'Serviço Social', 'Terapia Ocupacional', 'Triagem'];
+    const s = new Set([...setoresBase, ...atendimentosDB.map(a => a.setor), ...agendamentosFull.map(a => a.tipo)].filter(Boolean));
     return Array.from(s).sort();
   }, [atendimentosDB, agendamentosFull]);
 
@@ -138,7 +140,7 @@ const Relatorios: React.FC = () => {
     return Array.from(s).sort();
   }, [agendamentosFull]);
 
-  const loadReportData = useCallback(async () => {
+  const loadReportData = useCallback(async (isAutoRefresh = false) => {
     if (isFetching) return;
     setIsFetching(true);
     
@@ -148,10 +150,11 @@ const Relatorios: React.FC = () => {
         prof: filterProf, 
         status: filterStatus, 
         type: filterTipo, 
+        setor: filterSetor,
         dateFrom, 
         dateTo 
       };
-      console.log("[Relatórios] buscando dados com filtros:", filters);
+      console.log(`[Relatórios] ${isAutoRefresh ? 'Auto-refresh' : 'Buscando'} dados com filtros:`, filters);
 
       const fetchAllPages = async (table: string, dateField?: string) => {
         let allData: any[] = [];
@@ -187,6 +190,7 @@ const Relatorios: React.FC = () => {
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
             if (filterStatus !== 'all') query = query.eq('status', filterStatus);
             if (filterTipo !== 'all') query = query.eq('tipo', filterTipo);
+            if (filterSetor !== 'all') query = query.eq('setor_id', filterSetor);
           } else if (table === 'prontuarios') {
             if (filterUnit !== 'all') query = query.eq('unidade_id', filterUnit);
             if (filterProf !== 'all') query = query.eq('profissional_id', filterProf);
@@ -281,15 +285,10 @@ const Relatorios: React.FC = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [user, filterUnit, filterProf, filterStatus, filterTipo, dateFrom, dateTo]);
+  }, [user, filterUnit, filterProf, filterStatus, filterTipo, filterSetor, dateFrom, dateTo]);
 
-  // Use a stable ref to avoid infinite loops if loadReportData changes
-  const hasLoadedRef = useRef(false);
   useEffect(() => {
-    if (!hasLoadedRef.current) {
-      loadReportData();
-      hasLoadedRef.current = true;
-    }
+    loadReportData();
   }, [loadReportData]);
 
   const handleRefresh = () => {
@@ -299,9 +298,12 @@ const Relatorios: React.FC = () => {
   // Realtime subscription for auto-refresh
   useRealtimeSubscription({
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
-    onchange: loadReportData,
+    onchange: () => {
+      console.log("[Relatórios] Mudança detectada, atualizando...");
+      loadReportData(true);
+    },
     enabled: true,
-    debounceMs: 2000,
+    debounceMs: 5000,
   });
 
   // Update "last updated" label every 10s
@@ -1557,7 +1559,10 @@ ${dataRows}
 
   // === MAPA DE ATENDIMENTO ===
   const generateMapa = useCallback(async () => {
-    if (!mapaDateFrom || !mapaDateTo) return;
+    if (!mapaDateFrom || !mapaDateTo) {
+      toast.warning('Selecione o período para o mapa');
+      return;
+    }
     setMapaLoading(true);
     try {
       let query = supabase
