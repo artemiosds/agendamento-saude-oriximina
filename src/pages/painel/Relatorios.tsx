@@ -3918,7 +3918,7 @@ th{background:#f1f5f9;font-weight:600;}
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/60 font-semibold">
-                        <td colSpan={21} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
+                        <td colSpan={20} className="border border-border px-2 py-1.5 text-right">Total: {mapaData.length} atendimentos</td>
                       </tr>
 
                     </tfoot>
