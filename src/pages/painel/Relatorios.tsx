@@ -300,7 +300,7 @@ const Relatorios: React.FC = () => {
     tables: ['agendamentos', 'atendimentos', 'prontuarios', 'fila_espera'],
     onchange: () => {
       console.log("[Relatórios] Mudança detectada, atualizando...");
-      loadReportData();
+      loadReportData(true);
     },
     enabled: true,
     debounceMs: 5000,
