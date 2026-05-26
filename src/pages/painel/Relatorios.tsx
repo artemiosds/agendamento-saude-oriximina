@@ -1830,7 +1830,6 @@ ${dataRows}
           r.complemento || '-',
           r.bairro || '-',
           r.municipio || '-',
-          r.endereco_completo || '-',
           r.profissional_nome || '', 
           r.especialidade || '-', 
           r.procedimentos_realizados || '-',
