@@ -1612,11 +1612,20 @@ ${dataRows}
         .select('prontuario_id, procedimento_id, cids_selecionados')
         .in('prontuario_id', pronIds);
 
-      // Fetch procedures to map IDs to SIGTAP codes and names
-      const { data: allProcedures } = await supabase
-        .from('procedimentos')
-        .select('id, codigo_sigtap, nome');
-      const proceduresMap = new Map((allProcedures || []).map(p => [p.id, p]));
+      // Fetch procedures from both tables to map IDs to SIGTAP codes and names
+      const [{ data: legacyProcs }, { data: sigtapProcs }] = await Promise.all([
+        supabase.from('procedimentos').select('id, codigo_sigtap, nome'),
+        supabase.from('sigtap_procedimentos').select('id, codigo, nome')
+      ]);
+
+      const proceduresMap = new Map();
+      (legacyProcs || []).forEach(p => {
+        proceduresMap.set(p.id, { codigo: p.codigo_sigtap, nome: p.nome });
+      });
+      (sigtapProcs || []).forEach(p => {
+        proceduresMap.set(p.id, { codigo: p.codigo, nome: p.nome });
+      });
+
 
       const pronsMap = new Map<string, any[]>();
       prons?.forEach(p => {
