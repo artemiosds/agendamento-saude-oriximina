@@ -2692,7 +2692,7 @@ const ProntuarioPage: React.FC = () => {
                   </div>
                   {dynamicConfig.visibleBlocks.map((bloco: any) => {
                     // Ignorar blocos que já têm campos nativos complexos ou que o usuário pediu para não substituir
-                    if (['soap', 'evolucao', 'especialidade', 'prescricao', 'solicitacao_exames', 'procedimentos'].includes(bloco.id)) return null;
+                    if (['soap', 'evolucao', 'especialidade', 'prescricao', 'solicitacao_exames', 'procedimentos', 'ciclo_tratamento', 'pts_vinculado', 'queixa_principal', 'anamnese', 'sinais_sintomas', 'exame_fisico', 'hipotese', 'conduta', 'observacoes', 'indicacao_retorno'].includes(bloco.id)) return null;
                     
                     const value = (form as any).custom_data?.[bloco.id] || "";
                     const setVal = (val: any) => setForm(p => ({
